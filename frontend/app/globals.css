@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Custom Color Palette */
+    --off-white: #FAFAF9;
+    --warm-beige: #E8DCC8;
+    --dark-charcoal: #2D3436;
+    --cool-gray: #6B7280;
+    --steel-blue: #5A6C7D;
+    --concrete: #95A5A6;
+    --medium-gray: #B8BEBD;
+  }
+
+  body {
+    color: var(--cool-gray);
+    background: var(--off-white);
+  }
+}
+
+@keyframes bounce-delay {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+}
+
+.delay-100 {
+  animation-delay: 0.1s;
+}
+
+.delay-200 {
+  animation-delay: 0.2s;
+}

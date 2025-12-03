@@ -1,0 +1,94 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Body,
+  UseGuards,
+  Req,
+  Res,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { RequestResetPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { CurrentUser } from './decorators/current-user.decorator';
+import { Response } from 'express';
+
+@Controller('auth')
+export class AuthController {
+  constructor(private authService: AuthService) {}
+
+  @Post('register')
+  async register(@Body() registerDto: RegisterDto) {
+    return this.authService.register(registerDto);
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto);
+  }
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuth() {
+    // Initiates Google OAuth flow
+  }
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuthRedirect(@Req() req: any, @Res() res: Response) {
+    const { accessToken, user } = await this.authService.googleLogin(req.user);
+
+    // Redirect to frontend with token
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    res.redirect(`${frontendUrl}/auth/callback?token=${accessToken}`);
+  }
+
+  @Post('reset-password-request')
+  @HttpCode(HttpStatus.OK)
+  async requestPasswordReset(@Body() dto: RequestResetPasswordDto) {
+    await this.authService.requestPasswordReset(dto.email);
+    return { message: 'Password reset email sent' };
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.authService.resetPassword(dto.token, dto.newPassword);
+    return { message: 'Password reset successful' };
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getProfile(@CurrentUser() user: any) {
+    return user;
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async logout() {
+    // With JWT, logout is handled client-side by removing the token
+    return { message: 'Logged out successfully' };
+  }
+
+  @Patch('profile')
+  @UseGuards(JwtAuthGuard)
+  async updateProfile(@CurrentUser() user: any, @Body() updateData: { name?: string; email?: string }) {
+    return this.authService.updateProfile(user.userId, updateData);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async changePassword(@CurrentUser() user: any, @Body() passwordData: { currentPassword: string; newPassword: string }) {
+    await this.authService.changePassword(user.userId, passwordData.currentPassword, passwordData.newPassword);
+    return { message: 'Password changed successfully' };
+  }
+}
