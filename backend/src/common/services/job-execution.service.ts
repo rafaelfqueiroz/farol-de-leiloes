@@ -7,14 +7,14 @@ import { JobExecution, JobExecutionDocument, RunMode } from '../schemas/job-exec
 export class JobExecutionService {
   constructor(
     @InjectModel(JobExecution.name)
-    private readonly model: Model<JobExecutionDocument>,
+    private readonly jobExecutionRepository: Model<JobExecutionDocument>,
   ) {}
 
   /**
    * Record a job execution
    */
   async recordExecution(jobName: string, runMode: RunMode): Promise<JobExecution> {
-    const execution = new this.model({
+    const execution = new this.jobExecutionRepository({
       jobName,
       runMode,
       finishedAt: new Date(),
@@ -26,7 +26,7 @@ export class JobExecutionService {
    * Get the last execution for a specific job and run mode
    */
   async getLastExecution(jobName: string, runMode: RunMode): Promise<JobExecution | null> {
-    return this.model
+    return this.jobExecutionRepository
       .findOne({ jobName, runMode })
       .sort({ finishedAt: -1 })
       .lean()

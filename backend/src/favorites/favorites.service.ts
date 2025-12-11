@@ -7,12 +7,12 @@ import { AuctionsService } from '../auctions/auctions.service';
 @Injectable()
 export class FavoritesService {
   constructor(
-    @InjectModel(Favorite.name) private favoriteModel: Model<Favorite>,
-    private auctionsService: AuctionsService,
+    @InjectModel(Favorite.name) private readonly favoriteRepository: Model<Favorite>,
+    private readonly auctionsService: AuctionsService,
   ) {}
 
   async findAll(userId: string): Promise<any[]> {
-    const favorites = await this.favoriteModel
+    const favorites = await this.favoriteRepository
       .find({ userId })
       .populate('auction')
       .sort({ createdAt: -1 })
@@ -25,14 +25,14 @@ export class FavoritesService {
   }
 
   async findOne(userId: string, auctionCode: string): Promise<Favorite | null> {
-    return this.favoriteModel.findOne({ userId, auctionCode }).exec();
+    return this.favoriteRepository.findOne({ userId, auctionCode }).exec();
   }
 
   async create(userId: string, auctionCode: string): Promise<any> {
     const existingFavorite = await this.findOne(userId, auctionCode);
     if (existingFavorite) {
       // Return the auction data for existing favorite
-      const populated = await this.favoriteModel
+      const populated = await this.favoriteRepository
         .findById(existingFavorite._id)
         .populate('auction')
         .exec();
@@ -46,7 +46,7 @@ export class FavoritesService {
     }
 
     // Create favorite with userId, code and ObjectId reference
-    const favorite = new this.favoriteModel({
+    const favorite = new this.favoriteRepository({
       userId,
       auctionCode: auctionCode,
       auction: auction._id,
@@ -58,7 +58,7 @@ export class FavoritesService {
   }
 
   async remove(userId: string, auctionCode: string): Promise<boolean> {
-    const result = await this.favoriteModel.deleteOne({ userId, auctionCode }).exec();
+    const result = await this.favoriteRepository.deleteOne({ userId, auctionCode }).exec();
     return result.deletedCount > 0;
   }
 }

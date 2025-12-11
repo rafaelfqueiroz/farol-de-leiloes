@@ -26,7 +26,7 @@ export interface QueryFilters {
 @Injectable()
 export class AuctionsService {
   constructor(
-    @InjectModel(Auction.name) private readonly model: Model<AuctionDocument>,
+    @InjectModel(Auction.name) private readonly auctionRepository: Model<AuctionDocument>,
   ) {}
 
   async upsertMany(items: AuctionUpsert[]) {
@@ -34,7 +34,7 @@ export class AuctionsService {
 
     // Step 1: Fetch all existing auctions in ONE query
     const codes = items.map((item) => item.code).filter(Boolean) as string[];
-    const existing = await this.model.find({ code: { $in: codes } }).select('code phases').lean();
+    const existing = await this.auctionRepository.find({ code: { $in: codes } }).select('code phases').lean();
 
     const existingMap = new Map(existing.map((doc) => [doc.code, doc]));
 
@@ -100,7 +100,7 @@ export class AuctionsService {
 
     if (ops.length === 0) return { matched: 0, upserted: 0, modified: 0 };
 
-    const res = await this.model.bulkWrite(ops, { ordered: false });
+    const res = await this.auctionRepository.bulkWrite(ops, { ordered: false });
     return {
       matched: res.matchedCount,
       upserted: res.upsertedCount,
@@ -117,7 +117,7 @@ export class AuctionsService {
     const take = Math.min(filters.take ?? 50, 200);
     const skip = filters.skip ?? 0;
 
-    let docs = await this.model
+    let docs = await this.auctionRepository
       .find(q)
       .sort({ updatedAt: -1 })
       .skip(skip)
@@ -146,12 +146,12 @@ export class AuctionsService {
       });
     }
 
-    const total = await this.model.countDocuments(q);
+    const total = await this.auctionRepository.countDocuments(q);
     return { total, items: docs };
   }
 
   async findByCode(code: string): Promise<AuctionDocument | null> {
-    return this.model.findOne({ code }).exec();
+    return this.auctionRepository.findOne({ code }).exec();
   }
 
 }

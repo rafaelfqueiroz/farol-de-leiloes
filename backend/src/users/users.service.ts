@@ -9,7 +9,7 @@ import * as bcrypt from 'bcrypt';
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(User.name) private readonly userRepository: Model<UserDocument>,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserDocument> {
@@ -25,7 +25,7 @@ export class UsersService {
       hashedPassword = await bcrypt.hash(createUserDto.password, 10);
     }
 
-    const user = new this.userModel({
+    const user = new this.userRepository({
       ...createUserDto,
       password: hashedPassword,
     });
@@ -34,19 +34,19 @@ export class UsersService {
   }
 
   async findAll(): Promise<UserDocument[]> {
-    return this.userModel.find().select('-password').exec();
+    return this.userRepository.find().select('-password').exec();
   }
 
   async findById(id: string): Promise<UserDocument | null> {
-    return this.userModel.findById(id).select('-password').exec();
+    return this.userRepository.findById(id).select('-password').exec();
   }
 
   async findByEmail(email: string): Promise<UserDocument | null> {
-    return this.userModel.findOne({ email: email.toLowerCase() }).exec();
+    return this.userRepository.findOne({ email: email.toLowerCase() }).exec();
   }
 
   async findByGoogleId(googleId: string): Promise<UserDocument | null> {
-    return this.userModel.findOne({ googleId }).exec();
+    return this.userRepository.findOne({ googleId }).exec();
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserDocument> {
@@ -63,7 +63,7 @@ export class UsersService {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
     }
 
-    const user = await this.userModel
+    const user = await this.userRepository
       .findByIdAndUpdate(id, updateUserDto, { new: true })
       .select('-password')
       .exec();
@@ -76,7 +76,7 @@ export class UsersService {
   }
 
   async remove(id: string): Promise<void> {
-    const result = await this.userModel.deleteOne({ _id: id }).exec();
+    const result = await this.userRepository.deleteOne({ _id: id }).exec();
     if (result.deletedCount === 0) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
@@ -106,7 +106,7 @@ export class UsersService {
     const expires = new Date();
     expires.setHours(expires.getHours() + 1);
 
-    await this.userModel.findByIdAndUpdate(user._id, {
+    await this.userRepository.findByIdAndUpdate(user._id, {
       resetPasswordToken: hashedToken,
       resetPasswordExpires: expires,
     });
@@ -115,7 +115,7 @@ export class UsersService {
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    const users = await this.userModel.find({
+    const users = await this.userRepository.find({
       resetPasswordExpires: { $gt: new Date() },
     }).exec();
 
@@ -137,7 +137,7 @@ export class UsersService {
 
     // Update password and clear reset token
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.userModel.findByIdAndUpdate(matchedUser._id, {
+    await this.userRepository.findByIdAndUpdate(matchedUser._id, {
       password: hashedPassword,
       resetPasswordToken: undefined,
       resetPasswordExpires: undefined,
