@@ -113,7 +113,7 @@ export class AuctionsService {
     if (filters.state) q['address.state'] = filters.state.toUpperCase();
     if (filters.city) q['address.city'] = new RegExp(`^${escapeRegExp(filters.city)}`, 'i');
     if (filters.neighborhood) q['address.neighborhood'] = new RegExp(`^${escapeRegExp(filters.neighborhood)}`, 'i');
-    if (filters.modality) q['phases.modality'] = filters.modality;
+    // Note: modality filter moved to in-memory filtering to check only the last phase
     const take = Math.min(filters.take ?? 50, 200);
     const skip = filters.skip ?? 0;
 
@@ -123,6 +123,15 @@ export class AuctionsService {
       .skip(skip)
       .limit(take)
       .lean();
+
+    // Filter by modality on last phase only
+    if (filters.modality) {
+      docs = docs.filter((doc) => {
+        if (!doc.phases || doc.phases.length === 0) return false;
+        const lastPhase = doc.phases[doc.phases.length - 1];
+        return lastPhase.modality === filters.modality;
+      });
+    }
 
     // Filter by price range on last phase's minimumPrice
     if (filters.minMargin !== undefined || filters.maxMargin !== undefined) {

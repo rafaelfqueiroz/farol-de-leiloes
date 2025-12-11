@@ -4,7 +4,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhos
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { code: string } }
+  { params }: { params: Promise<{ code: string }> }
 ) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -16,7 +16,7 @@ export async function DELETE(
       );
     }
 
-    const { code } = params;
+    const { code } = await params;
     const url = `${BACKEND_URL}/api/favorites/${code}`;
 
     const response = await fetch(url, {

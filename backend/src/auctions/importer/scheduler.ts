@@ -20,37 +20,33 @@ export class AuctionsImporter {
     private readonly config: SchedulerConfig,
   ) {}
 
-  // Run on startup only if IMPORT_RUN_MODE=MANUAL
+  // Run on startup only if IMPORT_ON_START_UP=true
   async onModuleInit() {
-    const { enabled, runMode } = this.config.import;
+    const { enabled, onStartup } = this.config.import;
 
     if (!enabled) {
       this.logger.log('Import is disabled (IMPORT_ENABLED=false)');
       return;
     }
 
-    if (runMode === 'MANUAL') {
-      this.logger.log('MANUAL mode: Running import on startup');
+    if (onStartup) {
+      this.logger.log('Running import on startup (IMPORT_ON_START_UP=true)');
       setTimeout(() => this.runImport(RunMode.MANUAL), 5000);
     } else {
-      this.logger.log('AUTO mode: Skipping startup import (scheduled only)');
+      this.logger.log('Skipping startup import (IMPORT_ON_START_UP=false), will run on schedule only');
     }
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async dailyJob() {
-    const { enabled, runMode } = this.config.import;
+    const { enabled } = this.config.import;
 
     if (!enabled) {
       this.logger.log('Import is disabled (IMPORT_ENABLED=false), skipping scheduled job');
       return;
     }
 
-    if (runMode !== 'AUTO') {
-      this.logger.log('MANUAL mode: Skipping scheduled job (run on startup only)');
-      return;
-    }
-
+    // Scheduled job always runs (if enabled), regardless of onStartup setting
     // Check if job ran recently to prevent duplicate runs
     const ranRecently = await this.jobExecutionService.hasRunRecently(
       this.jobName,

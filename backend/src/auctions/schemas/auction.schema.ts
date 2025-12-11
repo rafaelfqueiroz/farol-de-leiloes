@@ -43,6 +43,9 @@ export class Auction {
   @Prop({ type: String })
   detailsUrl?: string | null;
 
+  @Prop({ type: String })
+  imageUrl?: string | null;
+
   @Prop({ index: true })
   updatedAt!: Date;
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
   Container,
@@ -25,12 +26,46 @@ interface SearchResult {
 }
 
 export default function Home() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeView, setActiveView] = useState('home');
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [currentFilters, setCurrentFilters] = useState<AuctionFilters>({});
   const [pageSize, setPageSize] = useState(10);
+
+  // Load filters and view from URL on mount
+  useEffect(() => {
+    const view = searchParams.get('view');
+    const state = searchParams.get('state');
+    const city = searchParams.get('city');
+    const neighborhood = searchParams.get('neighborhood');
+    const modality = searchParams.get('modality');
+    const minMargin = searchParams.get('minMargin');
+    const maxMargin = searchParams.get('maxMargin');
+    const page = searchParams.get('page');
+
+    // Check if we should switch to favorites view
+    if (view === 'favorites') {
+      setActiveView('favorites');
+    } else if (state || city || neighborhood || modality || minMargin || maxMargin) {
+      const filters: AuctionFilters = {
+        state: state || undefined,
+        city: city ? city.split(',') : undefined,
+        neighborhood: neighborhood || undefined,
+        modality: modality ? modality.split(',') : undefined,
+        minMargin: minMargin ? Number(minMargin) : undefined,
+        maxMargin: maxMargin ? Number(maxMargin) : undefined,
+      };
+      const pageNum = page ? Number(page) : 1;
+
+      setCurrentFilters(filters);
+      setCurrentPage(pageNum);
+      setActiveView('search');
+      performSearch(filters, pageNum);
+    }
+  }, []);
 
   const performSearch = async (filters: AuctionFilters, page: number) => {
     setSearchLoading(true);
@@ -60,15 +95,31 @@ export default function Home() {
     }
   };
 
+  const updateURL = (filters: AuctionFilters, page: number) => {
+    const params = new URLSearchParams();
+    if (filters.state) params.set('state', filters.state);
+    if (filters.city && filters.city.length > 0) params.set('city', filters.city.join(','));
+    if (filters.neighborhood) params.set('neighborhood', filters.neighborhood);
+    if (filters.modality && filters.modality.length > 0) params.set('modality', filters.modality.join(','));
+    if (filters.minMargin) params.set('minMargin', filters.minMargin.toString());
+    if (filters.maxMargin) params.set('maxMargin', filters.maxMargin.toString());
+    if (page > 1) params.set('page', page.toString());
+
+    const queryString = params.toString();
+    router.push(queryString ? `/?${queryString}` : '/');
+  };
+
   const handleManualSearch = async (filters: AuctionFilters) => {
     setCurrentFilters(filters);
     setCurrentPage(1);
     setSearchResults(null);
+    updateURL(filters, 1);
     await performSearch(filters, 1);
   };
 
   const handlePageChange = async (page: number) => {
     setCurrentPage(page);
+    updateURL(currentFilters, page);
     await performSearch(currentFilters, page);
     // Scroll to top of results
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -87,7 +138,7 @@ export default function Home() {
           <Sidebar activeView={activeView} onViewChange={setActiveView} />
 
           <Box sx={{ flexGrow: 1, ml: '72px' }}>
-            <TopBar userName="Rafael Queiroz" userInitials="RQ" />
+            <TopBar />
 
             <Box component="main" sx={{ pt: 10, pb: 4, pr: activeView === 'search' ? '380px' : 0, transition: 'padding-right 0.3s' }}>
               <Container maxWidth="xl">
@@ -136,6 +187,7 @@ export default function Home() {
                         <SearchFilters
                           onSearch={handleManualSearch}
                           isLoading={searchLoading}
+                          initialFilters={currentFilters}
                         />
                       </Box>
                     </Box>

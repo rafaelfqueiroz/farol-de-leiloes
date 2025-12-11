@@ -1,13 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Typography, ToggleButtonGroup, ToggleButton, Card, CardContent, Chip, Pagination, Select, MenuItem, FormControl, InputLabel, IconButton } from '@mui/material';
+import { useRouter } from 'next/navigation';
+import { Box, Typography, ToggleButtonGroup, ToggleButton, Pagination, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
-import HomeIcon from '@mui/icons-material/Home';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import { useFavorites } from '../contexts/FavoritesContext';
+import AuctionCard from './AuctionCard';
 
 interface Auction {
   code: string;
@@ -26,6 +25,7 @@ interface Auction {
     date?: string;
   }>;
   detailsUrl?: string;
+  imageUrl?: string;
   updatedAt?: string;
 }
 
@@ -39,31 +39,6 @@ interface AuctionListProps {
   onPageSizeChange?: (pageSize: number) => void;
 }
 
-const MODALITY_LABELS: Record<string, string> = {
-  FIRST_AUCTION: 'Primeiro Leilão',
-  SECOND_AUCTION: 'Segundo Leilão',
-  OPEN_BIDDING: 'Licitação Aberta',
-  DIRECT_ONLINE_SALES: 'Venda Direta Online',
-  ONLINE_SALES: 'Venda Online',
-};
-
-function formatCurrency(value?: number): string {
-  if (!value) return 'N/A';
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-}
-
-function formatAddress(address: Auction['address']): string {
-  const parts = [
-    address.street,
-    address.neighborhood,
-    address.city,
-    address.state,
-  ].filter(Boolean);
-  return parts.join(', ') || 'Endereço não informado';
-}
 
 export default function AuctionList({
   auctions,
@@ -74,9 +49,23 @@ export default function AuctionList({
   onPageChange,
   onPageSizeChange
 }: AuctionListProps) {
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
   const totalPages = Math.ceil(total / pageSize);
   const { isFavorite, toggleFavorite } = useFavorites();
+
+  // Get current URL with search params to pass as returnUrl
+  const getCurrentUrl = () => {
+    if (typeof window !== 'undefined') {
+      return window.location.pathname + window.location.search;
+    }
+    return '/';
+  };
+
+  const navigateToDetail = (code: string) => {
+    const returnUrl = encodeURIComponent(getCurrentUrl());
+    router.push(`/auction/${code}?returnUrl=${returnUrl}`);
+  };
 
   if (isLoading) {
     return (
@@ -150,123 +139,15 @@ export default function AuctionList({
 
       {/* Auction Cards/List */}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: viewMode === 'cards' ? 'repeat(auto-fill, minmax(350px, 1fr))' : '1fr' }}>
-        {auctions.map((auction) => {
-          const lastPhase = auction.phases[auction.phases.length - 1];
-
-          return (
-            <Card
-              key={auction.code}
-              sx={{
-                transition: 'all 0.3s',
-                '&:hover': {
-                  boxShadow: 4,
-                  transform: 'translateY(-2px)',
-                },
-              }}
-            >
-              <CardContent>
-                {/* Header with Title, Modality and Favorite */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                  <Box sx={{ flex: 1, pr: 2 }}>
-                    <Typography variant="h6" fontWeight={600} sx={{ mb: 0.5, fontSize: '1rem' }}>
-                      {auction.title || 'Imóvel sem título'}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Código: {auction.code}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {lastPhase && (
-                      <Chip
-                        label={MODALITY_LABELS[lastPhase.modality] || lastPhase.modality}
-                        size="small"
-                        color="primary"
-                      />
-                    )}
-                    <IconButton
-                      onClick={() => toggleFavorite(auction)}
-                      size="small"
-                      sx={{
-                        color: isFavorite(auction.code) ? 'error.main' : 'action.active',
-                        '&:hover': {
-                          color: 'error.main',
-                        },
-                      }}
-                    >
-                      {isFavorite(auction.code) ? <FavoriteIcon /> : <FavoriteBorderIcon />}
-                    </IconButton>
-                  </Box>
-                </Box>
-
-                {/* Property Details */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                    <HomeIcon sx={{ fontSize: 18, color: 'text.secondary', mt: 0.25 }} />
-                    <Typography variant="body2" color="text.primary">
-                      {formatAddress(auction.address)}
-                    </Typography>
-                  </Box>
-
-                  {auction.appraisalPrice && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        💰 Avaliação:
-                      </Typography>
-                      <Typography variant="body2" fontWeight={600} color="text.primary">
-                        {formatCurrency(auction.appraisalPrice)}
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {lastPhase?.minimumPrice && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        🏷️ Lance mínimo:
-                      </Typography>
-                      <Typography variant="body2" fontWeight={600} color="text.primary">
-                        {formatCurrency(lastPhase.minimumPrice)}
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {auction.phases.length > 1 && (
-                    <Typography variant="caption" color="text.secondary">
-                      📊 {auction.phases.length} fases registradas
-                    </Typography>
-                  )}
-                </Box>
-
-                {/* Details Link */}
-                {auction.detailsUrl && (
-                  <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
-                    <Typography
-                      component="a"
-                      href={auction.detailsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      variant="body2"
-                      fontWeight={500}
-                      sx={{
-                        color: 'primary.main',
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        '&:hover': {
-                          color: 'primary.dark',
-                          textDecoration: 'underline',
-                        },
-                      }}
-                    >
-                      Ver detalhes completos
-                      <span style={{ fontSize: '0.75rem' }}>↗</span>
-                    </Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+        {auctions.map((auction) => (
+          <AuctionCard
+            key={auction.code}
+            auction={auction}
+            isFavorite={isFavorite(auction.code)}
+            onToggleFavorite={() => toggleFavorite(auction)}
+            onNavigateToDetail={() => navigateToDetail(auction.code)}
+          />
+        ))}
       </Box>
 
       {/* Pagination */}

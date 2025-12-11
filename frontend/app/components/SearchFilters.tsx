@@ -24,6 +24,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
   isLoading?: boolean;
+  initialFilters?: AuctionFilters;
 }
 
 export interface AuctionFilters {
@@ -122,9 +123,12 @@ function formatCurrency(value: number): string {
   return `R$ ${value}`;
 }
 
-export default function SearchFilters({ onSearch, isLoading = false }: SearchFiltersProps) {
-  const [filters, setFilters] = useState<AuctionFilters>({});
-  const [priceRange, setPriceRange] = useState<number[]>([0, 2000000]);
+export default function SearchFilters({ onSearch, isLoading = false, initialFilters = {} }: SearchFiltersProps) {
+  const [filters, setFilters] = useState<AuctionFilters>(initialFilters);
+  const [priceRange, setPriceRange] = useState<number[]>([
+    initialFilters.minMargin || 0,
+    initialFilters.maxMargin || 2000000
+  ]);
   const [drawerOpen, setDrawerOpen] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -305,16 +309,19 @@ export default function SearchFilters({ onSearch, isLoading = false }: SearchFil
                     size="small"
                   />
                 )}
-                renderOption={(props, option, { selected }) => (
-                  <li {...props}>
-                    <Checkbox
-                      checked={selected}
-                      size="small"
-                      sx={{ mr: 1 }}
-                    />
-                    {option}
-                  </li>
-                )}
+                renderOption={(props, option, { selected }) => {
+                  const { key, ...otherProps } = props;
+                  return (
+                    <li key={key} {...otherProps}>
+                      <Checkbox
+                        checked={selected}
+                        size="small"
+                        sx={{ mr: 1 }}
+                      />
+                      {option}
+                    </li>
+                  );
+                }}
                 sx={{ mb: 2 }}
                 noOptionsText="Nenhuma cidade encontrada"
                 ListboxProps={{

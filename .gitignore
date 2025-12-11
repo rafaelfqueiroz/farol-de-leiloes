@@ -44,3 +44,5 @@ next-env.d.ts
 
 # OS
 Thumbs.db
+
+.mcp.json

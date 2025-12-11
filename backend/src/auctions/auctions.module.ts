@@ -4,6 +4,7 @@ import { AuctionsController } from './auctions.controller';
 import { AuctionsService } from './auctions.service';
 import { Auction, AuctionSchema } from './schemas/auction.schema';
 import { AuctionsImporter } from './importer/scheduler';
+import { AuctionDetailsScraper } from './scraper/scraper-scheduler';
 import { CommonModule } from '../common/common.module';
 
 @Module({
@@ -14,7 +15,7 @@ import { CommonModule } from '../common/common.module';
     CommonModule,
   ],
   controllers: [AuctionsController],
-  providers: [AuctionsService, AuctionsImporter],
+  providers: [AuctionsService, AuctionsImporter, AuctionDetailsScraper],
   exports: [AuctionsService],
 })
 export class AuctionsModule {}

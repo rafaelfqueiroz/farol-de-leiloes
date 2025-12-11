@@ -24,12 +24,9 @@ export class FavoritesController {
   @Get()
   async findAll(@CurrentUser() user: any) {
     try {
-      this.logger.log(`GET - User: ${JSON.stringify(user)}`);
       const result = await this.favoritesService.findAll(user.userId);
-      this.logger.log(`GET - Success, count: ${result.length}`);
       return result;
     } catch (error: any) {
-      this.logger.error(`GET - Error: ${error.message}`, error.stack);
       throw error;
     }
   }
@@ -37,14 +34,10 @@ export class FavoritesController {
   @Post()
   async create(@CurrentUser() user: any, @Body() auctionData: any) {
     try {
-      this.logger.log(`POST - User: ${JSON.stringify(user)}`);
-      this.logger.log(`POST - Auction data: ${JSON.stringify(auctionData)}`);
       const auctionCode = auctionData.code;
       const result = await this.favoritesService.create(user.userId, auctionCode);
-      this.logger.log('POST - Success');
       return result;
     } catch (error: any) {
-      this.logger.error(`POST - Error: ${error.message}`, error.stack);
       throw error;
     }
   }
@@ -53,12 +46,8 @@ export class FavoritesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@CurrentUser() user: any, @Param('code') code: string) {
     try {
-      this.logger.log(`DELETE - User: ${JSON.stringify(user)}`);
-      this.logger.log(`DELETE - Code: ${code}`);
       await this.favoritesService.remove(user.userId, code);
-      this.logger.log('DELETE - Success');
     } catch (error: any) {
-      this.logger.error(`DELETE - Error: ${error.message}`, error.stack);
       throw error;
     }
   }

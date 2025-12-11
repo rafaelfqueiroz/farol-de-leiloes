@@ -6,9 +6,18 @@
       "Bash(npm run build:*)",
       "Bash(lsof:*)",
       "Bash(xargs kill:*)",
-      "Bash(npm run start:dev:*)"
+      "Bash(npm run start:dev:*)",
+      "mcp__mongodb-local__list-collections",
+      "mcp__mongodb-local__count",
+      "mcp__github__list_pull_requests",
+      "mcp__github__get_me",
+      "mcp__github__search_repositories"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "mongodb-local"
+  ]
 }
