@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 
 interface User {
   _id: string;
@@ -15,6 +15,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
+  loadUser: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -24,12 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load user on mount
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
+  const loadUser = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -56,7 +52,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Load user on mount
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
 
   const login = async (email: string, password: string) => {
     const response = await fetch('/api/auth/login', {
@@ -123,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
+        loadUser,
         isAuthenticated: !!user,
       }}
     >

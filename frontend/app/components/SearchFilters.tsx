@@ -15,6 +15,7 @@ import {
   IconButton,
   Divider,
   Autocomplete,
+  CircularProgress,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -23,6 +24,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
+  onAISearchResults?: (results: { total: number; items: any[] }) => void;
   isLoading?: boolean;
   initialFilters?: AuctionFilters;
 }
@@ -123,13 +125,15 @@ function formatCurrency(value: number): string {
   return `R$ ${value}`;
 }
 
-export default function SearchFilters({ onSearch, isLoading = false, initialFilters = {} }: SearchFiltersProps) {
+export default function SearchFilters({ onSearch, onAISearchResults, isLoading = false, initialFilters = {} }: SearchFiltersProps) {
   const [filters, setFilters] = useState<AuctionFilters>(initialFilters);
   const [priceRange, setPriceRange] = useState<number[]>([
     initialFilters.minMargin || 0,
     initialFilters.maxMargin || 2000000
   ]);
   const [drawerOpen, setDrawerOpen] = useState(true);
+  const [aiSearchInput, setAiSearchInput] = useState('');
+  const [aiSearchLoading, setAiSearchLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,6 +190,30 @@ export default function SearchFilters({ onSearch, isLoading = false, initialFilt
     });
   };
 
+  const handleAISearch = async () => {
+    if (!aiSearchInput.trim() || !onAISearchResults) return;
+
+    setAiSearchLoading(true);
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: aiSearchInput })
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha na busca por IA');
+      }
+
+      const results = await response.json();
+      onAISearchResults(results);
+    } catch (error) {
+      console.error('Erro na busca por IA:', error);
+    } finally {
+      setAiSearchLoading(false);
+    }
+  };
+
   return (
     <>
       {/* Center Content - AI Search */}
@@ -195,18 +223,26 @@ export default function SearchFilters({ onSearch, isLoading = false, initialFilt
         </Typography>
         <TextField
           fullWidth
+          value={aiSearchInput}
+          onChange={(e) => setAiSearchInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleAISearch()}
           placeholder="Ex: apartamento em santos até 300 mil"
-          InputProps={{
-            endAdornment: (
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<SearchIcon />}
-                sx={{ ml: 1 }}
-              >
-                Buscar
-              </Button>
-            ),
+          disabled={aiSearchLoading}
+          slotProps={{
+            input: {
+              endAdornment: (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={aiSearchLoading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
+                  onClick={handleAISearch}
+                  disabled={aiSearchLoading || !aiSearchInput.trim()}
+                  sx={{ ml: 1 }}
+                >
+                  {aiSearchLoading ? 'Buscando...' : 'Buscar'}
+                </Button>
+              ),
+            },
           }}
           sx={{
             '& .MuiOutlinedInput-root': {

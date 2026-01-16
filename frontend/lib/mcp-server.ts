@@ -5,8 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-
-const AUCTIONS_API_URL = process.env.AUCTIONS_API_URL || 'http://localhost:3000';
+import { AUCTIONS_API_URL } from './constants.js';
 
 // Schema for auction query filters
 const QueryFiltersSchema = z.object({
@@ -46,7 +45,8 @@ export class AuctionsMCPServer {
         tools: [
           {
             name: 'query_auctions',
-            description: 'Query auctions from the Caixa Economica Federal database. Supports filtering by state, city, neighborhood, modality, and price range.',
+            description:
+              'Query auctions from the Caixa Economica Federal database. Supports filtering by state, city, neighborhood, modality, and price range.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -64,7 +64,8 @@ export class AuctionsMCPServer {
                 },
                 modality: {
                   type: 'string',
-                  description: 'Auction modality: FIRST_AUCTION, SECOND_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, or ONLINE_SALES',
+                  description:
+                    'Auction modality: FIRST_AUCTION, SECOND_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, or ONLINE_SALES',
                 },
                 minMargin: {
                   type: 'number',
@@ -105,7 +106,7 @@ export class AuctionsMCPServer {
           if (filters.limit) queryParams.set('limit', filters.limit.toString());
           if (filters.offset) queryParams.set('offset', filters.offset.toString());
 
-          const response = await fetch(`${AUCTIONS_API_URL}/auctions?${queryParams}`);
+          const response = await fetch(`${AUCTIONS_API_URL}/api/auctions?${queryParams}`);
 
           if (!response.ok) {
             throw new Error(`API request failed: ${response.statusText}`);
@@ -121,12 +122,13 @@ export class AuctionsMCPServer {
               },
             ],
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           return {
             content: [
               {
                 type: 'text',
-                text: `Error querying auctions: ${error.message}`,
+                text: `Error querying auctions: ${errorMessage}`,
               },
             ],
             isError: true,
@@ -145,8 +147,6 @@ export class AuctionsMCPServer {
   }
 }
 
-// Run server if this is the main module
-if (require.main === module) {
-  const server = new AuctionsMCPServer();
-  server.run().catch(console.error);
-}
+// Run server when executed directly
+const server = new AuctionsMCPServer();
+server.run().catch(console.error);

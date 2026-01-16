@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import {
   Drawer,
   List,
@@ -27,6 +28,18 @@ const menuItems = [
 ];
 
 export default function Sidebar({ activeView = 'home', onViewChange }: SidebarProps) {
+  const router = useRouter();
+
+  const handleNavigation = (itemId: string) => {
+    if (itemId === 'home') {
+      router.push('/');
+    } else if (itemId === 'search') {
+      router.push('/search');
+    } else {
+      onViewChange?.(itemId);
+    }
+  };
+
   return (
     <Drawer
       variant="permanent"
@@ -62,7 +75,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
           <ListItem key={item.id} disablePadding sx={{ mb: 1 }}>
             <Tooltip title={item.label} placement="right">
               <ListItemButton
-                onClick={() => onViewChange?.(item.id)}
+                onClick={() => handleNavigation(item.id)}
                 sx={{
                   borderRadius: 2,
                   minHeight: 48,

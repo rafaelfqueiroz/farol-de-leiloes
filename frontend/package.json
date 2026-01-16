@@ -7,13 +7,15 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "lint": "next lint"
+    "lint": "next lint",
+    "mcp-server": "npx tsx lib/mcp-server.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@langchain/core": "^1.0.5",

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuctionsModule } from './auctions/auctions.module';
@@ -12,11 +12,18 @@ import schedulerConfig from './config/scheduler.config';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [schedulerConfig]
+      load: [schedulerConfig],
     }),
-    MongooseModule.forRoot(
-      process.env.MONGODB_URI || 'mongodb://localhost:27017/auctions',
-    ),
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => {
+        return {
+          uri: configService.get("MONGODB_URI"),
+          retryAttempts: 3,
+        }
+      },
+    }),
     ScheduleModule.forRoot(),
     UsersModule,
     AuthModule,

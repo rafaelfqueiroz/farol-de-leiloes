@@ -22,7 +22,7 @@ export default function TopBar() {
   const handleLogout = async () => {
     handleClose();
     await logout();
-    router.push('/login');
+    router.push('/');
   };
 
   const getUserInitials = () => {
