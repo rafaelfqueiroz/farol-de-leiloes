@@ -11,9 +11,13 @@ import {
   Typography,
   Alert,
   Link as MuiLink,
+  Divider,
 } from '@mui/material';
+import GoogleIcon from '@mui/icons-material/Google';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
+
+const API_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -98,16 +102,43 @@ export default function LoginPage() {
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
-
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                Não tem uma conta?{' '}
-                <MuiLink component={Link} href="/register" sx={{ cursor: 'pointer' }}>
-                  Cadastre-se
-                </MuiLink>
-              </Typography>
-            </Box>
           </form>
+
+          <Divider sx={{ my: 3 }}>
+            <Typography variant="body2" color="text.secondary">
+              ou
+            </Typography>
+          </Divider>
+
+          <Button
+            fullWidth
+            variant="outlined"
+            startIcon={<GoogleIcon />}
+            onClick={() => {
+              window.location.href = `${API_URL}/api/auth/google`;
+            }}
+            sx={{
+              mb: 3,
+              py: 1.5,
+              borderColor: '#dadce0',
+              color: '#3c4043',
+              '&:hover': {
+                borderColor: '#dadce0',
+                backgroundColor: '#f8f9fa',
+              },
+            }}
+          >
+            Entrar com Google
+          </Button>
+
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              Não tem uma conta?{' '}
+              <MuiLink component={Link} href="/register" sx={{ cursor: 'pointer' }}>
+                Cadastre-se
+              </MuiLink>
+            </Typography>
+          </Box>
         </CardContent>
       </Card>
     </Box>
