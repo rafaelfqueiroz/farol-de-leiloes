@@ -14,9 +14,9 @@ export interface AuctionUpsert {
 
 export interface QueryFilters {
   state?: string;
-  city?: string;
+  city?: string | string[];
   neighborhood?: string;
-  modality?: string;
+  modality?: string | string[];
   minMargin?: number;
   maxMargin?: number;
   take?: number;
@@ -30,21 +30,30 @@ export class AuctionsService {
   ) {}
 
   async upsertMany(items: AuctionUpsert[]) {
+    console.log(`[upsertMany] Received ${items.length} items`);
     if (!items.length) return { matched: 0, upserted: 0, modified: 0 };
 
     // Step 1: Fetch all existing auctions in ONE query
     const codes = items.map((item) => item.code).filter(Boolean) as string[];
+    console.log(`[upsertMany] Valid codes: ${codes.length}`);
+
     const existing = await this.auctionRepository.find({ code: { $in: codes } }).select('code phases').lean();
+    console.log(`[upsertMany] Found ${existing.length} existing auctions in DB`);
 
     const existingMap = new Map(existing.map((doc) => [doc.code, doc]));
 
     // Step 2: Build bulk operations
     const ops: any[] = [];
+    let skippedNoCode = 0;
+    let skippedNoPhases = 0;
+    let skippedSameModality = 0;
+    let insertOps = 0;
+    let updateOps = 0;
 
     for (const item of items) {
       // Code is always present (from CSV or extracted from URL)
       if (!item.code) {
-        console.warn('Skipping auction without code:', item);
+        skippedNoCode++;
         continue;
       }
 
@@ -53,6 +62,7 @@ export class AuctionsService {
 
       // Skip if no phases provided
       if (newPhases.length === 0) {
+        skippedNoPhases++;
         continue;
       }
 
@@ -61,6 +71,7 @@ export class AuctionsService {
 
       if (!existingDoc) {
         // INSERT: New auction
+        insertOps++;
         ops.push({
           insertOne: {
             document: {
@@ -82,6 +93,7 @@ export class AuctionsService {
 
         // Only add phase if modality is different
         if (lastPhase?.modality !== newPhase.modality) {
+          updateOps++;
           ops.push({
             updateOne: {
               filter: { code },
@@ -93,14 +105,22 @@ export class AuctionsService {
               },
             },
           });
+        } else {
+          skippedSameModality++;
         }
-        // If same modality: do nothing (no op added)
       }
     }
 
-    if (ops.length === 0) return { matched: 0, upserted: 0, modified: 0 };
+    console.log(`[upsertMany] Skipped - no code: ${skippedNoCode}, no phases: ${skippedNoPhases}, same modality: ${skippedSameModality}`);
+    console.log(`[upsertMany] Operations - inserts: ${insertOps}, updates: ${updateOps}, total: ${ops.length}`);
+
+    if (ops.length === 0) {
+      console.log(`[upsertMany] No operations to execute`);
+      return { matched: 0, upserted: 0, modified: 0 };
+    }
 
     const res = await this.auctionRepository.bulkWrite(ops, { ordered: false });
+    console.log(`[upsertMany] BulkWrite result - matched: ${res.matchedCount}, upserted: ${res.upsertedCount}, modified: ${res.modifiedCount}`);
     return {
       matched: res.matchedCount,
       upserted: res.upsertedCount,
@@ -109,44 +129,88 @@ export class AuctionsService {
   }
 
   async query(filters: QueryFilters) {
-    const q: Record<string, unknown> = {};
-    if (filters.state) q['address.state'] = filters.state.toUpperCase();
-    if (filters.city) q['address.city'] = new RegExp(`^${escapeRegExp(filters.city)}`, 'i');
-    if (filters.neighborhood) q['address.neighborhood'] = new RegExp(`^${escapeRegExp(filters.neighborhood)}`, 'i');
-    // Note: modality filter moved to in-memory filtering to check only the last phase
     const take = Math.min(filters.take ?? 50, 200);
     const skip = filters.skip ?? 0;
 
-    let docs = await this.auctionRepository
-      .find(q)
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(take)
-      .lean();
+    // Build aggregation pipeline to filter by last phase modality/price
+    const pipeline: any[] = [];
 
-    // Filter by modality on last phase only
+    // Match by address filters first
+    const matchStage: Record<string, unknown> = {};
+    if (filters.state) matchStage['address.state'] = filters.state.toUpperCase();
+
+    // Handle city filter (single value or array)
+    if (filters.city) {
+      const cities = Array.isArray(filters.city) ? filters.city : [filters.city];
+      if (cities.length === 1) {
+        matchStage['address.city'] = new RegExp(`^${escapeRegExp(cities[0])}`, 'i');
+      } else {
+        matchStage['address.city'] = {
+          $in: cities.map(c => new RegExp(`^${escapeRegExp(c)}`, 'i')),
+        };
+      }
+    }
+
+    if (filters.neighborhood) matchStage['address.neighborhood'] = new RegExp(`^${escapeRegExp(filters.neighborhood)}`, 'i');
+
+    if (Object.keys(matchStage).length > 0) {
+      pipeline.push({ $match: matchStage });
+    }
+
+    // Add computed field for last phase
+    pipeline.push({
+      $addFields: {
+        lastPhase: { $arrayElemAt: ['$phases', -1] },
+      },
+    });
+
+    // Filter by modality on last phase (single value or array)
     if (filters.modality) {
-      docs = docs.filter((doc) => {
-        if (!doc.phases || doc.phases.length === 0) return false;
-        const lastPhase = doc.phases[doc.phases.length - 1];
-        return lastPhase.modality === filters.modality;
-      });
+      const modalities = Array.isArray(filters.modality) ? filters.modality : [filters.modality];
+      if (modalities.length === 1) {
+        pipeline.push({
+          $match: { 'lastPhase.modality': modalities[0] },
+        });
+      } else {
+        pipeline.push({
+          $match: { 'lastPhase.modality': { $in: modalities } },
+        });
+      }
     }
 
     // Filter by price range on last phase's minimumPrice
     if (filters.minMargin !== undefined || filters.maxMargin !== undefined) {
-      docs = docs.filter((doc) => {
-        if (!doc.phases || doc.phases.length === 0) return false;
-        const lastPhase = doc.phases[doc.phases.length - 1];
-        const price = lastPhase.minimumPrice;
-        if (price === null || price === undefined) return false;
-        if (filters.minMargin !== undefined && price < filters.minMargin) return false;
-        if (filters.maxMargin !== undefined && price > filters.maxMargin) return false;
-        return true;
+      const priceMatch: Record<string, unknown> = {};
+      if (filters.minMargin !== undefined) {
+        priceMatch.$gte = filters.minMargin;
+      }
+      if (filters.maxMargin !== undefined) {
+        priceMatch.$lte = filters.maxMargin;
+      }
+      pipeline.push({
+        $match: { 'lastPhase.minimumPrice': priceMatch },
       });
     }
 
-    const total = await this.auctionRepository.countDocuments(q);
+    // Remove the computed field
+    pipeline.push({
+      $unset: 'lastPhase',
+    });
+
+    console.log('Query filters:', filters, 'Aggregation pipeline:', JSON.stringify(pipeline));
+
+    // Get total count with same filters (without skip/limit)
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await this.auctionRepository.aggregate(countPipeline).exec();
+    const total = countResult[0]?.total ?? 0;
+
+    // Add sort, skip, limit
+    pipeline.push({ $sort: { updatedAt: -1 } });
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: take });
+
+    const docs = await this.auctionRepository.aggregate(pipeline).exec();
+    console.log(`[query] Found ${docs.length} docs, total: ${total}`);
     return { total, items: docs };
   }
 

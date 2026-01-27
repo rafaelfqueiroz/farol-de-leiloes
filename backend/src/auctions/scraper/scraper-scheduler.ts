@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Auction, AuctionDocument, PhaseModality } from '../schemas/auction.schema';
+import { Auction, AuctionDocument, Phase } from '../schemas/auction.schema';
 import { fetchAndScrapeDetails } from './details-scraper';
 import { JobExecutionService } from '../../common/services/job-execution.service';
 import { RunMode } from '../../common/schemas/job-execution.schema';
@@ -88,36 +88,22 @@ export class AuctionDetailsScraper implements OnModuleInit {
   }
 
   /**
-   * Main scraping logic - finds auctions with last modality = DIRECT_ONLINE_SALES
-   * and scrapes their details if they don't have an image yet
+   * Main scraping logic - finds auctions that are not fulfilled yet
+   * and scrapes their details
    */
   private async scrapeAuctionDetails() {
     try {
-      // Find auctions where:
-      // 1. Last phase modality is DIRECT_ONLINE_SALES
-      // 2. Has a detailsUrl
-      // 3. Does not have an imageUrl yet (or imageUrl is null/empty)
-      const auctions = await this.auctionModel
+      // Find auctions where fulfilled = false or doesn't exist
+      const auctionsToScrape = await this.auctionModel
         .find({
-          detailsUrl: { $ne: null, $exists: true },
           $or: [
-            { imageUrl: { $exists: false } },
-            { imageUrl: null },
-            { imageUrl: '' }
+            { fulfilled: { $exists: false } },
+            { fulfilled: false }
           ]
         })
         .lean();
 
-      this.logger.log(`Found ${auctions.length} auctions to scrape`);
-
-      // Filter by last phase modality in memory
-      const auctionsToScrape = auctions.filter((auction) => {
-        if (!auction.phases || auction.phases.length === 0) return false;
-        const lastPhase = auction.phases[auction.phases.length - 1];
-        return lastPhase.modality === PhaseModality.ONLINE_SALES;
-      });
-
-      this.logger.log(`Found ${auctionsToScrape.length} auctions to scrape`);
+      this.logger.log(`Found ${auctionsToScrape.length} unfulfilled auctions to scrape`);
 
       if (auctionsToScrape.length === 0) {
         this.logger.log('No auctions to scrape');
@@ -140,22 +126,40 @@ export class AuctionDetailsScraper implements OnModuleInit {
             // Scrape details
             const details = await fetchAndScrapeDetails(auction.detailsUrl);
 
-            // Update auction with scraped details
+            // Update auction with scraped details and mark as fulfilled
+            const updateData: Record<string, unknown> = {
+              fulfilled: true,
+              updatedAt: new Date()
+            };
+
             if (details.imageUrl) {
-              await this.auctionModel.updateOne(
-                { code: auction.code },
-                {
-                  $set: {
-                    imageUrl: details.imageUrl,
-                    updatedAt: new Date()
-                  }
-                }
-              );
-              scrapedCount++;
+              updateData.imageUrl = details.imageUrl;
               this.logger.debug(`Scraped image for auction ${auction.code}: ${details.imageUrl}`);
-            } else {
-              this.logger.debug(`No image found for auction ${auction.code}`);
             }
+
+            if (details.description) {
+              updateData.description = details.description;
+              this.logger.debug(`Scraped description for auction ${auction.code}`);
+            }
+
+            // Update phase-specific details (paymentMethods, expenseRules) on the last phase
+            if (details.phaseDetails && auction.phases && auction.phases.length > 0) {
+              const updatedPhases: Phase[] = [...auction.phases];
+              const lastPhaseIndex = updatedPhases.length - 1;
+              updatedPhases[lastPhaseIndex] = {
+                ...updatedPhases[lastPhaseIndex],
+                paymentMethods: details.phaseDetails.paymentMethods,
+                expenseRules: details.phaseDetails.expenseRules,
+              };
+              updateData.phases = updatedPhases;
+              this.logger.debug(`Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules`);
+            }
+
+            await this.auctionModel.updateOne(
+              { code: auction.code },
+              { $set: updateData }
+            );
+            scrapedCount++;
 
             // Delay between requests to be respectful to the server
             await this.delay(this.delayBetweenRequests);

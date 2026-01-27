@@ -65,7 +65,7 @@ export class AuctionsMCPServer {
                 modality: {
                   type: 'string',
                   description:
-                    'Auction modality: FIRST_AUCTION, SECOND_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, or ONLINE_SALES',
+                    'Auction modality: SFI_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, or ONLINE_SALES',
                 },
                 minMargin: {
                   type: 'number',

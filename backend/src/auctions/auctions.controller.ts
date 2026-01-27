@@ -8,9 +8,9 @@ export class AuctionsController {
   @Get()
   async list(
     @Query('state') state?: string,
-    @Query('city') city?: string,
+    @Query('city') city?: string | string[],
     @Query('neighborhood') neighborhood?: string,
-    @Query('modality') modality?: string,
+    @Query('modality') modality?: string | string[],
     @Query('minMargin') minMargin?: string,
     @Query('maxMargin') maxMargin?: string,
     @Query('limit') limit?: string,
@@ -18,11 +18,20 @@ export class AuctionsController {
   ) {
     const take = Math.min(Number(limit) || 10, 200);
     const skip = Number(offset) || 0;
+
+    // Parse comma-separated values into arrays
+    const parseMultiple = (value: string | string[] | undefined): string | string[] | undefined => {
+      if (!value) return undefined;
+      if (Array.isArray(value)) return value;
+      if (value.includes(',')) return value.split(',').map(v => v.trim());
+      return value;
+    };
+
     return this.auctions.query({
       state,
-      city,
+      city: parseMultiple(city),
       neighborhood,
-      modality,
+      modality: parseMultiple(modality),
       minMargin: minMargin ? Number(minMargin) : undefined,
       maxMargin: maxMargin ? Number(maxMargin) : undefined,
       take,

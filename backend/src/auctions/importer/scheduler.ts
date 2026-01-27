@@ -67,7 +67,13 @@ export class AuctionsImporter {
     try {
       const csv = await downloadCsvAllStates();
       const parsed = parseCsv(csv);
-      const normalized = normalizeRows(parsed).map((n) => {
+      const normalizedRows = normalizeRows(parsed);
+      this.logger.log(`Normalized rows: ${normalizedRows.length}`);
+
+      let skippedNoModality = 0;
+      let skippedUnknownModality = 0;
+
+      const normalized = normalizedRows.map((n) => {
         const phases: Phase[] = [];
 
         // Convert modality to phase
@@ -79,6 +85,9 @@ export class AuctionsImporter {
               minimumPrice: n.minimumPrice ?? null,
               date: null, // CSV doesn't contain auction dates
             });
+          } else {
+            skippedUnknownModality++;
+            this.logger.debug(`Unknown modality: "${n.modality}" for code: ${n.code}`);
           }
         }
 
@@ -96,8 +105,17 @@ export class AuctionsImporter {
           detailsUrl: n.detailsUrl ?? undefined,
         };
       });
+
+      this.logger.log(`Prepared ${normalized.length} items for upsert`);
+      this.logger.log(`Items without modality: ${skippedNoModality}`);
+      this.logger.log(`Items with unknown modality: ${skippedUnknownModality}`);
+
+      const withPhases = normalized.filter(n => n.phases.length > 0);
+      const withoutPhases = normalized.filter(n => n.phases.length === 0);
+      this.logger.log(`Items with phases: ${withPhases.length}, without phases: ${withoutPhases.length}`);
+
       const res = await this.auctions.upsertMany(normalized);
-      this.logger.log(`Imported ${normalized.length} rows (upserts: ${res.upserted})`);
+      this.logger.log(`Import result - matched: ${res.matched}, upserted: ${res.upserted}, modified: ${res.modified}`);
       this.logger.log(`Auctions import completed.`);
       
       // Record execution in database
@@ -111,12 +129,10 @@ export class AuctionsImporter {
 
   private mapModalityToPhase(modality: string): PhaseModality | null {
     const normalized = modality.toUpperCase();
-    if (normalized.includes('1') || normalized.includes('PRIMEIRO')) return PhaseModality.FIRST_AUCTION;
-    if (normalized.includes('2') || normalized.includes('SEGUNDO')) return PhaseModality.SECOND_AUCTION;
+    if (normalized.includes('SFI') || normalized.includes('EDITAL ÚNICO') || normalized.includes('EDITAL UNICO') || normalized.includes('LEILÃO') || normalized.includes('LEILAO')) return PhaseModality.SFI_AUCTION;
     if (normalized.includes('LICITACAO') || normalized.includes('LICITAÇÃO')) return PhaseModality.OPEN_BIDDING;
-    if (normalized.includes('COMPRA DIRETA ONLINE')) return PhaseModality.DIRECT_ONLINE_SALES;
-    if (normalized.includes('VENDA ONLINE') || normalized.includes('ONLINE')) return PhaseModality.ONLINE_SALES;
-    if (normalized.includes('COMPRA DIRETA')) return PhaseModality.DIRECT_ONLINE_SALES;
+    if (normalized.includes('VENDA DIRETA') || normalized.includes('VENDA DIRETA ONLINE')) return PhaseModality.DIRECT_ONLINE_SALES;
+    if (normalized.includes('VENDA ONLINE')) return PhaseModality.ONLINE_SALES;
     return null;
   }
 }

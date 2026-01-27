@@ -59,7 +59,7 @@ const queryAuctionsSchema = z.object({
   state: z.string().optional().describe('State abbreviation (e.g., RN, SP, RJ)'),
   city: z.string().optional().describe('City name (e.g., Natal, São Paulo)'),
   neighborhood: z.string().optional().describe('Neighborhood name'),
-  modality: z.string().optional().describe('Auction modality: FIRST_AUCTION, SECOND_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, or ONLINE_SALES'),
+  modality: z.string().optional().describe('Auction modality: SFI_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, or ONLINE_SALES'),
   minMargin: z.number().optional().describe('Minimum price filter (in BRL)'),
   maxMargin: z.number().optional().describe('Maximum price filter (in BRL)'),
   limit: z.number().optional().describe('Maximum number of results to return (default: 10)'),
@@ -94,7 +94,7 @@ export async function queryAuctions(userMessage: string): Promise<string> {
             },
             modality: {
               type: 'string',
-              description: 'Auction modality: FIRST_AUCTION, SECOND_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, or ONLINE_SALES',
+              description: 'Auction modality: SFI_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, or ONLINE_SALES',
             },
             minMargin: {
               type: 'number',
@@ -124,10 +124,9 @@ Seu trabalho é:
 1. Extrair informações relevantes da mensagem do usuário (estado, cidade, bairro, modalidade de leilão, faixa de preço)
 2. Mapear estados para suas abreviações (ex: Rio Grande do Norte -> RN, São Paulo -> SP)
 3. Mapear modalidades para os valores corretos:
-   - "Primeiro Leilão" ou "1º Leilão" -> FIRST_AUCTION
-   - "Segundo Leilão" ou "2º Leilão" -> SECOND_AUCTION
+   - "Leilão" ou "Leilão SFI" ou "Edital Único" -> SFI_AUCTION
    - "Licitação Aberta" -> OPEN_BIDDING
-   - "Venda Direta Online" ou "Compra Direta Online" -> DIRECT_ONLINE_SALES
+   - "Venda Direta" ou "Venda Direta Online" -> DIRECT_ONLINE_SALES
    - "Venda Online" -> ONLINE_SALES
 4. Converter valores em reais (R$) para números (ex: R$ 200.000,00 -> 200000)
 5. Usar a ferramenta query_auctions com os filtros corretos

@@ -40,8 +40,7 @@ interface AuctionCardProps {
 }
 
 const MODALITY_LABELS: Record<string, string> = {
-  FIRST_AUCTION: 'Primeiro Leilão',
-  SECOND_AUCTION: 'Segundo Leilão',
+  SFI_AUCTION: 'Leilão SFI',
   OPEN_BIDDING: 'Licitação Aberta',
   DIRECT_ONLINE_SALES: 'Venda Direta Online',
   ONLINE_SALES: 'Venda Online',

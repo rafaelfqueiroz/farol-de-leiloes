@@ -69,8 +69,7 @@ const BRAZILIAN_STATES = [
 ];
 
 const MODALITIES = [
-  { value: 'FIRST_AUCTION', label: 'Primeiro Leilão' },
-  { value: 'SECOND_AUCTION', label: 'Segundo Leilão' },
+  { value: 'SFI_AUCTION', label: 'Leilão SFI' },
   { value: 'OPEN_BIDDING', label: 'Licitação Aberta' },
   { value: 'DIRECT_ONLINE_SALES', label: 'Venda Direta Online' },
   { value: 'ONLINE_SALES', label: 'Venda Online' },

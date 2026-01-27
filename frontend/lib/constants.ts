@@ -70,19 +70,17 @@ export const STATE_ABBREVIATIONS: Record<string, string> = {
 
 // Modality mappings (Portuguese → API values)
 export const MODALITY_MAPPINGS: Record<string, string> = {
-  'primeiro leilão': 'FIRST_AUCTION',
-  '1º leilão': 'FIRST_AUCTION',
-  '1o leilão': 'FIRST_AUCTION',
-  'primeiro leilao': 'FIRST_AUCTION',
-  'second leilão': 'SECOND_AUCTION',
-  'segundo leilão': 'SECOND_AUCTION',
-  '2º leilão': 'SECOND_AUCTION',
-  '2o leilão': 'SECOND_AUCTION',
-  'segundo leilao': 'SECOND_AUCTION',
+  'leilão': 'SFI_AUCTION',
+  'leilao': 'SFI_AUCTION',
+  'leilão sfi': 'SFI_AUCTION',
+  'leilao sfi': 'SFI_AUCTION',
+  'edital único': 'SFI_AUCTION',
+  'edital unico': 'SFI_AUCTION',
   'licitação aberta': 'OPEN_BIDDING',
   'licitacao aberta': 'OPEN_BIDDING',
   'venda direta online': 'DIRECT_ONLINE_SALES',
   'compra direta online': 'DIRECT_ONLINE_SALES',
+  'venda direta': 'DIRECT_ONLINE_SALES',
   'venda online': 'ONLINE_SALES',
 };
 

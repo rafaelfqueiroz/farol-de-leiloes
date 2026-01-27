@@ -2,8 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
 export enum PhaseModality {
-  FIRST_AUCTION = 'FIRST_AUCTION',
-  SECOND_AUCTION = 'SECOND_AUCTION',
+  SFI_AUCTION = 'SFI_AUCTION',
   OPEN_BIDDING = 'OPEN_BIDDING',
   DIRECT_ONLINE_SALES = 'DIRECT_ONLINE_SALES',
   ONLINE_SALES = 'ONLINE_SALES',
@@ -17,10 +16,23 @@ export interface Address {
   zipcode?: string;
 }
 
+export interface ExpenseRule {
+  type: string; // e.g., 'Condomínio', 'Tributos'
+  description: string;
+}
+
+export enum PaymentMethod {
+  OWN_RESOURCES = 'OWN_RESOURCES', // Recursos próprios
+  FGTS = 'FGTS', // Permite utilização de FGTS
+  FINANCING = 'FINANCING', // Financiamento
+}
+
 export interface Phase {
   modality: PhaseModality;
   minimumPrice?: number | null;
   date?: Date | null;
+  paymentMethods?: PaymentMethod[];
+  expenseRules?: ExpenseRule[];
 }
 
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })
@@ -45,6 +57,12 @@ export class Auction {
 
   @Prop({ type: String })
   imageUrl?: string | null;
+
+  @Prop({ type: String })
+  description?: string | null;
+
+  @Prop({ type: Boolean, default: false, index: true })
+  fulfilled!: boolean;
 
   @Prop({ index: true })
   updatedAt!: Date;

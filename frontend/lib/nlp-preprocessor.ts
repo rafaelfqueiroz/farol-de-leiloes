@@ -7,7 +7,7 @@ Sua tarefa é analisar a mensagem do usuário e extrair os seguintes parâmetros
 - state: Sigla do estado brasileiro (ex: RN, SP, RJ, MG)
 - city: Nome da cidade
 - neighborhood: Nome do bairro
-- modality: Modalidade do leilão (FIRST_AUCTION, SECOND_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, ONLINE_SALES)
+- modality: Modalidade do leilão (SFI_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, ONLINE_SALES)
 - minMargin: Valor mínimo em reais (número inteiro, sem formatação)
 - maxMargin: Valor máximo em reais (número inteiro, sem formatação)
 - limit: Número máximo de resultados
@@ -16,10 +16,9 @@ Regras de conversão:
 1. Estados: Converta nomes completos para siglas (Rio Grande do Norte → RN, São Paulo → SP)
 2. Valores monetários: Converta para números inteiros (R$ 300.000,00 → 300000, 300 mil → 300000, 1 milhão → 1000000)
 3. Modalidades:
-   - "primeiro leilão" ou "1º leilão" → FIRST_AUCTION
-   - "segundo leilão" ou "2º leilão" → SECOND_AUCTION
+   - "leilão" ou "leilão sfi" ou "edital único" → SFI_AUCTION
    - "licitação aberta" → OPEN_BIDDING
-   - "venda direta online" → DIRECT_ONLINE_SALES
+   - "venda direta" ou "venda direta online" → DIRECT_ONLINE_SALES
    - "venda online" → ONLINE_SALES
 
 Responda APENAS com um objeto JSON válido contendo os parâmetros encontrados. Se um parâmetro não for mencionado, não o inclua no JSON.
@@ -27,7 +26,7 @@ Responda APENAS com um objeto JSON válido contendo os parâmetros encontrados. 
 Exemplos:
 - "Leilões em Natal/RN até 300 mil" → {"state": "RN", "city": "Natal", "maxMargin": 300000}
 - "Apartamentos em São Paulo acima de 500 mil" → {"state": "SP", "city": "São Paulo", "minMargin": 500000}
-- "Imóveis no segundo leilão em Belo Horizonte" → {"state": "MG", "city": "Belo Horizonte", "modality": "SECOND_AUCTION"}
+- "Imóveis em leilão em Belo Horizonte" → {"state": "MG", "city": "Belo Horizonte", "modality": "SFI_AUCTION"}
 - "Casas no bairro Boa Viagem em Recife entre 200 e 400 mil" → {"state": "PE", "city": "Recife", "neighborhood": "Boa Viagem", "minMargin": 200000, "maxMargin": 400000}`;
 
 interface OpenAICompatibleResponse {
