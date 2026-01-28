@@ -73,4 +73,5 @@ export type AuctionDocument = HydratedDocument<Auction>;
 export const AuctionSchema = SchemaFactory.createForClass(Auction);
 
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1 });
+AuctionSchema.index({ 'address.state': 1, 'address.city': 1, 'address.neighborhood': 1 });
 

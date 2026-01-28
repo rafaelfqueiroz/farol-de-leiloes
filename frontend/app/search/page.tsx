@@ -15,6 +15,7 @@ import SearchFilters, { AuctionFilters } from '../components/SearchFilters';
 import AuctionList from '../components/AuctionList';
 import FavoritesView from '../components/FavoritesView';
 import { FavoritesProvider } from '../contexts/FavoritesContext';
+import { SavedFiltersProvider } from '../contexts/SavedFiltersContext';
 import theme from '../theme';
 
 interface SearchResult {
@@ -50,7 +51,7 @@ function SearchPageContent() {
       const filters: AuctionFilters = {
         state: state || undefined,
         city: city ? city.split(',') : undefined,
-        neighborhood: neighborhood || undefined,
+        neighborhood: neighborhood ? neighborhood.split(',') : undefined,
         modality: modality ? modality.split(',') : undefined,
         minMargin: minMargin ? Number(minMargin) : undefined,
         maxMargin: maxMargin ? Number(maxMargin) : undefined,
@@ -76,7 +77,8 @@ function SearchPageContent() {
       if (filters.state) params.set('state', filters.state);
       // Handle city as array - join with comma for API
       if (filters.city && filters.city.length > 0) params.set('city', filters.city.join(','));
-      if (filters.neighborhood) params.set('neighborhood', filters.neighborhood);
+      // Handle neighborhood as array - join with comma for API
+      if (filters.neighborhood && filters.neighborhood.length > 0) params.set('neighborhood', filters.neighborhood.join(','));
       // Handle modality as array - join with comma for API
       if (filters.modality && filters.modality.length > 0) params.set('modality', filters.modality.join(','));
       if (filters.minMargin) params.set('minMargin', filters.minMargin.toString());
@@ -100,7 +102,7 @@ function SearchPageContent() {
     const params = new URLSearchParams();
     if (filters.state) params.set('state', filters.state);
     if (filters.city && filters.city.length > 0) params.set('city', filters.city.join(','));
-    if (filters.neighborhood) params.set('neighborhood', filters.neighborhood);
+    if (filters.neighborhood && filters.neighborhood.length > 0) params.set('neighborhood', filters.neighborhood.join(','));
     if (filters.modality && filters.modality.length > 0) params.set('modality', filters.modality.join(','));
     if (filters.minMargin) params.set('minMargin', filters.minMargin.toString());
     if (filters.maxMargin) params.set('maxMargin', filters.maxMargin.toString());
@@ -221,9 +223,11 @@ export default function SearchPage() {
   return (
     <ThemeProvider theme={theme}>
       <FavoritesProvider>
-        <Suspense fallback={<SearchPageLoading />}>
-          <SearchPageContent />
-        </Suspense>
+        <SavedFiltersProvider>
+          <Suspense fallback={<SearchPageLoading />}>
+            <SearchPageContent />
+          </Suspense>
+        </SavedFiltersProvider>
       </FavoritesProvider>
     </ThemeProvider>
   );

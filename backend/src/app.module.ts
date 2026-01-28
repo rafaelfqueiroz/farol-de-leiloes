@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuctionsModule } from './auctions/auctions.module';
 import { FavoritesModule } from './favorites/favorites.module';
+import { SavedFiltersModule } from './saved-filters/saved-filters.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import schedulerConfig from './config/scheduler.config';
@@ -29,6 +30,7 @@ import schedulerConfig from './config/scheduler.config';
     AuthModule,
     AuctionsModule,
     FavoritesModule,
+    SavedFiltersModule,
   ],
 })
 export class AppModule {}

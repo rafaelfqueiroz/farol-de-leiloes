@@ -3,6 +3,7 @@ import { registerAs } from "@nestjs/config"
 export interface SchedulerConfig {
 	import: SchedulerImportConfig
 	scraper: SchedulerScraperConfig
+	cache: CacheConfig
 }
 
 export interface SchedulerImportConfig {
@@ -15,6 +16,10 @@ export interface SchedulerScraperConfig {
 	onStartup: boolean
 }
 
+export interface CacheConfig {
+	neighborhoodsTtl: number
+}
+
 export const KEY = 'SchedulerConfig'
 
 export default registerAs(KEY, () => ({
@@ -25,5 +30,8 @@ export default registerAs(KEY, () => ({
 	scraper: {
 		enabled: process.env.SCRAPER_ENABLED !== 'false',
 		onStartup: process.env.SCRAPER_ON_START_UP === 'true'
+	},
+	cache: {
+		neighborhoodsTtl: parseInt(process.env.NEIGHBORHOODS_CACHE_TTL || '3600000', 10) // Default 1 hour
 	}
 } satisfies SchedulerConfig))

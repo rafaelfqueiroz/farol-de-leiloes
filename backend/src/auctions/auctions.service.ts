@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { Model } from 'mongoose';
 import { Auction, AuctionDocument, Address, Phase } from './schemas/auction.schema';
 
@@ -15,7 +17,7 @@ export interface AuctionUpsert {
 export interface QueryFilters {
   state?: string;
   city?: string | string[];
-  neighborhood?: string;
+  neighborhood?: string | string[];
   modality?: string | string[];
   minMargin?: number;
   maxMargin?: number;
@@ -23,10 +25,13 @@ export interface QueryFilters {
   skip?: number;
 }
 
+const NEIGHBORHOODS_CACHE_PREFIX = 'neighborhoods';
+
 @Injectable()
 export class AuctionsService {
   constructor(
     @InjectModel(Auction.name) private readonly auctionRepository: Model<AuctionDocument>,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
   async upsertMany(items: AuctionUpsert[]) {
@@ -151,7 +156,17 @@ export class AuctionsService {
       }
     }
 
-    if (filters.neighborhood) matchStage['address.neighborhood'] = new RegExp(`^${escapeRegExp(filters.neighborhood)}`, 'i');
+    // Handle neighborhood filter (single value or array)
+    if (filters.neighborhood) {
+      const neighborhoods = Array.isArray(filters.neighborhood) ? filters.neighborhood : [filters.neighborhood];
+      if (neighborhoods.length === 1) {
+        matchStage['address.neighborhood'] = new RegExp(`^${escapeRegExp(neighborhoods[0])}`, 'i');
+      } else {
+        matchStage['address.neighborhood'] = {
+          $in: neighborhoods.map(n => new RegExp(`^${escapeRegExp(n)}`, 'i')),
+        };
+      }
+    }
 
     if (Object.keys(matchStage).length > 0) {
       pipeline.push({ $match: matchStage });
@@ -216,6 +231,71 @@ export class AuctionsService {
 
   async findByCode(code: string): Promise<AuctionDocument | null> {
     return this.auctionRepository.findOne({ code }).exec();
+  }
+
+  /**
+   * Get distinct neighborhoods for a given state and cities
+   * Results are cached for performance
+   */
+  async getNeighborhoods(state: string, cities: string[]): Promise<string[]> {
+    // Build cache key
+    const sortedCities = [...cities].sort();
+    const cacheKey = `${NEIGHBORHOODS_CACHE_PREFIX}:${state.toUpperCase()}:${sortedCities.join(',')}`;
+
+    // Check cache first
+    const cached = await this.cacheManager.get<string[]>(cacheKey);
+    if (cached) {
+      console.log(`[getNeighborhoods] Cache hit for ${cacheKey}`);
+      return cached;
+    }
+
+    console.log(`[getNeighborhoods] Cache miss for ${cacheKey}, querying database`);
+
+    // Build match stage
+    const matchStage: Record<string, unknown> = {
+      'address.state': state.toUpperCase(),
+      'address.neighborhood': { $exists: true, $nin: [null, ''] },
+    };
+
+    // Match cities with case-insensitive regex
+    if (cities.length === 1) {
+      matchStage['address.city'] = new RegExp(`^${escapeRegExp(cities[0])}`, 'i');
+    } else {
+      matchStage['address.city'] = {
+        $in: cities.map(c => new RegExp(`^${escapeRegExp(c)}`, 'i')),
+      };
+    }
+
+    // Aggregate to get distinct neighborhoods
+    const result = await this.auctionRepository.aggregate([
+      { $match: matchStage },
+      { $group: { _id: '$address.neighborhood' } },
+      { $sort: { _id: 1 } },
+    ]).exec();
+
+    const neighborhoods = result
+      .map(doc => doc._id as string)
+      .filter(Boolean);
+
+    // Cache the result
+    await this.cacheManager.set(cacheKey, neighborhoods);
+    console.log(`[getNeighborhoods] Cached ${neighborhoods.length} neighborhoods for ${cacheKey}`);
+
+    return neighborhoods;
+  }
+
+  /**
+   * Invalidate all neighborhoods cache entries
+   * Called after import to ensure fresh data
+   */
+  async invalidateNeighborhoodsCache(): Promise<void> {
+    console.log('[invalidateNeighborhoodsCache] Clearing neighborhoods cache');
+    // cache-manager uses stores array, access first store and call reset
+    const stores = (this.cacheManager as any).stores;
+    if (stores && stores[0] && typeof stores[0].reset === 'function') {
+      await stores[0].reset();
+    }
+    console.log('[invalidateNeighborhoodsCache] Cache cleared');
   }
 
 }

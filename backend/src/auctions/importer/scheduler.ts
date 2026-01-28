@@ -117,7 +117,11 @@ export class AuctionsImporter {
       const res = await this.auctions.upsertMany(normalized);
       this.logger.log(`Import result - matched: ${res.matched}, upserted: ${res.upserted}, modified: ${res.modified}`);
       this.logger.log(`Auctions import completed.`);
-      
+
+      // Invalidate neighborhoods cache after import
+      await this.auctions.invalidateNeighborhoodsCache();
+      this.logger.log(`Neighborhoods cache invalidated`);
+
       // Record execution in database
       await this.jobExecutionService.recordExecution(this.jobName, runMode);
       this.logger.log(`Execution recorded in database`);

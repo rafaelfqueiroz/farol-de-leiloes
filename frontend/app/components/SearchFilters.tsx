@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Drawer,
@@ -16,11 +16,21 @@ import {
   Divider,
   Autocomplete,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  Snackbar,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SaveIcon from '@mui/icons-material/Save';
+import DeleteIcon from '@mui/icons-material/Delete';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import { useSavedFilters } from '../contexts/SavedFiltersContext';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
@@ -32,7 +42,7 @@ interface SearchFiltersProps {
 export interface AuctionFilters {
   state?: string;
   city?: string[];
-  neighborhood?: string;
+  neighborhood?: string[];
   modality?: string[];
   minMargin?: number;
   maxMargin?: number;
@@ -133,6 +143,51 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [aiSearchInput, setAiSearchInput] = useState('');
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
+  const [availableNeighborhoods, setAvailableNeighborhoods] = useState<string[]>([]);
+  const [loadingNeighborhoods, setLoadingNeighborhoods] = useState(false);
+
+  // Saved filters state
+  const { savedFilters, isAuthenticated, saveFilter, deleteFilter, loading: savedFiltersLoading } = useSavedFilters();
+  const [selectedSavedFilterId, setSelectedSavedFilterId] = useState<string>('');
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [newFilterName, setNewFilterName] = useState('');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savingFilter, setSavingFilter] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+
+  // Fetch neighborhoods when city selection changes
+  useEffect(() => {
+    const fetchNeighborhoods = async () => {
+      // Clear neighborhoods if no state or city selected
+      if (!filters.state || !filters.city || filters.city.length === 0) {
+        setAvailableNeighborhoods([]);
+        return;
+      }
+
+      setLoadingNeighborhoods(true);
+      try {
+        const cityParams = filters.city.map(c => `city=${encodeURIComponent(c)}`).join('&');
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_AUCTIONS_API_URL}/api/auctions/neighborhoods?state=${filters.state}&${cityParams}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableNeighborhoods(data.neighborhoods || []);
+        } else {
+          console.error('Failed to fetch neighborhoods');
+          setAvailableNeighborhoods([]);
+        }
+      } catch (error) {
+        console.error('Error fetching neighborhoods:', error);
+        setAvailableNeighborhoods([]);
+      } finally {
+        setLoadingNeighborhoods(false);
+      }
+    };
+
+    fetchNeighborhoods();
+  }, [filters.state, filters.city]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,6 +207,15 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
     setFilters({
       ...filters,
       city: newValue.length > 0 ? newValue : undefined,
+      // Clear neighborhood selection when cities change
+      neighborhood: undefined,
+    });
+  };
+
+  const handleNeighborhoodChange = (_: any, newValue: string[]) => {
+    setFilters({
+      ...filters,
+      neighborhood: newValue.length > 0 ? newValue : undefined,
     });
   };
 
@@ -184,8 +248,9 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
     setFilters({
       ...filters,
       state: newState || undefined,
-      // Clear city selections when state changes
-      city: undefined
+      // Clear city and neighborhood selections when state changes
+      city: undefined,
+      neighborhood: undefined,
     });
   };
 
@@ -211,6 +276,85 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
     } finally {
       setAiSearchLoading(false);
     }
+  };
+
+  // Saved filters handlers
+  const handleSelectSavedFilter = (filterId: string) => {
+    setSelectedSavedFilterId(filterId);
+    if (!filterId) return;
+
+    const selectedFilter = savedFilters.find(f => f._id === filterId);
+    if (selectedFilter) {
+      const savedFilterData = selectedFilter.filters;
+      setFilters({
+        state: savedFilterData.state,
+        city: savedFilterData.city,
+        neighborhood: savedFilterData.neighborhood,
+        modality: savedFilterData.modality,
+      });
+      setPriceRange([
+        savedFilterData.minMargin || 0,
+        savedFilterData.maxMargin || 2000000,
+      ]);
+    }
+  };
+
+  const handleOpenSaveDialog = () => {
+    setNewFilterName('');
+    setSaveError(null);
+    setSaveDialogOpen(true);
+  };
+
+  const handleCloseSaveDialog = () => {
+    setSaveDialogOpen(false);
+    setNewFilterName('');
+    setSaveError(null);
+  };
+
+  const handleSaveFilter = async () => {
+    if (!newFilterName.trim()) {
+      setSaveError('Digite um nome para o filtro');
+      return;
+    }
+
+    setSavingFilter(true);
+    setSaveError(null);
+
+    try {
+      const filterData = {
+        state: filters.state,
+        city: filters.city,
+        neighborhood: filters.neighborhood,
+        modality: filters.modality,
+        minMargin: priceRange[0] > 0 ? priceRange[0] : undefined,
+        maxMargin: priceRange[1] < 2000000 ? priceRange[1] : undefined,
+      };
+
+      await saveFilter(newFilterName.trim(), filterData);
+      handleCloseSaveDialog();
+      setSnackbarMessage('Filtro salvo com sucesso!');
+      setSnackbarOpen(true);
+    } catch (error: any) {
+      setSaveError(error.message || 'Erro ao salvar filtro');
+    } finally {
+      setSavingFilter(false);
+    }
+  };
+
+  const handleDeleteSavedFilter = async (e: React.MouseEvent, filterId: string) => {
+    e.stopPropagation();
+    const success = await deleteFilter(filterId);
+    if (success) {
+      if (selectedSavedFilterId === filterId) {
+        setSelectedSavedFilterId('');
+      }
+      setSnackbarMessage('Filtro removido com sucesso!');
+      setSnackbarOpen(true);
+    }
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
   };
 
   return (
@@ -307,6 +451,60 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
 
           {/* Scrollable Content */}
           <Box component="form" onSubmit={handleSubmit} sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+            {/* Saved Filters Section - Only shown for authenticated users */}
+            {isAuthenticated && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
+                  <BookmarkIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
+                  Filtros Salvos
+                </Typography>
+
+                <TextField
+                  select
+                  fullWidth
+                  label="Selecione um filtro"
+                  value={selectedSavedFilterId}
+                  onChange={(e) => handleSelectSavedFilter(e.target.value)}
+                  size="small"
+                  sx={{ mb: 1.5 }}
+                  disabled={savedFiltersLoading}
+                >
+                  <MenuItem value="">
+                    <em>Nenhum selecionado</em>
+                  </MenuItem>
+                  {savedFilters.map((filter) => (
+                    <MenuItem key={filter._id} value={filter._id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <Typography variant="body2" noWrap sx={{ flex: 1 }}>
+                          {filter.name}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleDeleteSavedFilter(e, filter._id)}
+                          sx={{ ml: 1, p: 0.5 }}
+                        >
+                          <DeleteIcon fontSize="small" color="error" />
+                        </IconButton>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </TextField>
+
+                <Button
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  startIcon={<SaveIcon />}
+                  onClick={handleOpenSaveDialog}
+                  disabled={savedFilters.length >= 10}
+                >
+                  {savedFilters.length >= 10 ? 'Limite de 10 filtros atingido' : 'Salvar Filtros Atuais'}
+                </Button>
+
+                <Divider sx={{ my: 3 }} />
+              </Box>
+            )}
+
             {/* Location Section */}
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
@@ -364,13 +562,62 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                 }}
               />
 
-              <TextField
-                fullWidth
-                label="Bairro"
-                value={filters.neighborhood || ''}
-                onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value || undefined })}
-                placeholder="Digite o nome do bairro"
-                size="small"
+              <Autocomplete
+                multiple
+                options={availableNeighborhoods}
+                value={filters.neighborhood || []}
+                onChange={handleNeighborhoodChange}
+                disabled={!filters.city || filters.city.length === 0}
+                loading={loadingNeighborhoods}
+                disableCloseOnSelect
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Bairro"
+                    placeholder={
+                      !filters.city || filters.city.length === 0
+                        ? "Selecione uma cidade primeiro"
+                        : filters.neighborhood && filters.neighborhood.length > 0
+                          ? ""
+                          : "Digite para buscar bairro..."
+                    }
+                    size="small"
+                    slotProps={{
+                      input: {
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {loadingNeighborhoods ? <CircularProgress color="inherit" size={20} /> : null}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      },
+                    }}
+                  />
+                )}
+                renderOption={(props, option, { selected }) => {
+                  const { key, ...otherProps } = props;
+                  return (
+                    <li key={key} {...otherProps}>
+                      <Checkbox
+                        checked={selected}
+                        size="small"
+                        sx={{ mr: 1 }}
+                      />
+                      {option}
+                    </li>
+                  );
+                }}
+                noOptionsText={
+                  loadingNeighborhoods
+                    ? "Carregando..."
+                    : !filters.city || filters.city.length === 0
+                      ? "Selecione uma cidade primeiro"
+                      : "Nenhum bairro encontrado"
+                }
+                ListboxProps={{
+                  style: { maxHeight: 250 }
+                }}
               />
             </Box>
 
@@ -477,6 +724,50 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
           </Box>
         </Box>
       </Drawer>
+
+      {/* Save Filter Dialog */}
+      <Dialog open={saveDialogOpen} onClose={handleCloseSaveDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>Salvar Filtro</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Nome do filtro"
+            fullWidth
+            value={newFilterName}
+            onChange={(e) => setNewFilterName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSaveFilter()}
+            error={!!saveError}
+            helperText={saveError}
+            disabled={savingFilter}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseSaveDialog} disabled={savingFilter}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleSaveFilter}
+            variant="contained"
+            disabled={savingFilter || !newFilterName.trim()}
+            startIcon={savingFilter ? <CircularProgress size={16} /> : <SaveIcon />}
+          >
+            {savingFilter ? 'Salvando...' : 'Salvar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Success/Error Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </>
   );
 }

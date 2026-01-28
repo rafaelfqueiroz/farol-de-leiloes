@@ -1,4 +1,4 @@
-import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
 import { AuctionsService } from './auctions.service';
 
 @Controller('auctions')
@@ -9,7 +9,7 @@ export class AuctionsController {
   async list(
     @Query('state') state?: string,
     @Query('city') city?: string | string[],
-    @Query('neighborhood') neighborhood?: string,
+    @Query('neighborhood') neighborhood?: string | string[],
     @Query('modality') modality?: string | string[],
     @Query('minMargin') minMargin?: string,
     @Query('maxMargin') maxMargin?: string,
@@ -30,13 +30,36 @@ export class AuctionsController {
     return this.auctions.query({
       state,
       city: parseMultiple(city),
-      neighborhood,
+      neighborhood: parseMultiple(neighborhood),
       modality: parseMultiple(modality),
       minMargin: minMargin ? Number(minMargin) : undefined,
       maxMargin: maxMargin ? Number(maxMargin) : undefined,
       take,
       skip,
     });
+  }
+
+  @Get('neighborhoods')
+  async getNeighborhoods(
+    @Query('state') state?: string,
+    @Query('city') city?: string | string[],
+  ) {
+    if (!state) {
+      throw new BadRequestException('State is required');
+    }
+    if (!city) {
+      throw new BadRequestException('City is required');
+    }
+
+    // Parse comma-separated values into arrays
+    const cities = Array.isArray(city)
+      ? city
+      : city.includes(',')
+        ? city.split(',').map(c => c.trim())
+        : [city];
+
+    const neighborhoods = await this.auctions.getNeighborhoods(state, cities);
+    return { neighborhoods };
   }
 
   @Get(':code')
