@@ -5,6 +5,7 @@ import { User, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class UsersService {
@@ -28,6 +29,7 @@ export class UsersService {
     const user = new this.userRepository({
       ...createUserDto,
       password: hashedPassword,
+      emailVerified: createUserDto.provider === 'google',
     });
 
     return user.save();
@@ -142,5 +144,67 @@ export class UsersService {
       resetPasswordToken: undefined,
       resetPasswordExpires: undefined,
     });
+  }
+
+  async setEmailVerificationToken(userId: string): Promise<string> {
+    const user = await this.userRepository.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Generate cryptographically secure random token
+    const token = crypto.randomBytes(32).toString('hex');
+    const hashedToken = await bcrypt.hash(token, 10);
+
+    // Set expiration to 24 hours from now
+    const expires = new Date();
+    expires.setHours(expires.getHours() + 24);
+
+    await this.userRepository.findByIdAndUpdate(userId, {
+      emailVerificationToken: hashedToken,
+      emailVerificationExpires: expires,
+    });
+
+    return token;
+  }
+
+  async verifyEmail(token: string): Promise<UserDocument> {
+    const users = await this.userRepository
+      .find({
+        emailVerificationExpires: { $gt: new Date() },
+        emailVerified: false,
+      })
+      .exec();
+
+    let matchedUser: UserDocument | null = null;
+    for (const user of users) {
+      if (user.emailVerificationToken) {
+        const isTokenValid = await bcrypt.compare(
+          token,
+          user.emailVerificationToken,
+        );
+        if (isTokenValid) {
+          matchedUser = user;
+          break;
+        }
+      }
+    }
+
+    if (!matchedUser) {
+      throw new NotFoundException('Invalid or expired verification token');
+    }
+
+    await this.userRepository.findByIdAndUpdate(matchedUser._id, {
+      emailVerified: true,
+      emailVerificationToken: undefined,
+      emailVerificationExpires: undefined,
+    });
+
+    return matchedUser;
+  }
+
+  async isEmailVerified(userId: string): Promise<boolean> {
+    const user = await this.userRepository.findById(userId).exec();
+    return user?.emailVerified ?? false;
   }
 }

@@ -83,7 +83,7 @@ export class AuctionsImporter {
             phases.push({
               modality: phaseModality,
               minimumPrice: n.minimumPrice ?? null,
-              date: null, // CSV doesn't contain auction dates
+              phaseDates: [], // Dates are scraped from the details page
             });
           } else {
             skippedUnknownModality++;

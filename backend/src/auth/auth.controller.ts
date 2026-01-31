@@ -14,6 +14,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RequestResetPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -90,5 +91,26 @@ export class AuthController {
   async changePassword(@CurrentUser() user: any, @Body() passwordData: { currentPassword: string; newPassword: string }) {
     await this.authService.changePassword(user.userId, passwordData.currentPassword, passwordData.newPassword);
     return { message: 'Password changed successfully' };
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    await this.authService.verifyEmail(dto.token);
+    return { message: 'Email verified successfully' };
+  }
+
+  @Post('resend-verification')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async resendVerification(@CurrentUser() user: any) {
+    await this.authService.resendVerification(user.userId);
+    return { message: 'Verification email sent' };
+  }
+
+  @Get('verification-status')
+  @UseGuards(JwtAuthGuard)
+  async getVerificationStatus(@CurrentUser() user: any) {
+    return this.authService.getVerificationStatus(user.userId);
   }
 }

@@ -30,7 +30,7 @@ export enum PaymentMethod {
 export interface Phase {
   modality: PhaseModality;
   minimumPrice?: number | null;
-  date?: Date | null;
+  phaseDates?: Date[];
   paymentMethods?: PaymentMethod[];
   expenseRules?: ExpenseRule[];
 }

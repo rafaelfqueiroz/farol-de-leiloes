@@ -1,6 +1,12 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
+import { EmailService } from '../email/email.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UserDocument } from '../users/schemas/user.schema';
@@ -10,6 +16,7 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private emailService: EmailService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<{ accessToken: string; user: any }> {
@@ -17,6 +24,16 @@ export class AuthService {
       ...registerDto,
       provider: 'local',
     });
+
+    // Generate and send verification email
+    const verificationToken = await this.usersService.setEmailVerificationToken(
+      user._id.toString(),
+    );
+    await this.emailService.sendVerificationEmail(
+      user.email,
+      verificationToken,
+      user.name,
+    );
 
     const accessToken = this.generateToken(user);
     return {
@@ -51,11 +68,14 @@ export class AuthService {
   }
 
   async requestPasswordReset(email: string): Promise<void> {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      // Don't reveal if email exists
+      return;
+    }
+
     const token = await this.usersService.setResetPasswordToken(email);
-    // TODO: Send email with reset token
-    // For now, just log the token (in production, send via email service)
-    console.log(`Password reset token for ${email}: ${token}`);
-    console.log(`Reset URL: ${process.env.FRONTEND_URL}/reset-password/${token}`);
+    await this.emailService.sendPasswordResetEmail(email, token, user.name);
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
@@ -94,8 +114,52 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 
+  async verifyEmail(token: string): Promise<void> {
+    await this.usersService.verifyEmail(token);
+  }
+
+  async resendVerification(userId: string): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.provider !== 'local') {
+      throw new BadRequestException(
+        'OAuth users do not require email verification',
+      );
+    }
+
+    if (user.emailVerified) {
+      throw new BadRequestException('Email already verified');
+    }
+
+    const token = await this.usersService.setEmailVerificationToken(userId);
+    await this.emailService.sendVerificationEmail(user.email, token, user.name);
+  }
+
+  async getVerificationStatus(
+    userId: string,
+  ): Promise<{ emailVerified: boolean; provider: string }> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return {
+      emailVerified: user.emailVerified ?? false,
+      provider: user.provider,
+    };
+  }
+
   private sanitizeUser(user: UserDocument): any {
-    const { password, resetPasswordToken, resetPasswordExpires, ...sanitized } = user.toObject();
+    const {
+      password,
+      resetPasswordToken,
+      resetPasswordExpires,
+      emailVerificationToken,
+      emailVerificationExpires,
+      ...sanitized
+    } = user.toObject();
     return sanitized;
   }
 }

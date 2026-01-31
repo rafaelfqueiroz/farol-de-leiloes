@@ -4,6 +4,7 @@ import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema';
 export interface ScrapedPhaseDetails {
   paymentMethods?: PaymentMethod[];
   expenseRules?: ExpenseRule[];
+  phaseDates?: Date[];
 }
 
 export interface ScrapedDetails {
@@ -48,8 +49,8 @@ export function scrapeAuctionDetails(html: string): ScrapedDetails {
         .trim();
     }
 
-    // Extract payment methods and expense rules
-    details.phaseDetails = extractPhaseDetails(relatedBoxHtml);
+    // Extract payment methods, expense rules, and phase dates
+    details.phaseDetails = extractPhaseDetails(relatedBoxHtml, $);
   }
 
   return details;
@@ -122,12 +123,106 @@ function extractExpenseRules(html: string): ExpenseRule[] {
 }
 
 /**
- * Extracts phase-specific details (payment methods and expense rules)
+ * Parses a date string in Brazilian format "DD/MM/YYYY - HHhMM" to a Date object
+ * Example: "26/01/2026 - 10h00" -> Date
  */
-function extractPhaseDetails(html: string): ScrapedPhaseDetails {
+function parseBrazilianDate(dateStr: string): Date | null {
+  // Match pattern: DD/MM/YYYY - HHhMM
+  const match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s*-\s*(\d{1,2})h(\d{2})/);
+  if (!match) return null;
+
+  const [, day, month, year, hours, minutes] = match;
+  // Create date in Brazil timezone (UTC-3)
+  const date = new Date(
+    parseInt(year),
+    parseInt(month) - 1, // Month is 0-indexed
+    parseInt(day),
+    parseInt(hours),
+    parseInt(minutes),
+  );
+  return date;
+}
+
+/**
+ * Extracts phase dates from the related-box HTML
+ * Handles three different auction types:
+ * 1. SFI Auction: "Data do 1º Leilão - DD/MM/YYYY - HHhMM" and "Data do 2º Leilão - DD/MM/YYYY - HHhMM"
+ * 2. Open Bidding: "Data da Licitação Aberta - DD/MM/YYYY - HHhMM"
+ * 3. Online Sales: Countdown timer in div#divContador (calculates end date from remaining time)
+ * 4. Direct Online Sales: No end date (returns empty array)
+ */
+function extractPhaseDates(html: string, $: cheerio.CheerioAPI): Date[] {
+  const phaseDates: Date[] = [];
+
+  // Try SFI Auction pattern - "Data do 1º Leilão" and "Data do 2º Leilão"
+  const firstAuctionMatch = html.match(/Data do 1º Leilão\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i);
+  const secondAuctionMatch = html.match(/Data do 2º Leilão\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i);
+
+  if (firstAuctionMatch) {
+    const date = parseBrazilianDate(firstAuctionMatch[1]);
+    if (date) phaseDates.push(date);
+  }
+  if (secondAuctionMatch) {
+    const date = parseBrazilianDate(secondAuctionMatch[1]);
+    if (date) phaseDates.push(date);
+  }
+
+  if (phaseDates.length > 0) {
+    return phaseDates;
+  }
+
+  // Try Open Bidding pattern - "Data da Licitação Aberta"
+  const openBiddingMatch = html.match(/Data da Licitação Aberta\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i);
+  if (openBiddingMatch) {
+    const date = parseBrazilianDate(openBiddingMatch[1]);
+    if (date) phaseDates.push(date);
+    return phaseDates;
+  }
+
+  // Try Online Sales pattern - countdown timer in div#divContador
+  const countdownDiv = $('#divContador');
+  if (countdownDiv.length > 0) {
+    // Check if it's "Venda Online" (has countdown) vs "Venda Direta Online" (no end date)
+    const countdownHtml = countdownDiv.html() || '';
+    if (countdownHtml.includes('Venda Online') && !countdownHtml.includes('Venda Direta')) {
+      // Extract days, hours, minutes, seconds from the countdown
+      const daysEl = $('#dias0');
+      const hoursEl = $('#horas0');
+      const minutesEl = $('#minutos0');
+      const secondsEl = $('#segundos0');
+
+      if (daysEl.length > 0) {
+        const days = parseInt(daysEl.text().trim()) || 0;
+        const hours = parseInt(hoursEl.text().trim()) || 0;
+        const minutes = parseInt(minutesEl.text().trim()) || 0;
+        const seconds = parseInt(secondsEl.text().trim()) || 0;
+
+        // Calculate end date from now + remaining time
+        const now = new Date();
+        const endDate = new Date(
+          now.getTime() +
+            days * 24 * 60 * 60 * 1000 +
+            hours * 60 * 60 * 1000 +
+            minutes * 60 * 1000 +
+            seconds * 1000,
+        );
+        phaseDates.push(endDate);
+      }
+    }
+    // Direct Online Sales ("Venda Direta Online") - no end date, returns empty array
+  }
+
+  return phaseDates;
+}
+
+/**
+ * Extracts phase-specific details (payment methods, expense rules, and phase dates)
+ */
+function extractPhaseDetails(html: string, $: cheerio.CheerioAPI): ScrapedPhaseDetails {
   return {
     paymentMethods: extractPaymentMethods(html),
     expenseRules: extractExpenseRules(html),
+    phaseDates: extractPhaseDates(html, $),
   };
 }
 

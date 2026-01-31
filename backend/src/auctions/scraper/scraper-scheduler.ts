@@ -142,7 +142,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
               this.logger.debug(`Scraped description for auction ${auction.code}`);
             }
 
-            // Update phase-specific details (paymentMethods, expenseRules) on the last phase
+            // Update phase-specific details (paymentMethods, expenseRules, phaseDates) on the last phase
             if (details.phaseDetails && auction.phases && auction.phases.length > 0) {
               const updatedPhases: Phase[] = [...auction.phases];
               const lastPhaseIndex = updatedPhases.length - 1;
@@ -150,9 +150,10 @@ export class AuctionDetailsScraper implements OnModuleInit {
                 ...updatedPhases[lastPhaseIndex],
                 paymentMethods: details.phaseDetails.paymentMethods,
                 expenseRules: details.phaseDetails.expenseRules,
+                phaseDates: details.phaseDetails.phaseDates,
               };
               updateData.phases = updatedPhases;
-              this.logger.debug(`Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules`);
+              this.logger.debug(`Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules, ${details.phaseDetails.phaseDates?.length || 0} phase dates`);
             }
 
             await this.auctionModel.updateOne(

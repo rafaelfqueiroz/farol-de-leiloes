@@ -27,6 +27,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       this.logger.warn(`JWT validation - User not found for ID: ${payload.sub}`);
       throw new UnauthorizedException('User not found');
     }
-    return { userId: payload.sub, email: payload.email, name: payload.name };
+    return {
+      userId: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      emailVerified: user.emailVerified ?? false,
+      provider: user.provider,
+    };
   }
 }
