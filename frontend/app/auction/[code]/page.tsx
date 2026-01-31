@@ -30,15 +30,24 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import LinkIcon from '@mui/icons-material/Link';
+import PaymentIcon from '@mui/icons-material/Payment';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import Sidebar from '../../components/Sidebar';
 import TopBar from '../../components/TopBar';
 import theme from '../../theme';
 
+interface ExpenseRule {
+  type: string;
+  description: string;
+}
+
 interface Phase {
   modality: string;
   minimumPrice?: number;
-  date?: string;
+  phaseDates?: string[];
+  paymentMethods?: string[];
+  expenseRules?: ExpenseRule[];
 }
 
 interface Address {
@@ -66,6 +75,12 @@ const MODALITY_LABELS: Record<string, string> = {
   OPEN_BIDDING: 'Licitação Aberta',
   DIRECT_ONLINE_SALES: 'Venda Direta Online',
   ONLINE_SALES: 'Venda Online',
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  OWN_RESOURCES: 'Recursos Próprios',
+  FGTS: 'FGTS',
+  FINANCING: 'Financiamento',
 };
 
 function formatCurrency(value?: number): string {
@@ -336,20 +351,75 @@ export default function AuctionDetailPage() {
               </Box>
             )}
 
-            {lastPhase?.date && (
+            {lastPhase?.phaseDates && lastPhase.phaseDates.length > 0 && (
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                 <CalendarTodayIcon sx={{ color: 'warning.main' }} />
                 <Box>
                   <Typography variant="subtitle2" color="text.secondary">
-                    Data do Leilão
+                    {lastPhase.phaseDates.length > 1 ? 'Datas do Leilão' : 'Data do Leilão'}
                   </Typography>
-                  <Typography variant="body1" fontWeight={600}>
-                    {formatDate(lastPhase.date)}
-                  </Typography>
+                  {lastPhase.phaseDates.map((date, idx) => (
+                    <Typography key={idx} variant="body1" fontWeight={600}>
+                      {lastPhase.phaseDates!.length > 1 ? `${idx + 1}º Leilão: ` : ''}{formatDate(date)}
+                    </Typography>
+                  ))}
                 </Box>
               </Box>
             )}
           </Box>
+
+          {/* Payment Methods */}
+          {lastPhase?.paymentMethods && lastPhase.paymentMethods.length > 0 && (
+            <>
+              <Divider sx={{ mb: 3 }} />
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}>
+                <PaymentIcon sx={{ color: 'primary.main', mt: 0.5 }} />
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    Formas de Pagamento Aceitas
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {lastPhase.paymentMethods.map((method, idx) => (
+                      <Chip
+                        key={idx}
+                        label={PAYMENT_METHOD_LABELS[method] || method}
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              </Box>
+            </>
+          )}
+
+          {/* Expense Rules */}
+          {lastPhase?.expenseRules && lastPhase.expenseRules.length > 0 && (
+            <>
+              <Divider sx={{ mb: 3 }} />
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}>
+                <ReceiptLongIcon sx={{ color: 'warning.main', mt: 0.5 }} />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    Regras para Pagamento das Despesas
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {lastPhase.expenseRules.map((rule, idx) => (
+                      <Box key={idx} sx={{ backgroundColor: 'grey.50', p: 1.5, borderRadius: 1 }}>
+                        <Typography variant="body2" fontWeight={600} color="text.primary">
+                          {rule.type}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {rule.description}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              </Box>
+            </>
+          )}
 
           {/* External Link */}
           {auction.detailsUrl && (
@@ -389,7 +459,8 @@ export default function AuctionDetailPage() {
                     <TableCell><strong>Fase</strong></TableCell>
                     <TableCell><strong>Modalidade</strong></TableCell>
                     <TableCell align="right"><strong>Lance Mínimo</strong></TableCell>
-                    <TableCell><strong>Data</strong></TableCell>
+                    <TableCell><strong>Data(s)</strong></TableCell>
+                    <TableCell><strong>Pagamento</strong></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -407,7 +478,31 @@ export default function AuctionDetailPage() {
                         {formatCurrency(phase.minimumPrice)}
                       </TableCell>
                       <TableCell>
-                        {phase.date ? new Date(phase.date).toLocaleDateString('pt-BR') : 'Não informado'}
+                        {phase.phaseDates && phase.phaseDates.length > 0
+                          ? phase.phaseDates.map((d, i) => (
+                              <Box key={i} component="span" sx={{ display: 'block' }}>
+                                {new Date(d).toLocaleDateString('pt-BR', { dateStyle: 'short' })}
+                                {' '}
+                                {new Date(d).toLocaleTimeString('pt-BR', { timeStyle: 'short' })}
+                              </Box>
+                            ))
+                          : 'Não informado'}
+                      </TableCell>
+                      <TableCell>
+                        {phase.paymentMethods && phase.paymentMethods.length > 0 ? (
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                            {phase.paymentMethods.map((method, idx) => (
+                              <Chip
+                                key={idx}
+                                label={PAYMENT_METHOD_LABELS[method] || method}
+                                size="small"
+                                variant="outlined"
+                              />
+                            ))}
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">-</Typography>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

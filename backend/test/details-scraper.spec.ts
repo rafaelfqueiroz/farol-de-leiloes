@@ -94,6 +94,19 @@ describe('Details Scraper', () => {
     });
   });
 
+  describe('Unavailable property', () => {
+    it('returns unavailable when property is no longer for sale', () => {
+      const fixturePath = path.join(__dirname, 'fixtures', 'unavailable-property.html');
+      const html = fs.readFileSync(fixturePath, 'utf8');
+      const details = scrapeAuctionDetails(html);
+
+      expect(details.unavailable).toBe(true);
+      expect(details.imageUrl).toBeUndefined();
+      expect(details.description).toBeUndefined();
+      expect(details.phaseDetails).toBeUndefined();
+    });
+  });
+
   describe('Common extractions', () => {
     it('extracts image URL', () => {
       const fixturePath = path.join(__dirname, 'fixtures', 'sfi-auction.html');

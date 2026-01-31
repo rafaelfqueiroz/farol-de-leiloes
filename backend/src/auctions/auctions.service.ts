@@ -140,8 +140,10 @@ export class AuctionsService {
     // Build aggregation pipeline to filter by last phase modality/price
     const pipeline: any[] = [];
 
-    // Match by address filters first
-    const matchStage: Record<string, unknown> = {};
+    // Match by address filters first, excluding unavailable auctions
+    const matchStage: Record<string, unknown> = {
+      available: { $ne: false },
+    };
     if (filters.state) matchStage['address.state'] = filters.state.toUpperCase();
 
     // Handle city filter (single value or array)
@@ -251,10 +253,11 @@ export class AuctionsService {
 
     console.log(`[getNeighborhoods] Cache miss for ${cacheKey}, querying database`);
 
-    // Build match stage
+    // Build match stage, excluding unavailable auctions
     const matchStage: Record<string, unknown> = {
       'address.state': state.toUpperCase(),
       'address.neighborhood': { $exists: true, $nin: [null, ''] },
+      available: { $ne: false },
     };
 
     // Match cities with case-insensitive regex

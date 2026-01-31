@@ -43,7 +43,7 @@ export default function RegisterPage() {
 
     try {
       await register(email, password, name);
-      router.push('/');
+      router.push('/verify-email');
     } catch (err: any) {
       setError(err.message || 'Failed to register');
     } finally {

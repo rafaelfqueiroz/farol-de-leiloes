@@ -64,6 +64,9 @@ export class Auction {
   @Prop({ type: Boolean, default: false, index: true })
   fulfilled!: boolean;
 
+  @Prop({ type: Boolean, default: true, index: true })
+  available!: boolean;
+
   @Prop({ index: true })
   updatedAt!: Date;
 }

@@ -7,6 +7,7 @@ interface User {
   email: string;
   name: string;
   provider: string;
+  emailVerified: boolean;
 }
 
 interface AuthContextType {
@@ -17,6 +18,9 @@ interface AuthContextType {
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
   isAuthenticated: boolean;
+  emailVerified: boolean;
+  resendVerificationEmail: () => Promise<void>;
+  checkVerificationStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -116,6 +120,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const resendVerificationEmail = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch('/api/auth/resend-verification', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to resend verification email');
+    }
+  };
+
+  const checkVerificationStatus = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const response = await fetch('/api/auth/verification-status', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (user && data.emailVerified !== user.emailVerified) {
+        setUser({ ...user, emailVerified: data.emailVerified });
+      }
+    }
+  };
+
+  const emailVerified = user?.emailVerified ?? false;
+
   return (
     <AuthContext.Provider
       value={{
@@ -126,6 +169,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         loadUser,
         isAuthenticated: !!user,
+        emailVerified,
+        resendVerificationEmail,
+        checkVerificationStatus,
       }}
     >
       {children}

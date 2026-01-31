@@ -10,13 +10,17 @@ import theme from './theme';
 
 export default function Home() {
   const router = useRouter();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user, emailVerified } = useAuth();
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      router.push('/search');
+      if (user?.provider === 'local' && !emailVerified) {
+        router.push('/verify-email');
+      } else {
+        router.push('/search');
+      }
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, user, emailVerified, router]);
 
   // Show loading state while checking auth
   if (loading) {

@@ -11,6 +11,7 @@ export interface ScrapedDetails {
   imageUrl?: string;
   description?: string;
   phaseDetails?: ScrapedPhaseDetails;
+  unavailable?: boolean;
 }
 
 /**
@@ -21,6 +22,12 @@ export interface ScrapedDetails {
 export function scrapeAuctionDetails(html: string): ScrapedDetails {
   const $ = cheerio.load(html);
   const details: ScrapedDetails = {};
+
+  // Check if the property is no longer available for sale
+  const bodyText = $('body').text();
+  if (bodyText.includes('O imóvel que você procura não está mais disponível para venda')) {
+    return { unavailable: true };
+  }
 
   // Extract image URL from the preview img tag
   // Example: <img id="preview" src="/fotos/F844440432017221.jpg" alt="Foto do imóvel">

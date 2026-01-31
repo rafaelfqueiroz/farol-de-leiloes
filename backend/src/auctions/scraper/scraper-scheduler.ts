@@ -126,6 +126,18 @@ export class AuctionDetailsScraper implements OnModuleInit {
             // Scrape details
             const details = await fetchAndScrapeDetails(auction.detailsUrl);
 
+            // If the property is no longer available, mark it and skip further processing
+            if (details.unavailable) {
+              await this.auctionModel.updateOne(
+                { code: auction.code },
+                { $set: { available: false, fulfilled: true, updatedAt: new Date() } }
+              );
+              this.logger.log(`Auction ${auction.code} marked as unavailable`);
+              scrapedCount++;
+              await this.delay(this.delayBetweenRequests);
+              continue;
+            }
+
             // Update auction with scraped details and mark as fulfilled
             const updateData: Record<string, unknown> = {
               fulfilled: true,
