@@ -6,7 +6,7 @@ interface User {
   _id: string;
   email: string;
   name: string;
-  provider: string;
+  providers: string[];
   emailVerified: boolean;
 }
 
@@ -151,8 +151,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (response.ok) {
       const data = await response.json();
-      if (user && data.emailVerified !== user.emailVerified) {
-        setUser({ ...user, emailVerified: data.emailVerified });
+      if (user) {
+        const updates: Partial<User> = {};
+        if (data.emailVerified !== user.emailVerified) {
+          updates.emailVerified = data.emailVerified;
+        }
+        if (JSON.stringify(data.providers) !== JSON.stringify(user.providers)) {
+          updates.providers = data.providers;
+        }
+        if (Object.keys(updates).length > 0) {
+          setUser({ ...user, ...updates });
+        }
       }
     }
   };

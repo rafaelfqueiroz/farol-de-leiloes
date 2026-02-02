@@ -23,22 +23,28 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     const { id, emails, displayName } = profile;
     const email = emails[0].value;
 
-    // Try to find user by Google ID
+    // Try to find user by Google ID (already linked)
     let user = await this.usersService.findByGoogleId(id);
 
-    // If not found, try to find by email
     if (!user) {
+      // Try to find by email (existing local account)
       user = await this.usersService.findByEmail(email);
-    }
 
-    // If still not found, create new user
-    if (!user) {
-      user = await this.usersService.create({
-        email,
-        name: displayName,
-        googleId: id,
-        provider: 'google',
-      });
+      if (user) {
+        // Link Google identity to existing account
+        user = await this.usersService.linkGoogleAccount(
+          user._id.toString(),
+          id,
+        );
+      } else {
+        // Create brand new Google user
+        user = await this.usersService.create({
+          email,
+          name: displayName,
+          googleId: id,
+          providers: ['google'],
+        });
+      }
     }
 
     done(null, user);

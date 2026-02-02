@@ -17,8 +17,8 @@ export class User extends Document {
   @Prop({ required: false, unique: true, sparse: true })
   googleId?: string;
 
-  @Prop({ required: true, enum: ['local', 'google'], default: 'local' })
-  provider!: string;
+  @Prop({ type: [String], required: true, enum: ['local', 'google'], default: ['local'] })
+  providers!: string[];
 
   @Prop({ required: false })
   resetPasswordToken?: string;

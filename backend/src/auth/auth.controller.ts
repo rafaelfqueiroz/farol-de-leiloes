@@ -14,6 +14,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RequestResetPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
+import { SetPasswordDto } from './dto/set-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
@@ -91,6 +92,14 @@ export class AuthController {
   async changePassword(@CurrentUser() user: any, @Body() passwordData: { currentPassword: string; newPassword: string }) {
     await this.authService.changePassword(user.userId, passwordData.currentPassword, passwordData.newPassword);
     return { message: 'Password changed successfully' };
+  }
+
+  @Post('set-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async setPassword(@CurrentUser() user: any, @Body() dto: SetPasswordDto) {
+    await this.authService.setPassword(user.userId, dto.newPassword);
+    return { message: 'Password set successfully' };
   }
 
   @Post('verify-email')

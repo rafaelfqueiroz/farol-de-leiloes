@@ -22,7 +22,7 @@ export class AuthService {
   async register(registerDto: RegisterDto): Promise<{ accessToken: string; user: any }> {
     const user = await this.usersService.create({
       ...registerDto,
-      provider: 'local',
+      providers: ['local'],
     });
 
     // Generate and send verification email
@@ -93,8 +93,8 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    if (user.provider !== 'local') {
-      throw new UnauthorizedException('Cannot change password for OAuth accounts');
+    if (!user.providers?.includes('local')) {
+      throw new UnauthorizedException('Cannot change password for OAuth-only accounts. Use "Set Password" instead.');
     }
 
     const validPassword = await this.usersService.validatePassword(user.email, currentPassword);
@@ -103,6 +103,21 @@ export class AuthService {
     }
 
     await this.usersService.update(userId, { password: newPassword });
+  }
+
+  async setPassword(userId: string, newPassword: string): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (user.providers?.includes('local')) {
+      throw new BadRequestException(
+        'You already have a password set. Use "Change Password" instead.',
+      );
+    }
+
+    await this.usersService.setPassword(userId, newPassword);
   }
 
   private generateToken(user: UserDocument): string {
@@ -124,7 +139,7 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    if (user.provider !== 'local') {
+    if (!user.providers?.includes('local')) {
       throw new BadRequestException(
         'OAuth users do not require email verification',
       );
@@ -140,14 +155,14 @@ export class AuthService {
 
   async getVerificationStatus(
     userId: string,
-  ): Promise<{ emailVerified: boolean; provider: string }> {
+  ): Promise<{ emailVerified: boolean; providers: string[] }> {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
     return {
       emailVerified: user.emailVerified ?? false,
-      provider: user.provider,
+      providers: user.providers,
     };
   }
 

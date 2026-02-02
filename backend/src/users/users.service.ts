@@ -29,7 +29,7 @@ export class UsersService {
     const user = new this.userRepository({
       ...createUserDto,
       password: hashedPassword,
-      emailVerified: createUserDto.provider === 'google',
+      emailVerified: createUserDto.providers?.includes('google') ?? false,
     });
 
     return user.save();
@@ -49,6 +49,43 @@ export class UsersService {
 
   async findByGoogleId(googleId: string): Promise<UserDocument | null> {
     return this.userRepository.findOne({ googleId }).exec();
+  }
+
+  async linkGoogleAccount(userId: string, googleId: string): Promise<UserDocument> {
+    const updatedUser = await this.userRepository.findByIdAndUpdate(
+      userId,
+      {
+        googleId,
+        emailVerified: true,
+        $addToSet: { providers: 'google' },
+      },
+      { new: true },
+    ).exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    return updatedUser;
+  }
+
+  async setPassword(userId: string, newPassword: string): Promise<UserDocument> {
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    const updatedUser = await this.userRepository.findByIdAndUpdate(
+      userId,
+      {
+        password: hashedPassword,
+        $addToSet: { providers: 'local' },
+      },
+      { new: true },
+    ).select('-password').exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    return updatedUser;
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserDocument> {
@@ -137,12 +174,13 @@ export class UsersService {
       throw new NotFoundException('Invalid or expired reset token');
     }
 
-    // Update password and clear reset token
+    // Update password, clear reset token, and ensure 'local' provider is present
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.userRepository.findByIdAndUpdate(matchedUser._id, {
       password: hashedPassword,
       resetPasswordToken: undefined,
       resetPasswordExpires: undefined,
+      $addToSet: { providers: 'local' },
     });
   }
 

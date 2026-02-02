@@ -32,7 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: payload.email,
       name: payload.name,
       emailVerified: user.emailVerified ?? false,
-      provider: user.provider,
+      providers: user.providers,
     };
   }
 }

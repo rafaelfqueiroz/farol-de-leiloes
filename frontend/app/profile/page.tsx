@@ -17,7 +17,7 @@ import {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -113,6 +113,50 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (newPassword !== confirmPassword) {
+      setError('As senhas não coincidem');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/auth/set-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ newPassword }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to set password');
+      }
+
+      setSuccess('Senha definida com sucesso! Agora você pode entrar com email e senha.');
+      setNewPassword('');
+      setConfirmPassword('');
+      await loadUser();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao definir senha');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (authLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -168,8 +212,8 @@ export default function ProfilePage() {
                 onChange={(e) => setEmail(e.target.value)}
                 margin="normal"
                 required
-                disabled={user?.provider === 'google'}
-                helperText={user?.provider === 'google' ? 'Email não pode ser alterado para contas Google' : ''}
+                disabled={user?.providers?.includes('google')}
+                helperText={user?.providers?.includes('google') ? 'Email não pode ser alterado para contas Google' : ''}
               />
               <Button
                 type="submit"
@@ -185,8 +229,8 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* Change Password - Only for local accounts */}
-        {user?.provider !== 'google' && (
+        {/* Password Section */}
+        {user?.providers?.includes('local') ? (
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -230,6 +274,48 @@ export default function ProfilePage() {
                   sx={{ mt: 2 }}
                 >
                   {loading ? <CircularProgress size={24} /> : 'Alterar Senha'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Definir Senha
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Você entrou com o Google. Defina uma senha para também poder entrar com email e senha.
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+              <form onSubmit={handleSetPassword}>
+                <TextField
+                  fullWidth
+                  label="Nova Senha"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  margin="normal"
+                  required
+                />
+                <TextField
+                  fullWidth
+                  label="Confirmar Nova Senha"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  margin="normal"
+                  required
+                />
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  fullWidth
+                  disabled={loading}
+                  sx={{ mt: 2 }}
+                >
+                  {loading ? <CircularProgress size={24} /> : 'Definir Senha'}
                 </Button>
               </form>
             </CardContent>

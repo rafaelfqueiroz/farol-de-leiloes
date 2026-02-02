@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsEnum } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional, IsEnum, IsArray } from 'class-validator';
 
 export class CreateUserDto {
   @IsEmail()
@@ -18,7 +18,8 @@ export class CreateUserDto {
   @IsOptional()
   googleId?: string;
 
-  @IsEnum(['local', 'google'])
+  @IsArray()
+  @IsEnum(['local', 'google'], { each: true })
   @IsOptional()
-  provider?: string;
+  providers?: string[];
 }
