@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Favorite } from './schemas/favorite.schema';
 import { AuctionsService } from '../auctions/auctions.service';
+import { AuctionDocument } from '../auctions/schemas/auction.schema';
 
 @Injectable()
 export class FavoritesService {
@@ -18,10 +19,30 @@ export class FavoritesService {
       .sort({ createdAt: -1 })
       .exec();
 
-    // Filter out favorites where auction was deleted (null after populate)
-    return favorites
-      .filter(fav => fav.auction != null)
-      .map(fav => fav.auction);
+    const results: any[] = [];
+
+    for (const fav of favorites) {
+      if (fav.auction != null) {
+        results.push(fav.auction);
+        continue;
+      }
+
+      // Auction ObjectId reference is stale — look up by auctionCode
+      const auction = await this.auctionsService.findByCode(fav.auctionCode);
+      if (auction) {
+        await this.updateAuctionId(fav._id, auction._id);
+        results.push(auction);
+      }
+    }
+
+    return results;
+  }
+
+  private async updateAuctionId(favoriteId: any, auctionId: any): Promise<void> {
+    await this.favoriteRepository.updateOne(
+      { _id: favoriteId },
+      { $set: { auction: auctionId } },
+    );
   }
 
   async findOne(userId: string, auctionCode: string): Promise<Favorite | null> {

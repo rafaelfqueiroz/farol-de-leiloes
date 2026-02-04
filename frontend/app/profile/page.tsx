@@ -12,8 +12,17 @@ import {
   Typography,
   Alert,
   CircularProgress,
+  Container,
   Divider,
+  MenuItem,
+  ThemeProvider,
 } from '@mui/material';
+import PersonIcon from '@mui/icons-material/Person';
+import BadgeIcon from '@mui/icons-material/Badge';
+import LockIcon from '@mui/icons-material/Lock';
+import Sidebar from '../components/Sidebar';
+import TopBar from '../components/TopBar';
+import theme from '../theme';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -27,6 +36,17 @@ export default function ProfilePage() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Personal data fields
+  const [phone, setPhone] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [sex, setSex] = useState('');
+  const [street, setStreet] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [zipCode, setZipCode] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/login');
@@ -38,6 +58,74 @@ export default function ProfilePage() {
       setEmail(user.email || '');
     }
   }, [user, isAuthenticated, authLoading, router]);
+
+  // Load full profile data
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const loadFullProfile = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/auth/profile/full', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setPhone(data.phone || '');
+          setCpf(data.cpf || '');
+          setDateOfBirth(data.dateOfBirth ? data.dateOfBirth.split('T')[0] : '');
+          setSex(data.sex || '');
+          setStreet(data.address?.street || '');
+          setCity(data.address?.city || '');
+          setState(data.address?.state || '');
+          setZipCode(data.address?.zipCode || '');
+        }
+      } catch (err) {
+        console.error('Error loading full profile:', err);
+      }
+    };
+    loadFullProfile();
+  }, [isAuthenticated]);
+
+  const handleSavePersonalData = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setProfileLoading(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/auth/profile/complete', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          phone: phone || undefined,
+          cpf: cpf || undefined,
+          dateOfBirth: dateOfBirth || undefined,
+          sex: sex || undefined,
+          address: {
+            street: street || undefined,
+            city: city || undefined,
+            state: state || undefined,
+            zipCode: zipCode || undefined,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to save personal data');
+      }
+
+      setSuccess('Dados pessoais salvos com sucesso!');
+    } catch (err: any) {
+      setError(err.message || 'Erro ao salvar dados pessoais');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,167 +258,319 @@ export default function ProfilePage() {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: '#FAFAF9', padding: 4, paddingTop: 12 }}>
-      <Box sx={{ maxWidth: 600, margin: '0 auto' }}>
-        <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
-          Meu Perfil
-        </Typography>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {success && (
-          <Alert severity="success" sx={{ mb: 2 }}>
-            {success}
-          </Alert>
-        )}
-
-        {/* Profile Information */}
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Informações do Perfil
+    <ThemeProvider theme={theme}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: 'background.default' }}>
+        <Sidebar />
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+          <TopBar />
+          <Container maxWidth="md" sx={{ pt: 12, pb: 4, flexGrow: 1 }}>
+            <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
+              Meu Perfil
             </Typography>
-            <Divider sx={{ mb: 2 }} />
-            <form onSubmit={handleUpdateProfile}>
-              <TextField
-                fullWidth
-                label="Nome"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                margin="normal"
-                required
-              />
-              <TextField
-                fullWidth
-                label="Email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                margin="normal"
-                required
-                disabled={user?.providers?.includes('google')}
-                helperText={user?.providers?.includes('google') ? 'Email não pode ser alterado para contas Google' : ''}
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                fullWidth
-                disabled={loading}
-                sx={{ mt: 2 }}
-              >
-                {loading ? <CircularProgress size={24} /> : 'Atualizar Perfil'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+            <Typography variant="body1" sx={{ mb: 4 }}>
+              Gerencie suas informações pessoais e segurança
+            </Typography>
 
-        {/* Password Section */}
-        {user?.providers?.includes('local') ? (
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Alterar Senha
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <form onSubmit={handleChangePassword}>
-                <TextField
-                  fullWidth
-                  label="Senha Atual"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  margin="normal"
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Nova Senha"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  margin="normal"
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Confirmar Nova Senha"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  margin="normal"
-                  required
-                />
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  disabled={loading}
-                  sx={{ mt: 2 }}
-                >
-                  {loading ? <CircularProgress size={24} /> : 'Alterar Senha'}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Definir Senha
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Você entrou com o Google. Defina uma senha para também poder entrar com email e senha.
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <form onSubmit={handleSetPassword}>
-                <TextField
-                  fullWidth
-                  label="Nova Senha"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  margin="normal"
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Confirmar Nova Senha"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  margin="normal"
-                  required
-                />
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  disabled={loading}
-                  sx={{ mt: 2 }}
-                >
-                  {loading ? <CircularProgress size={24} /> : 'Definir Senha'}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        )}
+            {error && (
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {error}
+              </Alert>
+            )}
 
-        <Button
-          variant="outlined"
-          fullWidth
-          onClick={() => router.push('/')}
-          sx={{ mt: 3 }}
-        >
-          Voltar para Leilões
-        </Button>
+            {success && (
+              <Alert severity="success" sx={{ mb: 3 }}>
+                {success}
+              </Alert>
+            )}
+
+            {/* Profile Information */}
+            <Card sx={{ mb: 3 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                  <Box
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 1,
+                      backgroundColor: 'primary.main',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <PersonIcon sx={{ color: 'white', fontSize: 20 }} />
+                  </Box>
+                  <Typography variant="h6">
+                    Informações do Perfil
+                  </Typography>
+                </Box>
+                <Divider sx={{ mb: 2 }} />
+                <form onSubmit={handleUpdateProfile}>
+                  <TextField
+                    fullWidth
+                    label="Nome"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    margin="normal"
+                    required
+                  />
+                  <TextField
+                    fullWidth
+                    label="Email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    margin="normal"
+                    required
+                    disabled={user?.providers?.includes('google')}
+                    helperText={user?.providers?.includes('google') ? 'Email não pode ser alterado para contas Google' : ''}
+                  />
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    fullWidth
+                    disabled={loading}
+                    sx={{ mt: 2 }}
+                  >
+                    {loading ? <CircularProgress size={24} /> : 'Atualizar Perfil'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            {/* Personal Data */}
+            <Card sx={{ mb: 3 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                  <Box
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 1,
+                      backgroundColor: 'primary.main',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <BadgeIcon sx={{ color: 'white', fontSize: 20 }} />
+                  </Box>
+                  <Typography variant="h6">
+                    Dados Pessoais
+                  </Typography>
+                </Box>
+                <Divider sx={{ mb: 2 }} />
+                <form onSubmit={handleSavePersonalData}>
+                  <TextField
+                    fullWidth
+                    label="Telefone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    margin="normal"
+                    placeholder="(00) 00000-0000"
+                  />
+                  <TextField
+                    fullWidth
+                    label="CPF"
+                    value={cpf}
+                    onChange={(e) => setCpf(e.target.value)}
+                    margin="normal"
+                    placeholder="000.000.000-00"
+                  />
+                  <TextField
+                    fullWidth
+                    label="Data de Nascimento"
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    margin="normal"
+                    slotProps={{ inputLabel: { shrink: true } }}
+                  />
+                  <TextField
+                    fullWidth
+                    select
+                    label="Sexo"
+                    value={sex}
+                    onChange={(e) => setSex(e.target.value)}
+                    margin="normal"
+                  >
+                    <MenuItem value="">Selecione</MenuItem>
+                    <MenuItem value="male">Masculino</MenuItem>
+                    <MenuItem value="female">Feminino</MenuItem>
+                    <MenuItem value="other">Outro</MenuItem>
+                  </TextField>
+
+                  <Typography variant="subtitle2" sx={{ mt: 2, mb: 1, color: 'text.secondary' }}>
+                    Endereço
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    label="Rua"
+                    value={street}
+                    onChange={(e) => setStreet(e.target.value)}
+                    margin="normal"
+                  />
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <TextField
+                      fullWidth
+                      label="Cidade"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      margin="normal"
+                    />
+                    <TextField
+                      fullWidth
+                      label="Estado"
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
+                      margin="normal"
+                      placeholder="UF"
+                    />
+                  </Box>
+                  <TextField
+                    fullWidth
+                    label="CEP"
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value)}
+                    margin="normal"
+                    placeholder="00000-000"
+                  />
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    fullWidth
+                    disabled={profileLoading}
+                    sx={{ mt: 2 }}
+                  >
+                    {profileLoading ? <CircularProgress size={24} /> : 'Salvar Dados Pessoais'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            {/* Password Section */}
+            {user?.providers?.includes('local') ? (
+              <Card>
+                <CardContent sx={{ p: 3 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                    <Box
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 1,
+                        backgroundColor: 'primary.main',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <LockIcon sx={{ color: 'white', fontSize: 20 }} />
+                    </Box>
+                    <Typography variant="h6">
+                      Alterar Senha
+                    </Typography>
+                  </Box>
+                  <Divider sx={{ mb: 2 }} />
+                  <form onSubmit={handleChangePassword}>
+                    <TextField
+                      fullWidth
+                      label="Senha Atual"
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      margin="normal"
+                      required
+                    />
+                    <TextField
+                      fullWidth
+                      label="Nova Senha"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      margin="normal"
+                      required
+                    />
+                    <TextField
+                      fullWidth
+                      label="Confirmar Nova Senha"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      margin="normal"
+                      required
+                    />
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      fullWidth
+                      disabled={loading}
+                      sx={{ mt: 2 }}
+                    >
+                      {loading ? <CircularProgress size={24} /> : 'Alterar Senha'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent sx={{ p: 3 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                    <Box
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 1,
+                        backgroundColor: 'primary.main',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <LockIcon sx={{ color: 'white', fontSize: 20 }} />
+                    </Box>
+                    <Typography variant="h6">
+                      Definir Senha
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Você entrou com o Google. Defina uma senha para também poder entrar com email e senha.
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  <form onSubmit={handleSetPassword}>
+                    <TextField
+                      fullWidth
+                      label="Nova Senha"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      margin="normal"
+                      required
+                    />
+                    <TextField
+                      fullWidth
+                      label="Confirmar Nova Senha"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      margin="normal"
+                      required
+                    />
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      fullWidth
+                      disabled={loading}
+                      sx={{ mt: 2 }}
+                    >
+                      {loading ? <CircularProgress size={24} /> : 'Definir Senha'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            )}
+          </Container>
+        </Box>
       </Box>
-    </Box>
+    </ThemeProvider>
   );
 }

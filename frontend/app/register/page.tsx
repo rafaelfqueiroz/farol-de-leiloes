@@ -11,9 +11,12 @@ import {
   Typography,
   Alert,
   Link as MuiLink,
+  ThemeProvider,
 } from '@mui/material';
+import GavelIcon from '@mui/icons-material/Gavel';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
+import theme from '../theme';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -52,99 +55,116 @@ export default function RegisterPage() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#FAFAF9',
-        padding: 2,
-      }}
-    >
-      <Card sx={{ maxWidth: 450, width: '100%' }}>
-        <CardContent sx={{ p: 4 }}>
-          <Box sx={{ textAlign: 'center', mb: 3 }}>
-            <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
-              Farol dos Leilões
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Crie sua conta
-            </Typography>
-          </Box>
-
-          {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <TextField
-              fullWidth
-              label="Nome"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              sx={{ mb: 2 }}
-              autoComplete="name"
-            />
-
-            <TextField
-              fullWidth
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              sx={{ mb: 2 }}
-              autoComplete="email"
-            />
-
-            <TextField
-              fullWidth
-              label="Senha"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              sx={{ mb: 2 }}
-              autoComplete="new-password"
-              helperText="Mínimo de 6 caracteres"
-            />
-
-            <TextField
-              fullWidth
-              label="Confirmar Senha"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              sx={{ mb: 3 }}
-              autoComplete="new-password"
-            />
-
-            <Button
-              fullWidth
-              variant="contained"
-              type="submit"
-              disabled={loading}
-              sx={{ mb: 2, py: 1.5 }}
-            >
-              {loading ? 'Criando conta...' : 'Cadastrar'}
-            </Button>
-
-            <Box sx={{ textAlign: 'center' }}>
+    <ThemeProvider theme={theme}>
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #2D3436 0%, #5A6C7D 100%)',
+          padding: 2,
+        }}
+      >
+        <Card sx={{ maxWidth: 450, width: '100%' }}>
+          <CardContent sx={{ p: 4 }}>
+            <Box sx={{ textAlign: 'center', mb: 3 }}>
+              <Box
+                sx={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: '50%',
+                  backgroundColor: 'primary.main',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mx: 'auto',
+                  mb: 2,
+                }}
+              >
+                <GavelIcon sx={{ color: 'white', fontSize: 28 }} />
+              </Box>
+              <Typography variant="h4" fontWeight={700} sx={{ mb: 0.5 }}>
+                Farol dos Leilões
+              </Typography>
               <Typography variant="body2" color="text.secondary">
-                Já tem uma conta?{' '}
-                <MuiLink component={Link} href="/login" sx={{ cursor: 'pointer' }}>
-                  Entrar
-                </MuiLink>
+                Crie sua conta
               </Typography>
             </Box>
-          </form>
-        </CardContent>
-      </Card>
-    </Box>
+
+            {error && (
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {error}
+              </Alert>
+            )}
+
+            <form onSubmit={handleSubmit}>
+              <TextField
+                fullWidth
+                label="Nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                sx={{ mb: 2 }}
+                autoComplete="name"
+              />
+
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                sx={{ mb: 2 }}
+                autoComplete="email"
+              />
+
+              <TextField
+                fullWidth
+                label="Senha"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                sx={{ mb: 2 }}
+                autoComplete="new-password"
+                helperText="Mínimo de 6 caracteres"
+              />
+
+              <TextField
+                fullWidth
+                label="Confirmar Senha"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                sx={{ mb: 3 }}
+                autoComplete="new-password"
+              />
+
+              <Button
+                fullWidth
+                variant="contained"
+                type="submit"
+                disabled={loading}
+                sx={{ mb: 2, py: 1.5 }}
+              >
+                {loading ? 'Criando conta...' : 'Cadastrar'}
+              </Button>
+
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Já tem uma conta?{' '}
+                  <MuiLink component={Link} href="/login" sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}>
+                    Entrar
+                  </MuiLink>
+                </Typography>
+              </Box>
+            </form>
+          </CardContent>
+        </Card>
+      </Box>
+    </ThemeProvider>
   );
 }

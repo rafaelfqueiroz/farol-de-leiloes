@@ -33,6 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       name: payload.name,
       emailVerified: user.emailVerified ?? false,
       providers: user.providers,
+      role: user.role ?? 'free',
     };
   }
 }

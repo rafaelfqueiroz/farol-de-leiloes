@@ -8,6 +8,18 @@ interface User {
   name: string;
   providers: string[];
   emailVerified: boolean;
+  role: string;
+  subscriptionStatus?: string | null;
+  phone?: string;
+  cpf?: string;
+  dateOfBirth?: string;
+  sex?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
 }
 
 interface AuthContextType {
@@ -17,8 +29,11 @@ interface AuthContextType {
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
   emailVerified: boolean;
+  role: string;
+  hasSubscription: boolean;
   resendVerificationEmail: () => Promise<void>;
   checkVerificationStatus: () => Promise<void>;
 }
@@ -167,6 +182,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const emailVerified = user?.emailVerified ?? false;
+  const role = user?.role ?? 'free';
+  const hasSubscription = user?.subscriptionStatus === 'active';
+
+  const refreshUser = useCallback(async () => {
+    await loadUser();
+  }, [loadUser]);
 
   return (
     <AuthContext.Provider
@@ -177,8 +198,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         loadUser,
+        refreshUser,
         isAuthenticated: !!user,
         emailVerified,
+        role,
+        hasSubscription,
         resendVerificationEmail,
         checkVerificationStatus,
       }}

@@ -24,6 +24,7 @@
     "@modelcontextprotocol/sdk": "^1.22.0",
     "@mui/icons-material": "^7.3.5",
     "@mui/material": "^7.3.5",
+    "@stripe/stripe-js": "^8.7.0",
     "@tailwindcss/postcss": "^4.1.17",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",

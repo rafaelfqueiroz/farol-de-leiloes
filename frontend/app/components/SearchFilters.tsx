@@ -30,7 +30,9 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteIcon from '@mui/icons-material/Delete';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
+import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
@@ -145,6 +147,10 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const [availableNeighborhoods, setAvailableNeighborhoods] = useState<string[]>([]);
   const [loadingNeighborhoods, setLoadingNeighborhoods] = useState(false);
+
+  // Auth state for AI search gating
+  const { role } = useAuth();
+  const canUseAISearch = role === 'admin' || role === 'standard' || role === 'premium';
 
   // Saved filters state
   const { savedFilters, isAuthenticated, saveFilter, deleteFilter, loading: savedFiltersLoading } = useSavedFilters();
@@ -360,39 +366,66 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
   return (
     <>
       {/* Center Content - AI Search */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: 4, position: 'relative' }}>
         <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
           Busque por IA
         </Typography>
-        <TextField
-          fullWidth
-          value={aiSearchInput}
-          onChange={(e) => setAiSearchInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleAISearch()}
-          placeholder="Ex: apartamento em santos até 300 mil"
-          disabled={aiSearchLoading}
-          slotProps={{
-            input: {
-              endAdornment: (
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={aiSearchLoading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
-                  onClick={handleAISearch}
-                  disabled={aiSearchLoading || !aiSearchInput.trim()}
-                  sx={{ ml: 1 }}
-                >
-                  {aiSearchLoading ? 'Buscando...' : 'Buscar'}
-                </Button>
-              ),
-            },
-          }}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              pr: 1,
-            },
-          }}
-        />
+        {canUseAISearch ? (
+          <TextField
+            fullWidth
+            value={aiSearchInput}
+            onChange={(e) => setAiSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAISearch()}
+            placeholder="Ex: apartamento em santos até 300 mil"
+            disabled={aiSearchLoading}
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={aiSearchLoading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
+                    onClick={handleAISearch}
+                    disabled={aiSearchLoading || !aiSearchInput.trim()}
+                    sx={{ ml: 1 }}
+                  >
+                    {aiSearchLoading ? 'Buscando...' : 'Buscar'}
+                  </Button>
+                ),
+              },
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                pr: 1,
+              },
+            }}
+          />
+        ) : (
+          <Box
+            sx={{
+              p: 3,
+              border: '1px dashed #B8BEBD',
+              borderRadius: 2,
+              textAlign: 'center',
+              backgroundColor: '#f5f5f5',
+            }}
+          >
+            <LockIcon sx={{ fontSize: 40, color: '#B8BEBD', mb: 1 }} />
+            <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: '#2D3436' }}>
+              Recurso disponivel no plano Standard
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: '#6B7280' }}>
+              Assine o plano Standard para usar a busca por IA
+            </Typography>
+            <Button
+              variant="contained"
+              href="/plans"
+              size="small"
+            >
+              Assine agora
+            </Button>
+          </Box>
+        )}
       </Box>
 
       {/* Toggle Button for Filter Panel */}

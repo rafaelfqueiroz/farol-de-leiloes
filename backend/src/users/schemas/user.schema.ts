@@ -34,6 +34,41 @@ export class User extends Document {
 
   @Prop({ required: false })
   emailVerificationExpires?: Date;
+
+  // Role-based access control
+  @Prop({ required: true, enum: ['admin', 'free', 'standard', 'premium'], default: 'free' })
+  role!: string;
+
+  // Stripe integration
+  @Prop({ required: false, unique: true, sparse: true })
+  stripeCustomerId?: string;
+
+  @Prop({ required: false })
+  stripeSubscriptionId?: string;
+
+  @Prop({ type: String, required: false, enum: ['active', 'canceled', 'past_due', 'incomplete'], default: null })
+  subscriptionStatus?: string | null;
+
+  // Profile fields
+  @Prop({ required: false })
+  phone?: string;
+
+  @Prop({ required: false })
+  cpf?: string;
+
+  @Prop({ required: false })
+  dateOfBirth?: Date;
+
+  @Prop({ required: false, enum: ['male', 'female', 'other'] })
+  sex?: string;
+
+  @Prop({ type: Object, required: false })
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -41,3 +76,5 @@ export const UserSchema = SchemaFactory.createForClass(User);
 // Create indexes
 UserSchema.index({ email: 1 });
 UserSchema.index({ googleId: 1 }, { sparse: true });
+UserSchema.index({ stripeCustomerId: 1 }, { sparse: true });
+UserSchema.index({ role: 1 });

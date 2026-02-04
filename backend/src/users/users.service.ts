@@ -51,6 +51,16 @@ export class UsersService {
     return this.userRepository.findOne({ googleId }).exec();
   }
 
+  async findByStripeCustomerId(stripeCustomerId: string): Promise<UserDocument | null> {
+    return this.userRepository.findOne({ stripeCustomerId }).exec();
+  }
+
+  async findByIdFull(id: string): Promise<UserDocument | null> {
+    return this.userRepository.findById(id)
+      .select('-password -resetPasswordToken -resetPasswordExpires -emailVerificationToken -emailVerificationExpires')
+      .exec();
+  }
+
   async linkGoogleAccount(userId: string, googleId: string): Promise<UserDocument> {
     const updatedUser = await this.userRepository.findByIdAndUpdate(
       userId,

@@ -7,6 +7,8 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { SavedFiltersModule } from './saved-filters/saved-filters.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { PaymentsModule } from './payments/payments.module';
+import { CouponsModule } from './coupons/coupons.module';
 import schedulerConfig from './config/scheduler.config';
 
 @Module({
@@ -31,6 +33,8 @@ import schedulerConfig from './config/scheduler.config';
     AuctionsModule,
     FavoritesModule,
     SavedFiltersModule,
+    PaymentsModule,
+    CouponsModule,
   ],
 })
 export class AppModule {}

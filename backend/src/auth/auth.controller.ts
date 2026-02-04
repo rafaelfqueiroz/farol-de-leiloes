@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { RequestResetPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { CompleteProfileDto } from './dto/complete-profile.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -121,5 +122,17 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async getVerificationStatus(@CurrentUser() user: any) {
     return this.authService.getVerificationStatus(user.userId);
+  }
+
+  @Patch('profile/complete')
+  @UseGuards(JwtAuthGuard)
+  async completeProfile(@CurrentUser() user: any, @Body() dto: CompleteProfileDto) {
+    return this.authService.completeProfile(user.userId, dto);
+  }
+
+  @Get('profile/full')
+  @UseGuards(JwtAuthGuard)
+  async getFullProfile(@CurrentUser() user: any) {
+    return this.authService.getFullProfile(user.userId);
   }
 }

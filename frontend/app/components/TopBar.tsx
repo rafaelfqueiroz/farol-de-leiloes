@@ -1,13 +1,13 @@
 'use client';
 
-import { AppBar, Toolbar, Typography, Box, Avatar, IconButton, Menu, MenuItem, Button } from '@mui/material';
+import { AppBar, Toolbar, Typography, Box, Avatar, IconButton, Menu, MenuItem, Button, Chip } from '@mui/material';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function TopBar() {
   const router = useRouter();
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, role, hasSubscription } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
 
@@ -23,6 +23,20 @@ export default function TopBar() {
     handleClose();
     await logout();
     router.push('/');
+  };
+
+  const getPlanLabel = () => {
+    if (role === 'admin') return 'Admin';
+    if (role === 'standard' && hasSubscription) return 'Standard';
+    if (role === 'premium') return 'Premium';
+    return 'Gratuito';
+  };
+
+  const getPlanColor = (): 'default' | 'primary' | 'secondary' | 'success' => {
+    if (role === 'admin') return 'secondary';
+    if (role === 'standard' && hasSubscription) return 'primary';
+    if (role === 'premium') return 'success';
+    return 'default';
   };
 
   const getUserInitials = () => {
@@ -65,6 +79,13 @@ export default function TopBar() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {isAuthenticated && user ? (
             <>
+              <Chip
+                label={getPlanLabel()}
+                color={getPlanColor()}
+                size="small"
+                variant="outlined"
+                sx={{ fontWeight: 600, fontSize: 11 }}
+              />
               <IconButton
                 onClick={handleClick}
                 sx={{
@@ -109,6 +130,9 @@ export default function TopBar() {
                 </MenuItem>
                 <MenuItem onClick={() => { handleClose(); router.push('/profile'); }}>
                   Perfil
+                </MenuItem>
+                <MenuItem onClick={() => { handleClose(); router.push('/plans'); }}>
+                  Planos
                 </MenuItem>
                 <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
                   Sair

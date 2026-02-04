@@ -9,6 +9,7 @@ import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { CompleteProfileDto } from './dto/complete-profile.dto';
 import { UserDocument } from '../users/schemas/user.schema';
 
 @Injectable()
@@ -85,6 +86,19 @@ export class AuthService {
   async updateProfile(userId: string, updateData: { name?: string; email?: string }): Promise<any> {
     const user = await this.usersService.update(userId, updateData);
     return this.sanitizeUser(user);
+  }
+
+  async completeProfile(userId: string, dto: CompleteProfileDto): Promise<any> {
+    const user = await this.usersService.update(userId, dto);
+    return this.sanitizeUser(user);
+  }
+
+  async getFullProfile(userId: string): Promise<any> {
+    const user = await this.usersService.findByIdFull(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {

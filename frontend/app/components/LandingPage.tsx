@@ -76,35 +76,53 @@ const PRICING_PLANS = [
     period: '/mês',
     description: 'Para quem está começando a explorar oportunidades',
     features: [
-      { text: 'Busca de imóveis', included: true },
+      { text: 'Busca manual por filtros', included: true },
       { text: 'Favoritar imóveis', included: true },
-      { text: 'Visualizar detalhes básicos', included: true },
-      { text: 'Análise de risco do imóvel', included: false },
-      { text: 'Simulador de aquisição', included: false },
-      { text: 'Alertas de oportunidades', included: false },
-      { text: 'Verificação de documentação', included: false },
+      { text: 'Filtros salvos (até 10)', included: true },
+      { text: 'Busca por IA', included: false },
       { text: 'Suporte prioritário', included: false },
+      { text: 'Alertas personalizados', included: false },
+      { text: 'Relatórios avançados', included: false },
     ],
     buttonText: 'Começar Grátis',
     highlighted: false,
+    disabled: false,
   },
   {
-    name: 'Completo',
-    price: 'R$ 49,90',
+    name: 'Standard',
+    price: 'R$ 29,90',
     period: '/mês',
-    description: 'Todas as ferramentas para investir com segurança',
+    description: 'Ferramentas inteligentes para encontrar as melhores oportunidades',
     features: [
-      { text: 'Busca de imóveis', included: true },
+      { text: 'Busca manual por filtros', included: true },
       { text: 'Favoritar imóveis', included: true },
-      { text: 'Visualizar detalhes completos', included: true },
-      { text: 'Análise de risco do imóvel', included: true },
-      { text: 'Simulador de aquisição', included: true },
-      { text: 'Alertas de oportunidades', included: true },
-      { text: 'Verificação de documentação', included: true },
+      { text: 'Filtros salvos (até 10)', included: true },
+      { text: 'Busca por IA', included: true },
       { text: 'Suporte prioritário', included: true },
+      { text: 'Alertas personalizados', included: false },
+      { text: 'Relatórios avançados', included: false },
     ],
     buttonText: 'Assinar Agora',
     highlighted: true,
+    disabled: false,
+  },
+  {
+    name: 'Premium',
+    price: 'Em breve',
+    period: '',
+    description: 'Todas as ferramentas para investir com segurança',
+    features: [
+      { text: 'Busca manual por filtros', included: true },
+      { text: 'Favoritar imóveis', included: true },
+      { text: 'Filtros salvos (até 10)', included: true },
+      { text: 'Busca por IA', included: true },
+      { text: 'Suporte prioritário', included: true },
+      { text: 'Alertas personalizados', included: true },
+      { text: 'Relatórios avançados', included: true },
+    ],
+    buttonText: 'Em Breve',
+    highlighted: false,
+    disabled: true,
   },
 ];
 
@@ -411,19 +429,20 @@ export default function LandingPage() {
             Escolha seu Plano
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
-            Comece gratuitamente ou desbloqueie todas as funcionalidades com o plano completo
+            Comece gratuitamente ou desbloqueie funcionalidades com nossos planos
           </Typography>
         </Box>
 
         <Grid container spacing={4} sx={{ justifyContent: 'center' }}>
           {PRICING_PLANS.map((plan, index) => (
-            <Grid size={{ xs: 12, sm: 6, md: 5 }} key={index}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={index}>
               <Card
                 sx={{
                   height: '100%',
                   position: 'relative',
                   border: plan.highlighted ? '2px solid #5A6C7D' : '1px solid #B8BEBD',
                   transform: plan.highlighted ? 'scale(1.02)' : 'none',
+                  opacity: plan.disabled ? 0.7 : 1,
                 }}
               >
                 {plan.highlighted && (
@@ -492,6 +511,7 @@ export default function LandingPage() {
                     variant={plan.highlighted ? 'contained' : 'outlined'}
                     fullWidth
                     size="large"
+                    disabled={plan.disabled}
                     onClick={handleLogin}
                     sx={{
                       mt: 3,
