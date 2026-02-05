@@ -12,6 +12,7 @@ import {
 import { SavedFiltersService } from './saved-filters.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { SavedFilterResponseDto } from './dto/saved-filter-response.dto';
 import { FilterData } from './schemas/saved-filter.schema';
 
 interface CreateSavedFilterDto {
@@ -25,16 +26,18 @@ export class SavedFiltersController {
   constructor(private readonly savedFiltersService: SavedFiltersService) {}
 
   @Get()
-  async findAll(@CurrentUser() user: any) {
-    return this.savedFiltersService.findAll(user.userId);
+  async findAll(@CurrentUser() user: any): Promise<SavedFilterResponseDto[]> {
+    const filters = await this.savedFiltersService.findAll(user.userId);
+    return filters.map(filter => new SavedFilterResponseDto(filter));
   }
 
   @Post()
   async create(
     @CurrentUser() user: any,
     @Body() body: CreateSavedFilterDto,
-  ) {
-    return this.savedFiltersService.create(user.userId, body.name, body.filters);
+  ): Promise<SavedFilterResponseDto> {
+    const filter = await this.savedFiltersService.create(user.userId, body.name, body.filters);
+    return new SavedFilterResponseDto(filter);
   }
 
   @Delete(':id')

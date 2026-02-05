@@ -1,7 +1,7 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { User, UserDocument } from './schemas/user.schema';
+import { UserEntity, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
@@ -10,7 +10,7 @@ import * as crypto from 'crypto';
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectModel(User.name) private readonly userRepository: Model<UserDocument>,
+    @InjectModel(UserEntity.name) private readonly userRepository: Model<UserDocument>,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserDocument> {

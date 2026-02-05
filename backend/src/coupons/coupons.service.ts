@@ -3,8 +3,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import Stripe from 'stripe';
-import { Coupon, CouponDocument } from './schemas/coupon.schema';
+import { CouponEntity, CouponDocument } from './schemas/coupon.schema';
 import { CreateCouponDto } from './dto/create-coupon.dto';
+import { Coupon } from './interfaces/coupon.interface';
 
 @Injectable()
 export class CouponsService {
@@ -12,13 +13,13 @@ export class CouponsService {
   private stripe: Stripe;
 
   constructor(
-    @InjectModel(Coupon.name) private readonly couponModel: Model<CouponDocument>,
+    @InjectModel(CouponEntity.name) private readonly couponModel: Model<CouponDocument>,
     private configService: ConfigService,
   ) {
     this.stripe = new Stripe(this.configService.get<string>('STRIPE_SECRET_KEY')!);
   }
 
-  async create(dto: CreateCouponDto): Promise<CouponDocument> {
+  async create(dto: CreateCouponDto): Promise<Coupon> {
     // Create Stripe coupon with absolute amount off
     const stripeCoupon = await this.stripe.coupons.create({
       amount_off: dto.discountValue,
@@ -45,24 +46,26 @@ export class CouponsService {
       active: true,
     });
 
-    return coupon.save();
+    const saved = await coupon.save();
+    return this.toCoupon(saved);
   }
 
-  async findAll(): Promise<CouponDocument[]> {
-    return this.couponModel.find().sort({ createdAt: -1 }).exec();
+  async findAll(): Promise<Coupon[]> {
+    const docs = await this.couponModel.find().sort({ createdAt: -1 }).exec();
+    return docs.map(doc => this.toCoupon(doc));
   }
 
-  async validateCoupon(code: string): Promise<CouponDocument> {
+  async validateCoupon(code: string): Promise<Coupon> {
     const coupon = await this.couponModel.findOne({ code: code.toUpperCase() }).exec();
 
     if (!coupon || !coupon.active || new Date(coupon.validTo) < new Date()) {
       throw new BadRequestException('Este cupom encontra-se invalido');
     }
 
-    return coupon;
+    return this.toCoupon(coupon);
   }
 
-  async invalidate(id: string): Promise<CouponDocument> {
+  async invalidate(id: string): Promise<Coupon> {
     const coupon = await this.couponModel.findById(id).exec();
 
     if (!coupon) {
@@ -81,10 +84,21 @@ export class CouponsService {
     }
 
     coupon.active = false;
-    return coupon.save();
+    const saved = await coupon.save();
+    return this.toCoupon(saved);
   }
 
-  async findByCode(code: string): Promise<CouponDocument | null> {
-    return this.couponModel.findOne({ code: code.toUpperCase() }).exec();
+  private toCoupon(doc: CouponDocument): Coupon {
+    return {
+      _id: doc._id.toString(),
+      code: doc.code,
+      discountValue: doc.discountValue,
+      validTo: doc.validTo,
+      active: doc.active,
+      stripeCouponId: doc.stripeCouponId ?? null,
+      stripePromotionCodeId: doc.stripePromotionCodeId ?? null,
+      description: doc.description ?? null,
+      createdAt: (doc as any).createdAt,
+    };
   }
 }

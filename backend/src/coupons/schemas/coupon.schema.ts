@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-export type CouponDocument = Coupon & Document;
+export type CouponDocument = CouponEntity & Document;
 
 @Schema({ timestamps: true })
-export class Coupon extends Document {
+export class CouponEntity extends Document {
   @Prop({ required: true, unique: true, uppercase: true, trim: true })
   code!: string;
 
@@ -27,6 +27,6 @@ export class Coupon extends Document {
   description?: string;
 }
 
-export const CouponSchema = SchemaFactory.createForClass(Coupon);
+export const CouponSchema = SchemaFactory.createForClass(CouponEntity);
 
 CouponSchema.index({ code: 1 }, { unique: true });

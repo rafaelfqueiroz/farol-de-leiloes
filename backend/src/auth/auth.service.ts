@@ -11,6 +11,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { CompleteProfileDto } from './dto/complete-profile.dto';
 import { UserDocument } from '../users/schemas/user.schema';
+import { UserProfile, AuthResult } from './interfaces/auth.interface';
 
 @Injectable()
 export class AuthService {
@@ -20,7 +21,7 @@ export class AuthService {
     private emailService: EmailService,
   ) {}
 
-  async register(registerDto: RegisterDto): Promise<{ accessToken: string; user: any }> {
+  async register(registerDto: RegisterDto): Promise<AuthResult> {
     const user = await this.usersService.create({
       ...registerDto,
       providers: ['local'],
@@ -39,11 +40,11 @@ export class AuthService {
     const accessToken = this.generateToken(user);
     return {
       accessToken,
-      user: this.sanitizeUser(user),
+      user: this.toUserProfile(user),
     };
   }
 
-  async login(loginDto: LoginDto): Promise<{ accessToken: string; user: any }> {
+  async login(loginDto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.validatePassword(
       loginDto.email,
       loginDto.password,
@@ -56,15 +57,15 @@ export class AuthService {
     const accessToken = this.generateToken(user);
     return {
       accessToken,
-      user: this.sanitizeUser(user),
+      user: this.toUserProfile(user),
     };
   }
 
-  async googleLogin(user: UserDocument): Promise<{ accessToken: string; user: any }> {
+  async googleLogin(user: UserDocument): Promise<AuthResult> {
     const accessToken = this.generateToken(user);
     return {
       accessToken,
-      user: this.sanitizeUser(user),
+      user: this.toUserProfile(user),
     };
   }
 
@@ -83,22 +84,22 @@ export class AuthService {
     await this.usersService.resetPassword(token, newPassword);
   }
 
-  async updateProfile(userId: string, updateData: { name?: string; email?: string }): Promise<any> {
+  async updateProfile(userId: string, updateData: { name?: string; email?: string }): Promise<UserProfile> {
     const user = await this.usersService.update(userId, updateData);
-    return this.sanitizeUser(user);
+    return this.toUserProfile(user);
   }
 
-  async completeProfile(userId: string, dto: CompleteProfileDto): Promise<any> {
+  async completeProfile(userId: string, dto: CompleteProfileDto): Promise<UserProfile> {
     const user = await this.usersService.update(userId, dto);
-    return this.sanitizeUser(user);
+    return this.toUserProfile(user);
   }
 
-  async getFullProfile(userId: string): Promise<any> {
+  async getFullProfile(userId: string): Promise<UserProfile> {
     const user = await this.usersService.findByIdFull(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    return user;
+    return this.toUserProfile(user);
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
@@ -180,15 +181,22 @@ export class AuthService {
     };
   }
 
-  private sanitizeUser(user: UserDocument): any {
-    const {
-      password,
-      resetPasswordToken,
-      resetPasswordExpires,
-      emailVerificationToken,
-      emailVerificationExpires,
-      ...sanitized
-    } = user.toObject();
-    return sanitized;
+  private toUserProfile(user: UserDocument): UserProfile {
+    const obj = typeof user.toObject === 'function' ? user.toObject() : user;
+    return {
+      _id: obj._id.toString(),
+      email: obj.email,
+      name: obj.name,
+      providers: obj.providers,
+      emailVerified: obj.emailVerified ?? false,
+      role: obj.role ?? 'free',
+      phone: obj.phone,
+      cpf: obj.cpf,
+      dateOfBirth: obj.dateOfBirth,
+      sex: obj.sex,
+      address: obj.address,
+      createdAt: obj.createdAt,
+      updatedAt: obj.updatedAt,
+    };
   }
 }

@@ -36,7 +36,7 @@ export interface Phase {
 }
 
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })
-export class Auction {
+export class AuctionEntity {
   @Prop({ index: true, unique: true })
   code!: string;
 
@@ -71,9 +71,9 @@ export class Auction {
   updatedAt!: Date;
 }
 
-export type AuctionDocument = HydratedDocument<Auction>;
+export type AuctionDocument = HydratedDocument<AuctionEntity>;
 
-export const AuctionSchema = SchemaFactory.createForClass(Auction);
+export const AuctionSchema = SchemaFactory.createForClass(AuctionEntity);
 
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1 });
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1, 'address.neighborhood': 1 });

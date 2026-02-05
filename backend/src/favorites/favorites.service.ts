@@ -1,36 +1,39 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Favorite } from './schemas/favorite.schema';
+import { FavoriteEntity, FavoriteDocument } from './schemas/favorite.schema';
 import { AuctionsService } from '../auctions/auctions.service';
-import { AuctionDocument } from '../auctions/schemas/auction.schema';
+import { Auction } from '../auctions/interfaces/auction.interface';
 
 @Injectable()
 export class FavoritesService {
   constructor(
-    @InjectModel(Favorite.name) private readonly favoriteRepository: Model<Favorite>,
+    @InjectModel(FavoriteEntity.name) private readonly favoriteRepository: Model<FavoriteDocument>,
     private readonly auctionsService: AuctionsService,
   ) {}
 
-  async findAll(userId: string): Promise<any[]> {
+  async findAll(userId: string): Promise<Auction[]> {
     const favorites = await this.favoriteRepository
       .find({ userId })
       .populate('auction')
       .sort({ createdAt: -1 })
       .exec();
 
-    const results: any[] = [];
+    const results: Auction[] = [];
 
     for (const fav of favorites) {
       if (fav.auction != null) {
-        results.push(fav.auction);
+        results.push(this.toAuction(fav.auction));
         continue;
       }
 
       // Auction ObjectId reference is stale — look up by auctionCode
       const auction = await this.auctionsService.findByCode(fav.auctionCode);
       if (auction) {
-        await this.updateAuctionId(fav._id, auction._id);
+        const doc = await this.auctionsService.findDocumentByCode(fav.auctionCode);
+        if (doc) {
+          await this.updateAuctionId(fav._id, doc._id);
+        }
         results.push(auction);
       }
     }
@@ -45,41 +48,57 @@ export class FavoritesService {
     );
   }
 
-  async findOne(userId: string, auctionCode: string): Promise<Favorite | null> {
+  async findOne(userId: string, auctionCode: string): Promise<FavoriteDocument | null> {
     return this.favoriteRepository.findOne({ userId, auctionCode }).exec();
   }
 
-  async create(userId: string, auctionCode: string): Promise<any> {
+  async create(userId: string, auctionCode: string): Promise<Auction> {
     const existingFavorite = await this.findOne(userId, auctionCode);
     if (existingFavorite) {
-      // Return the auction data for existing favorite
       const populated = await this.favoriteRepository
         .findById(existingFavorite._id)
         .populate('auction')
         .exec();
-      return populated?.auction;
+      if (populated?.auction) {
+        return this.toAuction(populated.auction);
+      }
     }
 
-    // Find the auction by code
-    const auction = await this.auctionsService.findByCode(auctionCode);
-    if (!auction) {
+    // Find the auction document by code (need _id for the Favorite record)
+    const auctionDoc = await this.auctionsService.findDocumentByCode(auctionCode);
+    if (!auctionDoc) {
       throw new NotFoundException(`Auction with code ${auctionCode} not found`);
     }
 
-    // Create favorite with userId, code and ObjectId reference
     const favorite = new this.favoriteRepository({
       userId,
-      auctionCode: auctionCode,
-      auction: auction._id,
+      auctionCode,
+      auction: auctionDoc._id,
     });
     await favorite.save();
 
-    // Return the auction data
-    return auction;
+    const auction = await this.auctionsService.findByCode(auctionCode);
+    return auction!;
   }
 
   async remove(userId: string, auctionCode: string): Promise<boolean> {
     const result = await this.favoriteRepository.deleteOne({ userId, auctionCode }).exec();
     return result.deletedCount > 0;
+  }
+
+  private toAuction(doc: any): Auction {
+    return {
+      code: doc.code,
+      title: doc.title ?? null,
+      address: doc.address ?? null,
+      appraisalPrice: doc.appraisalPrice ?? null,
+      phases: doc.phases ?? [],
+      detailsUrl: doc.detailsUrl ?? null,
+      imageUrl: doc.imageUrl ?? null,
+      description: doc.description ?? null,
+      fulfilled: doc.fulfilled ?? false,
+      available: doc.available ?? true,
+      updatedAt: doc.updatedAt,
+    };
   }
 }

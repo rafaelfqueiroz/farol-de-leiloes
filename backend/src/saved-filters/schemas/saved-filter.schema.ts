@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema, Types } from 'mongoose';
+import { Document, HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
 export interface FilterData {
   state?: string;
@@ -11,10 +11,10 @@ export interface FilterData {
 }
 
 @Schema({ timestamps: true })
-export class SavedFilter extends Document {
+export class SavedFilterEntity extends Document {
   @Prop({
     type: MongooseSchema.Types.ObjectId,
-    ref: 'User',
+    ref: 'UserEntity',
     required: true,
     index: true,
   })
@@ -27,7 +27,9 @@ export class SavedFilter extends Document {
   filters!: FilterData;
 }
 
-export const SavedFilterSchema = SchemaFactory.createForClass(SavedFilter);
+export type SavedFilterDocument = HydratedDocument<SavedFilterEntity>;
+
+export const SavedFilterSchema = SchemaFactory.createForClass(SavedFilterEntity);
 
 // Create compound index to ensure unique names per user
 SavedFilterSchema.index({ userId: 1, name: 1 }, { unique: true });

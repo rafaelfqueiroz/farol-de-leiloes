@@ -1,5 +1,6 @@
 import { BadRequestException, Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
 import { AuctionsService } from './auctions.service';
+import { AuctionResponseDto, AuctionListResponseDto } from './dto/auction-response.dto';
 
 @Controller('auctions')
 export class AuctionsController {
@@ -15,7 +16,7 @@ export class AuctionsController {
     @Query('maxMargin') maxMargin?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
-  ) {
+  ): Promise<AuctionListResponseDto> {
     const take = Math.min(Number(limit) || 10, 200);
     const skip = Number(offset) || 0;
 
@@ -27,7 +28,7 @@ export class AuctionsController {
       return value;
     };
 
-    return this.auctions.query({
+    const result = await this.auctions.query({
       state,
       city: parseMultiple(city),
       neighborhood: parseMultiple(neighborhood),
@@ -37,6 +38,8 @@ export class AuctionsController {
       take,
       skip,
     });
+
+    return new AuctionListResponseDto(result);
   }
 
   @Get('neighborhoods')
@@ -63,12 +66,11 @@ export class AuctionsController {
   }
 
   @Get(':code')
-  async getAuction(@Param('code') code: string) {
+  async getAuction(@Param('code') code: string): Promise<AuctionResponseDto> {
     const auction = await this.auctions.findByCode(code);
     if (!auction) {
       throw new NotFoundException(`Auction with code ${code} not found`)
     }
-    return auction;
+    return new AuctionResponseDto(auction);
   }
 }
-

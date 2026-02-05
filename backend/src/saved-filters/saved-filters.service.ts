@@ -1,22 +1,24 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { SavedFilter, FilterData } from './schemas/saved-filter.schema';
+import { SavedFilterEntity, SavedFilterDocument, FilterData } from './schemas/saved-filter.schema';
+import { SavedFilter } from './interfaces/saved-filter.interface';
 
 const MAX_SAVED_FILTERS = 10;
 
 @Injectable()
 export class SavedFiltersService {
   constructor(
-    @InjectModel(SavedFilter.name)
-    private readonly savedFilterRepository: Model<SavedFilter>,
+    @InjectModel(SavedFilterEntity.name)
+    private readonly savedFilterRepository: Model<SavedFilterDocument>,
   ) {}
 
   async findAll(userId: string): Promise<SavedFilter[]> {
-    return this.savedFilterRepository
+    const docs = await this.savedFilterRepository
       .find({ userId })
       .sort({ createdAt: -1 })
       .exec();
+    return docs.map(doc => this.toSavedFilter(doc));
   }
 
   async create(
@@ -44,7 +46,8 @@ export class SavedFiltersService {
       filters,
     });
 
-    return savedFilter.save();
+    const saved = await savedFilter.save();
+    return this.toSavedFilter(saved);
   }
 
   async delete(userId: string, id: string): Promise<boolean> {
@@ -57,5 +60,14 @@ export class SavedFiltersService {
     }
 
     return true;
+  }
+
+  private toSavedFilter(doc: SavedFilterDocument): SavedFilter {
+    return {
+      _id: doc._id.toString(),
+      name: doc.name,
+      filters: doc.filters,
+      createdAt: (doc as any).createdAt,
+    };
   }
 }

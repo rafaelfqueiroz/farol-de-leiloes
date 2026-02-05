@@ -4,7 +4,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuctionsController } from './auctions.controller';
 import { AuctionsService } from './auctions.service';
-import { Auction, AuctionSchema } from './schemas/auction.schema';
+import { AuctionEntity, AuctionSchema } from './schemas/auction.schema';
 import { AuctionsImporter } from './importer/scheduler';
 import { AuctionDetailsScraper } from './scraper/scraper-scheduler';
 import { CommonModule } from '../common/common.module';
@@ -13,7 +13,7 @@ import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { name: Auction.name, schema: AuctionSchema },
+      { name: AuctionEntity.name, schema: AuctionSchema },
     ]),
     CacheModule.registerAsync({
       imports: [ConfigModule.forFeature(schedulerConfig)],

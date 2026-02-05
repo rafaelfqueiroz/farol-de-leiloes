@@ -3,7 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Model } from 'mongoose';
-import { Auction, AuctionDocument, Address, Phase } from './schemas/auction.schema';
+import { AuctionEntity, AuctionDocument, Address, Phase } from './schemas/auction.schema';
+import { Auction, AuctionListResult } from './interfaces/auction.interface';
 
 export interface AuctionUpsert {
   code?: string;
@@ -30,7 +31,7 @@ const NEIGHBORHOODS_CACHE_PREFIX = 'neighborhoods';
 @Injectable()
 export class AuctionsService {
   constructor(
-    @InjectModel(Auction.name) private readonly auctionRepository: Model<AuctionDocument>,
+    @InjectModel(AuctionEntity.name) private readonly auctionRepository: Model<AuctionDocument>,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
@@ -133,7 +134,7 @@ export class AuctionsService {
     };
   }
 
-  async query(filters: QueryFilters) {
+  async query(filters: QueryFilters): Promise<AuctionListResult> {
     const take = Math.min(filters.take ?? 50, 200);
     const skip = filters.skip ?? 0;
 
@@ -228,11 +229,32 @@ export class AuctionsService {
 
     const docs = await this.auctionRepository.aggregate(pipeline).exec();
     console.log(`[query] Found ${docs.length} docs, total: ${total}`);
-    return { total, items: docs };
+    return { total, items: docs.map(doc => this.toAuction(doc)) };
   }
 
-  async findByCode(code: string): Promise<AuctionDocument | null> {
+  async findByCode(code: string): Promise<Auction | null> {
+    const doc = await this.auctionRepository.findOne({ code }).exec();
+    return doc ? this.toAuction(doc) : null;
+  }
+
+  async findDocumentByCode(code: string): Promise<AuctionDocument | null> {
     return this.auctionRepository.findOne({ code }).exec();
+  }
+
+  private toAuction(doc: any): Auction {
+    return {
+      code: doc.code,
+      title: doc.title ?? null,
+      address: doc.address ?? null,
+      appraisalPrice: doc.appraisalPrice ?? null,
+      phases: doc.phases ?? [],
+      detailsUrl: doc.detailsUrl ?? null,
+      imageUrl: doc.imageUrl ?? null,
+      description: doc.description ?? null,
+      fulfilled: doc.fulfilled ?? false,
+      available: doc.available ?? true,
+      updatedAt: doc.updatedAt,
+    };
   }
 
   /**

@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Auction, AuctionDocument, Phase } from '../schemas/auction.schema';
+import { AuctionEntity, AuctionDocument, Phase } from '../schemas/auction.schema';
 import { fetchAndScrapeDetails } from './details-scraper';
 import { JobExecutionService } from '../../common/services/job-execution.service';
 import { RunMode } from '../../common/schemas/job-execution.schema';
@@ -16,7 +16,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
   private readonly delayBetweenRequests = 2000; // 2 seconds delay between requests
 
   constructor(
-    @InjectModel(Auction.name) private readonly auctionModel: Model<AuctionDocument>,
+    @InjectModel(AuctionEntity.name) private readonly auctionModel: Model<AuctionDocument>,
     private readonly jobExecutionService: JobExecutionService,
     @Inject(schedulerConfig.KEY)
     private readonly config: SchedulerConfig,

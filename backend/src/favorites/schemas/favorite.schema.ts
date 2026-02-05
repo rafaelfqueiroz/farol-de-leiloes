@@ -1,11 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema, Types } from 'mongoose';
+import { Document, HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
 @Schema({ timestamps: true })
-export class Favorite extends Document {
+export class FavoriteEntity extends Document {
   @Prop({
     type: MongooseSchema.Types.ObjectId,
-    ref: 'User',
+    ref: 'UserEntity',
     required: true,
     index: true
   })
@@ -16,14 +16,16 @@ export class Favorite extends Document {
 
   @Prop({
     type: MongooseSchema.Types.ObjectId,
-    ref: 'Auction',
+    ref: 'AuctionEntity',
     required: true,
     index: true
   })
   auction!: Types.ObjectId;
 }
 
-export const FavoriteSchema = SchemaFactory.createForClass(Favorite);
+export type FavoriteDocument = HydratedDocument<FavoriteEntity>;
+
+export const FavoriteSchema = SchemaFactory.createForClass(FavoriteEntity);
 
 // Create compound index to ensure a user can't favorite the same auction twice
 FavoriteSchema.index({ userId: 1, auctionCode: 1 }, { unique: true });

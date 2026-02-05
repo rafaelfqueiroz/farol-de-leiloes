@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-export type UserDocument = User & Document;
+export type UserDocument = UserEntity & Document;
 
 @Schema({ timestamps: true })
-export class User extends Document {
+export class UserEntity extends Document {
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email!: string;
 
@@ -71,7 +71,7 @@ export class User extends Document {
   };
 }
 
-export const UserSchema = SchemaFactory.createForClass(User);
+export const UserSchema = SchemaFactory.createForClass(UserEntity);
 
 // Create indexes
 UserSchema.index({ email: 1 });
