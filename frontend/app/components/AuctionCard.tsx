@@ -5,6 +5,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import InfoIcon from '@mui/icons-material/Info';
+import ReminderButton from './ReminderButton';
 
 interface Phase {
   modality: string;
@@ -181,6 +182,11 @@ export default function AuctionCard({
             >
               {isFavorite ? <FavoriteIcon /> : <FavoriteBorderIcon />}
             </IconButton>
+            <ReminderButton
+              auctionCode={auction.code}
+              auctionTitle={auction.title}
+              auctionDate={lastPhase?.date}
+            />
           </Box>
         </Box>
 

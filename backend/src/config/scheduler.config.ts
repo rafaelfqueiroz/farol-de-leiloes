@@ -4,6 +4,11 @@ export interface SchedulerConfig {
 	import: SchedulerImportConfig
 	scraper: SchedulerScraperConfig
 	cache: CacheConfig
+	reminders: SchedulerRemindersConfig
+}
+
+export interface SchedulerRemindersConfig {
+	enabled: boolean
 }
 
 export interface SchedulerImportConfig {
@@ -33,5 +38,8 @@ export default registerAs(KEY, () => ({
 	},
 	cache: {
 		neighborhoodsTtl: parseInt(process.env.NEIGHBORHOODS_CACHE_TTL || '3600000', 10) // Default 1 hour
+	},
+	reminders: {
+		enabled: process.env.REMINDERS_ENABLED !== 'false'
 	}
 } satisfies SchedulerConfig))

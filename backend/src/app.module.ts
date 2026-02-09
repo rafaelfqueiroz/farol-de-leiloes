@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { PaymentsModule } from './payments/payments.module';
 import { CouponsModule } from './coupons/coupons.module';
+import { RemindersModule } from './reminders/reminders.module';
 import schedulerConfig from './config/scheduler.config';
 
 @Module({
@@ -35,6 +36,7 @@ import schedulerConfig from './config/scheduler.config';
     SavedFiltersModule,
     PaymentsModule,
     CouponsModule,
+    RemindersModule,
   ],
 })
 export class AppModule {}

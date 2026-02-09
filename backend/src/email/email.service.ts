@@ -5,6 +5,10 @@ import {
   getVerificationEmailTemplate,
   getPasswordResetEmailTemplate,
 } from './templates/verification.template';
+import {
+  getAuctionReminderEmailTemplate,
+  ReminderEmailPayload,
+} from '../reminders/templates/reminder.template';
 
 @Injectable()
 export class EmailService {
@@ -101,5 +105,35 @@ export class EmailService {
     });
 
     this.logger.log(`Password reset email sent to ${email}`);
+  }
+
+  async sendReminderEmail(
+    email: string,
+    payload: ReminderEmailPayload,
+  ): Promise<void> {
+    if (!this.transporter) {
+      this.logger.log('='.repeat(60));
+      this.logger.log('AUCTION REMINDER EMAIL (Development Mode)');
+      this.logger.log(`To: ${email}`);
+      this.logger.log(`User: ${payload.userName}`);
+      this.logger.log(`Auction: ${payload.auctionTitle || payload.auctionCode}`);
+      this.logger.log(`Location: ${payload.auctionCity}, ${payload.auctionState}`);
+      this.logger.log(`Description: ${payload.description ?? 'N/A'}`);
+      this.logger.log('='.repeat(60));
+      return;
+    }
+
+    const emailFrom =
+      this.configService.get<string>('EMAIL_FROM') ||
+      'noreply@faroldosleiloes.com';
+
+    await this.transporter.sendMail({
+      from: emailFrom,
+      to: email,
+      subject: `Lembrete: Leilao ${payload.auctionCode} - Farol dos Leiloes`,
+      html: getAuctionReminderEmailTemplate(payload),
+    });
+
+    this.logger.log(`Reminder email sent to ${email}`);
   }
 }
