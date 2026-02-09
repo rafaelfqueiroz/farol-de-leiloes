@@ -3,7 +3,7 @@ import { Document } from 'mongoose';
 
 export type UserDocument = UserEntity & Document;
 
-@Schema({ timestamps: true })
+@Schema({ collection: 'users', timestamps: true })
 export class UserEntity extends Document {
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email!: string;
@@ -46,7 +46,7 @@ export class UserEntity extends Document {
   @Prop({ required: false })
   stripeSubscriptionId?: string;
 
-  @Prop({ type: String, required: false, enum: ['active', 'canceled', 'past_due', 'incomplete'], default: null })
+  @Prop({ type: String, required: false, enum: ['active', 'canceled', 'past_due', 'incomplete', null], default: null })
   subscriptionStatus?: string | null;
 
   // Profile fields

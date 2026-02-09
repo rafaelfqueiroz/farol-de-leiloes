@@ -10,7 +10,7 @@ export interface FilterData {
   maxMargin?: number;
 }
 
-@Schema({ timestamps: true })
+@Schema({ collection: 'savedfilters', timestamps: true })
 export class SavedFilterEntity extends Document {
   @Prop({
     type: MongooseSchema.Types.ObjectId,

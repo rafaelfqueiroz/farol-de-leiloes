@@ -6,7 +6,7 @@ export enum RunMode {
   AUTO = 'AUTO',
 }
 
-@Schema({ timestamps: true })
+@Schema({ collection: 'jobexecutions', timestamps: true })
 export class JobExecution {
   @Prop({ required: true, index: true })
   jobName!: string;

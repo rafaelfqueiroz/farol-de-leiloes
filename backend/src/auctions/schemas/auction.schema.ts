@@ -35,7 +35,7 @@ export interface Phase {
   expenseRules?: ExpenseRule[];
 }
 
-@Schema({ timestamps: { createdAt: true, updatedAt: false } })
+@Schema({ collection: 'auctions', timestamps: { createdAt: true, updatedAt: false } })
 export class AuctionEntity {
   @Prop({ index: true, unique: true })
   code!: string;

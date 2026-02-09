@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
-@Schema({ timestamps: true })
+@Schema({ collection: 'favorites', timestamps: true })
 export class FavoriteEntity extends Document {
   @Prop({
     type: MongooseSchema.Types.ObjectId,
