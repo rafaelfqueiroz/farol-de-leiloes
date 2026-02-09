@@ -139,8 +139,8 @@ export default function AuctionCard({
 
       <CardContent>
         {/* Header with Title, Modality and Actions */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Box sx={{ flex: 1, pr: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
+          <Box>
             <Typography variant="h6" fontWeight={600} sx={{ mb: 0.5, fontSize: '1rem' }}>
               {auction.title || 'Imóvel sem título'}
             </Typography>
