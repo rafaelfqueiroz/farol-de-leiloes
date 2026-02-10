@@ -5,12 +5,11 @@ import {
   IsOptional,
   IsDateString,
   MaxLength,
-  IsMongoId,
 } from 'class-validator';
 import { ReminderChannel } from '../schemas/reminder.schema';
 
 export class CreateReminderDto {
-  @IsMongoId()
+  @IsString()
   @IsNotEmpty()
   auctionId!: string;
 

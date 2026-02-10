@@ -17,6 +17,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import SearchIcon from '@mui/icons-material/Search';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CardMembershipIcon from '@mui/icons-material/CardMembership';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,6 +33,7 @@ const baseMenuItems = [
   { id: 'home', icon: <HomeIcon />, label: 'Inicio' },
   { id: 'search', icon: <SearchIcon />, label: 'Buscar' },
   { id: 'favorites', icon: <FavoriteIcon />, label: 'Favoritos' },
+  { id: 'reminders', icon: <NotificationsIcon />, label: 'Lembretes' },
   { id: 'plans', icon: <CardMembershipIcon />, label: 'Planos' },
 ];
 
@@ -68,6 +70,8 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
       } else {
         router.push('/search?view=favorites');
       }
+    } else if (itemId === 'reminders') {
+      router.push('/reminders');
     } else {
       onViewChange?.(itemId);
     }

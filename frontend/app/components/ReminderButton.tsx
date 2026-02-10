@@ -18,6 +18,11 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs, { Dayjs } from 'dayjs';
+import 'dayjs/locale/pt-br';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -44,7 +49,7 @@ export default function ReminderButton({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [channel, setChannel] = useState<ReminderChannel>('EMAIL');
-  const [scheduledAt, setScheduledAt] = useState('');
+  const [scheduledAt, setScheduledAt] = useState<Dayjs | null>(null);
   const [description, setDescription] = useState('');
 
   const hasReminder = hasReminderForAuction(auctionCode);
@@ -61,9 +66,8 @@ export default function ReminderButton({
     setError(null);
 
     if (!scheduledAt && auctionDate) {
-      const date = new Date(auctionDate);
-      date.setHours(date.getHours() - 1);
-      setScheduledAt(formatDateTimeLocal(date));
+      const date = dayjs(auctionDate).subtract(1, 'hour');
+      setScheduledAt(date);
     }
   };
 
@@ -85,7 +89,7 @@ export default function ReminderButton({
       const result = await createReminder({
         auctionId: auctionCode,
         channel,
-        scheduledAt: new Date(scheduledAt).toISOString(),
+        scheduledAt: scheduledAt.toISOString(),
         description: description || undefined,
       });
 
@@ -119,15 +123,6 @@ export default function ReminderButton({
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatDateTimeLocal = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   const formatDisplayDate = (dateStr: string): string => {
@@ -200,15 +195,20 @@ export default function ReminderButton({
                   </Select>
                 </FormControl>
 
-                <TextField
-                  label="Data e hora do lembrete"
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(e) => setScheduledAt(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                  helperText="O lembrete deve ser antes do início do leilão"
-                />
+                <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="pt-br">
+                  <DateTimePicker
+                    label="Data e hora do lembrete"
+                    value={scheduledAt}
+                    onChange={(newValue) => setScheduledAt(newValue)}
+                    timeSteps={{ minutes: 10 }}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        helperText: 'O lembrete deve ser antes do início do leilão',
+                      },
+                    }}
+                  />
+                </LocalizationProvider>
 
                 <TextField
                   label="Nota (opcional)"
@@ -217,7 +217,7 @@ export default function ReminderButton({
                   multiline
                   rows={2}
                   fullWidth
-                  inputProps={{ maxLength: 500 }}
+                  slotProps={{ htmlInput: { maxLength: 500 } }}
                   helperText={`${description.length}/500 caracteres`}
                 />
               </Box>

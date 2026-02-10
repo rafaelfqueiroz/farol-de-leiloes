@@ -30,12 +30,19 @@ export interface CreateReminderData {
   description?: string;
 }
 
+export interface UpdateReminderData {
+  channel?: ReminderChannel;
+  scheduledAt?: string;
+  description?: string;
+}
+
 interface RemindersContextType {
   reminders: Reminder[];
   loading: boolean;
   hasReminderForAuction: (auctionCode: string) => boolean;
   getReminderForAuction: (auctionCode: string) => Reminder | undefined;
   createReminder: (data: CreateReminderData) => Promise<Reminder | null>;
+  updateReminder: (id: string, data: UpdateReminderData) => Promise<boolean>;
   deleteReminder: (id: string) => Promise<boolean>;
   refreshReminders: () => Promise<void>;
 }
@@ -125,6 +132,41 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     return null;
   };
 
+  const updateReminder = async (id: string, data: UpdateReminderData): Promise<boolean> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.push('/login');
+      return false;
+    }
+
+    try {
+      const response = await fetch(`/api/reminders/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        const updatedReminder = await response.json();
+        setReminders(prev => prev.map(r => r._id === id ? updatedReminder : r));
+        return true;
+      } else if (response.status === 401) {
+        localStorage.removeItem('token');
+        router.push('/login');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error updating reminder:', response.status, errorData);
+      }
+    } catch (error) {
+      console.error('Error updating reminder:', error);
+    }
+
+    return false;
+  };
+
   const deleteReminder = async (id: string): Promise<boolean> => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -165,6 +207,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         hasReminderForAuction,
         getReminderForAuction,
         createReminder,
+        updateReminder,
         deleteReminder,
         refreshReminders,
       }}
