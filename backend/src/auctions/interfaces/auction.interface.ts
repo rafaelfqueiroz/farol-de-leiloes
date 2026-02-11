@@ -6,6 +6,7 @@ export interface Auction {
   address: Address | null;
   appraisalPrice: number | null;
   phases: Phase[];
+  currentPhase: Phase | null;
   detailsUrl: string | null;
   imageUrl: string | null;
   description: string | null;

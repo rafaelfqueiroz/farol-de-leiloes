@@ -52,6 +52,9 @@ export class AuctionEntity {
   @Prop({ type: Array })
   phases?: Phase[];
 
+  @Prop({ type: Object })
+  currentPhase?: Phase;
+
   @Prop({ type: String })
   detailsUrl?: string | null;
 
@@ -77,4 +80,6 @@ export const AuctionSchema = SchemaFactory.createForClass(AuctionEntity);
 
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1 });
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1, 'address.neighborhood': 1 });
+AuctionSchema.index({ 'currentPhase.modality': 1 });
+AuctionSchema.index({ 'currentPhase.minimumPrice': 1 });
 

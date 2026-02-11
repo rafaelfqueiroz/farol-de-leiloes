@@ -86,6 +86,7 @@ export class AuctionsService {
               address: item.address ?? {},
               appraisalPrice: item.appraisalPrice ?? null,
               phases: newPhases,
+              currentPhase: newPhase,
               detailsUrl: item.detailsUrl ?? null,
               createdAt: new Date(),
               updatedAt: new Date(),
@@ -100,12 +101,14 @@ export class AuctionsService {
         // Only add phase if modality is different
         if (lastPhase?.modality !== newPhase.modality) {
           updateOps++;
+          const updatedPhases = [...existingPhases, ...newPhases];
           ops.push({
             updateOne: {
               filter: { code },
               update: {
                 $set: {
-                  phases: [...existingPhases, ...newPhases],
+                  phases: updatedPhases,
+                  currentPhase: newPhase,
                   updatedAt: new Date(),
                 },
               },
@@ -138,22 +141,20 @@ export class AuctionsService {
     const take = Math.min(filters.take ?? 50, 200);
     const skip = filters.skip ?? 0;
 
-    // Build aggregation pipeline to filter by last phase modality/price
-    const pipeline: any[] = [];
-
-    // Match by address filters first, excluding unavailable auctions
-    const matchStage: Record<string, unknown> = {
+    // Build query using currentPhase denormalized field
+    const query: Record<string, unknown> = {
       available: { $ne: false },
     };
-    if (filters.state) matchStage['address.state'] = filters.state.toUpperCase();
+
+    if (filters.state) query['address.state'] = filters.state.toUpperCase();
 
     // Handle city filter (single value or array)
     if (filters.city) {
       const cities = Array.isArray(filters.city) ? filters.city : [filters.city];
       if (cities.length === 1) {
-        matchStage['address.city'] = new RegExp(`^${escapeRegExp(cities[0])}`, 'i');
+        query['address.city'] = new RegExp(`^${escapeRegExp(cities[0])}`, 'i');
       } else {
-        matchStage['address.city'] = {
+        query['address.city'] = {
           $in: cities.map(c => new RegExp(`^${escapeRegExp(c)}`, 'i')),
         };
       }
@@ -163,40 +164,25 @@ export class AuctionsService {
     if (filters.neighborhood) {
       const neighborhoods = Array.isArray(filters.neighborhood) ? filters.neighborhood : [filters.neighborhood];
       if (neighborhoods.length === 1) {
-        matchStage['address.neighborhood'] = new RegExp(`^${escapeRegExp(neighborhoods[0])}`, 'i');
+        query['address.neighborhood'] = new RegExp(`^${escapeRegExp(neighborhoods[0])}`, 'i');
       } else {
-        matchStage['address.neighborhood'] = {
+        query['address.neighborhood'] = {
           $in: neighborhoods.map(n => new RegExp(`^${escapeRegExp(n)}`, 'i')),
         };
       }
     }
 
-    if (Object.keys(matchStage).length > 0) {
-      pipeline.push({ $match: matchStage });
-    }
-
-    // Add computed field for last phase
-    pipeline.push({
-      $addFields: {
-        lastPhase: { $arrayElemAt: ['$phases', -1] },
-      },
-    });
-
-    // Filter by modality on last phase (single value or array)
+    // Filter by modality on currentPhase (single value or array)
     if (filters.modality) {
       const modalities = Array.isArray(filters.modality) ? filters.modality : [filters.modality];
       if (modalities.length === 1) {
-        pipeline.push({
-          $match: { 'lastPhase.modality': modalities[0] },
-        });
+        query['currentPhase.modality'] = modalities[0];
       } else {
-        pipeline.push({
-          $match: { 'lastPhase.modality': { $in: modalities } },
-        });
+        query['currentPhase.modality'] = { $in: modalities };
       }
     }
 
-    // Filter by price range on last phase's minimumPrice
+    // Filter by price range on currentPhase.minimumPrice
     if (filters.minMargin !== undefined || filters.maxMargin !== undefined) {
       const priceMatch: Record<string, unknown> = {};
       if (filters.minMargin !== undefined) {
@@ -205,29 +191,23 @@ export class AuctionsService {
       if (filters.maxMargin !== undefined) {
         priceMatch.$lte = filters.maxMargin;
       }
-      pipeline.push({
-        $match: { 'lastPhase.minimumPrice': priceMatch },
-      });
+      query['currentPhase.minimumPrice'] = priceMatch;
     }
 
-    // Remove the computed field
-    pipeline.push({
-      $unset: 'lastPhase',
-    });
+    console.log('Query filters:', filters, 'Query:', JSON.stringify(query));
 
-    console.log('Query filters:', filters, 'Aggregation pipeline:', JSON.stringify(pipeline));
+    // Get total count
+    const total = await this.auctionRepository.countDocuments(query).exec();
 
-    // Get total count with same filters (without skip/limit)
-    const countPipeline = [...pipeline, { $count: 'total' }];
-    const countResult = await this.auctionRepository.aggregate(countPipeline).exec();
-    const total = countResult[0]?.total ?? 0;
+    // Get documents with sort, skip, limit
+    const docs = await this.auctionRepository
+      .find(query)
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(take)
+      .lean()
+      .exec();
 
-    // Add sort, skip, limit
-    pipeline.push({ $sort: { updatedAt: -1 } });
-    pipeline.push({ $skip: skip });
-    pipeline.push({ $limit: take });
-
-    const docs = await this.auctionRepository.aggregate(pipeline).exec();
     console.log(`[query] Found ${docs.length} docs, total: ${total}`);
     return { total, items: docs.map(doc => this.toAuction(doc)) };
   }
@@ -260,12 +240,14 @@ export class AuctionsService {
   }
 
   private toAuction(doc: any): Auction {
+    const phases = doc.phases ?? [];
     return {
       code: doc.code,
       title: doc.title ?? null,
       address: doc.address ?? null,
       appraisalPrice: doc.appraisalPrice ?? null,
-      phases: doc.phases ?? [],
+      phases,
+      currentPhase: doc.currentPhase ?? phases[phases.length - 1] ?? null,
       detailsUrl: doc.detailsUrl ?? null,
       imageUrl: doc.imageUrl ?? null,
       description: doc.description ?? null,

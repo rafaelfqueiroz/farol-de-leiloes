@@ -87,12 +87,14 @@ export class FavoritesService {
   }
 
   private toAuction(doc: any): Auction {
+    const phases = doc.phases ?? [];
     return {
       code: doc.code,
       title: doc.title ?? null,
       address: doc.address ?? null,
       appraisalPrice: doc.appraisalPrice ?? null,
-      phases: doc.phases ?? [],
+      phases,
+      currentPhase: doc.currentPhase ?? phases[phases.length - 1] ?? null,
       detailsUrl: doc.detailsUrl ?? null,
       imageUrl: doc.imageUrl ?? null,
       description: doc.description ?? null,

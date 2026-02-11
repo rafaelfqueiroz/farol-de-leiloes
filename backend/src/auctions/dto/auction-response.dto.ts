@@ -6,6 +6,7 @@ export class AuctionResponseDto {
   address: Auction['address'];
   appraisalPrice: number | null;
   phases: Auction['phases'];
+  currentPhase: Auction['currentPhase'];
   detailsUrl: string | null;
   imageUrl: string | null;
   description: string | null;
@@ -19,6 +20,7 @@ export class AuctionResponseDto {
     this.address = auction.address;
     this.appraisalPrice = auction.appraisalPrice;
     this.phases = auction.phases;
+    this.currentPhase = auction.currentPhase;
     this.detailsUrl = auction.detailsUrl;
     this.imageUrl = auction.imageUrl;
     this.description = auction.description;
