@@ -241,6 +241,24 @@ export class AuctionsService {
     return this.auctionRepository.findOne({ code }).exec();
   }
 
+  /**
+   * Get all auction codes for sitemap generation
+   * Returns codes of available auctions sorted by updatedAt
+   */
+  async getAllCodes(): Promise<{ code: string; updatedAt: Date }[]> {
+    const docs = await this.auctionRepository
+      .find({ available: { $ne: false } })
+      .select('code updatedAt')
+      .sort({ updatedAt: -1 })
+      .lean()
+      .exec();
+
+    return docs.map(doc => ({
+      code: doc.code,
+      updatedAt: doc.updatedAt,
+    }));
+  }
+
   private toAuction(doc: any): Auction {
     return {
       code: doc.code,

@@ -65,6 +65,12 @@ export class AuctionsController {
     return { neighborhoods };
   }
 
+  @Get('sitemap/codes')
+  async getSitemapCodes() {
+    const codes = await this.auctions.getAllCodes();
+    return { codes };
+  }
+
   @Get(':code')
   async getAuction(@Param('code') code: string): Promise<AuctionResponseDto> {
     const auction = await this.auctions.findByCode(code);
