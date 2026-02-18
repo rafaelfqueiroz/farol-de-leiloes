@@ -2,11 +2,12 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { AuctionEntity, AuctionDocument, Phase } from '../schemas/auction.schema';
+import { AuctionEntity, AuctionDocument, Phase, AuctionFile } from '../schemas/auction.schema';
 import { fetchAndScrapeDetails } from './details-scraper';
 import { JobExecutionService } from '../../common/services/job-execution.service';
 import { RunMode } from '../../common/schemas/job-execution.schema';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
+import { StorageService } from '../../storage/storage.service';
 
 @Injectable()
 export class AuctionDetailsScraper implements OnModuleInit {
@@ -18,6 +19,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
   constructor(
     @InjectModel(AuctionEntity.name) private readonly auctionModel: Model<AuctionDocument>,
     private readonly jobExecutionService: JobExecutionService,
+    private readonly storageService: StorageService,
     @Inject(schedulerConfig.KEY)
     private readonly config: SchedulerConfig,
   ) {}
@@ -144,14 +146,67 @@ export class AuctionDetailsScraper implements OnModuleInit {
               updatedAt: new Date()
             };
 
-            if (details.imageUrl) {
-              updateData.imageUrl = details.imageUrl;
-              this.logger.debug(`Scraped image for auction ${auction.code}: ${details.imageUrl}`);
-            }
-
             if (details.description) {
               updateData.description = details.description;
               this.logger.debug(`Scraped description for auction ${auction.code}`);
+            }
+
+            // Upload files to R2 if configured
+            if (this.storageService.isConfigured()) {
+              // Upload image if auction doesn't have it stored yet
+              if (details.imageUrl && !auction.image?.publicUrl) {
+                const imageFile: AuctionFile = {
+                  originalUrl: details.imageUrl,
+                  mimeType: 'image/jpeg',
+                };
+
+                const imageResult = await this.storageService.uploadImageFromUrl(details.imageUrl, auction.code);
+                if (imageResult) {
+                  imageFile.storageKey = imageResult.key;
+                  imageFile.publicUrl = imageResult.url;
+                  imageFile.size = imageResult.size;
+                  imageFile.uploadedAt = new Date();
+                  this.logger.debug(`Uploaded image to R2 for auction ${auction.code}: ${imageResult.key}`);
+                }
+
+                updateData.image = imageFile;
+              }
+
+              // Upload matricula if auction doesn't have it stored yet
+              if (details.matriculaUrl && !auction.matricula?.publicUrl) {
+                const result = await this.storageService.uploadDocumentFromUrl(
+                  details.matriculaUrl, auction.code, 'matricula'
+                );
+                if (result) {
+                  updateData.matricula = {
+                    originalUrl: details.matriculaUrl,
+                    storageKey: result.key,
+                    publicUrl: result.url,
+                    mimeType: 'application/pdf',
+                    size: result.size,
+                    uploadedAt: new Date(),
+                  };
+                  this.logger.debug(`Uploaded matricula to R2 for auction ${auction.code}`);
+                }
+              }
+
+              // TODO: Edital upload disabled - edital is tied to auction phase, not the auction itself
+              // if (details.editalUrl && !auction.edital?.publicUrl) {
+              //   const result = await this.storageService.uploadDocumentFromUrl(
+              //     details.editalUrl, auction.code, 'edital'
+              //   );
+              //   if (result) {
+              //     updateData.edital = {
+              //       originalUrl: details.editalUrl,
+              //       storageKey: result.key,
+              //       publicUrl: result.url,
+              //       mimeType: 'application/pdf',
+              //       size: result.size,
+              //       uploadedAt: new Date(),
+              //     };
+              //     this.logger.debug(`Uploaded edital to R2 for auction ${auction.code}`);
+              //   }
+              // }
             }
 
             // Update phase-specific details (paymentMethods, expenseRules, phaseDates) on the last phase and currentPhase

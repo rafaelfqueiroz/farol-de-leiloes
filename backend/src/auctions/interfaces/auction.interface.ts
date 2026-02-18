@@ -9,6 +9,8 @@ export interface Auction {
   currentPhase: Phase | null;
   detailsUrl: string | null;
   imageUrl: string | null;
+  matriculaUrl: string | null;
+  editalUrl: string | null;
   description: string | null;
   fulfilled: boolean;
   available: boolean;

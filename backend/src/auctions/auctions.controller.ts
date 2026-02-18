@@ -4,7 +4,9 @@ import { AuctionResponseDto, AuctionListResponseDto } from './dto/auction-respon
 
 @Controller('auctions')
 export class AuctionsController {
-  constructor(private readonly auctions: AuctionsService) {}
+  constructor(
+    private readonly auctions: AuctionsService,
+  ) {}
 
   @Get()
   async list(

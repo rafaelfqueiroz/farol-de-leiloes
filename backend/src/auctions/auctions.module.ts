@@ -8,6 +8,7 @@ import { AuctionEntity, AuctionSchema } from './schemas/auction.schema';
 import { AuctionsImporter } from './importer/scheduler';
 import { AuctionDetailsScraper } from './scraper/scraper-scheduler';
 import { CommonModule } from '../common/common.module';
+import { StorageModule } from '../storage/storage.module';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
 
 @Module({
@@ -26,6 +27,7 @@ import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
       },
     }),
     CommonModule,
+    StorageModule,
   ],
   controllers: [AuctionsController],
   providers: [AuctionsService, AuctionsImporter, AuctionDetailsScraper],

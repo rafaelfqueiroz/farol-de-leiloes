@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Model } from 'mongoose';
-import { AuctionEntity, AuctionDocument, Address, Phase } from './schemas/auction.schema';
+import { AuctionEntity, AuctionDocument, Address, Phase, PhaseModality } from './schemas/auction.schema';
 import { Auction, AuctionListResult } from './interfaces/auction.interface';
 
 export interface AuctionUpsert {
@@ -142,9 +142,8 @@ export class AuctionsService {
     const skip = filters.skip ?? 0;
 
     // Build query using currentPhase denormalized field
-    const query: Record<string, unknown> = {
-      available: { $ne: false },
-    };
+    // Filter active auctions: available AND (ONLINE_SALES OR has future date)
+    const query: Record<string, unknown> = this.buildActiveAuctionFilter();
 
     if (filters.state) query['address.state'] = filters.state.toUpperCase();
 
@@ -223,11 +222,11 @@ export class AuctionsService {
 
   /**
    * Get all auction codes for sitemap generation
-   * Returns codes of available auctions sorted by updatedAt
+   * Returns codes of active auctions sorted by updatedAt
    */
   async getAllCodes(): Promise<{ code: string; updatedAt: Date }[]> {
     const docs = await this.auctionRepository
-      .find({ available: { $ne: false } })
+      .find(this.buildActiveAuctionFilter())
       .select('code updatedAt')
       .sort({ updatedAt: -1 })
       .lean()
@@ -241,6 +240,13 @@ export class AuctionsService {
 
   private toAuction(doc: any): Auction {
     const phases = doc.phases ?? [];
+
+    // Compute URLs from file objects (prefer publicUrl, fallback to originalUrl)
+    const imageUrl = doc.image?.publicUrl ?? doc.image?.originalUrl ?? null;
+    const matriculaUrl = doc.matricula?.publicUrl ?? doc.matricula?.originalUrl ?? null;
+    // TODO: editalUrl disabled - edital is tied to auction phase, not the auction itself
+    // const editalUrl = doc.edital?.publicUrl ?? doc.edital?.originalUrl ?? null;
+
     return {
       code: doc.code,
       title: doc.title ?? null,
@@ -249,11 +255,30 @@ export class AuctionsService {
       phases,
       currentPhase: doc.currentPhase ?? phases[phases.length - 1] ?? null,
       detailsUrl: doc.detailsUrl ?? null,
-      imageUrl: doc.imageUrl ?? null,
+      imageUrl,
+      matriculaUrl,
+      editalUrl: null, // Disabled - edital is tied to auction phase
       description: doc.description ?? null,
       fulfilled: doc.fulfilled ?? false,
       available: doc.available ?? true,
       updatedAt: doc.updatedAt,
+    };
+  }
+
+  /**
+   * Builds the MongoDB query filter for active auctions.
+   * An auction is active if:
+   * - available !== false
+   * - AND (ONLINE_SALES modality OR has at least one future date)
+   */
+  private buildActiveAuctionFilter(): Record<string, unknown> {
+    const now = new Date();
+    return {
+      available: { $ne: false },
+      $or: [
+        { 'currentPhase.modality': PhaseModality.ONLINE_SALES },
+        { 'currentPhase.phaseDates': { $elemMatch: { $gte: now } } },
+      ],
     };
   }
 
@@ -275,11 +300,11 @@ export class AuctionsService {
 
     console.log(`[getNeighborhoods] Cache miss for ${cacheKey}, querying database`);
 
-    // Build match stage, excluding unavailable auctions
+    // Build match stage, excluding inactive auctions
     const matchStage: Record<string, unknown> = {
+      ...this.buildActiveAuctionFilter(),
       'address.state': state.toUpperCase(),
       'address.neighborhood': { $exists: true, $nin: [null, ''] },
-      available: { $ne: false },
     };
 
     // Match cities with case-insensitive regex

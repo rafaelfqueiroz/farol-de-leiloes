@@ -4,7 +4,6 @@ import { Card, CardContent, Box, Typography, Chip, IconButton } from '@mui/mater
 import HomeIcon from '@mui/icons-material/Home';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import InfoIcon from '@mui/icons-material/Info';
 import ReminderButton from './ReminderButton';
 
 interface Phase {
@@ -36,7 +35,7 @@ interface AuctionCardProps {
   auction: Auction;
   isFavorite: boolean;
   onToggleFavorite: () => void;
-  onNavigateToDetail: () => void;
+  detailUrl: string;
   showDate?: boolean;
 }
 
@@ -69,7 +68,7 @@ export default function AuctionCard({
   auction,
   isFavorite,
   onToggleFavorite,
-  onNavigateToDetail,
+  detailUrl,
   showDate = false,
 }: AuctionCardProps) {
   const lastPhase = auction.phases[auction.phases.length - 1];
@@ -157,19 +156,6 @@ export default function AuctionCard({
               />
             )}
             <IconButton
-              onClick={onNavigateToDetail}
-              size="small"
-              sx={{
-                color: 'info.main',
-                '&:hover': {
-                  color: 'info.dark',
-                },
-              }}
-              title="Ver detalhes"
-            >
-              <InfoIcon />
-            </IconButton>
-            <IconButton
               onClick={onToggleFavorite}
               size="small"
               sx={{
@@ -240,32 +226,30 @@ export default function AuctionCard({
         </Box>
 
         {/* Details Link */}
-        {auction.detailsUrl && (
-          <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
-            <Typography
-              component="a"
-              href={auction.detailsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="body2"
-              fontWeight={500}
-              sx={{
-                color: 'primary.main',
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0.5,
-                '&:hover': {
-                  color: 'primary.dark',
-                  textDecoration: 'underline',
-                },
-              }}
-            >
-              Ver detalhes completos
-              <span style={{ fontSize: '0.75rem' }}>↗</span>
-            </Typography>
-          </Box>
-        )}
+        <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Typography
+            component="a"
+            href={detailUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="body2"
+            fontWeight={500}
+            sx={{
+              color: 'primary.main',
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.5,
+              '&:hover': {
+                color: 'primary.dark',
+                textDecoration: 'underline',
+              },
+            }}
+          >
+            Ver detalhes completos
+            <span style={{ fontSize: '0.75rem' }}>↗</span>
+          </Typography>
+        </Box>
       </CardContent>
     </Card>
   );

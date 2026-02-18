@@ -9,6 +9,8 @@ export class AuctionResponseDto {
   currentPhase: Auction['currentPhase'];
   detailsUrl: string | null;
   imageUrl: string | null;
+  matriculaUrl: string | null;
+  editalUrl: string | null;
   description: string | null;
   fulfilled: boolean;
   available: boolean;
@@ -23,6 +25,8 @@ export class AuctionResponseDto {
     this.currentPhase = auction.currentPhase;
     this.detailsUrl = auction.detailsUrl;
     this.imageUrl = auction.imageUrl;
+    this.matriculaUrl = auction.matriculaUrl;
+    this.editalUrl = auction.editalUrl;
     this.description = auction.description;
     this.fulfilled = auction.fulfilled;
     this.available = auction.available;

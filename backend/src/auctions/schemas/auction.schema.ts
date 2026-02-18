@@ -21,6 +21,15 @@ export interface ExpenseRule {
   description: string;
 }
 
+export interface AuctionFile {
+  originalUrl: string;      // Caixa URL (kept for reference/fallback)
+  storageKey?: string;      // R2 object key (for signed URL generation)
+  publicUrl?: string;       // R2 public URL (only for images)
+  mimeType: string;         // e.g., 'image/jpeg', 'application/pdf'
+  size?: number;            // File size in bytes
+  uploadedAt?: Date;        // When uploaded to R2
+}
+
 export enum PaymentMethod {
   OWN_RESOURCES = 'OWN_RESOURCES', // Recursos próprios
   FGTS = 'FGTS', // Permite utilização de FGTS
@@ -35,7 +44,7 @@ export interface Phase {
   expenseRules?: ExpenseRule[];
 }
 
-@Schema({ collection: 'auctions', timestamps: { createdAt: true, updatedAt: false } })
+@Schema({ collection: 'auctions_tmp', timestamps: { createdAt: true, updatedAt: false } })
 export class AuctionEntity {
   @Prop({ index: true, unique: true })
   code!: string;
@@ -58,8 +67,14 @@ export class AuctionEntity {
   @Prop({ type: String })
   detailsUrl?: string | null;
 
-  @Prop({ type: String })
-  imageUrl?: string | null;
+  @Prop({ type: Object })
+  image?: AuctionFile | null;
+
+  @Prop({ type: Object })
+  matricula?: AuctionFile | null;
+
+  @Prop({ type: Object })
+  edital?: AuctionFile | null;
 
   @Prop({ type: String })
   description?: string | null;

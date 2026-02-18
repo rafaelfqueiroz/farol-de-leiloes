@@ -12,6 +12,8 @@ export interface ScrapedDetails {
   description?: string;
   phaseDetails?: ScrapedPhaseDetails;
   unavailable?: boolean;
+  matriculaUrl?: string;
+  editalUrl?: string;
 }
 
 /**
@@ -58,6 +60,18 @@ export function scrapeAuctionDetails(html: string): ScrapedDetails {
 
     // Extract payment methods, expense rules, and phase dates
     details.phaseDetails = extractPhaseDetails(relatedBoxHtml, $);
+  }
+
+  // Extract matrícula URL: ExibeDoc('/editais/matricula/{STATE}/{CODE}.pdf')
+  const matriculaMatch = html.match(/ExibeDoc\(['"](\/editais\/matricula\/[^'"]+)['"]\)/i);
+  if (matriculaMatch) {
+    details.matriculaUrl = `https://venda-imoveis.caixa.gov.br${matriculaMatch[1]}`;
+  }
+
+  // Extract edital URL: ExibeDoc('/editais/{CODE}.PDF')
+  const editalMatch = html.match(/ExibeDoc\(['"](\/editais\/[A-Z0-9]+\.PDF)['"]\)/i);
+  if (editalMatch) {
+    details.editalUrl = `https://venda-imoveis.caixa.gov.br${editalMatch[1]}`;
   }
 
   return details;

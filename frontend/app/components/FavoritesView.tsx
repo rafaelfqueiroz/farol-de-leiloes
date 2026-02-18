@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Typography, Divider } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useAuth } from '../contexts/AuthContext';
 import AuctionCard from './AuctionCard';
@@ -11,12 +11,6 @@ export default function FavoritesView() {
   const { favorites, toggleFavorite } = useFavorites();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
-
-  // Navigate to detail with return URL to favorites page
-  const navigateToDetail = (code: string) => {
-    const returnUrl = encodeURIComponent('/?view=favorites');
-    router.push(`/auction/${code}?returnUrl=${returnUrl}`);
-  };
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -30,19 +24,8 @@ export default function FavoritesView() {
     return null;
   }
 
-  // Split favorites into upcoming and old based on current date
-  const now = new Date();
-  const upcoming = favorites.filter(auction => {
-    const lastPhase = auction.phases[auction.phases.length - 1];
-    if (!lastPhase.date) return false;
-    return new Date(lastPhase.date) >= now;
-  });
-
-  const old = favorites.filter(auction => {
-    const lastPhase = auction.phases[auction.phases.length - 1];
-    if (!lastPhase.date) return true;
-    return new Date(lastPhase.date) < now;
-  });
+  // Backend already filters out inactive auctions (unavailable or past date)
+  // Only active favorites are returned
 
   if (favorites.length === 0) {
     return (
@@ -64,7 +47,7 @@ export default function FavoritesView() {
       auction={auction}
       isFavorite={true}
       onToggleFavorite={() => toggleFavorite(auction)}
-      onNavigateToDetail={() => navigateToDetail(auction.code)}
+      detailUrl={`/auction/${auction.code}`}
       showDate={true}
     />
   );
@@ -81,31 +64,10 @@ export default function FavoritesView() {
         </Typography>
       </Box>
 
-      {/* Upcoming Auctions */}
-      {upcoming.length > 0 && (
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
-            Próximos Leilões ({upcoming.length})
-          </Typography>
-          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))' }}>
-            {upcoming.map(renderAuctionCard)}
-          </Box>
-        </Box>
-      )}
-
-      {upcoming.length > 0 && old.length > 0 && <Divider sx={{ my: 4 }} />}
-
-      {/* Old Auctions */}
-      {old.length > 0 && (
-        <Box>
-          <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
-            Leilões Encerrados ({old.length})
-          </Typography>
-          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))' }}>
-            {old.map(renderAuctionCard)}
-          </Box>
-        </Box>
-      )}
+      {/* Active Favorites */}
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))' }}>
+        {favorites.map(renderAuctionCard)}
+      </Box>
     </Box>
   );
 }

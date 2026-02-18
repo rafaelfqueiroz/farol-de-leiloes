@@ -30,6 +30,8 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import LinkIcon from '@mui/icons-material/Link';
 import PaymentIcon from '@mui/icons-material/Payment';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import DownloadIcon from '@mui/icons-material/Download';
+import DescriptionIcon from '@mui/icons-material/Description';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import Sidebar from '../../components/Sidebar';
 import TopBar from '../../components/TopBar';
@@ -64,6 +66,8 @@ export interface Auction {
   phases: Phase[];
   detailsUrl?: string;
   imageUrl?: string;
+  matriculaUrl?: string;
+  editalUrl?: string;
   description?: string;
   fulfilled?: boolean;
   available?: boolean;
@@ -82,6 +86,11 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   OWN_RESOURCES: 'Recursos Próprios',
   FGTS: 'FGTS',
   FINANCING: 'Financiamento',
+};
+
+const DOCUMENT_LABELS: Record<string, string> = {
+  matricula: 'Matrícula do Imóvel',
+  edital: 'Edital e Anexos',
 };
 
 function formatCurrency(value?: number): string {
@@ -126,6 +135,13 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
       return returnUrl || '/';
     }
     return '/';
+  };
+
+  const handleDownloadDocument = (type: 'matricula' | 'edital') => {
+    const url = type === 'matricula' ? auction.matriculaUrl : auction.editalUrl;
+    if (url) {
+      window.open(url, '_blank');
+    }
   };
 
   const lastPhase = auction.phases[auction.phases.length - 1];
@@ -366,6 +382,43 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                                   </Typography>
                                 </Box>
                               ))}
+                            </Box>
+                          </Box>
+                        </Box>
+                      </>
+                    )}
+
+                    {/* Documents */}
+                    {(auction.matriculaUrl || auction.editalUrl) && (
+                      <>
+                        <Divider sx={{ mb: 3 }} />
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}>
+                          <DescriptionIcon sx={{ color: 'secondary.main', mt: 0.5 }} />
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                              Documentos Disponíveis
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                              {auction.matriculaUrl && (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  startIcon={<DownloadIcon />}
+                                  onClick={() => handleDownloadDocument('matricula')}
+                                >
+                                  {DOCUMENT_LABELS.matricula}
+                                </Button>
+                              )}
+                              {auction.editalUrl && (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  startIcon={<DownloadIcon />}
+                                  onClick={() => handleDownloadDocument('edital')}
+                                >
+                                  {DOCUMENT_LABELS.edital}
+                                </Button>
+                              )}
                             </Box>
                           </Box>
                         </Box>

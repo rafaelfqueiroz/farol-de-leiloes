@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { FavoriteEntity, FavoriteDocument } from './schemas/favorite.schema';
 import { AuctionsService } from '../auctions/auctions.service';
 import { Auction } from '../auctions/interfaces/auction.interface';
+import { isAuctionActive } from '../auctions/utils/auction-filters';
 
 @Injectable()
 export class FavoritesService {
@@ -23,13 +24,19 @@ export class FavoritesService {
 
     for (const fav of favorites) {
       if (fav.auction != null) {
-        results.push(this.toAuction(fav.auction));
+        const auctionDoc = fav.auction as any;
+        const auction = this.toAuction(auctionDoc);
+        // Skip inactive auctions (unavailable, past date, etc.)
+        if (!isAuctionActive(auction)) {
+          continue;
+        }
+        results.push(auction);
         continue;
       }
 
       // Auction ObjectId reference is stale — look up by auctionCode
       const auction = await this.auctionsService.findByCode(fav.auctionCode);
-      if (auction) {
+      if (auction && isAuctionActive(auction)) {
         const doc = await this.auctionsService.findDocumentByCode(fav.auctionCode);
         if (doc) {
           await this.updateAuctionId(fav._id, doc._id);
@@ -88,6 +95,13 @@ export class FavoritesService {
 
   private toAuction(doc: any): Auction {
     const phases = doc.phases ?? [];
+
+    // Compute URLs from file objects (prefer publicUrl, fallback to originalUrl)
+    const imageUrl = doc.image?.publicUrl ?? doc.image?.originalUrl ?? null;
+    const matriculaUrl = doc.matricula?.publicUrl ?? doc.matricula?.originalUrl ?? null;
+    // TODO: editalUrl disabled - edital is tied to auction phase, not the auction itself
+    // const editalUrl = doc.edital?.publicUrl ?? doc.edital?.originalUrl ?? null;
+
     return {
       code: doc.code,
       title: doc.title ?? null,
@@ -96,7 +110,9 @@ export class FavoritesService {
       phases,
       currentPhase: doc.currentPhase ?? phases[phases.length - 1] ?? null,
       detailsUrl: doc.detailsUrl ?? null,
-      imageUrl: doc.imageUrl ?? null,
+      imageUrl,
+      matriculaUrl,
+      editalUrl: null, // Disabled - edital is tied to auction phase
       description: doc.description ?? null,
       fulfilled: doc.fulfilled ?? false,
       available: doc.available ?? true,

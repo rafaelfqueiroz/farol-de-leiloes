@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Box, Typography, ToggleButtonGroup, ToggleButton, Pagination, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
@@ -49,23 +48,9 @@ export default function AuctionList({
   onPageChange,
   onPageSizeChange
 }: AuctionListProps) {
-  const router = useRouter();
   const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
   const totalPages = Math.ceil(total / pageSize);
   const { isFavorite, toggleFavorite } = useFavorites();
-
-  // Get current URL with search params to pass as returnUrl
-  const getCurrentUrl = () => {
-    if (typeof window !== 'undefined') {
-      return window.location.pathname + window.location.search;
-    }
-    return '/';
-  };
-
-  const navigateToDetail = (code: string) => {
-    const returnUrl = encodeURIComponent(getCurrentUrl());
-    router.push(`/auction/${code}?returnUrl=${returnUrl}`);
-  };
 
   if (isLoading) {
     return (
@@ -145,7 +130,7 @@ export default function AuctionList({
             auction={auction}
             isFavorite={isFavorite(auction.code)}
             onToggleFavorite={() => toggleFavorite(auction)}
-            onNavigateToDetail={() => navigateToDetail(auction.code)}
+            detailUrl={`/auction/${auction.code}`}
           />
         ))}
       </Box>
