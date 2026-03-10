@@ -156,10 +156,8 @@ OPENAI_API_KEY=
 
 ## Testing
 
-Tests are in `backend/test/` as `*.spec.ts` files:
-- `details-scraper.spec.ts` - Scraper unit tests
-- `downloader.spec.ts` - Download service tests
-- `parser.spec.ts` - CSV parser tests
+**IMPORTANT: Agents must NEVER run tests or start apps on the host machine.**
+Use Docker Compose instead. See `docs/development/guide.md` for details.
 
 ## Recent Development Focus
 
@@ -189,3 +187,92 @@ cd backend && npm run start:dev
 # Terminal 2 - Frontend
 cd frontend && npm run dev
 ```
+
+## Context Engineering (Main Agent Discipline)
+
+The main agent is an **orchestrator**, not a worker.
+
+**Main agent role:** Coordinate files, spawn sub-agents, process
+summaries, communicate with the user, elaborate plans.
+
+**Main agent NEVER:** Explores the codebase broadly, implements code
+changes, runs builds/tests, processes large command output.
+All of these get delegated to sub-agents.
+
+### Sub-agent Communication Protocol
+
+- Every prompt ends with: "Return a structured summary with these exact fields:"
+- Never ask a sub-agent to "return everything"
+- Target 10-20 lines of actionable info per result
+- Chain sub-agents: pass only relevant fields between them
+
+#### Required Response Fields by Task Type
+
+**Code exploration / research agents:**
+- `files_changed`: List of file paths read or relevant to findings
+- `summary`: 1-3 sentence description of what was found
+- `key_findings`: Bulleted list of actionable facts (max 10)
+- `blockers`: Any issues, missing dependencies, or ambiguities found
+- `suggested_approach`: Recommended next step based on findings
+
+**Implementation agents (write code):**
+- `files_changed`: List of file paths created or modified
+- `changes_summary`: 1-line description per file changed
+- `tests_needed`: Whether new/updated tests are required and for what
+- `dependencies_added`: Any new packages installed (name + version)
+- `migration_needed`: Whether DB schema changes require migration steps
+- `breaking_changes`: Any API or interface changes that affect other modules
+
+**Test / validation agents:**
+- `pass_fail`: PASS or FAIL
+- `total_tests`: Number of tests run
+- `failures`: List of failing test names with 1-line error description
+- `coverage_delta`: Whether coverage increased/decreased (if available)
+- `suggested_fixes`: For failures, recommended fix per failing test
+
+**Build / lint agents:**
+- `pass_fail`: PASS or FAIL
+- `errors`: List of errors with file:line and 1-line description
+- `warnings`: Count of warnings (list only if < 10)
+- `suggested_fixes`: Recommended fix per error
+
+### Model Routing Table
+
+Assign sub-agents to the optimal model based on task complexity:
+
+| Task | Model | Rationale |
+|------|-------|-----------|
+| Architectural decisions and system design | Opus | Requires deep reasoning about trade-offs and dependencies |
+| Complex multi-file refactoring | Opus | Needs holistic understanding of codebase relationships |
+| Debugging hard-to-reproduce issues | Opus | Requires hypothesis generation and multi-step reasoning |
+| Security audits and vulnerability analysis | Opus | Needs thorough analysis of attack vectors |
+| New feature planning and design | Opus | Requires weighing multiple design approaches |
+| Standard feature implementation | Sonnet | Well-defined scope, clear patterns to follow |
+| Test writing and test coverage | Sonnet | Follows established patterns, moderate complexity |
+| API endpoint implementation | Sonnet | Follows NestJS conventions, well-scoped |
+| Frontend page/component creation | Sonnet | Follows React/Next.js patterns, moderate reasoning |
+| Code review and PR analysis | Sonnet | Needs context understanding but follows checklists |
+| Bug fixes with clear reproduction | Sonnet | Scoped problem, moderate reasoning needed |
+| Database schema changes | Sonnet | Needs understanding of relationships but follows patterns |
+| Documentation updates | Haiku | Straightforward writing from existing code |
+| Simple fixes (lint, format, typos, CSS) | Haiku | Mechanical changes, minimal reasoning |
+| Dependency updates and version bumps | Haiku | Follow changelogs, update configs |
+| Code search and exploration | Haiku | Fast file/pattern matching, low reasoning |
+| Environment and config changes | Haiku | Small, well-defined edits |
+| Renaming and find-replace operations | Haiku | Mechanical, pattern-based changes |
+| Commit message and changelog generation | Haiku | Summarization from diff, low complexity |
+
+## Documentation
+
+Detailed docs live in `docs/`. Agent reads them on demand.
+
+| Topic | Location |
+|---|---|
+| Architecture | `docs/architecture/overview.md` |
+| Frontend App | `docs/apps/frontend/app-reference.md` |
+| Backend API | `docs/apps/backend/api-reference.md` |
+| Development Guide | `docs/development/guide.md` |
+
+**After every code change, review and update the affected docs.** If a change
+touches API routes, schemas, components, env vars, or project structure,
+the corresponding doc file must be updated in the same task.
