@@ -13,8 +13,9 @@ import { StorageService } from '../../storage/storage.service';
 export class AuctionDetailsScraper implements OnModuleInit {
   private readonly logger = new Logger(AuctionDetailsScraper.name);
   private readonly jobName = 'auction-details-scraper';
-  private readonly batchSize = 10; // Process 10 auctions at a time
-  private readonly delayBetweenRequests = 2000; // 2 seconds delay between requests
+  private readonly batchSize = 15; // Process 10 auctions at a time
+  private readonly concurrency = 3; // Process 3 auctions in parallel within each batch
+  private readonly delayBetweenGroups = 500; // 500ms delay between concurrent groups
 
   constructor(
     @InjectModel(AuctionEntity.name) private readonly auctionModel: Model<AuctionDocument>,
@@ -95,9 +96,10 @@ export class AuctionDetailsScraper implements OnModuleInit {
    */
   private async scrapeAuctionDetails() {
     try {
-      // Find auctions where fulfilled = false or doesn't exist
+      // Find auctions where fulfilled = false or doesn't exist, and have a detailsUrl
       const auctionsToScrape = await this.auctionModel
         .find({
+          detailsUrl: { $exists: true, $ne: null },
           $or: [
             { fulfilled: { $exists: false } },
             { fulfilled: false }
@@ -115,128 +117,31 @@ export class AuctionDetailsScraper implements OnModuleInit {
       let scrapedCount = 0;
       let errorCount = 0;
 
-      // Process in batches to avoid overwhelming the server
+      // Process in batches, with concurrent groups within each batch
       for (let i = 0; i < auctionsToScrape.length; i += this.batchSize) {
         const batch = auctionsToScrape.slice(i, i + this.batchSize);
 
         this.logger.log(`Processing batch ${Math.floor(i / this.batchSize) + 1}/${Math.ceil(auctionsToScrape.length / this.batchSize)}`);
 
-        for (const auction of batch) {
-          try {
-            if (!auction.detailsUrl) continue;
+        // Process concurrent groups within the batch
+        for (let j = 0; j < batch.length; j += this.concurrency) {
+          const group = batch.slice(j, j + this.concurrency);
+          const results = await Promise.allSettled(
+            group.map(auction => this.processAuction(auction))
+          );
 
-            // Scrape details
-            const details = await fetchAndScrapeDetails(auction.detailsUrl);
-
-            // If the property is no longer available, mark it and skip further processing
-            if (details.unavailable) {
-              await this.auctionModel.updateOne(
-                { code: auction.code },
-                { $set: { available: false, fulfilled: true, updatedAt: new Date() } }
-              );
-              this.logger.log(`Auction ${auction.code} marked as unavailable`);
-              scrapedCount++;
-              await this.delay(this.delayBetweenRequests);
-              continue;
+          for (let k = 0; k < results.length; k++) {
+            const result = results[k];
+            if (result.status === 'fulfilled') {
+              scrapedCount += result.value ? 1 : 0;
+            } else {
+              errorCount++;
+              const failedAuction = group[k];
+              this.logger.error(`Error scraping auction ${failedAuction.code}: ${result.reason?.message || result.reason}`);
             }
-
-            // Update auction with scraped details and mark as fulfilled
-            const updateData: Record<string, unknown> = {
-              fulfilled: true,
-              updatedAt: new Date()
-            };
-
-            if (details.description) {
-              updateData.description = details.description;
-              this.logger.debug(`Scraped description for auction ${auction.code}`);
-            }
-
-            // Upload files to R2 if configured
-            if (this.storageService.isConfigured()) {
-              // Upload image if auction doesn't have it stored yet
-              if (details.imageUrl && !auction.image?.publicUrl) {
-                const imageFile: AuctionFile = {
-                  originalUrl: details.imageUrl,
-                  mimeType: 'image/jpeg',
-                };
-
-                const imageResult = await this.storageService.uploadImageFromUrl(details.imageUrl, auction.code);
-                if (imageResult) {
-                  imageFile.storageKey = imageResult.key;
-                  imageFile.publicUrl = imageResult.url;
-                  imageFile.size = imageResult.size;
-                  imageFile.uploadedAt = new Date();
-                  this.logger.debug(`Uploaded image to R2 for auction ${auction.code}: ${imageResult.key}`);
-                }
-
-                updateData.image = imageFile;
-              }
-
-              // Upload matricula if auction doesn't have it stored yet
-              if (details.matriculaUrl && !auction.matricula?.publicUrl) {
-                const result = await this.storageService.uploadDocumentFromUrl(
-                  details.matriculaUrl, auction.code, 'matricula'
-                );
-                if (result) {
-                  updateData.matricula = {
-                    originalUrl: details.matriculaUrl,
-                    storageKey: result.key,
-                    publicUrl: result.url,
-                    mimeType: 'application/pdf',
-                    size: result.size,
-                    uploadedAt: new Date(),
-                  };
-                  this.logger.debug(`Uploaded matricula to R2 for auction ${auction.code}`);
-                }
-              }
-
-              // TODO: Edital upload disabled - edital is tied to auction phase, not the auction itself
-              // if (details.editalUrl && !auction.edital?.publicUrl) {
-              //   const result = await this.storageService.uploadDocumentFromUrl(
-              //     details.editalUrl, auction.code, 'edital'
-              //   );
-              //   if (result) {
-              //     updateData.edital = {
-              //       originalUrl: details.editalUrl,
-              //       storageKey: result.key,
-              //       publicUrl: result.url,
-              //       mimeType: 'application/pdf',
-              //       size: result.size,
-              //       uploadedAt: new Date(),
-              //     };
-              //     this.logger.debug(`Uploaded edital to R2 for auction ${auction.code}`);
-              //   }
-              // }
-            }
-
-            // Update phase-specific details (paymentMethods, expenseRules, phaseDates) on the last phase and currentPhase
-            if (details.phaseDetails && auction.phases && auction.phases.length > 0) {
-              const updatedPhases: Phase[] = [...auction.phases];
-              const lastPhaseIndex = updatedPhases.length - 1;
-              const updatedLastPhase: Phase = {
-                ...updatedPhases[lastPhaseIndex],
-                paymentMethods: details.phaseDetails.paymentMethods,
-                expenseRules: details.phaseDetails.expenseRules,
-                phaseDates: details.phaseDetails.phaseDates,
-              };
-              updatedPhases[lastPhaseIndex] = updatedLastPhase;
-              updateData.phases = updatedPhases;
-              updateData.currentPhase = updatedLastPhase;
-              this.logger.debug(`Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules, ${details.phaseDetails.phaseDates?.length || 0} phase dates`);
-            }
-
-            await this.auctionModel.updateOne(
-              { code: auction.code },
-              { $set: updateData }
-            );
-            scrapedCount++;
-
-            // Delay between requests to be respectful to the server
-            await this.delay(this.delayBetweenRequests);
-          } catch (error: any) {
-            errorCount++;
-            this.logger.error(`Error scraping auction ${auction.code}: ${error?.message || error}`);
           }
+
+          await this.delay(this.delayBetweenGroups);
         }
       }
 
@@ -245,6 +150,94 @@ export class AuctionDetailsScraper implements OnModuleInit {
       this.logger.error(`Failed to scrape auction details: ${error?.message || error}`);
       throw error;
     }
+  }
+
+  /**
+   * Processes a single auction: scrape details, upload files, update DB.
+   * Returns true if successfully processed, false if skipped.
+   */
+  private async processAuction(auction: AuctionEntity): Promise<boolean> {
+    if (!auction.detailsUrl) return false;
+
+    const details = await fetchAndScrapeDetails(auction.detailsUrl);
+
+    if (details.unavailable) {
+      await this.auctionModel.updateOne(
+        { code: auction.code },
+        { $set: { available: false, fulfilled: true, updatedAt: new Date() } }
+      );
+      this.logger.log(`Auction ${auction.code} marked as unavailable`);
+      return true;
+    }
+
+    const updateData: Record<string, unknown> = {
+      fulfilled: true,
+      updatedAt: new Date()
+    };
+
+    if (details.description) {
+      updateData.description = details.description;
+      this.logger.debug(`Scraped description for auction ${auction.code}`);
+    }
+
+    if (this.storageService.isConfigured()) {
+      if (details.imageUrl && !auction.image?.publicUrl) {
+        const imageFile: AuctionFile = {
+          originalUrl: details.imageUrl,
+          mimeType: 'image/jpeg',
+        };
+
+        const imageResult = await this.storageService.uploadImageFromUrl(details.imageUrl, auction.code);
+        if (imageResult) {
+          imageFile.storageKey = imageResult.key;
+          imageFile.publicUrl = imageResult.url;
+          imageFile.size = imageResult.size;
+          imageFile.uploadedAt = new Date();
+          this.logger.debug(`Uploaded image to R2 for auction ${auction.code}: ${imageResult.key}`);
+        }
+
+        updateData.image = imageFile;
+      }
+
+      if (details.matriculaUrl && !auction.matricula?.publicUrl) {
+        const result = await this.storageService.uploadDocumentFromUrl(
+          details.matriculaUrl, auction.code, 'matricula'
+        );
+        if (result) {
+          updateData.matricula = {
+            originalUrl: details.matriculaUrl,
+            storageKey: result.key,
+            publicUrl: result.url,
+            mimeType: 'application/pdf',
+            size: result.size,
+            uploadedAt: new Date(),
+          };
+          this.logger.debug(`Uploaded matricula to R2 for auction ${auction.code}`);
+        }
+      }
+    }
+
+    if (details.phaseDetails && auction.phases && auction.phases.length > 0) {
+      const updatedPhases: Phase[] = [...auction.phases];
+      const lastPhaseIndex = updatedPhases.length - 1;
+      const updatedLastPhase: Phase = {
+        ...updatedPhases[lastPhaseIndex],
+        paymentMethods: details.phaseDetails.paymentMethods,
+        expenseRules: details.phaseDetails.expenseRules,
+        phaseDates: details.phaseDetails.phaseDates,
+      };
+      updatedPhases[lastPhaseIndex] = updatedLastPhase;
+      updateData.phases = updatedPhases;
+      updateData.currentPhase = updatedLastPhase;
+      this.logger.debug(`Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules, ${details.phaseDetails.phaseDates?.length || 0} phase dates`);
+    }
+
+    await this.auctionModel.updateOne(
+      { code: auction.code },
+      { $set: updateData }
+    );
+    this.logger.log(`Auction ${auction.code} scraped successfully`);
+    return true;
   }
 
   /**

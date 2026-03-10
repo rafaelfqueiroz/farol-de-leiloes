@@ -257,7 +257,8 @@ export async function fetchAndScrapeDetails(detailsUrl: string): Promise<Scraped
     const response = await fetch(detailsUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
+      },
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!response.ok) {
@@ -267,7 +268,6 @@ export async function fetchAndScrapeDetails(detailsUrl: string): Promise<Scraped
     const html = await response.text();
     return scrapeAuctionDetails(html);
   } catch (error) {
-    console.error(`Error scraping details from ${detailsUrl}:`, error);
-    return {};
+    throw new Error(`Failed to scrape details from ${detailsUrl}: ${error instanceof Error ? error.message : error}`);
   }
 }
