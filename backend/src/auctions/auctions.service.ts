@@ -212,7 +212,7 @@ export class AuctionsService {
   }
 
   async findByCode(code: string): Promise<Auction | null> {
-    const doc = await this.auctionRepository.findOne({ code }).exec();
+    const doc = await this.auctionRepository.findOne({ code, available: true }).exec();
     return doc ? this.toAuction(doc) : null;
   }
 
