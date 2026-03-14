@@ -30,7 +30,7 @@ export class CouponsService {
 
     // Create Stripe promotion code (user-facing code)
     const promoCode = await this.stripe.promotionCodes.create({
-      coupon: stripeCoupon.id,
+      promotion: { type: 'coupon', coupon: stripeCoupon.id },
       code: dto.code.toUpperCase(),
       expires_at: Math.floor(new Date(dto.validTo).getTime() / 1000),
       active: true,
