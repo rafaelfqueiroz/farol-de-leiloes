@@ -20,8 +20,11 @@ export function isAuctionActive(auction: Auction): boolean {
     return false;
   }
 
-  // Online Sales auctions are always active (they're like real estate listings)
-  if (currentPhase.modality === PhaseModality.ONLINE_SALES) {
+  // Online Sales and Direct Online Sales auctions are always active (they're like real estate listings)
+  if (
+    currentPhase.modality === PhaseModality.ONLINE_SALES ||
+    currentPhase.modality === PhaseModality.DIRECT_ONLINE_SALES
+  ) {
     return true;
   }
 

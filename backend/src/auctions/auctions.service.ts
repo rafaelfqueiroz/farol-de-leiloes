@@ -269,14 +269,21 @@ export class AuctionsService {
    * Builds the MongoDB query filter for active auctions.
    * An auction is active if:
    * - available !== false
-   * - AND (ONLINE_SALES modality OR has at least one future date)
+   * - AND (ONLINE_SALES/DIRECT_ONLINE_SALES modality OR has at least one future date)
    */
   private buildActiveAuctionFilter(): Record<string, unknown> {
     const now = new Date();
     return {
       available: { $ne: false },
       $or: [
-        { 'currentPhase.modality': PhaseModality.ONLINE_SALES },
+        {
+          'currentPhase.modality': {
+            $in: [
+              PhaseModality.ONLINE_SALES,
+              PhaseModality.DIRECT_ONLINE_SALES,
+            ],
+          },
+        },
         { 'currentPhase.phaseDates': { $elemMatch: { $gte: now } } },
       ],
     };
