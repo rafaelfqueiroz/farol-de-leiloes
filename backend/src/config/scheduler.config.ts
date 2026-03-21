@@ -37,7 +37,7 @@ export default registerAs(KEY, () => ({
 		onStartup: process.env.SCRAPER_ON_START_UP === 'true'
 	},
 	cache: {
-		neighborhoodsTtl: parseInt(process.env.NEIGHBORHOODS_CACHE_TTL || '3600000', 10) // Default 1 hour
+		neighborhoodsTtl: parseInt(process.env.NEIGHBORHOODS_CACHE_TTL || '600000', 10) // Default 5 minutes
 	},
 	reminders: {
 		enabled: process.env.REMINDERS_ENABLED !== 'false'
