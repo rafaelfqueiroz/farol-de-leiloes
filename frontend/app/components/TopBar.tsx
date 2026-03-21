@@ -4,10 +4,12 @@ import { AppBar, Toolbar, Typography, Box, Avatar, IconButton, Menu, MenuItem, B
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
+import { useSidebar } from '../contexts/SidebarContext';
 
 export default function TopBar() {
   const router = useRouter();
   const { user, logout, isAuthenticated, role, hasSubscription } = useAuth();
+  const { sidebarWidth } = useSidebar();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
 
@@ -56,8 +58,9 @@ export default function TopBar() {
         backgroundColor: 'background.paper',
         borderBottom: 1,
         borderColor: 'divider',
-        left: 72, // Sidebar width
-        width: 'calc(100% - 72px)',
+        left: sidebarWidth,
+        width: `calc(100% - ${sidebarWidth}px)`,
+        transition: 'left 0.3s ease, width 0.3s ease',
       }}
     >
       <Toolbar sx={{ justifyContent: 'space-between' }}>

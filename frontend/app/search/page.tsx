@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
+import { useSidebar } from '../contexts/SidebarContext';
 import SearchFilters, { AuctionFilters } from '../components/SearchFilters';
 import AuctionList from '../components/AuctionList';
 import FavoritesView from '../components/FavoritesView';
@@ -26,6 +27,7 @@ interface SearchResult {
 function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { sidebarWidth } = useSidebar();
   const [activeView, setActiveView] = useState('search');
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -146,7 +148,7 @@ function SearchPageContent() {
     <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FAFAF9' }}>
       <Sidebar activeView={activeView} onViewChange={handleViewChange} />
 
-      <Box sx={{ flexGrow: 1, ml: '72px' }}>
+      <Box sx={{ flexGrow: 1, ml: `${sidebarWidth}px`, transition: 'margin-left 0.3s ease' }}>
         <TopBar />
 
         <Box component="main" sx={{ pt: 10, pb: 4, pr: activeView === 'search' ? '380px' : 0, transition: 'padding-right 0.3s' }}>

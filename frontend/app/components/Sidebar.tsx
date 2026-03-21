@@ -12,6 +12,7 @@ import {
   Box,
   Tooltip,
   Popover,
+  IconButton,
 } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
 import SearchIcon from '@mui/icons-material/Search';
@@ -20,9 +21,10 @@ import CardMembershipIcon from '@mui/icons-material/CardMembership';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import MenuIcon from '@mui/icons-material/Menu';
 import { useAuth } from '../contexts/AuthContext';
-
-const DRAWER_WIDTH = 72;
+import { useSidebar } from '../contexts/SidebarContext';
 
 interface SidebarProps {
   activeView?: string;
@@ -44,6 +46,7 @@ const adminSubMenuItems = [
 export default function Sidebar({ activeView = 'home', onViewChange }: SidebarProps) {
   const router = useRouter();
   const { role } = useAuth();
+  const { isExpanded, toggleSidebar, sidebarWidth } = useSidebar();
   const [adminAnchorEl, setAdminAnchorEl] = useState<HTMLElement | null>(null);
 
   const menuItems = [
@@ -90,42 +93,69 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
     <Drawer
       variant="permanent"
       sx={{
-        width: DRAWER_WIDTH,
+        width: sidebarWidth,
         flexShrink: 0,
         '& .MuiDrawer-paper': {
-          width: DRAWER_WIDTH,
+          width: sidebarWidth,
           boxSizing: 'border-box',
-          backgroundColor: '#5A6C7D', // Steel Blue
+          backgroundColor: '#5A6C7D',
           borderRight: '1px solid #B8BEBD',
           overflow: 'hidden',
+          transition: 'width 0.3s ease',
         },
       }}
     >
-      {/* Logo */}
+      {/* Header with Logo and Toggle */}
       <Box
         sx={{
           height: 64,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#2D3436', // Dark Charcoal
+          justifyContent: isExpanded ? 'space-between' : 'center',
+          backgroundColor: '#2D3436',
           borderBottom: '1px solid #B8BEBD',
+          px: isExpanded ? 2 : 0,
         }}
       >
-        <HomeIcon sx={{ color: 'white', fontSize: 32 }} />
+        {isExpanded && (
+          <Box
+            component="span"
+            sx={{
+              color: 'white',
+              fontWeight: 700,
+              fontSize: 14,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+            }}
+          >
+            Farol dos Leilões
+          </Box>
+        )}
+        <IconButton
+          onClick={toggleSidebar}
+          sx={{
+            color: 'white',
+            '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
+          }}
+        >
+          {isExpanded ? <ChevronLeftIcon /> : <MenuIcon />}
+        </IconButton>
       </Box>
 
       {/* Menu Items */}
       <List sx={{ py: 2, px: 1 }}>
         {menuItems.map((item) => (
           <ListItem key={item.id} disablePadding sx={{ mb: 1 }}>
-            <Tooltip title={item.id === 'admin' ? '' : item.label} placement="right">
+            <Tooltip
+              title={isExpanded ? '' : (item.id === 'admin' ? '' : item.label)}
+              placement="right"
+            >
               <ListItemButton
                 onClick={item.id === 'admin' ? handleAdminClick : () => handleNavigation(item.id)}
                 sx={{
                   borderRadius: 2,
                   minHeight: 48,
-                  justifyContent: 'center',
+                  justifyContent: isExpanded ? 'initial' : 'center',
                   px: 2,
                   backgroundColor: activeView === item.id ? 'rgba(255,255,255,0.1)' : 'transparent',
                   '&:hover': {
@@ -138,10 +168,24 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                     minWidth: 0,
                     justifyContent: 'center',
                     color: 'white',
+                    mr: isExpanded ? 2 : 0,
                   }}
                 >
                   {item.icon}
                 </ListItemIcon>
+                {isExpanded && (
+                  <ListItemText
+                    primary={item.label}
+                    sx={{
+                      '& .MuiListItemText-primary': {
+                        color: 'white',
+                        fontSize: 14,
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap',
+                      },
+                    }}
+                  />
+                )}
               </ListItemButton>
             </Tooltip>
           </ListItem>

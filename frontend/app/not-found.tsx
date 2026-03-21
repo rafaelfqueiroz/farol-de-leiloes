@@ -14,17 +14,19 @@ import SearchIcon from '@mui/icons-material/Search';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
+import { useSidebar } from './contexts/SidebarContext';
 import theme from './theme';
 
 export default function NotFound() {
   const router = useRouter();
+  const { sidebarWidth } = useSidebar();
 
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FAFAF9' }}>
         <Sidebar activeView="search" onViewChange={() => router.push('/')} />
 
-        <Box sx={{ flexGrow: 1, ml: '72px' }}>
+        <Box sx={{ flexGrow: 1, ml: `${sidebarWidth}px`, transition: 'margin-left 0.3s ease' }}>
           <TopBar />
 
           <Box component="main" sx={{ pt: 10, pb: 4 }}>
