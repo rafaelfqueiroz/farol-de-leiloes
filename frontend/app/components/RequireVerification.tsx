@@ -33,7 +33,7 @@ export default function RequireVerification({ children }: RequireVerificationPro
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FAFAF9',
+          backgroundColor: '#FFF8F0',
         }}
       >
         <CircularProgress />
@@ -50,7 +50,7 @@ export default function RequireVerification({ children }: RequireVerificationPro
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FAFAF9',
+          backgroundColor: '#FFF8F0',
         }}
       >
         <CircularProgress />

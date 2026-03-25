@@ -53,7 +53,7 @@ export default function LoginPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, #2D3436 0%, #5A6C7D 100%)',
+          background: 'linear-gradient(135deg, #5E0006 0%, #9B0F06 100%)',
           padding: 2,
         }}
       >

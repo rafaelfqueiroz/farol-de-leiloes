@@ -191,7 +191,7 @@ export default function PlansPage() {
 
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FAFAF9' }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
         <Sidebar activeView="plans" />
         <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
           <TopBar />
@@ -210,7 +210,7 @@ export default function PlansPage() {
                   sx={{
                     width: 320,
                     position: 'relative',
-                    border: plan.highlighted ? '2px solid #5A6C7D' : '1px solid #B8BEBD',
+                    border: plan.highlighted ? '2px solid #9B0F06' : '1px solid #FFF8F0',
                     opacity: plan.disabled ? 0.6 : 1,
                   }}
                 >
@@ -224,7 +224,7 @@ export default function PlansPage() {
                         top: -12,
                         left: '50%',
                         transform: 'translateX(-50%)',
-                        backgroundColor: '#5A6C7D',
+                        backgroundColor: '#9B0F06',
                         color: 'white',
                         '& .MuiChip-icon': { color: 'white' },
                       }}
@@ -239,7 +239,7 @@ export default function PlansPage() {
                         {plan.price}
                       </Typography>
                       {plan.period && (
-                        <Typography component="span" variant="body1" sx={{ color: '#6B7280' }}>
+                        <Typography component="span" variant="body1" sx={{ color: 'text.secondary' }}>
                           {plan.period}
                         </Typography>
                       )}
@@ -250,9 +250,9 @@ export default function PlansPage() {
                         <ListItem key={idx} disableGutters sx={{ py: 0.5 }}>
                           <ListItemIcon sx={{ minWidth: 32 }}>
                             {plan.disabled ? (
-                              <LockIcon sx={{ fontSize: 18, color: '#B8BEBD' }} />
+                              <LockIcon sx={{ fontSize: 18, color: '#EED9B9' }} />
                             ) : (
-                              <CheckIcon sx={{ fontSize: 18, color: '#5A6C7D' }} />
+                              <CheckIcon sx={{ fontSize: 18, color: '#9B0F06' }} />
                             )}
                           </ListItemIcon>
                           <ListItemText

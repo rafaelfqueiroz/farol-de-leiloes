@@ -27,7 +27,7 @@ export default function PlansSuccessPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FAFAF9',
+          backgroundColor: '#FFFFFF',
         }}
       >
         <Container maxWidth="sm" sx={{ textAlign: 'center' }}>
@@ -35,7 +35,7 @@ export default function PlansSuccessPage() {
           <Typography variant="h4" sx={{ fontWeight: 700, mb: 2 }}>
             Assinatura realizada com sucesso!
           </Typography>
-          <Typography variant="body1" sx={{ mb: 4, color: '#6B7280' }}>
+          <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
             Voce agora tem acesso a todos os recursos do plano Standard, incluindo a busca por IA.
             Voce sera redirecionado automaticamente.
           </Typography>

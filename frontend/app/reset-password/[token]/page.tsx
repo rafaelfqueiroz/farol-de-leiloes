@@ -72,7 +72,7 @@ export default function ResetPasswordPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FAFAF9',
+        backgroundColor: '#FFFFFF',
         padding: 2,
       }}
     >

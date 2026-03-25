@@ -33,8 +33,6 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import DownloadIcon from '@mui/icons-material/Download';
 import DescriptionIcon from '@mui/icons-material/Description';
 import { useFavorites } from '../../contexts/FavoritesContext';
-import Sidebar from '../../components/Sidebar';
-import { useSidebar } from '../../contexts/SidebarContext';
 import TopBar from '../../components/TopBar';
 import theme from '../../theme';
 
@@ -126,7 +124,6 @@ interface AuctionDetailClientProps {
 }
 
 export default function AuctionDetailClient({ auction }: AuctionDetailClientProps) {
-  const { sidebarWidth } = useSidebar();
   const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
 
@@ -153,10 +150,8 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
 
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FAFAF9' }}>
-        <Sidebar activeView="search" onViewChange={() => router.push('/')} />
-
-        <Box sx={{ flexGrow: 1, ml: `${sidebarWidth}px`, transition: 'margin-left 0.3s ease' }}>
+      <Box sx={{ minHeight: '100vh', backgroundColor: '#FFF8F0' }}>
+        <Box sx={{ flexGrow: 1 }}>
           <TopBar />
 
           <Box component="main" sx={{ pt: 10, pb: 4 }}>
@@ -196,7 +191,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                       width: '100%',
                       height: 400,
                       overflow: 'hidden',
-                      backgroundColor: '#e0e0e0',
+                      backgroundColor: '#FFFFFF',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',

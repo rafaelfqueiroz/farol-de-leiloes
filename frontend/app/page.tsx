@@ -32,7 +32,7 @@ export default function Home() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#FAFAF9',
+            backgroundColor: '#FFFFFF',
           }}
         >
           <CircularProgress />
@@ -51,7 +51,7 @@ export default function Home() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#FAFAF9',
+            backgroundColor: '#FFFFFF',
           }}
         >
           <CircularProgress />

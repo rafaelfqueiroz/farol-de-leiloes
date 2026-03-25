@@ -89,7 +89,7 @@ export default function AuctionCard({
           width: '100%',
           height: 200,
           overflow: 'hidden',
-          backgroundColor: '#e0e0e0',
+          backgroundColor: '#FFF8F0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

@@ -40,7 +40,7 @@ function AuthCallbackContent() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FAFAF9',
+        backgroundColor: '#FFFFFF',
       }}
     >
       <CircularProgress size={48} sx={{ mb: 2 }} />
@@ -62,7 +62,7 @@ export default function AuthCallbackPage() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#FAFAF9',
+            backgroundColor: '#FFFFFF',
           }}
         >
           <CircularProgress size={48} sx={{ mb: 2 }} />

@@ -16,7 +16,7 @@ function RemindersPageLoading() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FAFAF9',
+        backgroundColor: '#FFFFFF',
       }}
     >
       <CircularProgress />
@@ -30,7 +30,7 @@ export default function Reminders() {
   return (
     <ThemeProvider theme={theme}>
       <Suspense fallback={<RemindersPageLoading />}>
-        <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FAFAF9' }}>
+        <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
           <Sidebar activeView="reminders" />
 
           <Box sx={{ flexGrow: 1, ml: `${sidebarWidth}px`, transition: 'margin-left 0.3s ease' }}>

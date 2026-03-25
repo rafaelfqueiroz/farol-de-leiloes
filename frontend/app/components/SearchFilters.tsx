@@ -404,17 +404,17 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
           <Box
             sx={{
               p: 3,
-              border: '1px dashed #B8BEBD',
+              border: '1px dashed #EED9B9',
               borderRadius: 2,
               textAlign: 'center',
-              backgroundColor: '#f5f5f5',
+              backgroundColor: '#FFF8F0',
             }}
           >
-            <LockIcon sx={{ fontSize: 40, color: '#B8BEBD', mb: 1 }} />
-            <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: '#2D3436' }}>
+            <LockIcon sx={{ fontSize: 40, color: '#EED9B9', mb: 1 }} />
+            <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: '#091413' }}>
               Recurso disponivel no plano Standard
             </Typography>
-            <Typography variant="body2" sx={{ mb: 2, color: '#6B7280' }}>
+            <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
               Assine o plano Standard para usar a busca por IA
             </Typography>
             <Button
@@ -466,14 +466,14 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
             boxSizing: 'border-box',
             mt: '64px', // TopBar height
             height: 'calc(100vh - 64px)',
-            borderLeft: '1px solid',
-            borderColor: 'divider',
+            borderLeft: '1px solid #9B0F06',
+            backgroundColor: '#FFFFFF',
           },
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {/* Header */}
-          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h6" fontWeight={600}>
               Filtros de Busca
             </Typography>
@@ -534,7 +534,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                   {savedFilters.length >= 10 ? 'Limite de 10 filtros atingido' : 'Salvar Filtros Atuais'}
                 </Button>
 
-                <Divider sx={{ my: 3 }} />
+                <Divider sx={{ my: 3, borderColor: '#9B0F06' }} />
               </Box>
             )}
 
@@ -654,7 +654,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               />
             </Box>
 
-            <Divider sx={{ my: 3 }} />
+            <Divider sx={{ my: 3, borderColor: '#9B0F06' }} />
 
             {/* Modality Section */}
             <Box sx={{ mb: 3 }}>
@@ -663,11 +663,8 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               </Typography>
 
               <Box sx={{
-                border: 1,
-                borderColor: 'divider',
                 borderRadius: 1,
                 p: 1.5,
-                backgroundColor: 'background.paper'
               }}>
                 <FormGroup>
                   {MODALITIES.map((modality) => (
@@ -687,7 +684,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               </Box>
             </Box>
 
-            <Divider sx={{ my: 3 }} />
+            <Divider sx={{ my: 3, borderColor: '#9B0F06' }} />
 
             {/* Price Range Section */}
             <Box sx={{ mb: 3 }}>
@@ -727,8 +724,8 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
           <Box sx={{
             p: 2,
             borderTop: 1,
-            borderColor: 'divider',
-            backgroundColor: 'background.paper',
+            borderColor: '#FFFFFF',
+            backgroundColor: '#FFFFFF',
             display: 'flex',
             flexDirection: 'column',
             gap: 1,

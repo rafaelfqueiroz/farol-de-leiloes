@@ -145,7 +145,7 @@ function SearchPageContent() {
   };
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FAFAF9' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
       <Sidebar activeView={activeView} onViewChange={handleViewChange} />
 
       <Box sx={{ flexGrow: 1, ml: `${sidebarWidth}px`, transition: 'margin-left 0.3s ease' }}>
@@ -213,7 +213,7 @@ function SearchPageLoading() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FAFAF9',
+        backgroundColor: '#FFFFFF',
       }}
     >
       <CircularProgress />

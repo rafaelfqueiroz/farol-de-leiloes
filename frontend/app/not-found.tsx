@@ -23,7 +23,7 @@ export default function NotFound() {
 
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FAFAF9' }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFF8F0' }}>
         <Sidebar activeView="search" onViewChange={() => router.push('/')} />
 
         <Box sx={{ flexGrow: 1, ml: `${sidebarWidth}px`, transition: 'margin-left 0.3s ease' }}>

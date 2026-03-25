@@ -56,7 +56,7 @@ export default function VerifyEmailTokenPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FAFAF9',
+        backgroundColor: '#FFFFFF',
         padding: 2,
       }}
     >

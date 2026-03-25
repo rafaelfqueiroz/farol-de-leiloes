@@ -57,7 +57,7 @@ export default function ResetPasswordRequestPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FAFAF9',
+        backgroundColor: '#FFFFFF',
         padding: 2,
       }}
     >

@@ -16,7 +16,7 @@ export default function PlansCancelPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FAFAF9',
+          backgroundColor: '#FFFFFF',
         }}
       >
         <Container maxWidth="sm" sx={{ textAlign: 'center' }}>
@@ -24,7 +24,7 @@ export default function PlansCancelPage() {
           <Typography variant="h4" sx={{ fontWeight: 700, mb: 2 }}>
             Pagamento cancelado
           </Typography>
-          <Typography variant="body1" sx={{ mb: 4, color: '#6B7280' }}>
+          <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
             O pagamento foi cancelado. Voce pode tentar novamente quando quiser.
           </Typography>
           <Button variant="contained" onClick={() => router.push('/plans')}>

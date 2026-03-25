@@ -4,19 +4,18 @@
 
 @layer base {
   :root {
-    /* Custom Color Palette */
-    --off-white: #FAFAF9;
-    --warm-beige: #E8DCC8;
-    --dark-charcoal: #2D3436;
-    --cool-gray: #6B7280;
-    --steel-blue: #5A6C7D;
-    --concrete: #95A5A6;
-    --medium-gray: #B8BEBD;
+    /* V2 Color Palette */
+    --maroon: #5E0006;
+    --red: #9B0F06;
+    --beige: #EED9B9;
+    --black: #091413;
+    --off-white: #FFF8F0;
+    --white: #FFFFFF;
   }
 
   body {
-    color: var(--cool-gray);
-    background: var(--off-white);
+    color: var(--black);
+    background: var(--white);
   }
 }
 

@@ -9,13 +9,11 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        'off-white': '#FAFAF9',
-        'warm-beige': '#E8DCC8',
-        'dark-charcoal': '#2D3436',
-        'cool-gray': '#6B7280',
-        'steel-blue': '#5A6C7D',
-        'concrete': '#95A5A6',
-        'medium-gray': '#B8BEBD',
+        'maroon': '#5E0006',
+        'red': '#9B0F06',
+        'beige': '#EED9B9',
+        'black': '#091413',
+        'white': '#FFF8F0',
       },
       animation: {
         'bounce': 'bounce-delay 1.4s infinite ease-in-out both',

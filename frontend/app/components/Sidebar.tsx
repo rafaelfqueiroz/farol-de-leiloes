@@ -98,44 +98,30 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
         '& .MuiDrawer-paper': {
           width: sidebarWidth,
           boxSizing: 'border-box',
-          backgroundColor: '#5A6C7D',
-          borderRight: '1px solid #B8BEBD',
+          backgroundColor: '#FFF8F0',
+          borderRight: 'none',
           overflow: 'hidden',
           transition: 'width 0.3s ease',
+          mt: '64px',
+          height: 'calc(100vh - 64px)',
         },
       }}
     >
-      {/* Header with Logo and Toggle */}
+      {/* Toggle Button */}
       <Box
         sx={{
-          height: 64,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: isExpanded ? 'space-between' : 'center',
-          backgroundColor: '#2D3436',
-          borderBottom: '1px solid #B8BEBD',
-          px: isExpanded ? 2 : 0,
+          justifyContent: isExpanded ? 'flex-end' : 'center',
+          px: isExpanded ? 1 : 0,
+          py: 1,
         }}
       >
-        {isExpanded && (
-          <Box
-            component="span"
-            sx={{
-              color: 'white',
-              fontWeight: 700,
-              fontSize: 14,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-            }}
-          >
-            Farol dos Leilões
-          </Box>
-        )}
         <IconButton
           onClick={toggleSidebar}
           sx={{
-            color: 'white',
-            '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
+            color: '#9B0F06',
+            '&:hover': { backgroundColor: 'rgba(155, 15, 6, 0.08)' },
           }}
         >
           {isExpanded ? <ChevronLeftIcon /> : <MenuIcon />}
@@ -143,7 +129,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
       </Box>
 
       {/* Menu Items */}
-      <List sx={{ py: 2, px: 1 }}>
+      <List sx={{ py: 2, px: 0 }}>
         {menuItems.map((item) => (
           <ListItem key={item.id} disablePadding sx={{ mb: 1 }}>
             <Tooltip
@@ -153,13 +139,14 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
               <ListItemButton
                 onClick={item.id === 'admin' ? handleAdminClick : () => handleNavigation(item.id)}
                 sx={{
-                  borderRadius: 2,
+                  borderRadius: 0,
                   minHeight: 48,
                   justifyContent: isExpanded ? 'initial' : 'center',
                   px: 2,
-                  backgroundColor: activeView === item.id ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  backgroundColor: activeView === item.id ? '#FFFFFF' : 'transparent',
+                  borderRight: activeView === item.id ? '2px solid #9B0F06' : '2px solid transparent',
                   '&:hover': {
-                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    backgroundColor: '#FFFFFF',
                   },
                 }}
               >
@@ -167,7 +154,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                   sx={{
                     minWidth: 0,
                     justifyContent: 'center',
-                    color: 'white',
+                    color: '#9B0F06',
                     mr: isExpanded ? 2 : 0,
                   }}
                 >
@@ -178,7 +165,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                     primary={item.label}
                     sx={{
                       '& .MuiListItemText-primary': {
-                        color: 'white',
+                        color: '#9B0F06',
                         fontSize: 14,
                         fontWeight: 500,
                         whiteSpace: 'nowrap',
@@ -201,8 +188,9 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
         transformOrigin={{ vertical: 'center', horizontal: 'left' }}
         sx={{
           '& .MuiPopover-paper': {
-            backgroundColor: '#5A6C7D',
+            backgroundColor: '#FFF8F0',
             borderRadius: 2,
+            border: '1px solid #FFF8F0',
             ml: 0.5,
             minWidth: 160,
           },
@@ -217,16 +205,16 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                   px: 2,
                   py: 1,
                   '&:hover': {
-                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    backgroundColor: '#FFFFFF',
                   },
                 }}
               >
-                <ListItemIcon sx={{ minWidth: 32, color: 'white' }}>
+                <ListItemIcon sx={{ minWidth: 32, color: '#9B0F06' }}>
                   {subItem.icon}
                 </ListItemIcon>
                 <ListItemText
                   primary={subItem.label}
-                  sx={{ '& .MuiListItemText-primary': { color: 'white', fontSize: 14 } }}
+                  sx={{ '& .MuiListItemText-primary': { color: '#9B0F06', fontSize: 14 } }}
                 />
               </ListItemButton>
             </ListItem>

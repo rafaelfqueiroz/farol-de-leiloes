@@ -1,68 +1,84 @@
 import { createTheme } from '@mui/material/styles';
 
+// V2 Color Palette
+const colors = {
+  maroon: '#5E0006',
+  red: '#9B0F06',
+  beige: '#EED9B9',
+  black: '#091413',
+  white: '#FFF8F0',
+  offWhite: '#FFF4EA',
+};
+//beige: '#EED9B9',
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#5A6C7D', // Steel Blue
-      dark: '#2D3436', // Dark Charcoal
-      light: '#B8BEBD', // Medium Gray
-      contrastText: '#FFFFFF',
+      main: colors.red,
+      dark: colors.maroon,
+      light: colors.beige,
+      contrastText: colors.white,
     },
     secondary: {
-      main: '#E8DCC8', // Warm Beige
-      light: '#FAFAF9', // Off White
-      contrastText: '#2D3436',
+      main: colors.beige,
+      light: colors.white,
+      contrastText: colors.black,
     },
     text: {
-      primary: '#2D3436', // Dark Charcoal
-      secondary: '#6B7280', // Cool Gray
+      primary: colors.black,
+      secondary: 'rgba(9, 20, 19, 0.6)',
     },
     background: {
-      default: '#FAFAF9', // Off White
+      default: '#FFFFFF',
       paper: '#FFFFFF',
     },
-    divider: '#B8BEBD', // Medium Gray
+    divider: colors.beige,
     grey: {
-      100: '#FAFAF9',
-      200: '#E8DCC8',
-      300: '#B8BEBD',
-      400: '#95A5A6',
-      500: '#6B7280',
-      600: '#5A6C7D',
-      700: '#2D3436',
+      100: colors.white,
+      200: colors.beige,
+      300: colors.beige,
+      400: 'rgba(9, 20, 19, 0.4)',
+      500: 'rgba(9, 20, 19, 0.6)',
+      600: colors.red,
+      700: colors.black,
+    },
+    error: {
+      main: '#D32F2F',
+    },
+    success: {
+      main: '#4CAF50',
     },
   },
   typography: {
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     h1: {
       fontWeight: 700,
-      color: '#2D3436',
+      color: colors.black,
     },
     h2: {
       fontWeight: 600,
-      color: '#2D3436',
+      color: colors.black,
     },
     h3: {
       fontWeight: 600,
-      color: '#2D3436',
+      color: colors.black,
     },
     h4: {
       fontWeight: 600,
-      color: '#2D3436',
+      color: colors.black,
     },
     h5: {
       fontWeight: 600,
-      color: '#2D3436',
+      color: colors.black,
     },
     h6: {
       fontWeight: 600,
-      color: '#2D3436',
+      color: colors.black,
     },
     body1: {
-      color: '#6B7280',
+      color: 'rgba(9, 20, 19, 0.6)',
     },
     body2: {
-      color: '#6B7280',
+      color: 'rgba(9, 20, 19, 0.6)',
     },
   },
   components: {
@@ -80,9 +96,9 @@ const theme = createTheme({
           },
         },
         containedPrimary: {
-          backgroundColor: '#5A6C7D',
+          backgroundColor: colors.red,
           '&:hover': {
-            backgroundColor: '#2D3436',
+            backgroundColor: colors.maroon,
           },
         },
       },
@@ -91,7 +107,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 12,
-          border: '1px solid #B8BEBD',
+          border: '1px solid #FFF8F0',
           boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
         },
       },
@@ -101,14 +117,11 @@ const theme = createTheme({
         root: {
           '& .MuiOutlinedInput-root': {
             borderRadius: 8,
-            '& fieldset': {
-              borderColor: '#B8BEBD',
-            },
             '&:hover fieldset': {
-              borderColor: '#5A6C7D',
+              borderColor: colors.red,
             },
             '&.Mui-focused fieldset': {
-              borderColor: '#5A6C7D',
+              borderColor: colors.red,
             },
           },
         },
@@ -120,8 +133,8 @@ const theme = createTheme({
           borderRadius: 16,
         },
         filled: {
-          backgroundColor: '#5A6C7D',
-          color: '#FFFFFF',
+          backgroundColor: colors.red,
+          color: colors.white,
         },
       },
     },

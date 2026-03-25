@@ -4,12 +4,12 @@ import { AppBar, Toolbar, Typography, Box, Avatar, IconButton, Menu, MenuItem, B
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
-import { useSidebar } from '../contexts/SidebarContext';
+
 
 export default function TopBar() {
   const router = useRouter();
   const { user, logout, isAuthenticated, role, hasSubscription } = useAuth();
-  const { sidebarWidth } = useSidebar();
+
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
 
@@ -55,11 +55,11 @@ export default function TopBar() {
       position="fixed"
       elevation={0}
       sx={{
-        backgroundColor: 'background.paper',
+        backgroundColor: 'primary.dark',
         borderBottom: 1,
         borderColor: 'divider',
-        left: sidebarWidth,
-        width: `calc(100% - ${sidebarWidth}px)`,
+        left: 0,
+        width: '100%',
         transition: 'left 0.3s ease, width 0.3s ease',
       }}
     >
@@ -71,7 +71,7 @@ export default function TopBar() {
             sx={{
               fontSize: 20,
               fontWeight: 700,
-              color: 'text.primary',
+              color: 'primary.contrastText',
             }}
           >
             🏠 Farol dos leilões
@@ -87,7 +87,7 @@ export default function TopBar() {
                 color={getPlanColor()}
                 size="small"
                 variant="outlined"
-                sx={{ fontWeight: 600, fontSize: 11 }}
+                sx={{ fontWeight: 600, fontSize: 11, borderColor: 'rgba(255,255,255,0.5)', color: 'white' }}
               />
               <IconButton
                 onClick={handleClick}
