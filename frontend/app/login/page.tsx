@@ -143,7 +143,7 @@ export default function LoginPage() {
                 color: 'text.primary',
                 '&:hover': {
                   borderColor: 'primary.main',
-                  backgroundColor: 'grey.100',
+                  backgroundColor: '#F7ECEB',
                 },
               }}
             >

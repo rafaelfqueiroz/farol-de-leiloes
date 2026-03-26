@@ -180,7 +180,7 @@ export default function LandingPage() {
                 color: '#091413',
                 fontWeight: 600,
                 '&:hover': {
-                  backgroundColor: '#EED9B9',
+                  backgroundColor: '#F7ECEB',
                 },
               }}
             >
@@ -253,7 +253,7 @@ export default function LandingPage() {
                     fontSize: '1rem',
                     fontWeight: 600,
                     '&:hover': {
-                      backgroundColor: '#EED9B9',
+                      backgroundColor: '#F7ECEB',
                     },
                   }}
                 >
@@ -514,11 +514,11 @@ export default function LandingPage() {
                     onClick={handleLogin}
                     sx={{
                       mt: 3,
-                      backgroundColor: plan.highlighted ? '#9B0F06' : 'transparent',
+                      backgroundColor: plan.highlighted ? '#9B0F06' : 'white',
                       borderColor: '#9B0F06',
                       color: plan.highlighted ? 'white' : '#9B0F06',
                       '&:hover': {
-                        backgroundColor: plan.highlighted ? '#5E0006' : 'rgba(155, 15, 6, 0.08)',
+                        backgroundColor: plan.highlighted ? '#5E0006' : '#F7ECEB',
                       },
                     }}
                   >
@@ -559,7 +559,7 @@ export default function LandingPage() {
                 fontSize: '1.1rem',
                 fontWeight: 600,
                 '&:hover': {
-                  backgroundColor: '#EED9B9',
+                  backgroundColor: '#F7ECEB',
                 },
               }}
             >

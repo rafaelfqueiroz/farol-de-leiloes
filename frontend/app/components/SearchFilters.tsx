@@ -748,6 +748,12 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               startIcon={<ClearIcon />}
               onClick={handleReset}
               disabled={isLoading}
+              sx={{
+                '&:hover': {
+                  backgroundColor: '#F7ECEB',
+                  borderColor: 'transparent',
+                },
+              }}
             >
               Limpar Filtros
             </Button>
