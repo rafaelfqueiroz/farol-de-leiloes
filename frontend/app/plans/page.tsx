@@ -31,7 +31,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import { useAuth } from '../contexts/AuthContext';
-import theme from '../theme';
+import theme, { colors } from '../theme';
 
 const plans = [
   {
@@ -191,7 +191,7 @@ export default function PlansPage() {
 
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh'}}>
         <Sidebar activeView="plans" />
         <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
           <TopBar />
@@ -210,7 +210,7 @@ export default function PlansPage() {
                   sx={{
                     width: 320,
                     position: 'relative',
-                    border: plan.highlighted ? '2px solid #9B0F06' : '1px solid #FFF8F0',
+                    border: plan.highlighted ? `2px solid ${colors.red}` : `1px solid ${colors.lightGray}`,
                     opacity: plan.disabled ? 0.6 : 1,
                   }}
                 >
@@ -250,9 +250,9 @@ export default function PlansPage() {
                         <ListItem key={idx} disableGutters sx={{ py: 0.5 }}>
                           <ListItemIcon sx={{ minWidth: 32 }}>
                             {plan.disabled ? (
-                              <LockIcon sx={{ fontSize: 18, color: '#EED9B9' }} />
+                              <LockIcon sx={{ fontSize: 18 }} />
                             ) : (
-                              <CheckIcon sx={{ fontSize: 18, color: '#9B0F06' }} />
+                              <CheckIcon sx={{ fontSize: 18, color: colors.red }} />
                             )}
                           </ListItemIcon>
                           <ListItemText

@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
+import { colors } from '../theme';
 
 interface RequireVerificationProps {
   children: React.ReactNode;
@@ -33,7 +34,7 @@ export default function RequireVerification({ children }: RequireVerificationPro
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FFF8F0',
+          backgroundColor: colors.lightGray,
         }}
       >
         <CircularProgress />
@@ -50,7 +51,7 @@ export default function RequireVerification({ children }: RequireVerificationPro
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FFF8F0',
+          backgroundColor: colors.lightGray,
         }}
       >
         <CircularProgress />

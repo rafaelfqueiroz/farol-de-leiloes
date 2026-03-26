@@ -29,6 +29,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import StarIcon from '@mui/icons-material/Star';
 import LoginIcon from '@mui/icons-material/Login';
+import { colors } from '../theme';
 
 const FEATURES = [
   {
@@ -141,7 +142,7 @@ export default function LandingPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: '#FFF8F0' }}>
+    <Box sx={{ minHeight: '100vh', backgroundColor: colors.white }}>
       {/* Header */}
       <AppBar
         position="fixed"
@@ -180,7 +181,7 @@ export default function LandingPage() {
                 color: '#091413',
                 fontWeight: 600,
                 '&:hover': {
-                  backgroundColor: '#F7ECEB',
+                  backgroundColor: colors.lightRed,
                 },
               }}
             >
@@ -225,7 +226,7 @@ export default function LandingPage() {
                   }}
                 >
                   Encontre o imóvel dos seus sonhos com até{' '}
-                  <Box component="span" sx={{ color: '#EED9B9' }}>
+                  <Box component="span" sx={{ color: colors.white }}>
                     70% de desconto
                   </Box>
                 </Typography>
@@ -253,7 +254,7 @@ export default function LandingPage() {
                     fontSize: '1rem',
                     fontWeight: 600,
                     '&:hover': {
-                      backgroundColor: '#F7ECEB',
+                      backgroundColor: colors.lightRed,
                     },
                   }}
                 >
@@ -518,7 +519,7 @@ export default function LandingPage() {
                       borderColor: '#9B0F06',
                       color: plan.highlighted ? 'white' : '#9B0F06',
                       '&:hover': {
-                        backgroundColor: plan.highlighted ? '#5E0006' : '#F7ECEB',
+                        backgroundColor: plan.highlighted ? '#5E0006' : colors.lightRed,
                       },
                     }}
                   >
@@ -559,7 +560,7 @@ export default function LandingPage() {
                 fontSize: '1.1rem',
                 fontWeight: 600,
                 '&:hover': {
-                  backgroundColor: '#F7ECEB',
+                  backgroundColor: colors.lightRed,
                 },
               }}
             >

@@ -34,7 +34,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import DescriptionIcon from '@mui/icons-material/Description';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import TopBar from '../../components/TopBar';
-import theme from '../../theme';
+import theme, { colors } from '../../theme';
 
 interface ExpenseRule {
   type: string;
@@ -150,7 +150,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
 
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={{ minHeight: '100vh', backgroundColor: '#FFF8F0' }}>
+      <Box sx={{ minHeight: '100vh', backgroundColor: colors.lightGray }}>
         <Box sx={{ flexGrow: 1 }}>
           <TopBar />
 
@@ -231,7 +231,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                         inset: 0,
                       }}
                     >
-                      <HomeIcon sx={{ fontSize: 60, mb: 1, opacity: 0.5 }} />
+                      <HomeIcon sx={{ fontSize: 60, mb: 1, opacity: 0.7 }} />
                       <Typography variant="body2" color="text.secondary">
                         Sem imagem
                       </Typography>

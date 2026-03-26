@@ -15,7 +15,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import { useSidebar } from './contexts/SidebarContext';
-import theme from './theme';
+import theme, { colors } from './theme';
 
 export default function NotFound() {
   const router = useRouter();
@@ -23,7 +23,7 @@ export default function NotFound() {
 
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFF8F0' }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: colors.white }}>
         <Sidebar activeView="search" onViewChange={() => router.push('/')} />
 
         <Box sx={{ flexGrow: 1, ml: `${sidebarWidth}px`, transition: 'margin-left 0.3s ease' }}>

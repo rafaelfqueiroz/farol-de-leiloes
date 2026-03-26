@@ -5,6 +5,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ReminderButton from './ReminderButton';
+import { colors } from '../theme';
 
 interface Phase {
   modality: string;
@@ -89,7 +90,7 @@ export default function AuctionCard({
           width: '100%',
           height: 200,
           overflow: 'hidden',
-          backgroundColor: '#FFF8F0',
+          backgroundColor: colors.lightGray,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -129,7 +130,7 @@ export default function AuctionCard({
             inset: 0,
           }}
         >
-          <HomeIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
+          <HomeIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7 }} />
           <Typography variant="body2" color="text.secondary">
             Sem imagem
           </Typography>

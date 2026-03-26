@@ -141,10 +141,6 @@ export default function LoginPage() {
                 py: 1.5,
                 borderColor: 'divider',
                 color: 'text.primary',
-                '&:hover': {
-                  borderColor: 'primary.main',
-                  backgroundColor: '#F7ECEB',
-                },
               }}
             >
               Entrar com Google

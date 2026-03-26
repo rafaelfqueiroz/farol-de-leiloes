@@ -1,13 +1,14 @@
 import { createTheme } from '@mui/material/styles';
 
 // V2 Color Palette
-const colors = {
+export const colors = {
   maroon: '#5E0006',
   red: '#9B0F06',
   beige: '#EED9B9',
   black: '#091413',
-  white: '#FFF8F0',
-  offWhite: '#FFF4EA',
+  white: '#FFFFFF',
+  lightGray: '#F4F4F6',
+  lightRed: '#F7ECEB',
 };
 //beige: '#EED9B9',
 const theme = createTheme({
@@ -15,7 +16,7 @@ const theme = createTheme({
     primary: {
       main: colors.red,
       dark: colors.maroon,
-      light: colors.beige,
+      light: colors.lightGray,
       contrastText: colors.white,
     },
     secondary: {
@@ -31,16 +32,16 @@ const theme = createTheme({
       default: '#FFFFFF',
       paper: '#FFFFFF',
     },
-    divider: colors.beige,
-    grey: {
-      100: colors.white,
-      200: colors.beige,
-      300: colors.beige,
-      400: 'rgba(9, 20, 19, 0.4)',
-      500: 'rgba(9, 20, 19, 0.6)',
-      600: colors.red,
-      700: colors.black,
-    },
+    //divider: colors.lightGray,
+    // grey: {
+    //   100: colors.white,
+    //   200: colors.beige,
+    //   300: colors.beige,
+    //   400: 'rgba(9, 20, 19, 0.4)',
+    //   500: 'rgba(9, 20, 19, 0.6)',
+    //   600: colors.red,
+    //   700: colors.black,
+    // },
     error: {
       main: '#D32F2F',
     },
@@ -101,13 +102,19 @@ const theme = createTheme({
             backgroundColor: colors.maroon,
           },
         },
+        outlined: {
+          '&:hover': {
+            backgroundColor: colors.lightRed,
+            borderColor: 'transparent',
+          },
+        },
       },
     },
     MuiCard: {
       styleOverrides: {
         root: {
           borderRadius: 12,
-          border: '1px solid #FFF8F0',
+          border: `1px solid ${colors.lightGray}`,
           boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
         },
       },

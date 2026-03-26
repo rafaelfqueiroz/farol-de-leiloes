@@ -12,21 +12,16 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
-import Sidebar from '../../components/Sidebar';
 import TopBar from '../../components/TopBar';
-import { useSidebar } from '../../contexts/SidebarContext';
-import theme from '../../theme';
+import theme, { colors } from '../../theme';
 
 export default function AuctionNotFound() {
   const router = useRouter();
-  const { sidebarWidth } = useSidebar();
 
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFF8F0' }}>
-        <Sidebar activeView="search" onViewChange={() => router.push('/')} />
-
-        <Box sx={{ flexGrow: 1, ml: `${sidebarWidth}px`, transition: 'margin-left 0.3s ease' }}>
+      <Box sx={{ minHeight: '100vh', backgroundColor: colors.lightGray }}>
+        <Box sx={{ flexGrow: 1 }}>
           <TopBar />
 
           <Box component="main" sx={{ pt: 10, pb: 4 }}>

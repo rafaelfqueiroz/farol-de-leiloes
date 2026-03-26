@@ -33,6 +33,7 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
+import { colors } from '../theme';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
@@ -404,13 +405,12 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
           <Box
             sx={{
               p: 3,
-              border: '1px dashed #EED9B9',
               borderRadius: 2,
               textAlign: 'center',
-              backgroundColor: '#FFF8F0',
+              backgroundColor: colors.lightGray,
             }}
           >
-            <LockIcon sx={{ fontSize: 40, color: '#EED9B9', mb: 1 }} />
+            <LockIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7}} />
             <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: '#091413' }}>
               Recurso disponivel no plano Standard
             </Typography>
@@ -464,8 +464,8 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
           '& .MuiDrawer-paper': {
             width: DRAWER_WIDTH,
             boxSizing: 'border-box',
-            mt: '64px', // TopBar height
-            height: 'calc(100vh - 64px)',
+            mt: '65px', // TopBar height
+            height: 'calc(100vh - 65px)',
             borderLeft: '1px solid #9B0F06',
             backgroundColor: '#FFFFFF',
           },
@@ -477,7 +477,10 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
             <Typography variant="h6" fontWeight={600}>
               Filtros de Busca
             </Typography>
-            <IconButton size="small" onClick={() => setDrawerOpen(false)}>
+            <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{
+            color: colors.red,
+            '&:hover': { backgroundColor: colors.lightRed },
+          }}>
               <ChevronRightIcon />
             </IconButton>
           </Box>
@@ -748,12 +751,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               startIcon={<ClearIcon />}
               onClick={handleReset}
               disabled={isLoading}
-              sx={{
-                '&:hover': {
-                  backgroundColor: '#F7ECEB',
-                  borderColor: 'transparent',
-                },
-              }}
+              sx={{}}
             >
               Limpar Filtros
             </Button>

@@ -13,7 +13,7 @@ const config: Config = {
         'red': '#9B0F06',
         'beige': '#EED9B9',
         'black': '#091413',
-        'white': '#FFF8F0',
+        'white': '#FFFFFF',
       },
       animation: {
         'bounce': 'bounce-delay 1.4s infinite ease-in-out both',

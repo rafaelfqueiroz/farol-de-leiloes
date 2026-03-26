@@ -25,6 +25,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import MenuIcon from '@mui/icons-material/Menu';
 import { useAuth } from '../contexts/AuthContext';
 import { useSidebar } from '../contexts/SidebarContext';
+import { colors } from '../theme';
 
 interface SidebarProps {
   activeView?: string;
@@ -98,12 +99,12 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
         '& .MuiDrawer-paper': {
           width: sidebarWidth,
           boxSizing: 'border-box',
-          backgroundColor: '#FFF8F0',
+          backgroundColor: colors.lightGray,
           borderRight: 'none',
           overflow: 'hidden',
           transition: 'width 0.3s ease',
-          mt: '64px',
-          height: 'calc(100vh - 64px)',
+          mt: '65px',
+          height: 'calc(100vh - 65px)',
         },
       }}
     >
@@ -120,8 +121,8 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
         <IconButton
           onClick={toggleSidebar}
           sx={{
-            color: '#9B0F06',
-            '&:hover': { backgroundColor: 'rgba(155, 15, 6, 0.08)' },
+            color: colors.red,
+            '&:hover': { backgroundColor: colors.lightRed },
           }}
         >
           {isExpanded ? <ChevronLeftIcon /> : <MenuIcon />}
@@ -188,9 +189,9 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
         transformOrigin={{ vertical: 'center', horizontal: 'left' }}
         sx={{
           '& .MuiPopover-paper': {
-            backgroundColor: '#FFF8F0',
+            backgroundColor: colors.lightGray,
             borderRadius: 2,
-            border: '1px solid #FFF8F0',
+            border: `1px solid ${colors.lightGray}`,
             ml: 0.5,
             minWidth: 160,
           },
