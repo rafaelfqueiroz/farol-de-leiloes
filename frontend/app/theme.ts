@@ -4,11 +4,21 @@ import { createTheme } from '@mui/material/styles';
 export const colors = {
   maroon: '#5E0006',
   red: '#9B0F06',
+  red10: '#F5E7E6',
+  red20: '#EBD0CD',
+  red30: '#E1B8B4',
+  red40: '#D79F9B',
+  red50: '#CD8783',
+  red60: '#C4706B',
+  red70: '#BC5B54',
+  red80: '#AF3F37',
+  red90: '#A5271E',
   beige: '#EED9B9',
   black: '#091413',
   white: '#FFFFFF',
   lightGray: '#F4F4F6',
-  lightRed: '#F7ECEB',
+  lightRed: '#E1B8B4', // red30
+  //lightRed: '#F7ECEB',
 };
 //beige: '#EED9B9',
 const theme = createTheme({

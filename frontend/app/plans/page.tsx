@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Box,
   Container,
@@ -30,6 +29,7 @@ import StarIcon from '@mui/icons-material/Star';
 import LockIcon from '@mui/icons-material/Lock';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
+import RequireAuthentication from '../components/RequireAuthentication';
 import { useAuth } from '../contexts/AuthContext';
 import theme, { colors } from '../theme';
 
@@ -74,8 +74,7 @@ const plans = [
 ];
 
 export default function PlansPage() {
-  const router = useRouter();
-  const { user, role, hasSubscription } = useAuth();
+  const { role, hasSubscription } = useAuth();
   const [couponCode, setCouponCode] = useState('');
   const [couponValid, setCouponValid] = useState<boolean | null>(null);
   const [couponDiscount, setCouponDiscount] = useState<number | null>(null);
@@ -191,6 +190,7 @@ export default function PlansPage() {
 
   return (
     <ThemeProvider theme={theme}>
+      <RequireAuthentication>
       <Box sx={{ display: 'flex', minHeight: '100vh'}}>
         <Sidebar activeView="plans" />
         <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
@@ -224,7 +224,7 @@ export default function PlansPage() {
                         top: -12,
                         left: '50%',
                         transform: 'translateX(-50%)',
-                        backgroundColor: '#9B0F06',
+                        backgroundColor: colors.red,
                         color: 'white',
                         '& .MuiChip-icon': { color: 'white' },
                       }}
@@ -366,6 +366,7 @@ export default function PlansPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
+      </RequireAuthentication>
     </ThemeProvider>
   );
 }

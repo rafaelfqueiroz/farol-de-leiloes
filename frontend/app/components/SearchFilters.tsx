@@ -466,7 +466,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
             boxSizing: 'border-box',
             mt: '65px', // TopBar height
             height: 'calc(100vh - 65px)',
-            borderLeft: '1px solid #9B0F06',
+            borderLeft: `1px solid ${colors.red}`,
             backgroundColor: '#FFFFFF',
           },
         }}
@@ -537,7 +537,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                   {savedFilters.length >= 10 ? 'Limite de 10 filtros atingido' : 'Salvar Filtros Atuais'}
                 </Button>
 
-                <Divider sx={{ my: 3, borderColor: '#9B0F06' }} />
+                <Divider sx={{ my: 3, borderColor: colors.red }} />
               </Box>
             )}
 
@@ -657,7 +657,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               />
             </Box>
 
-            <Divider sx={{ my: 3, borderColor: '#9B0F06' }} />
+            <Divider sx={{ my: 3, borderColor: colors.red }} />
 
             {/* Modality Section */}
             <Box sx={{ mb: 3 }}>
@@ -687,7 +687,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               </Box>
             </Box>
 
-            <Divider sx={{ my: 3, borderColor: '#9B0F06' }} />
+            <Divider sx={{ my: 3, borderColor: colors.red }} />
 
             {/* Price Range Section */}
             <Box sx={{ mb: 3 }}>

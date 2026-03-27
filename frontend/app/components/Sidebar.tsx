@@ -145,7 +145,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                   justifyContent: isExpanded ? 'initial' : 'center',
                   px: 2,
                   backgroundColor: activeView === item.id ? '#FFFFFF' : 'transparent',
-                  borderRight: activeView === item.id ? '2px solid #9B0F06' : '2px solid transparent',
+                  borderRight: activeView === item.id ? `2px solid ${colors.red}` : '2px solid transparent',
                   '&:hover': {
                     backgroundColor: '#FFFFFF',
                   },
@@ -155,7 +155,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                   sx={{
                     minWidth: 0,
                     justifyContent: 'center',
-                    color: '#9B0F06',
+                    color: colors.red,
                     mr: isExpanded ? 2 : 0,
                   }}
                 >
@@ -166,7 +166,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                     primary={item.label}
                     sx={{
                       '& .MuiListItemText-primary': {
-                        color: '#9B0F06',
+                        color: colors.red,
                         fontSize: 14,
                         fontWeight: 500,
                         whiteSpace: 'nowrap',
@@ -210,12 +210,12 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                   },
                 }}
               >
-                <ListItemIcon sx={{ minWidth: 32, color: '#9B0F06' }}>
+                <ListItemIcon sx={{ minWidth: 32, color: colors.red }}>
                   {subItem.icon}
                 </ListItemIcon>
                 <ListItemText
                   primary={subItem.label}
-                  sx={{ '& .MuiListItemText-primary': { color: '#9B0F06', fontSize: 14 } }}
+                  sx={{ '& .MuiListItemText-primary': { color: colors.red, fontSize: 14 } }}
                 />
               </ListItemButton>
             </ListItem>

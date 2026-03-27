@@ -148,7 +148,7 @@ export default function LandingPage() {
         position="fixed"
         elevation={0}
         sx={{
-          backgroundColor: '#5E0006',
+          backgroundColor: colors.maroon,
           borderBottom: '1px solid rgba(255,255,255,0.1)',
         }}
       >
@@ -166,7 +166,9 @@ export default function LandingPage() {
                 color: 'white',
                 fontWeight: 500,
                 '&:hover': {
-                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  color: colors.maroon,
+                  backgroundColor: colors.lightRed,
+                  //backgroundColor: 'rgba(255,255,255,0.1)',
                 },
               }}
             >
@@ -194,7 +196,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <Box
         sx={{
-          backgroundColor: '#9B0F06',
+          backgroundColor: colors.red80,
           color: 'white',
           pt: { xs: 12, md: 16 },
           pb: { xs: 8, md: 12 },
@@ -338,7 +340,7 @@ export default function LandingPage() {
                       width: 64,
                       height: 64,
                       borderRadius: 2,
-                      backgroundColor: '#9B0F06',
+                      backgroundColor: colors.red,
                       color: 'white',
                       display: 'flex',
                       alignItems: 'center',
@@ -396,7 +398,7 @@ export default function LandingPage() {
                       width: 60,
                       height: 60,
                       borderRadius: '50%',
-                      backgroundColor: '#9B0F06',
+                      backgroundColor: colors.red,
                       color: 'white',
                       display: 'flex',
                       alignItems: 'center',
@@ -440,7 +442,7 @@ export default function LandingPage() {
                 sx={{
                   height: '100%',
                   position: 'relative',
-                  border: plan.highlighted ? '2px solid #9B0F06' : '1px solid #EED9B9',
+                  border: plan.highlighted ? `2px solid ${colors.red}` : `1px solid ${colors.beige}`,
                   transform: plan.highlighted ? 'scale(1.02)' : 'none',
                   opacity: plan.disabled ? 0.7 : 1,
                 }}
@@ -458,7 +460,7 @@ export default function LandingPage() {
                       icon={<StarIcon sx={{ color: 'white !important', fontSize: 16 }} />}
                       label="Mais Popular"
                       sx={{
-                        backgroundColor: '#9B0F06',
+                        backgroundColor: colors.red,
                         color: 'white',
                         fontWeight: 600,
                         '& .MuiChip-icon': { color: 'white' },
@@ -471,7 +473,7 @@ export default function LandingPage() {
                     {plan.name}
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'baseline', mb: 2 }}>
-                    <Typography variant="h3" fontWeight={700} sx={{ color: '#9B0F06' }}>
+                    <Typography variant="h3" fontWeight={700} sx={{ color: colors.red }}>
                       {plan.price}
                     </Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ ml: 1 }}>
@@ -515,11 +517,11 @@ export default function LandingPage() {
                     onClick={handleLogin}
                     sx={{
                       mt: 3,
-                      backgroundColor: plan.highlighted ? '#9B0F06' : 'white',
-                      borderColor: '#9B0F06',
-                      color: plan.highlighted ? 'white' : '#9B0F06',
+                      backgroundColor: plan.highlighted ? colors.red : 'white',
+                      borderColor: colors.red,
+                      color: plan.highlighted ? 'white' : colors.red,
                       '&:hover': {
-                        backgroundColor: plan.highlighted ? '#5E0006' : colors.lightRed,
+                        backgroundColor: plan.highlighted ? colors.maroon : colors.lightRed,
                       },
                     }}
                   >
@@ -535,7 +537,7 @@ export default function LandingPage() {
       {/* CTA Section */}
       <Box
         sx={{
-          backgroundColor: '#9B0F06',
+          backgroundColor: colors.red80,
           color: 'white',
           py: 8,
         }}
@@ -571,16 +573,16 @@ export default function LandingPage() {
       </Box>
 
       {/* Footer */}
-      <Box sx={{ backgroundColor: '#5E0006', color: 'white', py: 4 }}>
+      <Box sx={{ backgroundColor: colors.maroon, color: colors.white, py: 4 }}>
         <Container maxWidth="lg">
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <GavelIcon />
-              <Typography variant="h6" fontWeight={600}>
+              <Typography variant="h6" fontWeight={600} sx={{color: colors.white}}>
                 Farol dos Leilões
               </Typography>
             </Box>
-            <Typography variant="body2" sx={{ opacity: 0.7 }}>
+            <Typography variant="body2" sx={{ opacity: 0.7, color: colors.white }}>
               © 2024 Farol dos Leilões. Todos os direitos reservados.
             </Typography>
           </Box>

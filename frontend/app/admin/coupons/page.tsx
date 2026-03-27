@@ -28,6 +28,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import Sidebar from '../../components/Sidebar';
 import TopBar from '../../components/TopBar';
+import RequireAuthentication from '../../components/RequireAuthentication';
 import { useAuth } from '../../contexts/AuthContext';
 import theme from '../../theme';
 
@@ -152,6 +153,7 @@ export default function AdminCouponsPage() {
 
   return (
     <ThemeProvider theme={theme}>
+      <RequireAuthentication>
       <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
         <Sidebar activeView="admin" />
         <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
@@ -326,6 +328,7 @@ export default function AdminCouponsPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
+      </RequireAuthentication>
     </ThemeProvider>
   );
 }

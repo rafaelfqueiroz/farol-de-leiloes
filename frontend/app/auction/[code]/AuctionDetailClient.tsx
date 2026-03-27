@@ -158,8 +158,11 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
             <Container maxWidth="xl">
               <Box>
                 {/* Header */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                  <IconButton onClick={() => router.push(getReturnUrl())} size="large">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3,  }}>
+                  <IconButton onClick={() => router.push(getReturnUrl())} size="large" 
+                    sx={{'&:hover': {
+                        backgroundColor: colors.red30
+                      }}}>
                     <ArrowBackIcon />
                   </IconButton>
                   <Box sx={{ flex: 1 }}>
@@ -177,6 +180,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                       color: isFavorite(auction.code) ? 'error.main' : 'action.active',
                       '&:hover': {
                         color: 'error.main',
+                        backgroundColor: colors.red30
                       },
                     }}
                   >

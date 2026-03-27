@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
+import RequireAuthentication from '../components/RequireAuthentication';
 import { useSidebar } from '../contexts/SidebarContext';
 import SearchFilters, { AuctionFilters } from '../components/SearchFilters';
 import AuctionList from '../components/AuctionList';
@@ -224,13 +225,15 @@ function SearchPageLoading() {
 export default function SearchPage() {
   return (
     <ThemeProvider theme={theme}>
-      <FavoritesProvider>
-        <SavedFiltersProvider>
-          <Suspense fallback={<SearchPageLoading />}>
-            <SearchPageContent />
-          </Suspense>
-        </SavedFiltersProvider>
-      </FavoritesProvider>
+      <RequireAuthentication>
+        <FavoritesProvider>
+          <SavedFiltersProvider>
+            <Suspense fallback={<SearchPageLoading />}>
+              <SearchPageContent />
+            </Suspense>
+          </SavedFiltersProvider>
+        </FavoritesProvider>
+      </RequireAuthentication>
     </ThemeProvider>
   );
 }

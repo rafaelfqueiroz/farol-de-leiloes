@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useRouter } from 'next/navigation';
 import {
   Box,
   Card,
@@ -22,10 +21,10 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import LockIcon from '@mui/icons-material/Lock';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
+import RequireAuthentication from '../components/RequireAuthentication';
 import theme from '../theme';
 
 export default function ProfilePage() {
-  const router = useRouter();
   const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -48,16 +47,11 @@ export default function ProfilePage() {
   const [profileLoading, setProfileLoading] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push('/login');
-      return;
-    }
-
     if (user) {
       setName(user.name || '');
       setEmail(user.email || '');
     }
-  }, [user, isAuthenticated, authLoading, router]);
+  }, [user]);
 
   // Load full profile data
   useEffect(() => {
@@ -253,12 +247,9 @@ export default function ProfilePage() {
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
   return (
     <ThemeProvider theme={theme}>
+      <RequireAuthentication>
       <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
         <Sidebar />
         <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
@@ -571,6 +562,7 @@ export default function ProfilePage() {
           </Container>
         </Box>
       </Box>
+      </RequireAuthentication>
     </ThemeProvider>
   );
 }

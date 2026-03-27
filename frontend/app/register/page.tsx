@@ -16,7 +16,7 @@ import {
 import GavelIcon from '@mui/icons-material/Gavel';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
-import theme from '../theme';
+import theme, { colors } from '../theme';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -62,7 +62,7 @@ export default function RegisterPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, #5E0006 0%, #9B0F06 100%)',
+          background: `linear-gradient(135deg, ${colors.maroon} 0%, ${colors.red} 100%)`,
           padding: 2,
         }}
       >
