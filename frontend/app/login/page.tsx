@@ -139,8 +139,8 @@ export default function LoginPage() {
               sx={{
                 mb: 3,
                 py: 1.5,
-                borderColor: 'divider',
-                color: 'text.primary',
+                //borderColor: colors.red,
+                //color: colors.red,
               }}
             >
               Entrar com Google

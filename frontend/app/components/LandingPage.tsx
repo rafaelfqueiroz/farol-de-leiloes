@@ -165,10 +165,24 @@ export default function LandingPage() {
               sx={{
                 color: 'white',
                 fontWeight: 500,
+                position: 'relative',
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  bottom: 6,
+                  left: 8,
+                  right: 8,
+                  height: '1.5px',
+                  backgroundColor: 'white',
+                  transform: 'scaleX(0)',
+                  transformOrigin: 'left',
+                  transition: 'transform 0.3s ease',
+                },
+                '&:hover::after': {
+                  transform: 'scaleX(1)',
+                },
                 '&:hover': {
-                  color: colors.maroon,
-                  backgroundColor: colors.lightRed,
-                  //backgroundColor: 'rgba(255,255,255,0.1)',
+                  backgroundColor: 'transparent',
                 },
               }}
             >
@@ -179,11 +193,14 @@ export default function LandingPage() {
               startIcon={<LoginIcon />}
               onClick={handleLogin}
               sx={{
-                backgroundColor: 'white',
+                backgroundColor: colors.white,
                 color: '#091413',
                 fontWeight: 600,
+                border: '1px solid transparent',
                 '&:hover': {
-                  backgroundColor: colors.lightRed,
+                  backgroundColor: 'transparent',
+                  color: colors.white,
+                  border: `1px solid ${colors.white}`
                 },
               }}
             >
@@ -196,7 +213,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <Box
         sx={{
-          backgroundColor: colors.red80,
+          backgroundColor: colors.beige,
           color: 'white',
           pt: { xs: 12, md: 16 },
           pb: { xs: 8, md: 12 },
@@ -212,8 +229,8 @@ export default function LandingPage() {
                   icon={<GavelIcon sx={{ color: 'white !important' }} />}
                   label="Leilões da Caixa Econômica Federal"
                   sx={{
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    color: 'white',
+                    //backgroundColor: 'rgba(255,255,255,0.2)',
+                    //color: 'white',
                     mb: 2,
                     '& .MuiChip-icon': { color: 'white' },
                   }}
@@ -228,7 +245,7 @@ export default function LandingPage() {
                   }}
                 >
                   Encontre o imóvel dos seus sonhos com até{' '}
-                  <Box component="span" sx={{ color: colors.white }}>
+                  <Box component="span" sx={{ color: colors.red70 }}>
                     70% de desconto
                   </Box>
                 </Typography>
@@ -249,15 +266,15 @@ export default function LandingPage() {
                   size="large"
                   onClick={handleLogin}
                   sx={{
-                    backgroundColor: 'white',
-                    color: '#091413',
+                    //backgroundColor: colors.red,
+                    //color: colors.white,
                     px: 4,
                     py: 1.5,
                     fontSize: '1rem',
                     fontWeight: 600,
-                    '&:hover': {
-                      backgroundColor: colors.lightRed,
-                    },
+                    //'&:hover': {
+                    //  backgroundColor: colors.lightRed,
+                    //},
                   }}
                 >
                   Comece Agora
@@ -302,7 +319,7 @@ export default function LandingPage() {
                     justifyContent: 'center',
                   }}
                 >
-                  <HomeWorkIcon sx={{ fontSize: 150, opacity: 0.8 }} />
+                  <HomeWorkIcon sx={{ fontSize: 150, color: colors.white }} />
                 </Box>
               </Box>
             </Grid>
@@ -442,7 +459,7 @@ export default function LandingPage() {
                 sx={{
                   height: '100%',
                   position: 'relative',
-                  border: plan.highlighted ? `2px solid ${colors.red}` : `1px solid ${colors.beige}`,
+                  border: plan.highlighted ? `2px solid ${colors.red}` : `1px solid ${colors.lightGray}`,
                   transform: plan.highlighted ? 'scale(1.02)' : 'none',
                   opacity: plan.disabled ? 0.7 : 1,
                 }}
@@ -493,7 +510,7 @@ export default function LandingPage() {
                           {feature.included ? (
                             <CheckCircleIcon sx={{ color: '#4CAF50', fontSize: 20 }} />
                           ) : (
-                            <CancelIcon sx={{ color: '#EED9B9', fontSize: 20 }} />
+                            <CancelIcon sx={{ fontSize: 20 }} />
                           )}
                         </ListItemIcon>
                         <ListItemText
@@ -517,11 +534,11 @@ export default function LandingPage() {
                     onClick={handleLogin}
                     sx={{
                       mt: 3,
-                      backgroundColor: plan.highlighted ? colors.red : 'white',
+                      backgroundColor: plan.highlighted ? colors.red : colors.white,
                       borderColor: colors.red,
                       color: plan.highlighted ? 'white' : colors.red,
                       '&:hover': {
-                        backgroundColor: plan.highlighted ? colors.maroon : colors.lightRed,
+                        backgroundColor: plan.highlighted ? colors.maroon : colors.white,
                       },
                     }}
                   >
@@ -555,14 +572,17 @@ export default function LandingPage() {
               size="large"
               onClick={handleLogin}
               sx={{
-                backgroundColor: 'white',
+                backgroundColor: colors.white,
                 color: '#091413',
                 px: 6,
                 py: 1.5,
                 fontSize: '1.1rem',
                 fontWeight: 600,
+                border: `1px solid transparent`,
                 '&:hover': {
-                  backgroundColor: colors.lightRed,
+                  backgroundColor: 'transparent',
+                  color: colors.white,
+                  border: `1px solid ${colors.white}`
                 },
               }}
             >

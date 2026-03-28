@@ -14,6 +14,8 @@ export const colors = {
   red80: '#AF3F37',
   red90: '#A5271E',
   beige: '#EED9B9',
+  darkBeige: '#D2B48C',
+  darkBeige2: '#C8AD7F',
   black: '#091413',
   white: '#FFFFFF',
   lightGray: '#F4F4F6',
@@ -114,7 +116,7 @@ const theme = createTheme({
         },
         outlined: {
           '&:hover': {
-            backgroundColor: colors.lightRed,
+            backgroundColor: 'transparent',
             borderColor: 'transparent',
           },
         },
