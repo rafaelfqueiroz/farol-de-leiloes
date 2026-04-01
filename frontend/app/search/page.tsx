@@ -12,6 +12,8 @@ import {
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import RequireAuthentication from '../components/RequireAuthentication';
+import { hasMinimumRole } from '../components/RequireRole';
+import { useAuth } from '../contexts/AuthContext';
 import { useSidebar } from '../contexts/SidebarContext';
 import SearchFilters, { AuctionFilters } from '../components/SearchFilters';
 import AuctionList from '../components/AuctionList';
@@ -29,6 +31,8 @@ function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { sidebarWidth } = useSidebar();
+  const { role } = useAuth();
+  const canAccessFavorites = hasMinimumRole(role, 'standard');
   const [activeView, setActiveView] = useState('search');
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -47,8 +51,8 @@ function SearchPageContent() {
     const maxMargin = searchParams.get('maxMargin');
     const page = searchParams.get('page');
 
-    // Check if we should switch to favorites view
-    if (view === 'favorites') {
+    // Check if we should switch to favorites view (Standard+ only)
+    if (view === 'favorites' && canAccessFavorites) {
       setActiveView('favorites');
     } else {
       const filters: AuctionFilters = {
@@ -181,7 +185,7 @@ function SearchPageContent() {
               </>
             )}
 
-            {activeView === 'favorites' && (
+            {activeView === 'favorites' && canAccessFavorites && (
               <FavoritesView />
             )}
 

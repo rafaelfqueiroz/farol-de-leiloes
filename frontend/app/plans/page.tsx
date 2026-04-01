@@ -41,19 +41,19 @@ const plans = [
     period: '/mes',
     features: [
       'Busca manual por filtros',
-      'Favoritos',
-      'Filtros salvos (ate 10)',
     ],
     highlighted: false,
   },
   {
     id: 'standard',
     name: 'Standard',
-    price: 'R$ 29,90',
+    price: 'R$ 49,90',
     period: '/mes',
     features: [
       'Tudo do plano Gratuito',
-      'Busca por IA',
+      'Favoritos',
+      'Filtros salvos (ate 10)',
+      'Lembretes',
       'Suporte prioritario',
     ],
     highlighted: true,
@@ -61,15 +61,15 @@ const plans = [
   {
     id: 'premium',
     name: 'Premium',
-    price: 'Em breve',
-    period: '',
+    price: 'R$ 109,90',
+    period: '/mes',
     features: [
       'Tudo do plano Standard',
+      'Busca por IA',
       'Alertas personalizados',
       'Relatorios avancados',
     ],
     highlighted: false,
-    disabled: true,
   },
 ];
 
