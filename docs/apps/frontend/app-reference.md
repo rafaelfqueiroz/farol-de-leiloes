@@ -19,6 +19,7 @@
 | `/reset-password` | `app/reset-password/page.tsx` | Server | Password reset request |
 | `/reset-password/[token]` | `app/reset-password/[token]/page.tsx` | Server | Password reset with token |
 | `/auth/callback` | `app/auth/callback/page.tsx` | Client | Google OAuth callback (stores token, redirects) |
+| `/support` | `app/support/page.tsx` | Client | Support page with FAQ and contact form |
 | `/admin/coupons` | `app/admin/coupons/page.tsx` | Client | Admin coupon management |
 
 ## Components
@@ -34,6 +35,7 @@
 | FavoritesView | `app/components/FavoritesView.tsx` | - | Grid of favorited auctions |
 | RemindersPage | `app/components/RemindersPage.tsx` | - | List of pending reminders with edit/delete |
 | LandingPage | `app/components/LandingPage.tsx` | - | Marketing page: hero, features, how-it-works, pricing |
+| SupportPage | `app/components/SupportPage.tsx` | - | FAQ accordion and support request form |
 | RequireVerification | `app/components/RequireVerification.tsx` | `children`, `fallback?` | HOC: redirects unauthenticated users to `/login` |
 
 ## Contexts
@@ -73,6 +75,7 @@ All frontend API routes proxy to the backend. Key routes:
 | `/api/saved-filters/*` | `/api/saved-filters/*` | Saved filters CRUD |
 | `/api/payments/*` | `/api/payments/*` | Stripe operations |
 | `/api/coupons/*` | `/api/coupons/*` | Coupon operations |
+| `/api/support` | `/api/support` | Support request submission |
 | `/api/auctions/[code]` | `/api/auctions/[code]` | Auction detail (server-side) |
 
 ## Layout Structure

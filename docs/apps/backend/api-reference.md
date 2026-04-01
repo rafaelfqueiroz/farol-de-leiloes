@@ -15,6 +15,7 @@
 | email | `src/email/` | Nodemailer SMTP, email templates |
 | notifications | `src/notifications/` | SMS and WhatsApp services (SMS placeholder) |
 | ai | `src/ai/` | NLP service for natural language query parsing |
+| support | `src/support/` | Support requests with email notifications |
 | storage | `src/storage/` | Cloudflare R2 (S3-compatible) file storage |
 | common | `src/common/` | JobExecution schema/service for tracking scheduled jobs |
 
@@ -92,6 +93,12 @@
 | GET | `/` | JWT + Admin | List all coupons |
 | PATCH | `/:id/invalidate` | JWT + Admin | Deactivate coupon |
 | POST | `/validate` | JWT | Validate coupon code |
+
+### Support (`/api/support`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/` | JWT | Submit support request (body: `{title, description}`) |
 
 ### AI (`/api/ai`)
 

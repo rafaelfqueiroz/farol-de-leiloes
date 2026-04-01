@@ -36,6 +36,7 @@ auctions/
 │       ├── saved-filters/   # Saved search filters
 │       ├── email/           # Email templates
 │       ├── ai/              # NLP query parsing
+│       ├── support/         # Support requests
 │       └── common/          # Shared utilities
 ├── frontend/                # Next.js app (port 3001)
 │   └── app/
@@ -43,6 +44,7 @@ auctions/
 │       ├── contexts/        # Auth, Favorites, Reminders contexts
 │       ├── search/          # Main search page
 │       ├── auction/         # Auction detail page
+│       ├── support/         # Support page (FAQ + form)
 │       ├── admin/           # Admin panel (coupons)
 │       └── api/             # Next.js API routes
 └── AUTHENTICATION_IMPLEMENTATION.md
@@ -98,6 +100,7 @@ npm run lint         # Run ESLint
 | CRUD | `/api/favorites` | User bookmarks |
 | CRUD | `/api/reminders` | Reminder management |
 | CRUD | `/api/saved-filters` | Saved filter management |
+| POST | `/api/support` | Submit support request |
 | POST | `/api/payments/checkout` | Create Stripe checkout |
 | POST | `/api/payments/webhook` | Stripe webhook handler |
 

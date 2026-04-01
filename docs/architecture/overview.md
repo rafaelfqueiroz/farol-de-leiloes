@@ -95,6 +95,8 @@ AppModule (root)
 │   ├── UsersModule
 │   └── CouponsModule
 ├── CouponsModule
+├── SupportModule
+│   └── EmailModule
 ├── AiModule
 └── CommonModule (JobExecution tracking)
 ```
