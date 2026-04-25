@@ -132,6 +132,7 @@ OPENAI_API_KEY=
 - **Naming:** PascalCase for classes, camelCase for functions
 - **NestJS patterns:** `*.module.ts`, `*.service.ts`, `*.controller.ts`, `*.schema.ts`
 - **Directories:** Lowercase with hyphens
+- **Logging:** NEVER use `console.log/warn/error/debug`. Always use NestJS `Logger` from `@nestjs/common`. Instantiate as `private readonly logger = new Logger(ClassName.name)` and call `this.logger.log()`, `this.logger.warn()`, `this.logger.error()`, `this.logger.debug()` accordingly. Use `debug` for verbose/diagnostic output (queries, cache hits) and `log` for operational messages.
 
 ## Important Files
 
