@@ -344,27 +344,6 @@ export class AuctionsService {
   }
 
   /**
-   * Reconcile auction availability based on CSV codes.
-   * Auctions in the CSV are marked available; all others are marked unavailable.
-   */
-  async reconcileAvailability(csvCodes: string[]): Promise<{ markedAvailable: number; markedUnavailable: number }> {
-    const availableResult = await this.auctionRepository.updateMany(
-      { code: { $in: csvCodes }, available: { $ne: true } },
-      { $set: { available: true, updatedAt: new Date() } },
-    );
-
-    const unavailableResult = await this.auctionRepository.updateMany(
-      { code: { $nin: csvCodes }, available: { $ne: false } },
-      { $set: { available: false, updatedAt: new Date() } },
-    );
-
-    return {
-      markedAvailable: availableResult.modifiedCount,
-      markedUnavailable: unavailableResult.modifiedCount,
-    };
-  }
-
-  /**
    * Invalidate all neighborhoods cache entries
    * Called after import to ensure fresh data
    */

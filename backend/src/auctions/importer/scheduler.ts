@@ -118,11 +118,6 @@ export class AuctionsImporter {
       this.logger.log(`Import result - matched: ${res.matched}, upserted: ${res.upserted}, modified: ${res.modified}`);
       this.logger.log(`Auctions import completed.`);
 
-      // Reconcile availability: CSV is the source of truth
-      const allCodes = normalized.map(n => n.code).filter(Boolean) as string[];
-      const reconcileResult = await this.auctions.reconcileAvailability(allCodes);
-      this.logger.log(`Reconciliation - marked available: ${reconcileResult.markedAvailable}, marked unavailable: ${reconcileResult.markedUnavailable}`);
-
       // Invalidate neighborhoods cache after import
       await this.auctions.invalidateNeighborhoodsCache();
       this.logger.log(`Neighborhoods cache invalidated`);
