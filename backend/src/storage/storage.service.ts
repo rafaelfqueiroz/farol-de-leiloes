@@ -1,6 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import r2Config from './r2.config';
 
@@ -184,6 +184,29 @@ export class StorageService {
     } catch (error: any) {
       this.logger.error(`Failed to generate signed URL for ${key}: ${error.message}`);
       return null;
+    }
+  }
+
+  /**
+   * Delete a file from R2 by its storage key
+   */
+  async deleteFile(key: string): Promise<boolean> {
+    if (!this.s3Client) {
+      this.logger.debug('R2 not configured, skipping file deletion');
+      return false;
+    }
+
+    try {
+      await this.s3Client.send(new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }));
+
+      this.logger.debug(`Deleted file from R2: ${key}`);
+      return true;
+    } catch (error: any) {
+      this.logger.error(`Failed to delete file ${key}: ${error.message}`);
+      return false;
     }
   }
 
