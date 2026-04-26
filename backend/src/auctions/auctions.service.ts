@@ -6,6 +6,7 @@ import { Cache } from 'cache-manager';
 import { Model } from 'mongoose';
 import { AuctionEntity, AuctionDocument, Address, Phase } from './schemas/auction.schema';
 import { Auction, AuctionListResult } from './interfaces/auction.interface';
+import { fetchAndCheckAvailability } from './scraper/details-scraper';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
 
 export interface AuctionUpsert {
@@ -341,6 +342,81 @@ export class AuctionsService {
     }
 
     return neighborhoods;
+  }
+
+  /**
+   * Checks availability of fulfilled auctions whose codes are not in the CSV.
+   * Fetches each auction's details page and marks as unavailable if Caixa confirms it.
+   */
+  async verifyAvailability(csvCodes: string[]): Promise<{ checked: number; unavailable: number; errors: number }> {
+    const missingAuctions = await this.auctionRepository
+      .find({
+        fulfilled: true,
+        available: true,
+        detailsUrl: { $exists: true, $ne: null },
+        code: { $nin: csvCodes },
+      })
+      .select('code detailsUrl')
+      .lean();
+
+    this.logger.log(`[verifyAvailability] Found ${missingAuctions.length} auctions not in CSV to check`);
+
+    if (missingAuctions.length === 0) {
+      return { checked: 0, unavailable: 0, errors: 0 };
+    }
+
+    const batchSize = 15;
+    const concurrency = 3;
+    const delayBetweenGroups = 500;
+    let unavailableCount = 0;
+    let errorCount = 0;
+
+    const totalBatches = Math.ceil(missingAuctions.length / batchSize);
+
+    for (let i = 0; i < missingAuctions.length; i += batchSize) {
+      const batch = missingAuctions.slice(i, i + batchSize);
+      this.logger.log(`[verifyAvailability] Processing batch ${Math.floor(i / batchSize) + 1}/${totalBatches}`);
+
+      for (let j = 0; j < batch.length; j += concurrency) {
+        const group = batch.slice(j, j + concurrency);
+        const results = await Promise.allSettled(
+          group.map(async (auction) => {
+            let available: boolean;
+            try {
+              available = await fetchAndCheckAvailability(auction.detailsUrl!);
+            } catch (error) {
+              this.logger.error(`[verifyAvailability] Auction ${auction.code} fetch failed for ${auction.detailsUrl}: ${error instanceof Error ? error.message : error}`);
+              throw error;
+            }
+            this.logger.debug(`[verifyAvailability] Auction ${auction.code} result: ${available}`);
+            if (!available) {
+              await this.auctionRepository.updateOne(
+                { code: auction.code },
+                { $set: { available: false, updatedAt: new Date() } },
+              );
+              this.logger.debug(`[verifyAvailability] Auction ${auction.code} marked as unavailable`);
+              return false;
+            }
+            this.logger.debug(`[verifyAvailability] Auction ${auction.code} still available`);
+            return true;
+          }),
+        );
+
+        for (let k = 0; k < results.length; k++) {
+          const result = results[k];
+          if (result.status === 'fulfilled') {
+            if (!result.value) unavailableCount++;
+          } else {
+            errorCount++;
+            this.logger.error(`[verifyAvailability] Error checking ${group[k].code}: ${result.reason?.message || result.reason}`);
+          }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, delayBetweenGroups));
+      }
+    }
+
+    return { checked: missingAuctions.length, unavailable: unavailableCount, errors: errorCount };
   }
 
   /**

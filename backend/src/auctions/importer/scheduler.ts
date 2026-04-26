@@ -118,6 +118,15 @@ export class AuctionsImporter {
       this.logger.log(`Import result - matched: ${res.matched}, upserted: ${res.upserted}, modified: ${res.modified}`);
       this.logger.log(`Auctions import completed.`);
 
+      // Verify availability of auctions not present in the CSV
+      const csvCodes = normalized.map(n => n.code).filter(Boolean) as string[];
+      if (csvCodes.length > 0) {
+        const availabilityResult = await this.auctions.verifyAvailability(csvCodes);
+        this.logger.log(`Availability check - checked: ${availabilityResult.checked}, unavailable: ${availabilityResult.unavailable}, errors: ${availabilityResult.errors}`);
+      } else {
+        this.logger.warn('Skipping availability check — CSV returned no auction codes');
+      }
+
       // Invalidate neighborhoods cache after import
       await this.auctions.invalidateNeighborhoodsCache();
       this.logger.log(`Neighborhoods cache invalidated`);

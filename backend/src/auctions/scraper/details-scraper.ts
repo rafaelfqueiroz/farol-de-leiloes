@@ -233,26 +233,46 @@ function extractPhaseDetails(relatedBoxHtml: string, fullHtml: string): ScrapedP
 }
 
 /**
+ * Fetches the HTML content of an auction details page from Caixa website
+ */
+async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
+  const response = await fetch(detailsUrl, {
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const html = await response.text();
+
+  if (html.includes('Radware Bot Manager') || html.includes('cdn.perfdrive.com') || html.includes('ShieldSquare')) {
+    throw new Error('Bot protection page detected instead of auction content');
+  }
+
+  return html;
+}
+
+/**
  * Fetches and scrapes auction details from the Caixa website
  * @param detailsUrl URL of the auction details page
  * @returns Scraped details
  */
 export async function fetchAndScrapeDetails(detailsUrl: string): Promise<ScrapedDetails> {
   try {
-    const response = await fetch(detailsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      },
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const html = await response.text();
+    const html = await fetchAuctionDetailHtml(detailsUrl);
     return scrapeAuctionDetails(html);
   } catch (error) {
     throw new Error(`Failed to scrape details from ${detailsUrl}: ${error instanceof Error ? error.message : error}`);
   }
+}
+
+/**
+ * Lightweight availability check — fetches the page and only checks for the unavailable message.
+ * No HTML parsing (cheerio, regex, etc.).
+ * @returns true if available, false if unavailable
+ */
+export async function fetchAndCheckAvailability(detailsUrl: string): Promise<boolean> {
+  const html = await fetchAuctionDetailHtml(detailsUrl);
+  return !html.includes('O imóvel que você procura não está mais disponível para venda');
 }
