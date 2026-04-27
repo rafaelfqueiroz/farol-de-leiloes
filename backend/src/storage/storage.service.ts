@@ -210,6 +210,49 @@ export class StorageService {
     }
   }
 
+  /**
+   * Upload a buffer to R2 with a given key
+   */
+  async uploadBuffer(
+    key: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<{ key: string; size: number }> {
+    if (!this.s3Client) {
+      throw new Error('R2 not configured');
+    }
+
+    await this.s3Client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    }));
+
+    this.logger.debug(`Uploaded buffer: ${key} (${buffer.length} bytes)`);
+
+    return { key, size: buffer.length };
+  }
+
+  /**
+   * Download a file from R2 as a Buffer
+   */
+  async downloadBuffer(key: string): Promise<Buffer> {
+    if (!this.s3Client) {
+      throw new Error('R2 not configured');
+    }
+
+    const response = await this.s3Client.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    }));
+
+    const bytes = await response.Body!.transformToByteArray();
+    this.logger.debug(`Downloaded buffer: ${key} (${bytes.length} bytes)`);
+
+    return Buffer.from(bytes);
+  }
+
   private getExtensionFromMimeType(mimeType: string): string {
     const mimeToExt: Record<string, string> = {
       'image/jpeg': '.jpg',

@@ -395,7 +395,6 @@ export class AuctionsService {
               this.logger.error(`[verifyAvailability] Auction ${auction.code} fetch failed for ${auction.detailsUrl}: ${error instanceof Error ? error.message : error}`);
               throw error;
             }
-            this.logger.debug(`[verifyAvailability] Auction ${auction.code} result: ${available}`);
             if (!available) {
               await this.auctionRepository.updateOne(
                 { code: auction.code },
