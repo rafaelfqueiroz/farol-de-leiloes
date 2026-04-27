@@ -85,6 +85,9 @@ export class AuctionEntity {
   @Prop({ type: Boolean, default: true, index: true })
   available!: boolean;
 
+  @Prop({ type: Date, index: true })
+  availabilityCheckedAt?: Date;
+
   @Prop({ index: true })
   updatedAt!: Date;
 }

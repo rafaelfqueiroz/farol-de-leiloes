@@ -1,5 +1,10 @@
 import * as cheerio from 'cheerio';
+import puppeteer from 'puppeteer-extra';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema';
+
+puppeteer.use(StealthPlugin());
 
 export interface ScrapedPhaseDetails {
   paymentMethods?: PaymentMethod[];
@@ -236,21 +241,24 @@ function extractPhaseDetails(relatedBoxHtml: string, fullHtml: string): ScrapedP
  * Fetches the HTML content of an auction details page from Caixa website
  */
 async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
-  const response = await fetch(detailsUrl, {
-    signal: AbortSignal.timeout(15000),
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
 
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+  try {
+    const page = await browser.newPage();
+    await page.goto(detailsUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const html = await page.content();
+
+    if (html.includes('Radware Bot Manager') || html.includes('cdn.perfdrive.com') || html.includes('ShieldSquare')) {
+      throw new Error('Bot protection page detected instead of auction content');
+    }
+
+    return html;
+  } finally {
+    await browser.close();
   }
-
-  const html = await response.text();
-
-  if (html.includes('Radware Bot Manager') || html.includes('cdn.perfdrive.com') || html.includes('ShieldSquare')) {
-    throw new Error('Bot protection page detected instead of auction content');
-  }
-
-  return html;
 }
 
 /**

@@ -349,17 +349,24 @@ export class AuctionsService {
    * Fetches each auction's details page and marks as unavailable if Caixa confirms it.
    */
   async verifyAvailability(csvCodes: string[]): Promise<{ checked: number; unavailable: number; errors: number }> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const missingAuctions = await this.auctionRepository
       .find({
         fulfilled: true,
         available: true,
         detailsUrl: { $exists: true, $ne: null },
         code: { $nin: csvCodes },
+        $or: [
+          { availabilityCheckedAt: { $exists: false } },
+          { availabilityCheckedAt: { $lt: cutoff } },
+        ],
       })
       .select('code detailsUrl')
+      .sort({ availabilityCheckedAt: 1 })
+      .limit(1000)
       .lean();
 
-    this.logger.log(`[verifyAvailability] Found ${missingAuctions.length} auctions not in CSV to check`);
+    this.logger.log(`[verifyAvailability] Found ${missingAuctions.length} auctions not in CSV to check (max 1000)`);
 
     if (missingAuctions.length === 0) {
       return { checked: 0, unavailable: 0, errors: 0 };
@@ -367,7 +374,7 @@ export class AuctionsService {
 
     const batchSize = 15;
     const concurrency = 3;
-    const delayBetweenGroups = 500;
+    const delayBetweenGroups = 1000;
     let unavailableCount = 0;
     let errorCount = 0;
 
@@ -392,11 +399,15 @@ export class AuctionsService {
             if (!available) {
               await this.auctionRepository.updateOne(
                 { code: auction.code },
-                { $set: { available: false, updatedAt: new Date() } },
+                { $set: { available: false, availabilityCheckedAt: new Date(), updatedAt: new Date() } },
               );
               this.logger.debug(`[verifyAvailability] Auction ${auction.code} marked as unavailable`);
               return false;
             }
+            await this.auctionRepository.updateOne(
+                { code: auction.code },
+                { $set: { availabilityCheckedAt: new Date() } },
+              );
             this.logger.debug(`[verifyAvailability] Auction ${auction.code} still available`);
             return true;
           }),
