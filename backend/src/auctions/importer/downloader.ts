@@ -1,7 +1,17 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { readFile } from 'fs/promises';
 
 const execAsync = promisify(exec);
+
+// Read CSV from a local file path
+export async function readLocalCsv(filePath: string): Promise<string> {
+  try {
+    return await readFile(filePath, 'utf8');
+  } catch (error: any) {
+    throw new Error(`Failed to read local CSV from "${filePath}": ${error.message}`);
+  }
+}
 
 // Download CSV file directly using the static URL pattern from the website
 // Using curl because the Node.js HTTPS client is blocked by bot protection

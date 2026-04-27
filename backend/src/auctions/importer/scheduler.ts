@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AuctionsService } from '../auctions.service';
-import { downloadCsvAllStates } from './downloader';
+import { downloadCsvAllStates, readLocalCsv } from './downloader';
 import { normalizeRows, parseCsv } from './parser';
 import { PhaseModality, Phase } from '../schemas/auction.schema';
 import { JobExecutionService } from '../../common/services/job-execution.service';
@@ -65,7 +65,16 @@ export class AuctionsImporter {
   private async runImport(runMode: RunMode) {
     this.logger.log(`Starting auctions import (${runMode} mode)`);
     try {
-      const csv = await downloadCsvAllStates();
+      const { csvLocalPath } = this.config.import;
+      let csv: string;
+
+      if (csvLocalPath) {
+        this.logger.log(`Reading CSV from local path: ${csvLocalPath}`);
+        csv = await readLocalCsv(csvLocalPath);
+      } else {
+        this.logger.log('Downloading CSV from Caixa');
+        csv = await downloadCsvAllStates();
+      }
       const parsed = parseCsv(csv);
       const normalizedRows = normalizeRows(parsed);
       this.logger.log(`Normalized rows: ${normalizedRows.length}`);

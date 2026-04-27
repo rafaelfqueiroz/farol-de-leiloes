@@ -19,6 +19,7 @@ export interface SchedulerRemindersConfig {
 export interface SchedulerImportConfig {
 	enabled: boolean
 	onStartup: boolean
+	csvLocalPath: string | null
 }
 
 export interface SchedulerScraperConfig {
@@ -36,7 +37,8 @@ export const KEY = 'SchedulerConfig'
 export default registerAs(KEY, () => ({
   import: {
 		enabled: process.env.IMPORT_ENABLED !== 'false',
-		onStartup: process.env.IMPORT_ON_START_UP === 'true'
+		onStartup: process.env.IMPORT_ON_START_UP === 'true',
+		csvLocalPath: process.env.CSV_LOCAL_PATH || null,
 	},
 	scraper: {
 		enabled: process.env.SCRAPER_ENABLED !== 'false',
