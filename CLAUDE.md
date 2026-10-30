@@ -1,196 +1,41 @@
-# CLAUDE.md - Project Memory for Farol dos Leilões
+# CLAUDE.md — Farol dos Leilões
 
-## Project Overview
+Search, analysis and acquisition management for Caixa real-estate auctions: public search, AI-assisted search, favorites and reminders, advisor offices managing investors' acquisition journeys, and subscription plans.
 
-**Farol dos Leilões** is a full-stack web application for searching and bidding on real estate auctions from Caixa Econômica Federal (Brazilian federal bank). It features AI-powered search, user authentication, favorites, reminders, and subscription-based premium features.
+- `backend/` — NestJS API on MongoDB (port 3000)
+- `frontend/` — Next.js App Router with MUI (port 3001)
+- Product: [PRD and specs](https://github.com/rafaelfqueiroz/farol-de-leiloes/wiki) (wiki) · work: [project board](https://github.com/users/rafaelfqueiroz/projects/4) · one issue per spec
 
-## Tech Stack
+## Guidelines — read before changing code
 
-### Backend (NestJS)
-- **Framework:** NestJS 10 with TypeScript
-- **Database:** MongoDB 7.6 with Mongoose ODM
-- **Authentication:** JWT (7-day expiry) + Google OAuth 2.0 via Passport.js
-- **Payments:** Stripe SDK
-- **Email:** Nodemailer (SMTP)
-- **Testing:** Jest with ts-jest
+The rules live in [`docs/guidelines/`](docs/guidelines/README.md). Read the doc that governs the change before starting it, and cite rule ids (`AR-`, `DV-`, `TS-`, `SC-`, `DS-`, and spec `BR-NNN-nn`) in code comments, commits and PRs.
 
-### Frontend (Next.js)
-- **Framework:** Next.js 16 with React 19
-- **UI:** Material-UI v7 + Tailwind CSS 4
-- **State:** React Context API
-- **Validation:** Zod
+| Doc | Read it when |
+|---|---|
+| [ARCHITECTURE.md](docs/guidelines/ARCHITECTURE.md) | Adding a module, collection, endpoint, job, config value, or touching money or dates |
+| [DEVELOPMENT.md](docs/guidelines/DEVELOPMENT.md) | Always — conventions, agent rules, git/PR flow, CI, definition of done |
+| [TESTING.md](docs/guidelines/TESTING.md) | Writing or changing any behaviour (i.e. always) |
+| [SECURITY.md](docs/guidelines/SECURITY.md) | Auth, permissions, owned data, payments, uploads, AI, scraping, any personal data |
+| [DESIGN.md](docs/guidelines/DESIGN.md) | Any frontend change |
 
-## Project Structure
+Technical decisions: [`docs/adr/`](docs/adr/README.md). Incidents: [`docs/runbooks/`](docs/runbooks/README.md).
 
-```
-auctions/
-├── backend/                 # NestJS API (port 3000)
-│   └── src/
-│       ├── auctions/        # Auction import, search, scraping
-│       ├── auth/            # JWT + Google OAuth
-│       ├── users/           # User management
-│       ├── favorites/       # User bookmarks
-│       ├── reminders/       # Email/SMS reminders
-│       ├── payments/        # Stripe integration
-│       ├── coupons/         # Discount codes
-│       ├── saved-filters/   # Saved search filters
-│       ├── email/           # Email templates
-│       ├── ai/              # NLP query parsing
-│       ├── support/         # Support requests
-│       └── common/          # Shared utilities
-├── frontend/                # Next.js app (port 3001)
-│   └── app/
-│       ├── components/      # React components
-│       ├── contexts/        # Auth, Favorites, Reminders contexts
-│       ├── search/          # Main search page
-│       ├── auction/         # Auction detail page
-│       ├── support/         # Support page (FAQ + form)
-│       ├── admin/           # Admin panel (coupons)
-│       └── api/             # Next.js API routes
-└── AUTHENTICATION_IMPLEMENTATION.md
-```
+## Five rules that carry the most weight
 
-## Key Commands
+1. Owned data only through the owner-scoped repository, with an isolation test (AR-12, TS-13).
+2. Money is never a JS `number` — `Decimal128` / `decimal.js` / strings over JSON (AR-17).
+3. No personal or client data in logs, errors, Sentry or AI prompts (SC-15, SC-22).
+4. `domain/` imports no framework; critical modules at 100% branch coverage (AR-05, TS-24).
+5. Caixa is scraped politely and undisguised — no stealth or evasion (SC-24).
 
-```bash
-# Backend
-cd backend
-npm run start:dev    # Development with hot reload
-npm run build        # Build for production
-npm start            # Run production build
-npm test             # Run Jest tests
+## Agent rules (DEVELOPMENT §6)
 
-# Frontend
-cd frontend
-npm run dev          # Development server
-npm run build        # Production build
-npm start            # Start production server
-npm run lint         # Run ESLint
-```
-
-## Database Collections
-
-| Collection | Purpose |
-|------------|---------|
-| `auctions` | Property listings with phases, prices, addresses |
-| `users` | User accounts with auth and subscription data |
-| `favorites` | User-auction bookmarks (unique: userId+auctionCode) |
-| `reminders` | Scheduled notifications (EMAIL/SMS/WHATSAPP) |
-| `saved-filters` | Persisted search filter combinations |
-| `coupons` | Discount codes with Stripe integration |
-
-## Key Enums
-
-- **PhaseModality:** `SFI_AUCTION`, `OPEN_BIDDING`, `DIRECT_ONLINE_SALES`, `ONLINE_SALES`
-- **PaymentMethod:** `OWN_RESOURCES`, `FGTS`, `FINANCING`
-- **ReminderChannel:** `EMAIL`, `SMS`, `WHATSAPP`
-- **UserRole:** `admin`, `free`, `standard`, `premium`
-
-## API Routes (Backend)
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/auctions` | Search auctions with filters |
-| GET | `/api/auctions/neighborhoods` | Get neighborhoods by state/city |
-| POST | `/api/auth/register` | User registration |
-| POST | `/api/auth/login` | Email/password login |
-| GET | `/api/auth/google` | Google OAuth initiate |
-| GET | `/api/auth/me` | Current user (protected) |
-| PATCH | `/api/auth/profile` | Update profile (protected) |
-| CRUD | `/api/favorites` | User bookmarks |
-| CRUD | `/api/reminders` | Reminder management |
-| CRUD | `/api/saved-filters` | Saved filter management |
-| POST | `/api/support` | Submit support request |
-| POST | `/api/payments/checkout` | Create Stripe checkout |
-| POST | `/api/payments/webhook` | Stripe webhook handler |
-
-## Environment Variables
-
-### Backend (.env)
-```
-MONGODB_URI=mongodb://localhost:27017/auctions
-PORT=3000
-JWT_SECRET=your_jwt_secret
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-SMTP_HOST=
-SMTP_USER=
-SMTP_PASS=
-```
-
-### Frontend (.env.local)
-```
-NEXT_PUBLIC_AUCTIONS_API_URL=http://localhost:3000
-OPENAI_API_KEY=
-```
-
-## Code Conventions
-
-- **Indentation:** 2 spaces, semicolons, single quotes
-- **Naming:** PascalCase for classes, camelCase for functions
-- **NestJS patterns:** `*.module.ts`, `*.service.ts`, `*.controller.ts`, `*.schema.ts`
-- **Directories:** Lowercase with hyphens
-- **Logging:** NEVER use `console.log/warn/error/debug`. Always use NestJS `Logger` from `@nestjs/common`. Instantiate as `private readonly logger = new Logger(ClassName.name)` and call `this.logger.log()`, `this.logger.warn()`, `this.logger.error()`, `this.logger.debug()` accordingly. Use `debug` for verbose/diagnostic output (queries, cache hits) and `log` for operational messages.
-
-## Important Files
-
-| File | Purpose |
-|------|---------|
-| `backend/src/app.module.ts` | Root module with all imports |
-| `backend/src/auctions/auctions.service.ts` | Core search logic |
-| `backend/src/auth/auth.service.ts` | Authentication logic |
-| `frontend/app/contexts/AuthContext.tsx` | Client auth state |
-| `frontend/app/search/page.tsx` | Main search interface |
-| `AUTHENTICATION_IMPLEMENTATION.md` | Complete auth documentation |
-
-## Scheduled Jobs
-
-- **Auction Import:** Daily at 3:00 AM - imports CSV data from Caixa for all states
-
-## Security Features
-
-- Password hashing with bcrypt (10 salt rounds)
-- JWT tokens with 7-day expiration
-- Email verification for local accounts
-- Password reset tokens (1-hour expiry)
-- Global validation pipes (whitelist, forbid unknown)
-- CORS configuration
-
-## Testing
-
-**IMPORTANT: Agents must NEVER run tests or start apps on the host machine.**
-Use Docker Compose instead. See `docs/development/guide.md` for details.
-
-## Recent Development Focus
-
-- AI module for natural language search
-- Reminder system with multi-channel support
-- Auction phase management (currentPhase field)
-- Multi-provider authentication (local + Google)
-
-## Common Tasks
-
-### Adding a new backend module
-1. Create folder in `backend/src/`
-2. Add `*.module.ts`, `*.service.ts`, `*.controller.ts`
-3. Create schema in `schemas/` subfolder if needed
-4. Import module in `app.module.ts`
-
-### Adding a new frontend page
-1. Create folder in `frontend/app/`
-2. Add `page.tsx` for the route
-3. Wrap with `RequireVerification` if protected
-
-### Running the full stack
-```bash
-# Terminal 1 - Backend
-cd backend && npm run start:dev
-
-# Terminal 2 - Frontend
-cd frontend && npm run dev
-```
+- Run package scripts on the host: `npm run check`, `test`, `test:integration`, `test:isolation`, `test:cov`. Databases come from Testcontainers only (DV-17).
+- **Never start the apps on the host** (`start:dev`, `dev`, `start`) — the developer runs them; E2E uses `npm run test:e2e` (DV-18).
+- Never read, print or edit `.env` files; never touch the developer's local database (DV-19).
+- Logging: NestJS `Logger` only, never `console.*` (AR-45).
+- Done means `npm run check` passes in every package touched and affected docs are updated in the same PR (DV-20, DV-29). Never bypass hooks with `--no-verify` (TS-30).
+- Out-of-scope findings become issues on the board, not silent PR growth (DV-23).
 
 ## Context Engineering (Main Agent Discipline)
 
@@ -265,18 +110,3 @@ Assign sub-agents to the optimal model based on task complexity:
 | Environment and config changes | Haiku | Small, well-defined edits |
 | Renaming and find-replace operations | Haiku | Mechanical, pattern-based changes |
 | Commit message and changelog generation | Haiku | Summarization from diff, low complexity |
-
-## Documentation
-
-Detailed docs live in `docs/`. Agent reads them on demand.
-
-| Topic | Location |
-|---|---|
-| Architecture | `docs/architecture/overview.md` |
-| Frontend App | `docs/apps/frontend/app-reference.md` |
-| Backend API | `docs/apps/backend/api-reference.md` |
-| Development Guide | `docs/development/guide.md` |
-
-**After every code change, review and update the affected docs.** If a change
-touches API routes, schemas, components, env vars, or project structure,
-the corresponding doc file must be updated in the same task.
