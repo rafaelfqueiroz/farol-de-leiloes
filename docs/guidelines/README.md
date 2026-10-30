@@ -62,9 +62,9 @@ Decided, not built, each with the trigger that ends the deferral.
 
 | ID | Item | Trigger |
 |---|---|---|
-| BL-001 | Hosting and deploy target (app, MongoDB, backups); turn on `deploy.yml` (DEVELOPMENT §12) | Before the first external user |
-| BL-002 | Performance harness: reference workload + budgets on release candidates (TESTING §10) | With BL-001, before the first release candidate |
-| BL-003 | Brand identity — palette, typeface, radius scale (DESIGN §2) | Design-system task |
+| [BL-001](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40) | Hosting and deploy target (app, MongoDB, backups); turn on `deploy.yml` (DEVELOPMENT §12) | Before the first external user |
+| BL-002 | Performance harness: reference workload + budgets on release candidates (TESTING §10), planned in [#3](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/3) | With BL-001, before the first release candidate |
+| [BL-003](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/38) | Brand identity — palette, typeface, radius scale (DESIGN §2) | Design-system task |
 
 ## Amendments to spec issue plans
 
