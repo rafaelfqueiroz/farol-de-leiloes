@@ -39,7 +39,6 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FFFFFF',
         }}
       >
         <CircularProgress />
@@ -55,7 +54,6 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FFFFFF',
         }}
       >
         <CircularProgress />
@@ -75,7 +73,6 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FFFFFF',
         }}
       >
         <Box sx={{ textAlign: 'center', maxWidth: 400 }}>

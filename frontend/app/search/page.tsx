@@ -6,7 +6,6 @@ import {
   Box,
   Container,
   Typography,
-  ThemeProvider,
   CircularProgress,
 } from '@mui/material';
 import Sidebar from '../components/Sidebar';
@@ -20,7 +19,6 @@ import AuctionList from '../components/AuctionList';
 import FavoritesView from '../components/FavoritesView';
 import { FavoritesProvider } from '../contexts/FavoritesContext';
 import { SavedFiltersProvider } from '../contexts/SavedFiltersContext';
-import theme from '../legacyTheme';
 
 interface SearchResult {
   total: number;
@@ -150,7 +148,7 @@ function SearchPageContent() {
   };
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar activeView={activeView} onViewChange={handleViewChange} />
 
       <Box sx={{ flexGrow: 1, ml: `${sidebarWidth}px`, transition: 'margin-left 0.3s ease' }}>
@@ -218,7 +216,6 @@ function SearchPageLoading() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FFFFFF',
       }}
     >
       <CircularProgress />
@@ -228,16 +225,14 @@ function SearchPageLoading() {
 
 export default function SearchPage() {
   return (
-    <ThemeProvider theme={theme}>
-      <RequireAuthentication>
-        <FavoritesProvider>
-          <SavedFiltersProvider>
-            <Suspense fallback={<SearchPageLoading />}>
-              <SearchPageContent />
-            </Suspense>
-          </SavedFiltersProvider>
-        </FavoritesProvider>
-      </RequireAuthentication>
-    </ThemeProvider>
+    <RequireAuthentication>
+      <FavoritesProvider>
+        <SavedFiltersProvider>
+          <Suspense fallback={<SearchPageLoading />}>
+            <SearchPageContent />
+          </Suspense>
+        </SavedFiltersProvider>
+      </FavoritesProvider>
+    </RequireAuthentication>
   );
 }

@@ -2,11 +2,10 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ThemeProvider, Box, CircularProgress } from '@mui/material';
+import { Box, CircularProgress } from '@mui/material';
 import LandingPage from './components/LandingPage';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { useAuth } from './contexts/AuthContext';
-import theme from './legacyTheme';
 
 export default function Home() {
   const router = useRouter();
@@ -25,47 +24,39 @@ export default function Home() {
   // Show loading state while checking auth
   if (loading) {
     return (
-      <ThemeProvider theme={theme}>
-        <Box
-          sx={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#FFFFFF',
-          }}
-        >
-          <CircularProgress />
-        </Box>
-      </ThemeProvider>
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <CircularProgress />
+      </Box>
     );
   }
 
   // If authenticated, show loading while redirecting
   if (isAuthenticated) {
     return (
-      <ThemeProvider theme={theme}>
-        <Box
-          sx={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#FFFFFF',
-          }}
-        >
-          <CircularProgress />
-        </Box>
-      </ThemeProvider>
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <CircularProgress />
+      </Box>
     );
   }
 
   // Show landing page for unauthenticated users
   return (
-    <ThemeProvider theme={theme}>
-      <FavoritesProvider>
-        <LandingPage />
-      </FavoritesProvider>
-    </ThemeProvider>
+    <FavoritesProvider>
+      <LandingPage />
+    </FavoritesProvider>
   );
 }

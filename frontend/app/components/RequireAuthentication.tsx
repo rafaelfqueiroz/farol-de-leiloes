@@ -27,7 +27,6 @@ export default function RequireAuthentication({ children }: RequireAuthenticatio
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FFFFFF',
         }}
       >
         <CircularProgress />
@@ -43,7 +42,6 @@ export default function RequireAuthentication({ children }: RequireAuthenticatio
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FFFFFF',
         }}
       >
         <CircularProgress />

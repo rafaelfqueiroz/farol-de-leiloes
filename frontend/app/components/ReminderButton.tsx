@@ -231,7 +231,7 @@ export default function ReminderButton({
           {hasReminder ? (
             <Button
               onClick={handleDelete}
-              color="error"
+              color="destructive"
               startIcon={loading ? <CircularProgress size={16} /> : <DeleteIcon />}
               disabled={loading}
             >

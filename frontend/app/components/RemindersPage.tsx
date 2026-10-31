@@ -261,7 +261,7 @@ export default function RemindersPage() {
                     onClick={() => handleOpenDeleteDialog(reminder)}
                     size="small"
                     title="Remover lembrete"
-                    sx={{ color: 'error.main' }}
+                    color="destructive"
                   >
                     <DeleteIcon />
                   </IconButton>
@@ -374,7 +374,7 @@ export default function RemindersPage() {
           </Button>
           <Button
             onClick={handleConfirmDelete}
-            color="error"
+            color="destructive"
             variant="contained"
             disabled={actionLoading}
             startIcon={actionLoading ? <CircularProgress size={16} /> : <DeleteIcon />}

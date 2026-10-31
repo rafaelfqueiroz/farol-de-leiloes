@@ -16,7 +16,6 @@ import {
   ListItemText,
   Alert,
   Snackbar,
-  ThemeProvider,
   CircularProgress,
   Dialog,
   DialogTitle,
@@ -31,7 +30,6 @@ import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import RequireAuthentication from '../components/RequireAuthentication';
 import { useAuth } from '../contexts/AuthContext';
-import theme, { colors } from '../legacyTheme';
 
 interface Plan {
   id: string;
@@ -200,184 +198,184 @@ export default function PlansPage() {
   const currentPlanId = getUserPlanId();
 
   return (
-    <ThemeProvider theme={theme}>
-      <RequireAuthentication>
-      <Box sx={{ display: 'flex', minHeight: '100vh'}}>
-        <Sidebar activeView="plans" />
-        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-          <TopBar />
-          <Container maxWidth="lg" sx={{ pt: 12, pb: 4, flexGrow: 1 }}>
-            <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
-              Planos
-            </Typography>
-            <Typography variant="body1" sx={{ mb: 4 }}>
-              Escolha o plano ideal para suas necessidades
-            </Typography>
+    <RequireAuthentication>
+    <Box sx={{ display: 'flex', minHeight: '100vh'}}>
+      <Sidebar activeView="plans" />
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+        <TopBar />
+        <Container maxWidth="lg" sx={{ pt: 12, pb: 4, flexGrow: 1 }}>
+          <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
+            Planos
+          </Typography>
+          <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
+            Escolha o plano ideal para suas necessidades
+          </Typography>
 
-            <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {plans.map((plan) => (
-                <Card
-                  key={plan.id}
-                  sx={{
-                    width: 320,
-                    position: 'relative',
-                    border: plan.highlighted ? `2px solid ${colors.red}` : `1px solid ${colors.lightGray}`,
-                    opacity: plan.disabled ? 0.6 : 1,
-                  }}
-                >
-                  {plan.highlighted && (
-                    <Chip
-                      label="Mais popular"
-                      size="small"
-                      icon={<StarIcon />}
-                      sx={{
-                        position: 'absolute',
-                        top: -12,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        backgroundColor: colors.red,
-                        color: 'white',
-                        '& .MuiChip-icon': { color: 'white' },
-                      }}
-                    />
-                  )}
-                  <CardContent sx={{ p: 3 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
-                      {plan.name}
+          <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {plans.map((plan) => (
+              <Card
+                key={plan.id}
+                sx={{
+                  width: 320,
+                  position: 'relative',
+                  // DESIGN.md §2: the featured plan is one of amber's rare highlights
+                  border: plan.highlighted ? 2 : 1,
+                  borderColor: plan.highlighted ? 'secondary.main' : 'divider',
+                  opacity: plan.disabled ? 0.6 : 1,
+                }}
+              >
+                {plan.highlighted && (
+                  <Chip
+                    label="Mais popular"
+                    size="small"
+                    icon={<StarIcon />}
+                    sx={{
+                      position: 'absolute',
+                      top: -12,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      backgroundColor: 'secondary.main',
+                      color: 'secondary.contrastText',
+                      '& .MuiChip-icon': { color: 'secondary.contrastText' },
+                    }}
+                  />
+                )}
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+                    {plan.name}
+                  </Typography>
+                  <Box sx={{ mb: 3 }}>
+                    <Typography component="span" variant="h4" sx={{ fontWeight: 700 }}>
+                      {plan.price}
                     </Typography>
-                    <Box sx={{ mb: 3 }}>
-                      <Typography component="span" variant="h4" sx={{ fontWeight: 700 }}>
-                        {plan.price}
+                    {plan.period && (
+                      <Typography component="span" variant="body1" sx={{ color: 'text.secondary' }}>
+                        {plan.period}
                       </Typography>
-                      {plan.period && (
-                        <Typography component="span" variant="body1" sx={{ color: 'text.secondary' }}>
-                          {plan.period}
-                        </Typography>
-                      )}
-                    </Box>
-
-                    <List dense sx={{ mb: 3 }}>
-                      {plan.features.map((feature, idx) => (
-                        <ListItem key={idx} disableGutters sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 32 }}>
-                            {plan.disabled ? (
-                              <LockIcon sx={{ fontSize: 18 }} />
-                            ) : (
-                              <CheckIcon sx={{ fontSize: 18, color: colors.red }} />
-                            )}
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={feature}
-                            primaryTypographyProps={{ variant: 'body2' }}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-
-                    {plan.id === 'standard' && currentPlanId !== 'standard' && (
-                      <Box sx={{ mb: 2 }}>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <TextField
-                            size="small"
-                            placeholder="Cupom de desconto"
-                            value={couponCode}
-                            onChange={(e) => {
-                              setCouponCode(e.target.value.toUpperCase());
-                              setCouponValid(null);
-                              setCouponDiscount(null);
-                            }}
-                            sx={{ flex: 1 }}
-                          />
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={handleValidateCoupon}
-                            disabled={validatingCoupon || !couponCode.trim()}
-                          >
-                            {validatingCoupon ? <CircularProgress size={20} /> : 'Aplicar'}
-                          </Button>
-                        </Box>
-                        {couponValid === true && couponDiscount && (
-                          <Alert severity="success" sx={{ mt: 1 }}>
-                            Cupom aplicado! Desconto de R$ {(couponDiscount / 100).toFixed(2).replace('.', ',')}
-                          </Alert>
-                        )}
-                      </Box>
                     )}
+                  </Box>
 
-                    {currentPlanId === plan.id ? (
-                      <Box>
+                  <List dense sx={{ mb: 3 }}>
+                    {plan.features.map((feature, idx) => (
+                      <ListItem key={idx} disableGutters sx={{ py: 0.5 }}>
+                        <ListItemIcon sx={{ minWidth: 32 }}>
+                          {plan.disabled ? (
+                            <LockIcon sx={{ fontSize: 18 }} />
+                          ) : (
+                            <CheckIcon sx={{ fontSize: 18, color: 'primary.main' }} />
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={feature}
+                          primaryTypographyProps={{ variant: 'body2' }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+
+                  {plan.id === 'standard' && currentPlanId !== 'standard' && (
+                    <Box sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <TextField
+                          size="small"
+                          placeholder="Cupom de desconto"
+                          value={couponCode}
+                          onChange={(e) => {
+                            setCouponCode(e.target.value.toUpperCase());
+                            setCouponValid(null);
+                            setCouponDiscount(null);
+                          }}
+                          sx={{ flex: 1 }}
+                        />
                         <Button
                           variant="outlined"
-                          fullWidth
-                          disabled
-                          sx={{ mb: 1 }}
+                          size="small"
+                          onClick={handleValidateCoupon}
+                          disabled={validatingCoupon || !couponCode.trim()}
                         >
-                          Plano Atual
+                          {validatingCoupon ? <CircularProgress size={20} /> : 'Aplicar'}
                         </Button>
-                        {plan.id === 'standard' && hasSubscription && (
-                          <Button
-                            variant="text"
-                            color="error"
-                            fullWidth
-                            size="small"
-                            onClick={() => setCancelDialogOpen(true)}
-                          >
-                            Cancelar assinatura
-                          </Button>
-                        )}
                       </Box>
-                    ) : (
+                      {couponValid === true && couponDiscount && (
+                        <Alert severity="success" sx={{ mt: 1 }}>
+                          Cupom aplicado! Desconto de R$ {(couponDiscount / 100).toFixed(2).replace('.', ',')}
+                        </Alert>
+                      )}
+                    </Box>
+                  )}
+
+                  {currentPlanId === plan.id ? (
+                    <Box>
                       <Button
-                        variant="contained"
+                        variant="outlined"
                         fullWidth
-                        disabled={plan.disabled || loading || plan.id === 'free'}
-                        onClick={() => handleSubscribe(plan.id)}
+                        disabled
+                        sx={{ mb: 1 }}
                       >
-                        {loading && plan.id === 'standard' ? (
-                          <CircularProgress size={24} color="inherit" />
-                        ) : plan.disabled ? (
-                          'Em breve'
-                        ) : plan.id === 'free' ? (
-                          'Gratuito'
-                        ) : (
-                          `Assinar ${plan.name}`
-                        )}
+                        Plano Atual
                       </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
-          </Container>
-        </Box>
+                      {plan.id === 'standard' && hasSubscription && (
+                        <Button
+                          variant="text"
+                          color="destructive"
+                          fullWidth
+                          size="small"
+                          onClick={() => setCancelDialogOpen(true)}
+                        >
+                          Cancelar assinatura
+                        </Button>
+                      )}
+                    </Box>
+                  ) : (
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      disabled={plan.disabled || loading || plan.id === 'free'}
+                      onClick={() => handleSubscribe(plan.id)}
+                    >
+                      {loading && plan.id === 'standard' ? (
+                        <CircularProgress size={24} color="inherit" />
+                      ) : plan.disabled ? (
+                        'Em breve'
+                      ) : plan.id === 'free' ? (
+                        'Gratuito'
+                      ) : (
+                        `Assinar ${plan.name}`
+                      )}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        </Container>
       </Box>
+    </Box>
 
-      <Dialog open={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)}>
-        <DialogTitle>Cancelar assinatura</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Tem certeza que deseja cancelar sua assinatura? Voce perdera acesso aos recursos do plano Standard.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCancelDialogOpen(false)}>Voltar</Button>
-          <Button onClick={handleCancelSubscription} color="error" disabled={canceling}>
-            {canceling ? <CircularProgress size={20} /> : 'Confirmar cancelamento'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+    <Dialog open={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)}>
+      <DialogTitle>Cancelar assinatura</DialogTitle>
+      <DialogContent>
+        <DialogContentText>
+          Tem certeza que deseja cancelar sua assinatura? Voce perdera acesso aos recursos do plano Standard.
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setCancelDialogOpen(false)}>Voltar</Button>
+        <Button onClick={handleCancelSubscription} color="destructive" disabled={canceling}>
+          {canceling ? <CircularProgress size={20} /> : 'Confirmar cancelamento'}
+        </Button>
+      </DialogActions>
+    </Dialog>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-      >
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-      </RequireAuthentication>
-    </ThemeProvider>
+    <Snackbar
+      open={snackbar.open}
+      autoHideDuration={4000}
+      onClose={() => setSnackbar({ ...snackbar, open: false })}
+    >
+      <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+        {snackbar.message}
+      </Alert>
+    </Snackbar>
+    </RequireAuthentication>
   );
 }

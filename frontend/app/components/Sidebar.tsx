@@ -26,7 +26,6 @@ import MenuIcon from '@mui/icons-material/Menu';
 import { useAuth } from '../contexts/AuthContext';
 import { useSidebar } from '../contexts/SidebarContext';
 import { hasMinimumRole } from './RequireRole';
-import { colors } from '../legacyTheme';
 
 interface SidebarProps {
   activeView?: string;
@@ -105,8 +104,9 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
         '& .MuiDrawer-paper': {
           width: sidebarWidth,
           boxSizing: 'border-box',
-          backgroundColor: colors.lightGray,
-          borderRight: 'none',
+          backgroundColor: 'background.paper',
+          borderRight: 1,
+          borderColor: 'divider',
           overflow: 'hidden',
           transition: 'width 0.3s ease',
           mt: '65px',
@@ -127,8 +127,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
         <IconButton
           onClick={toggleSidebar}
           sx={{
-            color: colors.red,
-            '&:hover': { backgroundColor: colors.lightRed },
+            color: 'text.secondary',
           }}
         >
           {isExpanded ? <ChevronLeftIcon /> : <MenuIcon />}
@@ -150,10 +149,10 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                   minHeight: 48,
                   justifyContent: isExpanded ? 'initial' : 'center',
                   px: 2,
-                  backgroundColor: activeView === item.id ? '#FFFFFF' : 'transparent',
-                  borderRight: activeView === item.id ? `2px solid ${colors.red}` : '2px solid transparent',
+                  // DS-24: the current destination is primary on primary.soft
+                  backgroundColor: activeView === item.id ? 'primary.soft' : 'transparent',
                   '&:hover': {
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: activeView === item.id ? 'primary.soft' : 'action.hover',
                   },
                 }}
               >
@@ -161,7 +160,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                   sx={{
                     minWidth: 0,
                     justifyContent: 'center',
-                    color: colors.red,
+                    color: activeView === item.id ? 'primary.main' : 'text.secondary',
                     mr: isExpanded ? 2 : 0,
                   }}
                 >
@@ -172,7 +171,7 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                     primary={item.label}
                     sx={{
                       '& .MuiListItemText-primary': {
-                        color: colors.red,
+                        color: activeView === item.id ? 'primary.main' : 'text.primary',
                         fontSize: 14,
                         fontWeight: 500,
                         whiteSpace: 'nowrap',
@@ -195,9 +194,10 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
         transformOrigin={{ vertical: 'center', horizontal: 'left' }}
         sx={{
           '& .MuiPopover-paper': {
-            backgroundColor: colors.lightGray,
+            backgroundColor: 'background.raised',
             borderRadius: 2,
-            border: `1px solid ${colors.lightGray}`,
+            border: 1,
+            borderColor: 'divider',
             ml: 0.5,
             minWidth: 160,
           },
@@ -212,16 +212,16 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
                   px: 2,
                   py: 1,
                   '&:hover': {
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: 'action.hover',
                   },
                 }}
               >
-                <ListItemIcon sx={{ minWidth: 32, color: colors.red }}>
+                <ListItemIcon sx={{ minWidth: 32, color: 'text.secondary' }}>
                   {subItem.icon}
                 </ListItemIcon>
                 <ListItemText
                   primary={subItem.label}
-                  sx={{ '& .MuiListItemText-primary': { color: colors.red, fontSize: 14 } }}
+                  sx={{ '& .MuiListItemText-primary': { color: 'text.primary', fontSize: 14 } }}
                 />
               </ListItemButton>
             </ListItem>

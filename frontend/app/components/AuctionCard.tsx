@@ -5,7 +5,6 @@ import HomeIcon from '@mui/icons-material/Home';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ReminderButton from './ReminderButton';
-import { colors } from '../legacyTheme';
 
 interface Phase {
   modality: string;
@@ -120,7 +119,7 @@ export default function AuctionCard({
           width: '100%',
           height: 200,
           overflow: 'hidden',
-          backgroundColor: colors.lightGray,
+          backgroundColor: 'background.muted',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -138,8 +137,8 @@ export default function AuctionCard({
               zIndex: 1,
               fontWeight: 600,
               fontSize: '0.75rem',
-              backgroundColor: countdown.isToday ? '#4CAF50' : colors.beige,
-              color: countdown.isToday ? '#FFFFFF' : colors.black,
+              backgroundColor: countdown.isToday ? 'success.soft' : 'background.muted',
+              color: countdown.isToday ? 'success.main' : 'text.primary',
             }}
           />
         )}
