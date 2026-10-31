@@ -33,7 +33,17 @@ import RequireAuthentication from '../components/RequireAuthentication';
 import { useAuth } from '../contexts/AuthContext';
 import theme, { colors } from '../theme';
 
-const plans = [
+interface Plan {
+  id: string;
+  name: string;
+  price: string;
+  period: string;
+  features: string[];
+  highlighted: boolean;
+  disabled?: boolean;
+}
+
+const plans: Plan[] = [
   {
     id: 'free',
     name: 'Gratuito',
@@ -70,6 +80,7 @@ const plans = [
       'Relatorios avancados',
     ],
     highlighted: false,
+    disabled: true,
   },
 ];
 

@@ -248,7 +248,13 @@ async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
 
   try {
     const page = await browser.newPage();
-    await page.goto(detailsUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const response = await page.goto(detailsUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    if (!response) {
+      throw new Error('No response received from navigation');
+    }
+    if (!response.ok()) {
+      throw new Error(`HTTP error! status: ${response.status()}`);
+    }
     const html = await page.content();
 
     if (html.includes('Radware Bot Manager') || html.includes('cdn.perfdrive.com') || html.includes('ShieldSquare')) {

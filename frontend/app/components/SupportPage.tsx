@@ -67,10 +67,10 @@ export default function SupportPage() {
     setLoading(true);
 
     try {
-      const token = document.cookie
-        .split('; ')
-        .find((row) => row.startsWith('token='))
-        ?.split('=')[1];
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Faça login para enviar uma solicitação');
+      }
 
       const response = await fetch('/api/support', {
         method: 'POST',

@@ -58,6 +58,7 @@ export class AuctionCleanupService implements OnModuleInit {
       }
 
       let deletedCount = 0;
+      let retainedCount = 0;
       let filesDeleted = 0;
       let errorCount = 0;
 
@@ -74,8 +75,12 @@ export class AuctionCleanupService implements OnModuleInit {
           for (let k = 0; k < results.length; k++) {
             const result = results[k];
             if (result.status === 'fulfilled') {
-              deletedCount++;
-              filesDeleted += result.value;
+              filesDeleted += result.value.filesDeleted;
+              if (result.value.removed) {
+                deletedCount++;
+              } else {
+                retainedCount++;
+              }
             } else {
               errorCount++;
               this.logger.error(`Error cleaning auction ${group[k].code}: ${result.reason?.message || result.reason}`);
@@ -86,13 +91,15 @@ export class AuctionCleanupService implements OnModuleInit {
         }
       }
 
-      this.logger.log(`Cleanup completed: ${deletedCount} auctions removed, ${filesDeleted} files deleted, ${errorCount} errors`);
+      this.logger.log(`Cleanup completed: ${deletedCount} auctions removed, ${filesDeleted} files deleted, ${retainedCount} retained for retry, ${errorCount} errors`);
     } catch (error: any) {
       this.logger.error(`Cleanup failed: ${error?.message || error}`);
     }
   }
 
-  private async processAuction(auction: AuctionEntity & { _id: unknown }): Promise<number> {
+  private async processAuction(
+    auction: AuctionEntity & { _id: unknown },
+  ): Promise<{ removed: boolean; filesDeleted: number }> {
     let filesDeleted = 0;
 
     const storageKeys = [
@@ -101,17 +108,33 @@ export class AuctionCleanupService implements OnModuleInit {
       auction.edital?.storageKey,
     ].filter(Boolean) as string[];
 
-    if (this.storageService.isConfigured()) {
+    if (storageKeys.length > 0) {
+      if (!this.storageService.isConfigured()) {
+        this.logger.warn(`Keeping auction ${auction.code}: storage not configured, files cannot be deleted`);
+        return { removed: false, filesDeleted };
+      }
+
+      let allFilesDeleted = true;
       for (const key of storageKeys) {
         const deleted = await this.storageService.deleteFile(key);
-        if (deleted) filesDeleted++;
+        if (deleted) {
+          filesDeleted++;
+        } else {
+          allFilesDeleted = false;
+        }
+      }
+
+      // Keep the document (and its storage keys) so the next run retries the failed deletions
+      if (!allFilesDeleted) {
+        this.logger.warn(`Keeping auction ${auction.code}: some files could not be deleted, will retry on next cleanup`);
+        return { removed: false, filesDeleted };
       }
     }
 
     await this.auctionModel.deleteOne({ _id: auction._id });
     this.logger.debug(`Deleted auction ${auction.code} (${filesDeleted} files removed)`);
 
-    return filesDeleted;
+    return { removed: true, filesDeleted };
   }
 
   private delay(ms: number): Promise<void> {

@@ -147,6 +147,19 @@ export class AuctionsService {
     };
   }
 
+  /**
+   * Mark auctions present in the imported CSV as available.
+   * Restores auctions previously marked unavailable that reappear in the CSV.
+   */
+  async markAvailable(codes: string[]): Promise<number> {
+    if (!codes.length) return 0;
+    const result = await this.auctionRepository.updateMany(
+      { code: { $in: codes }, available: { $ne: true } },
+      { $set: { available: true, updatedAt: new Date() } },
+    );
+    return result.modifiedCount;
+  }
+
   async query(filters: QueryFilters): Promise<AuctionListResult> {
     const take = Math.min(filters.take ?? 50, 200);
     const skip = filters.skip ?? 0;

@@ -119,8 +119,14 @@ export class AuctionsImporter {
       this.logger.log(`Import result - matched: ${res.matched}, upserted: ${res.upserted}, modified: ${res.modified}`);
       this.logger.log(`Auctions import completed.`);
 
-      // Verify availability of auctions not present in the CSV
+      // Auctions present in the CSV are available again (e.g. previously marked unavailable)
       const csvCodes = normalized.map(n => n.code).filter(Boolean) as string[];
+      if (csvCodes.length > 0) {
+        const markedAvailable = await this.auctions.markAvailable(csvCodes);
+        this.logger.log(`Availability restore - marked available: ${markedAvailable}`);
+      }
+
+      // Verify availability of auctions not present in the CSV
       if (csvCodes.length > 0) {
         const availabilityResult = await this.auctions.verifyAvailability(csvCodes);
         this.logger.log(`Availability check - checked: ${availabilityResult.checked}, unavailable: ${availabilityResult.unavailable}, errors: ${availabilityResult.errors}`);

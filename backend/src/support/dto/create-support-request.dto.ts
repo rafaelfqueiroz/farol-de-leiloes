@@ -5,11 +5,11 @@ export class CreateSupportRequestDto {
   @IsNotEmpty()
   @MinLength(3)
   @MaxLength(200)
-  title: string;
+  title!: string;
 
   @IsString()
   @IsNotEmpty()
   @MinLength(10)
   @MaxLength(2000)
-  description: string;
+  description!: string;
 }
