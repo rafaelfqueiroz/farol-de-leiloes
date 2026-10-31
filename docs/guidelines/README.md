@@ -10,7 +10,7 @@ The guidelines live in the repository, next to the code they govern. The **[PRD]
 | **[DEVELOPMENT.md](DEVELOPMENT.md)** | How to work — dependencies, code conventions, agent rules, lifecycle, git and PRs, CI/CD, ADRs, definition of done |
 | **[TESTING.md](TESTING.md)** | How correctness is proven — test types, critical modules, isolation gate, coverage, lint/format and where each check runs |
 | **[SECURITY.md](SECURITY.md)** | How the system stays safe and lawful — authentication, authorization, input/output, supply chain, AI, scraping, LGPD |
-| **[DESIGN.md](DESIGN.md)** | How the interface is built — tokens, theming, colour, typography, layout, components, text, accessibility |
+| **[DESIGN.md](DESIGN.md)** | How the interface is built — brand, tokens, theming, colour, typography, layout, components, page frames, text, accessibility. Visual reference: the [design system artifact](https://claude.ai/artifact/A4Y69knqEHAqZfQKPLrKCf) (private to the owner until shared) |
 
 Rules are numbered `AR-nn` (architecture), `DV-nn` (development), `TS-nn` (testing), `SC-nn` (security) and `DS-nn` (design). Cite them from code comments, commits and PRs the same way spec rules (`BR-NNN-nn`) are cited (DV-14). Numbers are never reused; a rule that is withdrawn is struck through, not renumbered.
 
@@ -64,7 +64,7 @@ Decided, not built, each with the trigger that ends the deferral.
 |---|---|---|
 | [BL-001](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40) | Hosting and deploy target (app, MongoDB, backups); turn on `deploy.yml` (DEVELOPMENT §12) | Before the first external user |
 | BL-002 | Performance harness: reference workload + budgets on release candidates (TESTING §10), planned in [#3](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/3) | With BL-001, before the first release candidate |
-| [BL-003](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/38) | Brand identity — palette, typeface, radius scale (DESIGN §2) | Design-system task |
+| [BL-003](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/38) | Design-system code — theme folder, patterns, logo files, migration of screens. The brand itself is decided (DESIGN v1.1, DS-01–DS-30) | Second PR of #38 |
 
 ## Amendments to spec issue plans
 
