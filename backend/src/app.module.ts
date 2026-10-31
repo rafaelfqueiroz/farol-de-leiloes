@@ -11,6 +11,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { CouponsModule } from './coupons/coupons.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { AiModule } from './ai/ai.module';
+import { SupportModule } from './support/support.module';
 import schedulerConfig from './config/scheduler.config';
 
 @Module({
@@ -39,6 +40,7 @@ import schedulerConfig from './config/scheduler.config';
     CouponsModule,
     RemindersModule,
     AiModule,
+    SupportModule,
   ],
 })
 export class AppModule {}

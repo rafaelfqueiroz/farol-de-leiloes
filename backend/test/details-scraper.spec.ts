@@ -66,7 +66,8 @@ describe('Details Scraper', () => {
   });
 
   describe('Online Sales', () => {
-    it('extracts end date from countdown timer', () => {
+    it('extracts end date from strLista in carregaContador()', () => {
+      // Fixture strLista contains: "30/01/2026 18:00:00"
       const fixturePath = path.join(__dirname, 'fixtures', 'online-sales.html');
       const html = fs.readFileSync(fixturePath, 'utf8');
       const details = scrapeAuctionDetails(html);
@@ -76,9 +77,7 @@ describe('Details Scraper', () => {
       expect(details.phaseDetails?.phaseDates?.length).toBe(1);
 
       const endDate = details.phaseDetails?.phaseDates?.[0];
-      expect(endDate).toBeInstanceOf(Date);
-      // The date should be in the future
-      expect(endDate?.getTime()).toBeGreaterThan(Date.now());
+      expect(endDate).toEqual(new Date(2026, 0, 30, 18, 0, 0));
     });
   });
 

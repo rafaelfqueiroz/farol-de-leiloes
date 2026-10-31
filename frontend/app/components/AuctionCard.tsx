@@ -11,6 +11,7 @@ interface Phase {
   modality: string;
   minimumPrice?: number;
   date?: string;
+  phaseDates?: string[];
 }
 
 interface Address {
@@ -27,6 +28,7 @@ interface Auction {
   address: Address;
   appraisalPrice?: number;
   phases: Phase[];
+  currentPhase?: Phase;
   detailsUrl?: string;
   imageUrl?: string;
   updatedAt?: string;
@@ -55,6 +57,33 @@ function formatCurrency(value?: number): string {
   }).format(value);
 }
 
+function getCountdownLabel(currentPhase?: Phase): { text: string; isToday: boolean } | null {
+  if (!currentPhase) return null;
+  if (currentPhase.modality === 'DIRECT_ONLINE_SALES') return null;
+
+  const phaseDates = currentPhase.phaseDates;
+  if (!phaseDates || phaseDates.length === 0) return null;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const futureDates = phaseDates
+    .map((d) => new Date(d))
+    .filter((d) => d >= today)
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  if (futureDates.length === 0) return null;
+
+  const nearest = futureDates[0];
+  const nearestDay = new Date(nearest.getFullYear(), nearest.getMonth(), nearest.getDate());
+  const diffMs = nearestDay.getTime() - today.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return { text: 'Hoje', isToday: true };
+  if (diffDays === 1) return { text: 'Amanhã', isToday: false };
+  return { text: `${diffDays} dias`, isToday: false };
+}
+
 function formatAddress(address: Address): string {
   const parts = [
     address.street,
@@ -73,6 +102,7 @@ export default function AuctionCard({
   showDate = false,
 }: AuctionCardProps) {
   const lastPhase = auction.phases[auction.phases.length - 1];
+  const countdown = getCountdownLabel(auction.currentPhase ?? lastPhase);
 
   return (
     <Card
@@ -97,6 +127,22 @@ export default function AuctionCard({
           position: 'relative',
         }}
       >
+        {countdown && (
+          <Chip
+            label={countdown.text}
+            size="small"
+            sx={{
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              zIndex: 1,
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              backgroundColor: countdown.isToday ? '#4CAF50' : colors.beige,
+              color: countdown.isToday ? '#FFFFFF' : colors.black,
+            }}
+          />
+        )}
         {auction.imageUrl ? (
           <img
             src={auction.imageUrl}

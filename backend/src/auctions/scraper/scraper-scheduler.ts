@@ -175,7 +175,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
       updatedAt: new Date()
     };
 
-    if (details.description) {
+    if (details.description && !auction.description) {
       updateData.description = details.description;
       this.logger.debug(`Scraped description for auction ${auction.code}`);
     }
@@ -218,18 +218,25 @@ export class AuctionDetailsScraper implements OnModuleInit {
     }
 
     if (details.phaseDetails && auction.phases && auction.phases.length > 0) {
-      const updatedPhases: Phase[] = [...auction.phases];
-      const lastPhaseIndex = updatedPhases.length - 1;
-      const updatedLastPhase: Phase = {
-        ...updatedPhases[lastPhaseIndex],
-        paymentMethods: details.phaseDetails.paymentMethods,
-        expenseRules: details.phaseDetails.expenseRules,
-        phaseDates: details.phaseDetails.phaseDates,
-      };
-      updatedPhases[lastPhaseIndex] = updatedLastPhase;
-      updateData.phases = updatedPhases;
-      updateData.currentPhase = updatedLastPhase;
-      this.logger.debug(`Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules, ${details.phaseDetails.phaseDates?.length || 0} phase dates`);
+      const lastPhaseIndex = auction.phases.length - 1;
+      const lastPhase = auction.phases[lastPhaseIndex];
+      const hasPhaseDetails = (lastPhase.paymentMethods?.length ?? 0) > 0
+        || (lastPhase.expenseRules?.length ?? 0) > 0
+        || (lastPhase.phaseDates?.length ?? 0) > 0;
+
+      if (!hasPhaseDetails) {
+        const updatedPhases: Phase[] = [...auction.phases];
+        const updatedLastPhase: Phase = {
+          ...updatedPhases[lastPhaseIndex],
+          paymentMethods: details.phaseDetails.paymentMethods,
+          expenseRules: details.phaseDetails.expenseRules,
+          phaseDates: details.phaseDetails.phaseDates,
+        };
+        updatedPhases[lastPhaseIndex] = updatedLastPhase;
+        updateData.phases = updatedPhases;
+        updateData.currentPhase = updatedLastPhase;
+        this.logger.debug(`Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules, ${details.phaseDetails.phaseDates?.length || 0} phase dates`);
+      }
     }
 
     await this.auctionModel.updateOne(

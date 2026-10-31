@@ -1,11 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AuctionsService } from '../auctions.service';
-import { downloadCsvAllStates } from './downloader';
 import { normalizeRows, parseCsv } from './parser';
 import { PhaseModality, Phase } from '../schemas/auction.schema';
 import { JobExecutionService } from '../../common/services/job-execution.service';
 import { RunMode } from '../../common/schemas/job-execution.schema';
+import { CsvCacheService } from './csv-cache.service';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
 
 @Injectable()
@@ -16,6 +16,7 @@ export class AuctionsImporter {
   constructor(
     private readonly auctions: AuctionsService,
     private readonly jobExecutionService: JobExecutionService,
+    private readonly csvCacheService: CsvCacheService,
     @Inject(schedulerConfig.KEY)
     private readonly config: SchedulerConfig,
   ) {}
@@ -65,7 +66,7 @@ export class AuctionsImporter {
   private async runImport(runMode: RunMode) {
     this.logger.log(`Starting auctions import (${runMode} mode)`);
     try {
-      const csv = await downloadCsvAllStates();
+      const csv = await this.csvCacheService.resolveCsv();
       const parsed = parseCsv(csv);
       const normalizedRows = normalizeRows(parsed);
       this.logger.log(`Normalized rows: ${normalizedRows.length}`);
@@ -118,10 +119,20 @@ export class AuctionsImporter {
       this.logger.log(`Import result - matched: ${res.matched}, upserted: ${res.upserted}, modified: ${res.modified}`);
       this.logger.log(`Auctions import completed.`);
 
-      // Reconcile availability: CSV is the source of truth
-      const allCodes = normalized.map(n => n.code).filter(Boolean) as string[];
-      const reconcileResult = await this.auctions.reconcileAvailability(allCodes);
-      this.logger.log(`Reconciliation - marked available: ${reconcileResult.markedAvailable}, marked unavailable: ${reconcileResult.markedUnavailable}`);
+      // Auctions present in the CSV are available again (e.g. previously marked unavailable)
+      const csvCodes = normalized.map(n => n.code).filter(Boolean) as string[];
+      if (csvCodes.length > 0) {
+        const markedAvailable = await this.auctions.markAvailable(csvCodes);
+        this.logger.log(`Availability restore - marked available: ${markedAvailable}`);
+      }
+
+      // Verify availability of auctions not present in the CSV
+      if (csvCodes.length > 0) {
+        const availabilityResult = await this.auctions.verifyAvailability(csvCodes);
+        this.logger.log(`Availability check - checked: ${availabilityResult.checked}, unavailable: ${availabilityResult.unavailable}, errors: ${availabilityResult.errors}`);
+      } else {
+        this.logger.warn('Skipping availability check — CSV returned no auction codes');
+      }
 
       // Invalidate neighborhoods cache after import
       await this.auctions.invalidateNeighborhoodsCache();

@@ -137,6 +137,9 @@ export default function TopBar() {
                 <MenuItem onClick={() => { handleClose(); router.push('/plans'); }}>
                   Planos
                 </MenuItem>
+                <MenuItem onClick={() => { handleClose(); router.push('/support'); }}>
+                  Suporte
+                </MenuItem>
                 <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
                   Sair
                 </MenuItem>

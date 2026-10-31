@@ -1,10 +1,13 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Model } from 'mongoose';
-import { AuctionEntity, AuctionDocument, Address, Phase, PhaseModality } from './schemas/auction.schema';
+import { AuctionEntity, AuctionDocument, Address, Phase } from './schemas/auction.schema';
 import { Auction, AuctionListResult } from './interfaces/auction.interface';
+import { fetchAndCheckAvailability } from './scraper/details-scraper';
+import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
 
 export interface AuctionUpsert {
   code?: string;
@@ -30,21 +33,28 @@ const NEIGHBORHOODS_CACHE_PREFIX = 'neighborhoods';
 
 @Injectable()
 export class AuctionsService {
+  private readonly logger = new Logger(AuctionsService.name);
+  private readonly cacheEnabled: boolean;
+
   constructor(
     @InjectModel(AuctionEntity.name) private readonly auctionRepository: Model<AuctionDocument>,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    const config = this.configService.get<SchedulerConfig>(schedulerConfig.KEY);
+    this.cacheEnabled = config?.cache.neighborhoodsEnabled ?? false;
+  }
 
   async upsertMany(items: AuctionUpsert[]) {
-    console.log(`[upsertMany] Received ${items.length} items`);
+    this.logger.log(`[upsertMany] Received ${items.length} items`);
     if (!items.length) return { matched: 0, upserted: 0, modified: 0 };
 
     // Step 1: Fetch all existing auctions in ONE query
     const codes = items.map((item) => item.code).filter(Boolean) as string[];
-    console.log(`[upsertMany] Valid codes: ${codes.length}`);
+    this.logger.log(`[upsertMany] Valid codes: ${codes.length}`);
 
     const existing = await this.auctionRepository.find({ code: { $in: codes } }).select('code phases').lean();
-    console.log(`[upsertMany] Found ${existing.length} existing auctions in DB`);
+    this.logger.log(`[upsertMany] Found ${existing.length} existing auctions in DB`);
 
     const existingMap = new Map(existing.map((doc) => [doc.code, doc]));
 
@@ -120,21 +130,34 @@ export class AuctionsService {
       }
     }
 
-    console.log(`[upsertMany] Skipped - no code: ${skippedNoCode}, no phases: ${skippedNoPhases}, same modality: ${skippedSameModality}`);
-    console.log(`[upsertMany] Operations - inserts: ${insertOps}, updates: ${updateOps}, total: ${ops.length}`);
+    this.logger.log(`[upsertMany] Skipped - no code: ${skippedNoCode}, no phases: ${skippedNoPhases}, same modality: ${skippedSameModality}`);
+    this.logger.log(`[upsertMany] Operations - inserts: ${insertOps}, updates: ${updateOps}, total: ${ops.length}`);
 
     if (ops.length === 0) {
-      console.log(`[upsertMany] No operations to execute`);
+      this.logger.log(`[upsertMany] No operations to execute`);
       return { matched: 0, upserted: 0, modified: 0 };
     }
 
     const res = await this.auctionRepository.bulkWrite(ops, { ordered: false });
-    console.log(`[upsertMany] BulkWrite result - matched: ${res.matchedCount}, upserted: ${res.upsertedCount}, modified: ${res.modifiedCount}`);
+    this.logger.log(`[upsertMany] BulkWrite result - matched: ${res.matchedCount}, upserted: ${res.upsertedCount}, modified: ${res.modifiedCount}`);
     return {
       matched: res.matchedCount,
       upserted: res.upsertedCount,
       modified: res.modifiedCount,
     };
+  }
+
+  /**
+   * Mark auctions present in the imported CSV as available.
+   * Restores auctions previously marked unavailable that reappear in the CSV.
+   */
+  async markAvailable(codes: string[]): Promise<number> {
+    if (!codes.length) return 0;
+    const result = await this.auctionRepository.updateMany(
+      { code: { $in: codes }, available: { $ne: true } },
+      { $set: { available: true, updatedAt: new Date() } },
+    );
+    return result.modifiedCount;
   }
 
   async query(filters: QueryFilters): Promise<AuctionListResult> {
@@ -193,7 +216,7 @@ export class AuctionsService {
       query['currentPhase.minimumPrice'] = priceMatch;
     }
 
-    console.log('Query filters:', filters, 'Query:', JSON.stringify(query));
+    this.logger.debug(`Query filters: ${JSON.stringify(filters)}, Query: ${JSON.stringify(query)}`);
 
     // Get total count
     const total = await this.auctionRepository.countDocuments(query).exec();
@@ -207,7 +230,7 @@ export class AuctionsService {
       .lean()
       .exec();
 
-    console.log(`[query] Found ${docs.length} docs, total: ${total}`);
+    this.logger.log(`[query] Found ${docs.length} docs, total: ${total}`);
     return { total, items: docs.map(doc => this.toAuction(doc)) };
   }
 
@@ -267,25 +290,11 @@ export class AuctionsService {
 
   /**
    * Builds the MongoDB query filter for active auctions.
-   * An auction is active if:
-   * - available !== false
-   * - AND (ONLINE_SALES/DIRECT_ONLINE_SALES modality OR has at least one future date)
+   * An auction is active if available is true.
    */
   private buildActiveAuctionFilter(): Record<string, unknown> {
-    const now = new Date();
     return {
-      available: { $ne: false },
-      $or: [
-        {
-          'currentPhase.modality': {
-            $in: [
-              PhaseModality.ONLINE_SALES,
-              PhaseModality.DIRECT_ONLINE_SALES,
-            ],
-          },
-        },
-        { 'currentPhase.phaseDates': { $elemMatch: { $gte: now } } },
-      ],
+      available: true,
     };
   }
 
@@ -298,14 +307,17 @@ export class AuctionsService {
     const sortedCities = [...cities].sort();
     const cacheKey = `${NEIGHBORHOODS_CACHE_PREFIX}:${state.toUpperCase()}:${sortedCities.join(',')}`;
 
-    // Check cache first
-    const cached = await this.cacheManager.get<string[]>(cacheKey);
-    if (cached) {
-      console.log(`[getNeighborhoods] Cache hit for ${cacheKey}`);
-      return cached;
+    // Check cache first (if enabled)
+    if (this.cacheEnabled) {
+      const cached = await this.cacheManager.get<string[]>(cacheKey);
+      if (cached) {
+        this.logger.debug(`[getNeighborhoods] Cache hit for ${cacheKey}`);
+        return cached;
+      }
+      this.logger.debug(`[getNeighborhoods] Cache miss for ${cacheKey}, querying database`);
+    } else {
+      this.logger.debug(`[getNeighborhoods] Cache disabled, querying database for ${cacheKey}`);
     }
-
-    console.log(`[getNeighborhoods] Cache miss for ${cacheKey}, querying database`);
 
     // Build match stage, excluding inactive auctions
     const matchStage: Record<string, unknown> = {
@@ -323,6 +335,8 @@ export class AuctionsService {
       };
     }
 
+    this.logger.debug(`[getNeighborhoods] Filter: ${JSON.stringify(matchStage)}`);
+
     // Aggregate to get distinct neighborhoods
     const result = await this.auctionRepository.aggregate([
       { $match: matchStage },
@@ -334,32 +348,98 @@ export class AuctionsService {
       .map(doc => doc._id as string)
       .filter(Boolean);
 
-    // Cache the result
-    await this.cacheManager.set(cacheKey, neighborhoods);
-    console.log(`[getNeighborhoods] Cached ${neighborhoods.length} neighborhoods for ${cacheKey}`);
+    // Cache the result (if enabled)
+    if (this.cacheEnabled) {
+      await this.cacheManager.set(cacheKey, neighborhoods);
+      this.logger.debug(`[getNeighborhoods] Cached ${neighborhoods.length} neighborhoods for ${cacheKey}`);
+    }
 
     return neighborhoods;
   }
 
   /**
-   * Reconcile auction availability based on CSV codes.
-   * Auctions in the CSV are marked available; all others are marked unavailable.
+   * Checks availability of fulfilled auctions whose codes are not in the CSV.
+   * Fetches each auction's details page and marks as unavailable if Caixa confirms it.
    */
-  async reconcileAvailability(csvCodes: string[]): Promise<{ markedAvailable: number; markedUnavailable: number }> {
-    const availableResult = await this.auctionRepository.updateMany(
-      { code: { $in: csvCodes }, available: { $ne: true } },
-      { $set: { available: true, updatedAt: new Date() } },
-    );
+  async verifyAvailability(csvCodes: string[]): Promise<{ checked: number; unavailable: number; errors: number }> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const missingAuctions = await this.auctionRepository
+      .find({
+        fulfilled: true,
+        available: true,
+        detailsUrl: { $exists: true, $ne: null },
+        code: { $nin: csvCodes },
+        $or: [
+          { availabilityCheckedAt: { $exists: false } },
+          { availabilityCheckedAt: { $lt: cutoff } },
+        ],
+      })
+      .select('code detailsUrl')
+      .sort({ availabilityCheckedAt: 1 })
+      .limit(1000)
+      .lean();
 
-    const unavailableResult = await this.auctionRepository.updateMany(
-      { code: { $nin: csvCodes }, available: { $ne: false } },
-      { $set: { available: false, updatedAt: new Date() } },
-    );
+    this.logger.log(`[verifyAvailability] Found ${missingAuctions.length} auctions not in CSV to check (max 1000)`);
 
-    return {
-      markedAvailable: availableResult.modifiedCount,
-      markedUnavailable: unavailableResult.modifiedCount,
-    };
+    if (missingAuctions.length === 0) {
+      return { checked: 0, unavailable: 0, errors: 0 };
+    }
+
+    const batchSize = 15;
+    const concurrency = 3;
+    const delayBetweenGroups = 1000;
+    let unavailableCount = 0;
+    let errorCount = 0;
+
+    const totalBatches = Math.ceil(missingAuctions.length / batchSize);
+
+    for (let i = 0; i < missingAuctions.length; i += batchSize) {
+      const batch = missingAuctions.slice(i, i + batchSize);
+      this.logger.log(`[verifyAvailability] Processing batch ${Math.floor(i / batchSize) + 1}/${totalBatches}`);
+
+      for (let j = 0; j < batch.length; j += concurrency) {
+        const group = batch.slice(j, j + concurrency);
+        const results = await Promise.allSettled(
+          group.map(async (auction) => {
+            let available: boolean;
+            try {
+              available = await fetchAndCheckAvailability(auction.detailsUrl!);
+            } catch (error) {
+              this.logger.error(`[verifyAvailability] Auction ${auction.code} fetch failed for ${auction.detailsUrl}: ${error instanceof Error ? error.message : error}`);
+              throw error;
+            }
+            if (!available) {
+              await this.auctionRepository.updateOne(
+                { code: auction.code },
+                { $set: { available: false, availabilityCheckedAt: new Date(), updatedAt: new Date() } },
+              );
+              this.logger.debug(`[verifyAvailability] Auction ${auction.code} marked as unavailable`);
+              return false;
+            }
+            await this.auctionRepository.updateOne(
+                { code: auction.code },
+                { $set: { availabilityCheckedAt: new Date() } },
+              );
+            this.logger.debug(`[verifyAvailability] Auction ${auction.code} still available`);
+            return true;
+          }),
+        );
+
+        for (let k = 0; k < results.length; k++) {
+          const result = results[k];
+          if (result.status === 'fulfilled') {
+            if (!result.value) unavailableCount++;
+          } else {
+            errorCount++;
+            this.logger.error(`[verifyAvailability] Error checking ${group[k].code}: ${result.reason?.message || result.reason}`);
+          }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, delayBetweenGroups));
+      }
+    }
+
+    return { checked: missingAuctions.length, unavailable: unavailableCount, errors: errorCount };
   }
 
   /**
@@ -367,13 +447,13 @@ export class AuctionsService {
    * Called after import to ensure fresh data
    */
   async invalidateNeighborhoodsCache(): Promise<void> {
-    console.log('[invalidateNeighborhoodsCache] Clearing neighborhoods cache');
+    this.logger.log('[invalidateNeighborhoodsCache] Clearing neighborhoods cache');
     // cache-manager uses stores array, access first store and call reset
     const stores = (this.cacheManager as any).stores;
     if (stores && stores[0] && typeof stores[0].reset === 'function') {
       await stores[0].reset();
     }
-    console.log('[invalidateNeighborhoodsCache] Cache cleared');
+    this.logger.log('[invalidateNeighborhoodsCache] Cache cleared');
   }
 
 }

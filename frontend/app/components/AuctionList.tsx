@@ -22,7 +22,13 @@ interface Auction {
     modality: string;
     minimumPrice?: number;
     date?: string;
+    phaseDates?: string[];
   }>;
+  currentPhase?: {
+    modality: string;
+    minimumPrice?: number;
+    phaseDates?: string[];
+  };
   detailsUrl?: string;
   imageUrl?: string;
   updatedAt?: string;

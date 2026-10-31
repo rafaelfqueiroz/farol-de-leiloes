@@ -1,6 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import r2Config from './r2.config';
 
@@ -185,6 +185,72 @@ export class StorageService {
       this.logger.error(`Failed to generate signed URL for ${key}: ${error.message}`);
       return null;
     }
+  }
+
+  /**
+   * Delete a file from R2 by its storage key
+   */
+  async deleteFile(key: string): Promise<boolean> {
+    if (!this.s3Client) {
+      this.logger.debug('R2 not configured, skipping file deletion');
+      return false;
+    }
+
+    try {
+      await this.s3Client.send(new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }));
+
+      this.logger.debug(`Deleted file from R2: ${key}`);
+      return true;
+    } catch (error: any) {
+      this.logger.error(`Failed to delete file ${key}: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Upload a buffer to R2 with a given key
+   */
+  async uploadBuffer(
+    key: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<{ key: string; size: number }> {
+    if (!this.s3Client) {
+      throw new Error('R2 not configured');
+    }
+
+    await this.s3Client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    }));
+
+    this.logger.debug(`Uploaded buffer: ${key} (${buffer.length} bytes)`);
+
+    return { key, size: buffer.length };
+  }
+
+  /**
+   * Download a file from R2 as a Buffer
+   */
+  async downloadBuffer(key: string): Promise<Buffer> {
+    if (!this.s3Client) {
+      throw new Error('R2 not configured');
+    }
+
+    const response = await this.s3Client.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    }));
+
+    const bytes = await response.Body!.transformToByteArray();
+    this.logger.debug(`Downloaded buffer: ${key} (${bytes.length} bytes)`);
+
+    return Buffer.from(bytes);
   }
 
   private getExtensionFromMimeType(mimeType: string): string {

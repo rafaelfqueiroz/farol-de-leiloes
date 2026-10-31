@@ -149,9 +149,10 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
   const [availableNeighborhoods, setAvailableNeighborhoods] = useState<string[]>([]);
   const [loadingNeighborhoods, setLoadingNeighborhoods] = useState(false);
 
-  // Auth state for AI search gating
+  // Auth state for feature gating
   const { role } = useAuth();
-  const canUseAISearch = role === 'admin' || role === 'standard' || role === 'premium';
+  const canUseAISearch = role === 'admin' || role === 'premium';
+  const canUseSavedFilters = role === 'admin' || role === 'premium' || role === 'standard';
 
   // Saved filters state
   const { savedFilters, isAuthenticated, saveFilter, deleteFilter, loading: savedFiltersLoading } = useSavedFilters();
@@ -412,10 +413,10 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
           >
             <LockIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7}} />
             <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: '#091413' }}>
-              Recurso disponivel no plano Standard
+              Recurso disponivel no plano Premium
             </Typography>
             <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-              Assine o plano Standard para usar a busca por IA
+              Assine o plano Premium para usar a busca por IA
             </Typography>
             <Button
               variant="contained"
@@ -487,8 +488,8 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
 
           {/* Scrollable Content */}
           <Box component="form" onSubmit={handleSubmit} sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
-            {/* Saved Filters Section - Only shown for authenticated users */}
-            {isAuthenticated && (
+            {/* Saved Filters Section - Only shown for Standard+ users */}
+            {isAuthenticated && canUseSavedFilters && (
               <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
                   <BookmarkIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />

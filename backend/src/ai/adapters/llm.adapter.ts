@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export type LlmProvider = 'ollama' | 'groq' | 'gemini' | 'openai' | 'anthropic';
@@ -27,6 +27,8 @@ interface AnthropicResponse {
 
 @Injectable()
 export class LlmAdapter {
+  private readonly logger = new Logger(LlmAdapter.name);
+
   constructor(private readonly configService: ConfigService) {}
 
   getConfig(): LlmConfig {
@@ -34,7 +36,7 @@ export class LlmAdapter {
     const configs = this.getProviderConfigs();
 
     if (!configs[provider]) {
-      console.warn(`Unknown LLM provider: ${provider}, falling back to ollama`);
+      this.logger.warn(`Unknown LLM provider: ${provider}, falling back to ollama`);
       return configs.ollama;
     }
 
@@ -108,7 +110,7 @@ export class LlmAdapter {
       throw new Error(validation.error);
     }
 
-    console.log(`Using LLM provider: ${config.provider} (model: ${config.model})`);
+    this.logger.log(`Using LLM provider: ${config.provider} (model: ${config.model})`);
 
     if (config.provider === 'anthropic') {
       return this.callAnthropicApi(config, systemPrompt, userMessage);

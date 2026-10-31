@@ -25,6 +25,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import MenuIcon from '@mui/icons-material/Menu';
 import { useAuth } from '../contexts/AuthContext';
 import { useSidebar } from '../contexts/SidebarContext';
+import { hasMinimumRole } from './RequireRole';
 import { colors } from '../theme';
 
 interface SidebarProps {
@@ -32,12 +33,20 @@ interface SidebarProps {
   onViewChange?: (view: string) => void;
 }
 
-const baseMenuItems = [
+interface MenuItem {
+  id: string;
+  icon: React.ReactNode;
+  label: string;
+  minimumRole?: 'free' | 'standard' | 'premium' | 'admin';
+}
+
+const allMenuItems: MenuItem[] = [
   { id: 'home', icon: <HomeIcon />, label: 'Inicio' },
   { id: 'search', icon: <SearchIcon />, label: 'Buscar' },
-  { id: 'favorites', icon: <FavoriteIcon />, label: 'Favoritos' },
-  { id: 'reminders', icon: <NotificationsIcon />, label: 'Lembretes' },
+  { id: 'favorites', icon: <FavoriteIcon />, label: 'Favoritos', minimumRole: 'standard' },
+  { id: 'reminders', icon: <NotificationsIcon />, label: 'Lembretes', minimumRole: 'standard' },
   { id: 'plans', icon: <CardMembershipIcon />, label: 'Planos' },
+  { id: 'admin', icon: <AdminPanelSettingsIcon />, label: 'Admin', minimumRole: 'admin' },
 ];
 
 const adminSubMenuItems = [
@@ -50,12 +59,9 @@ export default function Sidebar({ activeView = 'home', onViewChange }: SidebarPr
   const { isExpanded, toggleSidebar, sidebarWidth } = useSidebar();
   const [adminAnchorEl, setAdminAnchorEl] = useState<HTMLElement | null>(null);
 
-  const menuItems = [
-    ...baseMenuItems,
-    ...(role === 'admin'
-      ? [{ id: 'admin', icon: <AdminPanelSettingsIcon />, label: 'Admin' }]
-      : []),
-  ];
+  const menuItems = allMenuItems.filter(
+    (item) => !item.minimumRole || hasMinimumRole(role, item.minimumRole)
+  );
 
   const handleNavigation = (itemId: string) => {
     if (itemId === 'home') {

@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { Box, Container, ThemeProvider, CircularProgress } from '@mui/material';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
-import RequireAuthentication from '../components/RequireAuthentication';
+import RequireRole from '../components/RequireRole';
 import { useSidebar } from '../contexts/SidebarContext';
 import RemindersPage from '../components/RemindersPage';
 import theme from '../theme';
@@ -30,7 +30,7 @@ export default function Reminders() {
 
   return (
     <ThemeProvider theme={theme}>
-      <RequireAuthentication>
+      <RequireRole minimumRole="standard" featureName="Lembretes">
         <Suspense fallback={<RemindersPageLoading />}>
           <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
             <Sidebar activeView="reminders" />
@@ -46,7 +46,7 @@ export default function Reminders() {
             </Box>
           </Box>
         </Suspense>
-      </RequireAuthentication>
+      </RequireRole>
     </ThemeProvider>
   );
 }

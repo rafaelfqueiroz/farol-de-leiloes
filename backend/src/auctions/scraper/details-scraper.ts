@@ -1,5 +1,10 @@
 import * as cheerio from 'cheerio';
+import puppeteer from 'puppeteer-extra';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema';
+
+puppeteer.use(StealthPlugin());
 
 export interface ScrapedPhaseDetails {
   paymentMethods?: PaymentMethod[];
@@ -59,7 +64,7 @@ export function scrapeAuctionDetails(html: string): ScrapedDetails {
     }
 
     // Extract payment methods, expense rules, and phase dates
-    details.phaseDetails = extractPhaseDetails(relatedBoxHtml, $);
+    details.phaseDetails = extractPhaseDetails(relatedBoxHtml, html);
   }
 
   // Extract matrícula URL: ExibeDoc('/editais/matricula/{STATE}/{CODE}.pdf')
@@ -172,7 +177,7 @@ function parseBrazilianDate(dateStr: string): Date | null {
  * 3. Online Sales: Countdown timer in div#divContador (calculates end date from remaining time)
  * 4. Direct Online Sales: No end date (returns empty array)
  */
-function extractPhaseDates(html: string, $: cheerio.CheerioAPI): Date[] {
+function extractPhaseDates(html: string): Date[] {
   const phaseDates: Date[] = [];
 
   // Try SFI Auction pattern - "Data do 1º Leilão" and "Data do 2º Leilão"
@@ -200,37 +205,22 @@ function extractPhaseDates(html: string, $: cheerio.CheerioAPI): Date[] {
     return phaseDates;
   }
 
-  // Try Online Sales pattern - countdown timer in div#divContador
-  const countdownDiv = $('#divContador');
-  if (countdownDiv.length > 0) {
-    // Check if it's "Venda Online" (has countdown) vs "Venda Direta Online" (no end date)
-    const countdownHtml = countdownDiv.html() || '';
-    if (countdownHtml.includes('Venda Online') && !countdownHtml.includes('Venda Direta')) {
-      // Extract days, hours, minutes, seconds from the countdown
-      const daysEl = $('#dias0');
-      const hoursEl = $('#horas0');
-      const minutesEl = $('#minutos0');
-      const secondsEl = $('#segundos0');
-
-      if (daysEl.length > 0) {
-        const days = parseInt(daysEl.text().trim()) || 0;
-        const hours = parseInt(hoursEl.text().trim()) || 0;
-        const minutes = parseInt(minutesEl.text().trim()) || 0;
-        const seconds = parseInt(secondsEl.text().trim()) || 0;
-
-        // Calculate end date from now + remaining time
-        const now = new Date();
-        const endDate = new Date(
-          now.getTime() +
-            days * 24 * 60 * 60 * 1000 +
-            hours * 60 * 60 * 1000 +
-            minutes * 60 * 1000 +
-            seconds * 1000,
-        );
-        phaseDates.push(endDate);
-      }
-    }
-    // Direct Online Sales ("Venda Direta Online") - no end date, returns empty array
+  // Try Online Sales pattern - extract date from strLista in carregaContador()
+  // Format: strLista: "1@@" + "DD/MM/YYYY HH:MM:SS" + "@@" + "0,00" + "||"
+  // Direct Online Sales has an empty date string, so no date is extracted
+  const strListaMatch = html.match(/strLista:\s*"1@@"\s*\+\s*"(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})"/);
+  if (strListaMatch) {
+    const [, day, month, year, hours, minutes, seconds] =
+      strListaMatch[1].match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/)!;
+    const date = new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hours),
+      parseInt(minutes),
+      parseInt(seconds),
+    );
+    phaseDates.push(date);
   }
 
   return phaseDates;
@@ -239,12 +229,42 @@ function extractPhaseDates(html: string, $: cheerio.CheerioAPI): Date[] {
 /**
  * Extracts phase-specific details (payment methods, expense rules, and phase dates)
  */
-function extractPhaseDetails(html: string, $: cheerio.CheerioAPI): ScrapedPhaseDetails {
+function extractPhaseDetails(relatedBoxHtml: string, fullHtml: string): ScrapedPhaseDetails {
   return {
-    paymentMethods: extractPaymentMethods(html),
-    expenseRules: extractExpenseRules(html),
-    phaseDates: extractPhaseDates(html, $),
+    paymentMethods: extractPaymentMethods(relatedBoxHtml),
+    expenseRules: extractExpenseRules(relatedBoxHtml),
+    phaseDates: extractPhaseDates(fullHtml),
   };
+}
+
+/**
+ * Fetches the HTML content of an auction details page from Caixa website
+ */
+async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  try {
+    const page = await browser.newPage();
+    const response = await page.goto(detailsUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    if (!response) {
+      throw new Error('No response received from navigation');
+    }
+    if (!response.ok()) {
+      throw new Error(`HTTP error! status: ${response.status()}`);
+    }
+    const html = await page.content();
+
+    if (html.includes('Radware Bot Manager') || html.includes('cdn.perfdrive.com') || html.includes('ShieldSquare')) {
+      throw new Error('Bot protection page detected instead of auction content');
+    }
+
+    return html;
+  } finally {
+    await browser.close();
+  }
 }
 
 /**
@@ -254,20 +274,19 @@ function extractPhaseDetails(html: string, $: cheerio.CheerioAPI): ScrapedPhaseD
  */
 export async function fetchAndScrapeDetails(detailsUrl: string): Promise<ScrapedDetails> {
   try {
-    const response = await fetch(detailsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      },
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const html = await response.text();
+    const html = await fetchAuctionDetailHtml(detailsUrl);
     return scrapeAuctionDetails(html);
   } catch (error) {
     throw new Error(`Failed to scrape details from ${detailsUrl}: ${error instanceof Error ? error.message : error}`);
   }
+}
+
+/**
+ * Lightweight availability check — fetches the page and only checks for the unavailable message.
+ * No HTML parsing (cheerio, regex, etc.).
+ * @returns true if available, false if unavailable
+ */
+export async function fetchAndCheckAvailability(detailsUrl: string): Promise<boolean> {
+  const html = await fetchAuctionDetailHtml(detailsUrl);
+  return !html.includes('O imóvel que você procura não está mais disponível para venda');
 }

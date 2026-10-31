@@ -107,6 +107,49 @@ export class EmailService {
     this.logger.log(`Password reset email sent to ${email}`);
   }
 
+  async sendSupportEmail(
+    to: string,
+    userEmail: string,
+    userName: string,
+    title: string,
+    description: string,
+  ): Promise<void> {
+    const subject = `[Suporte] ${title}`;
+    const html = `
+      <h2>Nova solicitação de suporte</h2>
+      <p><strong>Usuário:</strong> ${userName} (${userEmail})</p>
+      <p><strong>Título:</strong> ${title}</p>
+      <hr />
+      <p><strong>Descrição:</strong></p>
+      <p>${description.replace(/\n/g, '<br />')}</p>
+    `;
+
+    if (!this.transporter) {
+      this.logger.log('='.repeat(60));
+      this.logger.log('SUPPORT REQUEST EMAIL (Development Mode)');
+      this.logger.log(`To: ${to}`);
+      this.logger.log(`From User: ${userName} (${userEmail})`);
+      this.logger.log(`Title: ${title}`);
+      this.logger.log(`Description: ${description}`);
+      this.logger.log('='.repeat(60));
+      return;
+    }
+
+    const emailFrom =
+      this.configService.get<string>('EMAIL_FROM') ||
+      'noreply@faroldosleiloes.com';
+
+    await this.transporter.sendMail({
+      from: emailFrom,
+      to,
+      replyTo: userEmail,
+      subject,
+      html,
+    });
+
+    this.logger.log(`Support email sent to ${to} from ${userEmail}`);
+  }
+
   async sendReminderEmail(
     email: string,
     payload: ReminderEmailPayload,

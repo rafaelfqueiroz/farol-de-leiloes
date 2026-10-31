@@ -52,10 +52,6 @@ export function parseCsv(csv: string): ParsedAuctionRow[] {
 
   if (!header || headerIndex === -1) return [];
 
-  // Log headers for debugging
-  console.log('CSV Headers found:', header);
-  console.log('Header count:', header.length);
-
   // Convert rows to objects using the found header
   const rows: ParsedAuctionRow[] = [];
   for (let i = headerIndex + 1; i < allRows.length; i++) {

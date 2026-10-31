@@ -33,6 +33,8 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import DownloadIcon from '@mui/icons-material/Download';
 import DescriptionIcon from '@mui/icons-material/Description';
 import { useFavorites } from '../../contexts/FavoritesContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { hasMinimumRole } from '../../components/RequireRole';
 import TopBar from '../../components/TopBar';
 import theme, { colors } from '../../theme';
 
@@ -126,6 +128,8 @@ interface AuctionDetailClientProps {
 export default function AuctionDetailClient({ auction }: AuctionDetailClientProps) {
   const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { role } = useAuth();
+  const canAccessFavorites = hasMinimumRole(role, 'standard');
 
   const getReturnUrl = () => {
     if (typeof window !== 'undefined') {
@@ -173,19 +177,21 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                       Código: {auction.code}
                     </Typography>
                   </Box>
-                  <IconButton
-                    onClick={() => toggleFavorite(auction)}
-                    size="large"
-                    sx={{
-                      color: isFavorite(auction.code) ? 'error.main' : 'action.active',
-                      '&:hover': {
-                        color: 'error.main',
-                        backgroundColor: colors.red30
-                      },
-                    }}
-                  >
-                    {isFavorite(auction.code) ? <FavoriteIcon fontSize="large" /> : <FavoriteBorderIcon fontSize="large" />}
-                  </IconButton>
+                  {canAccessFavorites && (
+                    <IconButton
+                      onClick={() => toggleFavorite(auction)}
+                      size="large"
+                      sx={{
+                        color: isFavorite(auction.code) ? 'error.main' : 'action.active',
+                        '&:hover': {
+                          color: 'error.main',
+                          backgroundColor: colors.red30
+                        },
+                      }}
+                    >
+                      {isFavorite(auction.code) ? <FavoriteIcon fontSize="large" /> : <FavoriteBorderIcon fontSize="large" />}
+                    </IconButton>
+                  )}
                 </Box>
 
                 {/* Property Image */}
