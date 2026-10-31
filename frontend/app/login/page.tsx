@@ -50,8 +50,7 @@ export default function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        bgcolor: 'primary.main',
-        color: 'primary.contrastText',
+        bgcolor: 'background.default',
         padding: 2,
       }}
     >

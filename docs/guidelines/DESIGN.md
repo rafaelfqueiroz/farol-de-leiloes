@@ -349,6 +349,7 @@ The theme, tokens, shared patterns, formatters and logo from issue #38 are in pl
 | DS-26 | Date pickers (`ReminderButton`, `RemindersPage`) still use `dayjs` | #34 |
 | DS-29 | Inline currency and date formatters (`Intl`, `toLocaleString`, `toFixed`) remain in about 8 files — `AuctionCard`, `AuctionDetailClient`, `auction/[code]/page`, `plans/page`, `admin/coupons/page`, `RemindersPage`, `ReminderButton`, `SearchFilters`, `AuctionList` — and are not yet replaced by `Money` / `DateText` | #39 / #34 |
 | DS-01, DS-11, DS-14, DS-15 | Numeric `fontSize` / `fontWeight` literals in 25 files; pages do not yet use `PageShell` / `PageHeader` | #43 |
+| DS-27 | Destructive confirmations are hand-rolled `Dialog`s (`RemindersPage` delete reminder, `plans` cancel subscription) instead of `ConfirmDialog`; some destructive actions have no confirmation at all (admin coupons "Invalidar", `ReminderButton` delete, `SearchFilters` delete saved filter) | no issue yet |
 | §6 | `Sidebar` and `TopBar` are recoloured but the `AppShell` is not built (sidebar groups, rail, drawer); each page still mounts them itself | #42 |
 | TESTING §9 | No lint enforcement yet of hex/px and JSX string literals; `npm run check` is typecheck + test until lint and format land | #29 |
 | TS-24 | No frontend coverage gate | #32 |

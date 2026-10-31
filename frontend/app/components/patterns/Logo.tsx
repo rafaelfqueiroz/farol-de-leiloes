@@ -64,9 +64,9 @@ export default function Logo({ variant, size = 32 }: LogoProps) {
       {/* the mark already announces the name: hide the live text from assistive tech */}
       <Typography
         component="span"
-        variant="h3"
+        variant="wordmark"
         aria-hidden
-        sx={(theme) => ({ letterSpacing: '-0.015em', whiteSpace: 'nowrap', fontWeight: theme.typography.fontWeightBold })}
+        sx={{ whiteSpace: 'nowrap' }}
       >
         {first}{' '}
         <Box

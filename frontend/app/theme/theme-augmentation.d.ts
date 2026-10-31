@@ -77,16 +77,33 @@ declare module '@mui/material/styles' {
 
   interface TypographyVariants {
     metric: CSSProperties;
+    wordmark: CSSProperties;
   }
 
   interface TypographyVariantsOptions {
     metric?: CSSProperties;
+    wordmark?: CSSProperties;
+  }
+
+  /** Page container widths in px (DESIGN.md §6), exposed so components never import tokens.ts. */
+  interface Layout {
+    containerWidth: number;
+    readingWidth: number;
+  }
+
+  interface Theme {
+    layout: Layout;
+  }
+
+  interface ThemeOptions {
+    layout?: Layout;
   }
 }
 
 declare module '@mui/material/Typography' {
   interface TypographyPropsVariantOverrides {
     metric: true;
+    wordmark: true;
   }
 }
 

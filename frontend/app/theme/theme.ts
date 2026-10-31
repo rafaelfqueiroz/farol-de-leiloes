@@ -108,6 +108,12 @@ const typography: TypographyVariantsOptions = {
   button: { ...variant(typeScale.button), textTransform: 'none' },
   // DS-12: headline figures line up
   metric: { ...variant(typeScale.metric), fontVariantNumeric: 'tabular-nums' },
+  // the logo lockup's name: h3 size, bold, with the tighter h2 tracking
+  wordmark: {
+    ...variant(typeScale.h3),
+    fontWeight: 700,
+    letterSpacing: typeScale.h2.letterSpacing,
+  },
 };
 
 // Shadows are scheme-dependent (DESIGN.md §2), so the MUI shadow scale points at custom
@@ -134,6 +140,7 @@ export const theme = createTheme({
   shape: { borderRadius: radius.control, panelRadius: radius.panel, pillRadius: radius.pill },
   typography,
   shadows,
+  layout: { containerWidth: size.container, readingWidth: size.reading },
   // DS-18: product-wide restyling happens here, once
   components: {
     MuiCssBaseline: {

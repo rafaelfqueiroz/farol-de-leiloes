@@ -59,8 +59,7 @@ export default function RegisterPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        bgcolor: 'primary.main',
-        color: 'primary.contrastText',
+        bgcolor: 'background.default',
         padding: 2,
       }}
     >

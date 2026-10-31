@@ -69,7 +69,14 @@ export default function TopBar() {
     >
       <Toolbar sx={{ justifyContent: 'space-between' }}>
         {/* App Title */}
-        <Logo variant="lockup" size={32} />
+        {/* DS-13: the 230px lockup would push the avatar off a 360px screen, so below md only the
+            mark shows. display:none keeps exactly one accessible name exposed at a time. */}
+        <Box sx={{ display: { xs: 'flex', md: 'none' } }}>
+          <Logo variant="mark" size={32} />
+        </Box>
+        <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
+          <Logo variant="lockup" size={32} />
+        </Box>
 
         {/* User Profile */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -80,7 +87,7 @@ export default function TopBar() {
                 color={getPlanColor()}
                 size="small"
                 variant="outlined"
-                sx={{ fontWeight: 600, fontSize: 11 }}
+                sx={{ fontWeight: 600, fontSize: 11, display: { xs: 'none', sm: 'inline-flex' } }}
               />
               <IconButton
                 onClick={handleClick}

@@ -230,6 +230,7 @@ export default function LandingPage() {
                 <Chip
                   icon={<GavelIcon />}
                   label="Leilões da Caixa Econômica Federal"
+                  variant="outlined"
                   sx={{
                     mb: 2,
                     '& .MuiChip-icon': { color: 'text.secondary' },

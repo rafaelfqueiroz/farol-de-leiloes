@@ -175,7 +175,7 @@ export default function AdminCouponsPage() {
                 </Button>
               </Box>
 
-              <TableContainer component={Paper}>
+              <TableContainer component={Paper} variant="outlined">
                 <Table>
                   <TableHead>
                     <TableRow>
