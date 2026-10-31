@@ -156,7 +156,7 @@ The family is Inter and the variant scale is in §5.
 | Token | Value | Use |
 |---|---|---|
 | `size-touch` | 44px | Minimum width and height of every interactive control (DS-16). |
-| `size-button` | 44px | Button height (medium). Small buttons are 36px only inside dense tables on desktop. |
+| `size-button` | 44px | Button height (medium). Small buttons are 36px only inside dense tables and toolbars from `md` up (DS-16 exception). |
 | `size-input` | 48px | TextField, Select and DateField height. |
 | `size-table-row` | 44px | Dense table row height (compact tables, comfortable elsewhere). |
 | `size-topbar` | 64px | Top bar height from `md` (56px below `md`). |
@@ -223,7 +223,7 @@ Weights: 400 text · 500 emphasis and labels · 600 headings, buttons and figure
 
 **DS-15 — One `<h1>` per page, via `PageHeader`.** Heading levels follow the outline; a visual size never picks a heading level.
 
-**DS-16 — Touch targets are at least 44 × 44 px** on interactive controls, including icon buttons in cards.
+**DS-16 — Touch targets are at least 44 × 44 px** on interactive controls, including icon buttons in cards. The one exception is the 36 px `small` button inside dense tables and toolbars from `md` up (pointer layouts); below `md` the same control renders at 44 px.
 
 ### Navigation — sidebar + drawer
 
