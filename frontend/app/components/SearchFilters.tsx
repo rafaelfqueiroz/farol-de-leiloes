@@ -33,7 +33,6 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
-import { colors } from '../theme';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
@@ -408,11 +407,11 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               p: 3,
               borderRadius: 2,
               textAlign: 'center',
-              backgroundColor: colors.lightGray,
+              backgroundColor: 'background.muted',
             }}
           >
             <LockIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7}} />
-            <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: '#091413' }}>
+            <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: 'text.primary' }}>
               Recurso disponivel no plano Premium
             </Typography>
             <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
@@ -439,7 +438,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
             top: '50%',
             transform: 'translateY(-50%)',
             backgroundColor: 'primary.main',
-            color: 'white',
+            color: 'primary.contrastText',
             borderRadius: '8px 0 0 8px',
             '&:hover': {
               backgroundColor: 'primary.dark',
@@ -467,20 +466,20 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
             boxSizing: 'border-box',
             mt: '65px', // TopBar height
             height: 'calc(100vh - 65px)',
-            borderLeft: `1px solid ${colors.red}`,
-            backgroundColor: '#FFFFFF',
+            borderLeft: 1,
+            borderColor: 'divider',
+            backgroundColor: 'background.paper',
           },
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {/* Header */}
-          <Box sx={{ p: 2, borderBottom: 1, borderColor: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h6" fontWeight={600}>
               Filtros de Busca
             </Typography>
             <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{
-            color: colors.red,
-            '&:hover': { backgroundColor: colors.lightRed },
+            color: 'text.secondary',
           }}>
               <ChevronRightIcon />
             </IconButton>
@@ -520,7 +519,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                           onClick={(e) => handleDeleteSavedFilter(e, filter._id)}
                           sx={{ ml: 1, p: 0.5 }}
                         >
-                          <DeleteIcon fontSize="small" color="error" />
+                          <DeleteIcon fontSize="small" sx={{ color: 'destructive.main' }} />
                         </IconButton>
                       </Box>
                     </MenuItem>
@@ -538,7 +537,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                   {savedFilters.length >= 10 ? 'Limite de 10 filtros atingido' : 'Salvar Filtros Atuais'}
                 </Button>
 
-                <Divider sx={{ my: 3, borderColor: colors.red }} />
+                <Divider sx={{ my: 3 }} />
               </Box>
             )}
 
@@ -658,7 +657,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               />
             </Box>
 
-            <Divider sx={{ my: 3, borderColor: colors.red }} />
+            <Divider sx={{ my: 3 }} />
 
             {/* Modality Section */}
             <Box sx={{ mb: 3 }}>
@@ -688,7 +687,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               </Box>
             </Box>
 
-            <Divider sx={{ my: 3, borderColor: colors.red }} />
+            <Divider sx={{ my: 3 }} />
 
             {/* Price Range Section */}
             <Box sx={{ mb: 3 }}>
@@ -728,8 +727,8 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
           <Box sx={{
             p: 2,
             borderTop: 1,
-            borderColor: '#FFFFFF',
-            backgroundColor: '#FFFFFF',
+            borderColor: 'divider',
+            backgroundColor: 'background.paper',
             display: 'flex',
             flexDirection: 'column',
             gap: 1,

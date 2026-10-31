@@ -17,7 +17,6 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SendIcon from '@mui/icons-material/Send';
-import { colors } from '../theme';
 
 const faqItems = [
   {
@@ -119,7 +118,7 @@ export default function SupportPage() {
       {/* FAQ Section */}
       <Box sx={{ mb: 5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <HelpOutlineIcon sx={{ color: colors.red }} />
+          <HelpOutlineIcon sx={{ color: 'primary.main' }} />
           <Typography variant="h6" fontWeight={600}>
             Perguntas frequentes
           </Typography>
@@ -160,7 +159,7 @@ export default function SupportPage() {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-          <SendIcon sx={{ color: colors.red }} />
+          <SendIcon sx={{ color: 'primary.main' }} />
           <Typography variant="h6" fontWeight={600}>
             Enviar solicitação
           </Typography>

@@ -1,0 +1,55 @@
+{
+  "patterns": {
+    "money": {
+      "missing": "Não informado"
+    },
+    "errorState": {
+      "retry": "Tentar novamente",
+      "code": "Código {code}"
+    },
+    "confirmDialog": {
+      "cancel": "Cancelar"
+    },
+    "logo": {
+      "name": "Farol dos Leilões"
+    },
+    "colorScheme": {
+      "label": "Tema",
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema"
+    },
+    "dateText": {
+      "relative": {
+        "joined": " · {relative}",
+        "now": "agora",
+        "today": "hoje",
+        "minutes": {
+          "future": "em {count, plural, one {# minuto} other {# minutos}}",
+          "past": "há {count, plural, one {# minuto} other {# minutos}}"
+        },
+        "hours": {
+          "future": "em {count, plural, one {# hora} other {# horas}}",
+          "past": "há {count, plural, one {# hora} other {# horas}}"
+        },
+        "days": {
+          "future": "em {count, plural, one {# dia} other {# dias}}",
+          "past": "há {count, plural, one {# dia} other {# dias}}"
+        }
+      }
+    },
+    "statusBadge": {
+      "onTime": "No prazo",
+      "late": "Atrasada",
+      "done": "Concluída",
+      "cancelled": "Cancelada",
+      "neutral": "Não iniciada"
+    },
+    "figureDelta": {
+      "upPositive": "Aumento favorável",
+      "upNegative": "Aumento desfavorável",
+      "downPositive": "Redução favorável",
+      "downNegative": "Redução desfavorável"
+    }
+  }
+}

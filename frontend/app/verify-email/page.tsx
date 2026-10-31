@@ -59,7 +59,6 @@ export default function VerifyEmailPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FFFFFF',
         }}
       >
         <CircularProgress />
@@ -78,7 +77,6 @@ export default function VerifyEmailPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FFFFFF',
         padding: 2,
       }}
     >

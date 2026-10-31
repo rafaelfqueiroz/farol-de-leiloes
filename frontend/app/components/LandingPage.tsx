@@ -6,6 +6,7 @@ import {
   Container,
   Typography,
   Button,
+  ButtonBase,
   Card,
   CardContent,
   Grid,
@@ -29,7 +30,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import StarIcon from '@mui/icons-material/Star';
 import LoginIcon from '@mui/icons-material/Login';
-import { colors } from '../theme';
+import Logo from '@/app/components/patterns/Logo';
 
 const FEATURES = [
   {
@@ -142,29 +143,39 @@ export default function LandingPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: colors.white }}>
-      {/* Header */}
+    <Box sx={{ minHeight: '100vh' }}>
+      {/* Header: same surface as the app TopBar. MUI's AppBar repaints a coloured bar with its dark
+          background in dark mode, which left primary.contrastText unreadable on it, so the bar is
+          background.paper with text.primary links, legible in both schemes (DS-05, DS-24). */}
       <AppBar
         position="fixed"
         elevation={0}
         sx={{
-          backgroundColor: colors.maroon,
-          borderBottom: '1px solid rgba(255,255,255,0.1)',
+          backgroundColor: 'background.paper',
+          color: 'text.primary',
+          borderBottom: 1,
+          borderColor: 'divider',
         }}
       >
-        <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <GavelIcon sx={{ color: 'white' }} />
-            <Typography variant="h6" fontWeight={600} sx={{ color: 'white' }}>
-              Farol dos Leilões
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Toolbar sx={{ justifyContent: 'space-between', gap: 1 }}>
+          {/* DS-13: the lockup plus both links overflow a 360px screen, so below sm only the mark
+              shows. display:none keeps exactly one accessible name exposed at a time. */}
+          <ButtonBase
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            sx={{ minWidth: 44, minHeight: 44, borderRadius: 1 }}
+          >
+            <Box sx={{ display: { xs: 'flex', sm: 'none' } }}>
+              <Logo variant="mark" size={32} />
+            </Box>
+            <Box sx={{ display: { xs: 'none', sm: 'flex' } }}>
+              <Logo variant="lockup" size={28} />
+            </Box>
+          </ButtonBase>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
             <Button
+              color="inherit"
               onClick={scrollToPlanos}
               sx={{
-                color: 'white',
-                fontWeight: 500,
                 position: 'relative',
                 '&::after': {
                   content: '""',
@@ -172,8 +183,8 @@ export default function LandingPage() {
                   bottom: 6,
                   left: 8,
                   right: 8,
-                  height: '1.5px',
-                  backgroundColor: 'white',
+                  height: (theme) => theme.spacing(0.25),
+                  backgroundColor: 'currentColor',
                   transform: 'scaleX(0)',
                   transformOrigin: 'left',
                   transition: 'transform 0.3s ease',
@@ -188,22 +199,7 @@ export default function LandingPage() {
             >
               Planos
             </Button>
-            <Button
-              variant="contained"
-              startIcon={<LoginIcon />}
-              onClick={handleLogin}
-              sx={{
-                backgroundColor: colors.white,
-                color: '#091413',
-                fontWeight: 600,
-                border: '1px solid transparent',
-                '&:hover': {
-                  backgroundColor: 'transparent',
-                  color: colors.white,
-                  border: `1px solid ${colors.white}`
-                },
-              }}
-            >
+            <Button variant="contained" startIcon={<LoginIcon />} onClick={handleLogin}>
               Entrar
             </Button>
           </Box>
@@ -213,8 +209,8 @@ export default function LandingPage() {
       {/* Hero Section */}
       <Box
         sx={{
-          backgroundColor: colors.beige,
-          color: 'white',
+          backgroundColor: 'primary.soft',
+          color: 'text.primary',
           pt: { xs: 12, md: 16 },
           pb: { xs: 8, md: 12 },
           position: 'relative',
@@ -226,13 +222,12 @@ export default function LandingPage() {
             <Grid size={{ xs: 12, md: 7 }}>
               <Box sx={{ mb: 4 }}>
                 <Chip
-                  icon={<GavelIcon sx={{ color: 'white !important' }} />}
+                  icon={<GavelIcon />}
                   label="Leilões da Caixa Econômica Federal"
+                  variant="outlined"
                   sx={{
-                    //backgroundColor: 'rgba(255,255,255,0.2)',
-                    //color: 'white',
                     mb: 2,
-                    '& .MuiChip-icon': { color: 'white' },
+                    '& .MuiChip-icon': { color: 'text.secondary' },
                   }}
                 />
                 <Typography
@@ -245,7 +240,8 @@ export default function LandingPage() {
                   }}
                 >
                   Encontre o imóvel dos seus sonhos com até{' '}
-                  <Box component="span" sx={{ color: colors.red70 }}>
+                  {/* DS-24: a favourable figure, not the brand colour; the words carry the meaning (DS-10) */}
+                  <Box component="span" sx={{ color: 'figure.positive' }}>
                     70% de desconto
                   </Box>
                 </Typography>
@@ -266,15 +262,10 @@ export default function LandingPage() {
                   size="large"
                   onClick={handleLogin}
                   sx={{
-                    //backgroundColor: colors.red,
-                    //color: colors.white,
                     px: 4,
                     py: 1.5,
                     fontSize: '1rem',
                     fontWeight: 600,
-                    //'&:hover': {
-                    //  backgroundColor: colors.lightRed,
-                    //},
                   }}
                 >
                   Comece Agora
@@ -313,13 +304,13 @@ export default function LandingPage() {
                     width: 300,
                     height: 300,
                     borderRadius: '50%',
-                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    backgroundColor: 'background.paper',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <HomeWorkIcon sx={{ fontSize: 150, color: colors.white }} />
+                  <HomeWorkIcon sx={{ fontSize: 150, color: 'primary.main' }} />
                 </Box>
               </Box>
             </Grid>
@@ -330,7 +321,7 @@ export default function LandingPage() {
       {/* Features Section */}
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
-          <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: '#091413' }}>
+          <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: 'text.primary' }}>
             Por que usar o Farol dos Leilões?
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
@@ -347,7 +338,7 @@ export default function LandingPage() {
                   transition: 'transform 0.2s, box-shadow 0.2s',
                   '&:hover': {
                     transform: 'translateY(-4px)',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                    boxShadow: 4,
                   },
                 }}
               >
@@ -357,8 +348,8 @@ export default function LandingPage() {
                       width: 64,
                       height: 64,
                       borderRadius: 2,
-                      backgroundColor: colors.red,
-                      color: 'white',
+                      backgroundColor: 'primary.main',
+                      color: 'primary.contrastText',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -367,7 +358,7 @@ export default function LandingPage() {
                   >
                     {feature.icon}
                   </Box>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1, color: '#091413' }}>
+                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1, color: 'text.primary' }}>
                     {feature.title}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -377,8 +368,8 @@ export default function LandingPage() {
                     label={feature.highlight}
                     size="small"
                     sx={{
-                      backgroundColor: '#EED9B9',
-                      color: '#091413',
+                      backgroundColor: 'background.muted',
+                      color: 'text.primary',
                       fontWeight: 500,
                     }}
                   />
@@ -390,10 +381,10 @@ export default function LandingPage() {
       </Container>
 
       {/* How It Works Section */}
-      <Box sx={{ backgroundColor: '#EED9B9', py: 8 }}>
+      <Box sx={{ backgroundColor: 'primary.soft', py: 8 }}>
         <Container maxWidth="lg">
           <Box sx={{ textAlign: 'center', mb: 6 }}>
-            <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: '#091413' }}>
+            <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: 'text.primary' }}>
               Como funciona?
             </Typography>
             <Typography variant="h6" color="text.secondary">
@@ -415,8 +406,8 @@ export default function LandingPage() {
                       width: 60,
                       height: 60,
                       borderRadius: '50%',
-                      backgroundColor: colors.red,
-                      color: 'white',
+                      backgroundColor: 'primary.main',
+                      color: 'primary.contrastText',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -428,7 +419,7 @@ export default function LandingPage() {
                   >
                     {item.step}
                   </Box>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1, color: '#091413' }}>
+                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1, color: 'text.primary' }}>
                     {item.title}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -444,7 +435,7 @@ export default function LandingPage() {
       {/* Pricing Section */}
       <Container id="planos" maxWidth="lg" sx={{ py: 8, scrollMarginTop: '80px' }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
-          <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: '#091413' }}>
+          <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: 'text.primary' }}>
             Escolha seu Plano
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
@@ -459,7 +450,9 @@ export default function LandingPage() {
                 sx={{
                   height: '100%',
                   position: 'relative',
-                  border: plan.highlighted ? `2px solid ${colors.red}` : `1px solid ${colors.lightGray}`,
+                  // DESIGN.md §2: the featured plan is one of amber's rare highlights
+                  border: plan.highlighted ? 2 : 1,
+                  borderColor: plan.highlighted ? 'secondary.main' : 'divider',
                   transform: plan.highlighted ? 'scale(1.02)' : 'none',
                   opacity: plan.disabled ? 0.7 : 1,
                 }}
@@ -474,23 +467,24 @@ export default function LandingPage() {
                     }}
                   >
                     <Chip
-                      icon={<StarIcon sx={{ color: 'white !important', fontSize: 16 }} />}
+                      icon={<StarIcon sx={{ fontSize: 16 }} />}
                       label="Mais Popular"
                       sx={{
-                        backgroundColor: colors.red,
-                        color: 'white',
+                        backgroundColor: 'secondary.main',
+                        color: 'secondary.contrastText',
                         fontWeight: 600,
-                        '& .MuiChip-icon': { color: 'white' },
+                        '& .MuiChip-icon': { color: 'secondary.contrastText' },
                       }}
                     />
                   </Box>
                 )}
                 <CardContent sx={{ p: 4 }}>
-                  <Typography variant="h5" fontWeight={700} sx={{ mb: 1, color: '#091413' }}>
+                  <Typography variant="h5" fontWeight={700} sx={{ mb: 1, color: 'text.primary' }}>
                     {plan.name}
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'baseline', mb: 2 }}>
-                    <Typography variant="h3" fontWeight={700} sx={{ color: colors.red }}>
+                    {/* DS-24: a price is a figure, not a link */}
+                    <Typography variant="h3" fontWeight={700} sx={{ color: 'text.primary' }}>
                       {plan.price}
                     </Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ ml: 1 }}>
@@ -508,7 +502,7 @@ export default function LandingPage() {
                       <ListItem key={featureIndex} sx={{ px: 0 }}>
                         <ListItemIcon sx={{ minWidth: 32 }}>
                           {feature.included ? (
-                            <CheckCircleIcon sx={{ color: '#4CAF50', fontSize: 20 }} />
+                            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
                           ) : (
                             <CancelIcon sx={{ fontSize: 20 }} />
                           )}
@@ -532,15 +526,7 @@ export default function LandingPage() {
                     size="large"
                     disabled={plan.disabled}
                     onClick={handleLogin}
-                    sx={{
-                      mt: 3,
-                      backgroundColor: plan.highlighted ? colors.red : colors.white,
-                      borderColor: colors.red,
-                      color: plan.highlighted ? 'white' : colors.red,
-                      '&:hover': {
-                        backgroundColor: plan.highlighted ? colors.maroon : colors.white,
-                      },
-                    }}
+                    sx={{ mt: 3 }}
                   >
                     {plan.buttonText}
                   </Button>
@@ -553,38 +539,63 @@ export default function LandingPage() {
 
       {/* CTA Section */}
       <Box
-        sx={{
-          backgroundColor: colors.red80,
-          color: 'white',
+        sx={(theme) => ({
+          backgroundColor: 'primary.main',
+          color: 'primary.contrastText',
           py: 8,
-        }}
+          // Dark: the light-blue primary fill would be the loudest thing on the page,
+          // so the band sits on primary.soft with ink text (DS-01).
+          ...theme.applyStyles('dark', {
+            backgroundColor: 'primary.soft',
+            color: 'text.primary',
+          }),
+        })}
       >
         <Container maxWidth="md">
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="h3" fontWeight={700} sx={{ mb: 2 }}>
               Pronto para encontrar seu imóvel?
             </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+            <Typography
+              variant="h6"
+              sx={(theme) => ({
+                mb: 4,
+                opacity: 0.9,
+                ...theme.applyStyles('dark', { color: 'text.secondary', opacity: 1 }),
+              })}
+            >
               Crie sua conta gratuitamente e descubra oportunidades incríveis em todo o Brasil
             </Typography>
             <Button
               variant="contained"
               size="large"
               onClick={handleLogin}
-              sx={{
-                backgroundColor: colors.white,
-                color: '#091413',
+              sx={(theme) => ({
+                // inverse button on the brand band (light only)
+                backgroundColor: 'primary.contrastText',
+                color: 'primary.main',
                 px: 6,
                 py: 1.5,
                 fontSize: '1.1rem',
                 fontWeight: 600,
-                border: `1px solid transparent`,
+                border: 1,
+                borderColor: 'transparent',
                 '&:hover': {
                   backgroundColor: 'transparent',
-                  color: colors.white,
-                  border: `1px solid ${colors.white}`
+                  color: 'primary.contrastText',
+                  borderColor: 'primary.contrastText',
                 },
-              }}
+                // Dark: the standard contained primary Button (primary.main fill, contrastText label).
+                ...theme.applyStyles('dark', {
+                  backgroundColor: 'primary.main',
+                  color: 'primary.contrastText',
+                  '&:hover': {
+                    backgroundColor: 'primary.dark',
+                    color: 'primary.contrastText',
+                    borderColor: 'transparent',
+                  },
+                }),
+              })}
             >
               Criar Conta Grátis
             </Button>
@@ -592,17 +603,12 @@ export default function LandingPage() {
         </Container>
       </Box>
 
-      {/* Footer */}
-      <Box sx={{ backgroundColor: colors.maroon, color: colors.white, py: 4 }}>
+      {/* Footer: paper surface with a divider, matching the header in both schemes */}
+      <Box sx={{ backgroundColor: 'background.paper', color: 'text.primary', borderTop: 1, borderColor: 'divider', py: 4 }}>
         <Container maxWidth="lg">
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <GavelIcon />
-              <Typography variant="h6" fontWeight={600} sx={{color: colors.white}}>
-                Farol dos Leilões
-              </Typography>
-            </Box>
-            <Typography variant="body2" sx={{ opacity: 0.7, color: colors.white }}>
+            <Logo variant="lockup" size={28} />
+            <Typography variant="body2" color="text.secondary">
               © 2024 Farol dos Leilões. Todos os direitos reservados.
             </Typography>
           </Box>

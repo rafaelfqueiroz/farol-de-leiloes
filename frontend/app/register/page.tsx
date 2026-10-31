@@ -11,12 +11,10 @@ import {
   Typography,
   Alert,
   Link as MuiLink,
-  ThemeProvider,
 } from '@mui/material';
-import GavelIcon from '@mui/icons-material/Gavel';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
-import theme, { colors } from '../theme';
+import Logo from '@/app/components/patterns/Logo';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -55,116 +53,100 @@ export default function RegisterPage() {
   };
 
   return (
-    <ThemeProvider theme={theme}>
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: `linear-gradient(135deg, ${colors.maroon} 0%, ${colors.red} 100%)`,
-          padding: 2,
-        }}
-      >
-        <Card sx={{ maxWidth: 450, width: '100%' }}>
-          <CardContent sx={{ p: 4 }}>
-            <Box sx={{ textAlign: 'center', mb: 3 }}>
-              <Box
-                sx={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: '50%',
-                  backgroundColor: 'primary.main',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  mx: 'auto',
-                  mb: 2,
-                }}
-              >
-                <GavelIcon sx={{ color: 'white', fontSize: 28 }} />
-              </Box>
-              <Typography variant="h4" fontWeight={700} sx={{ mb: 0.5 }}>
-                Farol dos Leilões
-              </Typography>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: 'background.default',
+        padding: 2,
+      }}
+    >
+      <Card sx={{ maxWidth: 450, width: '100%' }}>
+        <CardContent sx={{ p: 4 }}>
+          <Box sx={{ textAlign: 'center', mb: 3 }}>
+            {/* the card is background.paper, so the mark's primary tower reads on it */}
+            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+              <Logo variant="lockup" size={40} />
+            </Box>
+            <Typography component="h1" variant="body1" color="text.secondary">
+              Crie sua conta
+            </Typography>
+          </Box>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {error}
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <TextField
+              fullWidth
+              label="Nome"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              sx={{ mb: 2 }}
+              autoComplete="name"
+            />
+
+            <TextField
+              fullWidth
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              sx={{ mb: 2 }}
+              autoComplete="email"
+            />
+
+            <TextField
+              fullWidth
+              label="Senha"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              sx={{ mb: 2 }}
+              autoComplete="new-password"
+              helperText="Mínimo de 6 caracteres"
+            />
+
+            <TextField
+              fullWidth
+              label="Confirmar Senha"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              sx={{ mb: 3 }}
+              autoComplete="new-password"
+            />
+
+            <Button
+              fullWidth
+              variant="contained"
+              type="submit"
+              disabled={loading}
+              sx={{ mb: 2, py: 1.5 }}
+            >
+              {loading ? 'Criando conta...' : 'Cadastrar'}
+            </Button>
+
+            <Box sx={{ textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary">
-                Crie sua conta
+                Já tem uma conta?{' '}
+                <MuiLink component={Link} href="/login" sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}>
+                  Entrar
+                </MuiLink>
               </Typography>
             </Box>
-
-            {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-            )}
-
-            <form onSubmit={handleSubmit}>
-              <TextField
-                fullWidth
-                label="Nome"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                sx={{ mb: 2 }}
-                autoComplete="name"
-              />
-
-              <TextField
-                fullWidth
-                label="Email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                sx={{ mb: 2 }}
-                autoComplete="email"
-              />
-
-              <TextField
-                fullWidth
-                label="Senha"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                sx={{ mb: 2 }}
-                autoComplete="new-password"
-                helperText="Mínimo de 6 caracteres"
-              />
-
-              <TextField
-                fullWidth
-                label="Confirmar Senha"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                sx={{ mb: 3 }}
-                autoComplete="new-password"
-              />
-
-              <Button
-                fullWidth
-                variant="contained"
-                type="submit"
-                disabled={loading}
-                sx={{ mb: 2, py: 1.5 }}
-              >
-                {loading ? 'Criando conta...' : 'Cadastrar'}
-              </Button>
-
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Já tem uma conta?{' '}
-                  <MuiLink component={Link} href="/login" sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}>
-                    Entrar
-                  </MuiLink>
-                </Typography>
-              </Box>
-            </form>
-          </CardContent>
-        </Card>
-      </Box>
-    </ThemeProvider>
+          </form>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }
