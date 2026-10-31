@@ -539,26 +539,39 @@ export default function LandingPage() {
 
       {/* CTA Section */}
       <Box
-        sx={{
+        sx={(theme) => ({
           backgroundColor: 'primary.main',
           color: 'primary.contrastText',
           py: 8,
-        }}
+          // Dark: the light-blue primary fill would be the loudest thing on the page,
+          // so the band sits on primary.soft with ink text (DS-01).
+          ...theme.applyStyles('dark', {
+            backgroundColor: 'primary.soft',
+            color: 'text.primary',
+          }),
+        })}
       >
         <Container maxWidth="md">
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="h3" fontWeight={700} sx={{ mb: 2 }}>
               Pronto para encontrar seu imóvel?
             </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+            <Typography
+              variant="h6"
+              sx={(theme) => ({
+                mb: 4,
+                opacity: 0.9,
+                ...theme.applyStyles('dark', { color: 'text.secondary', opacity: 1 }),
+              })}
+            >
               Crie sua conta gratuitamente e descubra oportunidades incríveis em todo o Brasil
             </Typography>
             <Button
               variant="contained"
               size="large"
               onClick={handleLogin}
-              sx={{
-                // inverse button on the brand band
+              sx={(theme) => ({
+                // inverse button on the brand band (light only)
                 backgroundColor: 'primary.contrastText',
                 color: 'primary.main',
                 px: 6,
@@ -572,7 +585,17 @@ export default function LandingPage() {
                   color: 'primary.contrastText',
                   borderColor: 'primary.contrastText',
                 },
-              }}
+                // Dark: the standard contained primary Button (primary.main fill, contrastText label).
+                ...theme.applyStyles('dark', {
+                  backgroundColor: 'primary.main',
+                  color: 'primary.contrastText',
+                  '&:hover': {
+                    backgroundColor: 'primary.dark',
+                    color: 'primary.contrastText',
+                    borderColor: 'transparent',
+                  },
+                }),
+              })}
             >
               Criar Conta Grátis
             </Button>
