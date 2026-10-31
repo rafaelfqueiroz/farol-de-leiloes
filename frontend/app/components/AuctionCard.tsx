@@ -5,7 +5,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ReminderButton from './ReminderButton';
-import { colors } from '../theme';
+import { colors } from '../legacyTheme';
 
 interface Phase {
   modality: string;

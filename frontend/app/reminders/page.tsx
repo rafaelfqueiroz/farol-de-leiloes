@@ -7,7 +7,7 @@ import TopBar from '../components/TopBar';
 import RequireRole from '../components/RequireRole';
 import { useSidebar } from '../contexts/SidebarContext';
 import RemindersPage from '../components/RemindersPage';
-import theme from '../theme';
+import theme from '../legacyTheme';
 
 function RemindersPageLoading() {
   return (

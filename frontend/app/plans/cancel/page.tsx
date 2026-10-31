@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { Box, Container, Typography, Button, ThemeProvider } from '@mui/material';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
-import theme from '../../theme';
+import theme from '../../legacyTheme';
 
 export default function PlansCancelPage() {
   const router = useRouter();

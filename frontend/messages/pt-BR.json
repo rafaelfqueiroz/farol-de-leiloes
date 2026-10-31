@@ -1,0 +1,23 @@
+{
+  "patterns": {
+    "money": {
+      "missing": "Não informado"
+    },
+    "errorState": {
+      "retry": "Tentar novamente",
+      "code": "Código {code}"
+    },
+    "confirmDialog": {
+      "cancel": "Cancelar"
+    },
+    "logo": {
+      "name": "Farol dos Leilões"
+    },
+    "colorScheme": {
+      "label": "Tema",
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema"
+    }
+  }
+}

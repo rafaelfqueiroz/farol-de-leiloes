@@ -48,7 +48,7 @@ The **old V2 maroon/beige palette** in `frontend/app/theme.ts` and the **Efetive
 
 ## 2. Tokens
 
-The vocabulary is MUI's palette, extended through module augmentation (`theme.d.ts`) so project tokens are type-checked:
+The vocabulary is MUI's palette, extended through module augmentation (`frontend/app/theme/theme-augmentation.d.ts`) so project tokens are type-checked:
 
 | Token | Means |
 |---|---|
@@ -65,7 +65,7 @@ The vocabulary is MUI's palette, extended through module augmentation (`theme.d.
 | `typography.*` variants | The only font sizes and weights in the product (DS-11) |
 | `spacing` | The 8 px base unit; every gap, margin and padding is a multiple via `theme.spacing` |
 
-**Module augmentation** (`theme.d.ts`) adds, beyond MUI's defaults: `status.*` (+ `*Surface`), `figure.*`, `destructive`, `background.raised` / `background.muted`, `primary.soft`, `secondary.soft` / `secondary.ink`, `*.soft` on `error`, `warning`, `info` and `success`, `border.control`, `shape.panelRadius` / `shape.pillRadius`, and the typography variant `metric`.
+**Module augmentation** (`theme-augmentation.d.ts`) adds, beyond MUI's defaults: `status.*` (+ `*Surface`), `figure.*`, `destructive`, `background.raised` / `background.muted`, `primary.soft`, `secondary.soft` / `secondary.ink`, `*.soft` on `error`, `warning`, `info` and `success`, `border.control`, `focus`, `overlay`, `shape.panelRadius` / `shape.pillRadius`, and the typography variant `metric`.
 
 **Contrast, measured at design time:** 82 text/surface pairs were computed. All are at least 4.5:1 (text) or 3:1 (`line-strong`, `primary`, focus) in both schemes; the minimum is 4.7:1 (`success` on `success-soft`, light). The structural test (DS-08) keeps it that way in code.
 

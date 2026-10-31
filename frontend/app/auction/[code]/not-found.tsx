@@ -13,7 +13,7 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import TopBar from '../../components/TopBar';
-import theme, { colors } from '../../theme';
+import theme, { colors } from '../../legacyTheme';
 
 export default function AuctionNotFound() {
   const router = useRouter();

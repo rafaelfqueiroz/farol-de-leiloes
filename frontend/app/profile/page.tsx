@@ -22,7 +22,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import RequireAuthentication from '../components/RequireAuthentication';
-import theme from '../theme';
+import theme from '../legacyTheme';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();

@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
-import { colors } from '../theme';
+import { colors } from '../legacyTheme';
 
 interface RequireVerificationProps {
   children: React.ReactNode;

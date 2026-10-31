@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Box, Container, Typography, Button, ThemeProvider } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { useAuth } from '../../contexts/AuthContext';
-import theme from '../../theme';
+import theme from '../../legacyTheme';
 
 export default function PlansSuccessPage() {
   const router = useRouter();

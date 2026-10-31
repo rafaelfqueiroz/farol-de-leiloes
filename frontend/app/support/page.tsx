@@ -7,7 +7,7 @@ import TopBar from '../components/TopBar';
 import RequireRole from '../components/RequireRole';
 import { useSidebar } from '../contexts/SidebarContext';
 import SupportPage from '../components/SupportPage';
-import theme from '../theme';
+import theme from '../legacyTheme';
 
 function SupportPageLoading() {
   return (

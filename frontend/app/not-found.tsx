@@ -15,7 +15,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import { useSidebar } from './contexts/SidebarContext';
-import theme, { colors } from './theme';
+import theme, { colors } from './legacyTheme';
 
 export default function NotFound() {
   const router = useRouter();

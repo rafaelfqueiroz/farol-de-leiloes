@@ -26,7 +26,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import { useAuth } from '../contexts/AuthContext';
 import { useSidebar } from '../contexts/SidebarContext';
 import { hasMinimumRole } from './RequireRole';
-import { colors } from '../theme';
+import { colors } from '../legacyTheme';
 
 interface SidebarProps {
   activeView?: string;

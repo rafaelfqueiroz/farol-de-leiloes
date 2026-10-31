@@ -17,7 +17,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SendIcon from '@mui/icons-material/Send';
-import { colors } from '../theme';
+import { colors } from '../legacyTheme';
 
 const faqItems = [
   {

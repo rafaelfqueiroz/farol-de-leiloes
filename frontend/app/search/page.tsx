@@ -20,7 +20,7 @@ import AuctionList from '../components/AuctionList';
 import FavoritesView from '../components/FavoritesView';
 import { FavoritesProvider } from '../contexts/FavoritesContext';
 import { SavedFiltersProvider } from '../contexts/SavedFiltersContext';
-import theme from '../theme';
+import theme from '../legacyTheme';
 
 interface SearchResult {
   total: number;

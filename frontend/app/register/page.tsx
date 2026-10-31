@@ -16,7 +16,7 @@ import {
 import GavelIcon from '@mui/icons-material/Gavel';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
-import theme, { colors } from '../theme';
+import theme, { colors } from '../legacyTheme';
 
 export default function RegisterPage() {
   const router = useRouter();

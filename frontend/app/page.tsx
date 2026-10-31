@@ -6,7 +6,7 @@ import { ThemeProvider, Box, CircularProgress } from '@mui/material';
 import LandingPage from './components/LandingPage';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { useAuth } from './contexts/AuthContext';
-import theme from './theme';
+import theme from './legacyTheme';
 
 export default function Home() {
   const router = useRouter();

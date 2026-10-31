@@ -31,7 +31,7 @@ import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import RequireAuthentication from '../components/RequireAuthentication';
 import { useAuth } from '../contexts/AuthContext';
-import theme, { colors } from '../theme';
+import theme, { colors } from '../legacyTheme';
 
 interface Plan {
   id: string;

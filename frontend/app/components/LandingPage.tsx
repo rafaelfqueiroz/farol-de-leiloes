@@ -29,7 +29,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import StarIcon from '@mui/icons-material/Star';
 import LoginIcon from '@mui/icons-material/Login';
-import { colors } from '../theme';
+import { colors } from '../legacyTheme';
 
 const FEATURES = [
   {

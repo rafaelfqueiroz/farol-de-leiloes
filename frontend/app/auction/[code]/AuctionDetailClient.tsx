@@ -36,7 +36,7 @@ import { useFavorites } from '../../contexts/FavoritesContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { hasMinimumRole } from '../../components/RequireRole';
 import TopBar from '../../components/TopBar';
-import theme, { colors } from '../../theme';
+import theme, { colors } from '../../legacyTheme';
 
 interface ExpenseRule {
   type: string;

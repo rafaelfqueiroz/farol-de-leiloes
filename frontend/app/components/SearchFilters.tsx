@@ -33,7 +33,7 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
-import { colors } from '../theme';
+import { colors } from '../legacyTheme';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
