@@ -29,6 +29,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import StarIcon from '@mui/icons-material/Star';
 import LoginIcon from '@mui/icons-material/Login';
+import Logo from '@/app/components/patterns/Logo';
 
 const FEATURES = [
   {
@@ -153,10 +154,10 @@ export default function LandingPage() {
       >
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <GavelIcon sx={{ color: 'primary.contrastText' }} />
-            <Typography variant="h6" fontWeight={600} sx={{ color: 'primary.contrastText' }}>
-              Farol dos Leilões
-            </Typography>
+            {/* paper chip: the mark's primary tower would vanish on the primary.dark bar */}
+            <Box sx={{ bgcolor: 'background.paper', color: 'text.primary', borderRadius: 2, px: 1.5, py: 0.5, display: 'inline-flex' }}>
+              <Logo variant="lockup" size={28} />
+            </Box>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Button
@@ -589,10 +590,9 @@ export default function LandingPage() {
         <Container maxWidth="lg">
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <GavelIcon />
-              <Typography variant="h6" fontWeight={600} sx={{ color: 'primary.contrastText' }}>
-                Farol dos Leilões
-              </Typography>
+              <Box sx={{ bgcolor: 'background.paper', color: 'text.primary', borderRadius: 2, px: 1.5, py: 0.5, display: 'inline-flex' }}>
+                <Logo variant="lockup" size={28} />
+              </Box>
             </Box>
             <Typography variant="body2" sx={{ opacity: 0.7, color: 'primary.contrastText' }}>
               © 2024 Farol dos Leilões. Todos os direitos reservados.

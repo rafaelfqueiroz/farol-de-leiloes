@@ -14,9 +14,9 @@ import {
   Divider,
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
-import GavelIcon from '@mui/icons-material/Gavel';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
+import Logo from '@/app/components/patterns/Logo';
 
 const API_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -58,25 +58,11 @@ export default function LoginPage() {
       <Card sx={{ maxWidth: 450, width: '100%' }}>
         <CardContent sx={{ p: 4 }}>
           <Box sx={{ textAlign: 'center', mb: 3 }}>
-            <Box
-              sx={{
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
-                backgroundColor: 'primary.main',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                mx: 'auto',
-                mb: 2,
-              }}
-            >
-              <GavelIcon sx={{ color: 'primary.contrastText', fontSize: 28 }} />
+            {/* the card is background.paper, so the mark's primary tower reads on it */}
+            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+              <Logo variant="lockup" size={40} />
             </Box>
-            <Typography variant="h4" fontWeight={700} sx={{ mb: 0.5 }}>
-              Farol dos Leilões
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography component="h1" variant="body1" color="text.secondary">
               Entre para acessar sua conta
             </Typography>
           </Box>

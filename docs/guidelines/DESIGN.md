@@ -26,7 +26,7 @@ The system is built **on MUI**. MUI supplies the primitives and their behaviour;
 | **Logo** | A geometric lighthouse — navy tower, roof and base, amber lantern and two beams, a band cut out in the ground colour — and the wordmark "Farol" (Inter 700) "dos Leilões" (Inter 500, `ink-muted`). First version, replaceable by swapping the three SVGs (`farol-mark.svg`, `farol-mark-inverse.svg`, `farol-app-icon.svg`) in `frontend/public/brand/` |
 | **Scheme** | Light leads: frames are designed in light and checked in dark. The app follows the system setting with a persisted user choice (DS-07) |
 
-The **old V2 maroon/beige palette** in `frontend/app/theme.ts` and the **Efetive pitch deck** are *not* sources of truth. The deck is a reference document only.
+The **old V2 maroon/beige palette** (replaced by the tokens in `frontend/app/theme/` in issue #38) and the **Efetive pitch deck** are *not* sources of truth. The deck is a reference document only.
 
 **The design-system artifact is the visual reference; this document is the rulebook.** If they disagree, DESIGN.md wins and both are updated in the same PR (DV-29). Changing the brand later means changing the theme, not the screens — that is the test of whether these rules are being followed.
 
@@ -341,17 +341,15 @@ The artifact's `SearchPageFrame` card is the example to follow.
 
 ## 12. Known gaps
 
-Brand values are decided; the theme code that carries them is the second PR of issue #38, which clears most rows below.
+The theme, tokens, shared patterns, formatters and logo from issue #38 are in place. What is still open, and who owns it:
 
-| Rule | Today |
-|---|---|
-| §2, Brand | Values decided here, but `theme.ts` still holds the V2 maroon/beige palette; `theme.v1.ts` is dead code |
-| §5 | Inter is loaded in `layout.tsx` while the theme uses the system font stack — two sources, neither wired to the other |
-| DS-04, DS-05, DS-07 | Light theme only, no `colorSchemes`, no CSS variables |
-| DS-07 | `ThemeProvider` repeated per page (about 15 files) |
-| DS-01 | Hardcoded hex values in components and pages (`#FFFFFF`, `#091413`, `#4CAF50`…) and colours in theme typography |
-| DS-17, §1 | No `frontend/app/components/patterns/` folder yet; no `AppShell`, `PageShell`, `Logo`… |
-| Logo | No logo files in `frontend/public` (`frontend/public/brand/` is created in the code PR) |
-| DS-20 | Strings are literals; next-intl not installed |
-| DS-23 | Tailwind v4 is installed with v3-style config and directives (likely inert) and no utility classes are actually used |
-| DS-26 | Date pickers on `dayjs`; `date-fns` not installed |
+| Rule | Today | Owner |
+|---|---|---|
+| DS-20 | Page strings are literals; only the `patterns` namespace is in the pt-BR catalogue | #39 |
+| DS-26 | Date pickers (`ReminderButton`, `RemindersPage`) still use `dayjs` | #34 |
+| DS-29 | Inline currency and date formatters (`Intl`, `toLocaleString`, `toFixed`) remain in about 8 files — `AuctionCard`, `AuctionDetailClient`, `auction/[code]/page`, `plans/page`, `admin/coupons/page`, `RemindersPage`, `ReminderButton`, `SearchFilters`, `AuctionList` — and are not yet replaced by `Money` / `DateText` | #39 / #34 |
+| DS-01, DS-11, DS-14, DS-15 | Numeric `fontSize` / `fontWeight` literals in 25 files; pages do not yet use `PageShell` / `PageHeader` | #43 |
+| §6 | `Sidebar` and `TopBar` are recoloured but the `AppShell` is not built (sidebar groups, rail, drawer); each page still mounts them itself | #42 |
+| TESTING §9 | No lint enforcement yet of hex/px and JSX string literals; `npm run check` is typecheck + test until lint and format land | #29 |
+| TS-24 | No frontend coverage gate | #32 |
+| Logo | First version: the SVGs in `frontend/public/brand/` are replaceable (see Brand) | — |

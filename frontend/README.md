@@ -57,6 +57,16 @@ npm run build
 npm start
 ```
 
+## Scripts
+
+| Script | What it does |
+|---|---|
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest (unit, component and structural tests) |
+| `npm run check` | `typecheck` + `test` — provisional until lint and format land (#29); run before pushing |
+| `npm run build` | Next.js production build |
+| `npm run lint` | `next lint` — currently broken, to be replaced by ESLint in #29 |
+
 ## Usage Examples
 
 Ask questions in natural Portuguese:
@@ -81,13 +91,16 @@ frontend/
 │   ├── api/
 │   │   └── chat/
 │   │       └── route.ts       # Chat API endpoint
+│   ├── components/patterns/   # Shared design-system patterns (Logo, PageShell, Money…)
 │   ├── theme/                 # MUI theme: tokens, light/dark schemes (DESIGN.md)
 │   ├── layout.tsx             # Root layout
-│   ├── page.tsx               # Main chat interface
-│   └── globals.css            # Global styles
+│   └── page.tsx               # Main chat interface
 ├── lib/
 │   ├── agent.ts               # LangChain agent logic
+│   ├── money.ts, dates.ts     # Money (decimal.js) and date (date-fns) helpers
 │   └── mcp-server.ts          # MCP server (optional standalone)
+├── messages/pt-BR.json        # next-intl catalogue (pt-BR)
+├── test/                      # Vitest setup and structural tests
 ├── .env.example               # Environment variables template
 ├── next.config.ts             # Next.js configuration
 ├── tsconfig.json              # TypeScript configuration

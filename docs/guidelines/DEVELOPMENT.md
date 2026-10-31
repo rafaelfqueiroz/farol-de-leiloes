@@ -92,7 +92,7 @@ Both packages expose the same script names:
 | `test:isolation` | Backend only — the isolation gate (TESTING §4) |
 | `test:e2e` | Frontend only — Playwright against the Compose stack |
 | `test:cov` | Tests with the coverage gate (TESTING §7) |
-| `check` | `typecheck` + `lint` + `format:check` + `test` — **run before pushing** |
+| `check` | `typecheck` + `lint` + `format:check` + `test` — **run before pushing**. Until #29 adds lint and format, the frontend `check` is `typecheck` + `test` only. |
 
 ### Rules for AI coding agents
 

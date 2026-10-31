@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import ColorSchemeControl from '@/app/theme/ColorSchemeControl';
+import Logo from '@/app/components/patterns/Logo';
 
 
 export default function TopBar() {
@@ -68,18 +69,7 @@ export default function TopBar() {
     >
       <Toolbar sx={{ justifyContent: 'space-between' }}>
         {/* App Title */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box
-            component="span"
-            sx={{
-              fontSize: 20,
-              fontWeight: 700,
-              color: 'text.primary',
-            }}
-          >
-            🏠 Farol dos leilões
-          </Box>
-        </Box>
+        <Logo variant="lockup" size={32} />
 
         {/* User Profile */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
