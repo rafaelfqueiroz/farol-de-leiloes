@@ -16,7 +16,7 @@ The rules live in [`docs/guidelines/`](docs/guidelines/README.md). Read the doc 
 | [DEVELOPMENT.md](docs/guidelines/DEVELOPMENT.md) | Always — conventions, agent rules, git/PR flow, CI, definition of done |
 | [TESTING.md](docs/guidelines/TESTING.md) | Writing or changing any behaviour (i.e. always) |
 | [SECURITY.md](docs/guidelines/SECURITY.md) | Auth, permissions, owned data, payments, uploads, AI, scraping, any personal data |
-| [DESIGN.md](docs/guidelines/DESIGN.md) | Any frontend change |
+| [DESIGN.md](docs/guidelines/DESIGN.md) | Any frontend change; a new or re-laid-out page needs an approved frame first (DS-30) |
 
 Technical decisions: [`docs/adr/`](docs/adr/README.md). Incidents: [`docs/runbooks/`](docs/runbooks/README.md).
 

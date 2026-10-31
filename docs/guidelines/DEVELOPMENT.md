@@ -114,6 +114,8 @@ PRD (wiki) ─► Spec (wiki, BR/AC/DL) ─► Issue + implementation plan (boar
    ─► board updated, AC ticked ─► (deploy, once enabled)
 ```
 
+An issue that adds a page or changes a page's layout also needs a **page frame approved by the product owner on the issue before the branch is cut** (DS-30); the PR links it.
+
 | Stage | Owner of the truth | What changes there |
 |---|---|---|
 | Product decision | PRD `D-nn`, `Questões-em-Aberto-e-Decisões` | A new decision or an answered question |
@@ -145,7 +147,7 @@ The PR template lives at [`.github/pull_request_template.md`](../../.github/pull
 - links the spec issue (`Closes #N` only when it completes the spec; otherwise `Part of #N`);
 - lists the BR/AC it implements and ticks the AC it satisfies;
 - says how it was verified;
-- includes screenshots in light and dark, desktop and 360 px, for UI changes;
+- includes screenshots in light and dark, desktop and 360 px, for UI changes, and links the approved frame for a new or changed page (DS-30);
 - updates the guidelines or `README`s it makes stale.
 
 ## 9. Documentation
@@ -224,6 +226,7 @@ A spec's issue is closed when:
 - [ ] No personal or client data in logs, errors or Sentry (SC-15)
 - [ ] User-facing text in pt-BR through next-intl, with Caixa vocabulary (DS-20)
 - [ ] Screens work at 360 px, in light and dark, by keyboard, and pass axe (DS-13, DS-21)
+- [ ] New or re-laid-out pages match their approved frame (DS-30)
 - [ ] Endpoints documented in OpenAPI (AR-33)
 - [ ] LGPD data inventory updated for any new personal data field (SC-25)
 - [ ] ADR written for any technical decision the specs did not cover

@@ -5,6 +5,7 @@
 Implements SPEC-NNN — rules BR-NNN-nn, BR-NNN-nn
 Spec page: https://github.com/rafaelfqueiroz/farol-de-leiloes/wiki/SPEC-NNN-...
 Part of #NN <!-- or "Closes #NN" when this PR completes the spec's issue -->
+Frame link (new or changed pages): <!-- approved page frame, DS-30; delete otherwise -->
 
 ## Acceptance criteria
 <!-- Copy the relevant checkboxes from the spec; tick what this PR satisfies. -->
