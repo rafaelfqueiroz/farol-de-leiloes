@@ -6,6 +6,7 @@ import {
   Container,
   Typography,
   Button,
+  ButtonBase,
   Card,
   CardContent,
   Grid,
@@ -143,28 +144,38 @@ export default function LandingPage() {
 
   return (
     <Box sx={{ minHeight: '100vh' }}>
-      {/* Header */}
+      {/* Header: same surface as the app TopBar. MUI's AppBar repaints a coloured bar with its dark
+          background in dark mode, which left primary.contrastText unreadable on it, so the bar is
+          background.paper with text.primary links, legible in both schemes (DS-05, DS-24). */}
       <AppBar
         position="fixed"
         elevation={0}
         sx={{
-          backgroundColor: 'primary.dark',
-          color: 'primary.contrastText',
+          backgroundColor: 'background.paper',
+          color: 'text.primary',
+          borderBottom: 1,
+          borderColor: 'divider',
         }}
       >
-        <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            {/* paper chip: the mark's primary tower would vanish on the primary.dark bar */}
-            <Box sx={{ bgcolor: 'background.paper', color: 'text.primary', borderRadius: 2, px: 1.5, py: 0.5, display: 'inline-flex' }}>
+        <Toolbar sx={{ justifyContent: 'space-between', gap: 1 }}>
+          {/* DS-13: the lockup plus both links overflow a 360px screen, so below sm only the mark
+              shows. display:none keeps exactly one accessible name exposed at a time. */}
+          <ButtonBase
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            sx={{ minWidth: 44, minHeight: 44, borderRadius: 1 }}
+          >
+            <Box sx={{ display: { xs: 'flex', sm: 'none' } }}>
+              <Logo variant="mark" size={32} />
+            </Box>
+            <Box sx={{ display: { xs: 'none', sm: 'flex' } }}>
               <Logo variant="lockup" size={28} />
             </Box>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          </ButtonBase>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
             <Button
+              color="inherit"
               onClick={scrollToPlanos}
               sx={{
-                color: 'primary.contrastText',
-                fontWeight: 500,
                 position: 'relative',
                 '&::after': {
                   content: '""',
@@ -172,7 +183,7 @@ export default function LandingPage() {
                   bottom: 6,
                   left: 8,
                   right: 8,
-                  height: '1.5px',
+                  height: (theme) => theme.spacing(0.25),
                   backgroundColor: 'currentColor',
                   transform: 'scaleX(0)',
                   transformOrigin: 'left',
@@ -188,24 +199,7 @@ export default function LandingPage() {
             >
               Planos
             </Button>
-            <Button
-              variant="contained"
-              startIcon={<LoginIcon />}
-              onClick={handleLogin}
-              sx={{
-                // inverse button on the brand band
-                backgroundColor: 'primary.contrastText',
-                color: 'primary.dark',
-                fontWeight: 600,
-                border: 1,
-                borderColor: 'transparent',
-                '&:hover': {
-                  backgroundColor: 'transparent',
-                  color: 'primary.contrastText',
-                  borderColor: 'primary.contrastText',
-                },
-              }}
-            >
+            <Button variant="contained" startIcon={<LoginIcon />} onClick={handleLogin}>
               Entrar
             </Button>
           </Box>
@@ -586,16 +580,12 @@ export default function LandingPage() {
         </Container>
       </Box>
 
-      {/* Footer */}
-      <Box sx={{ backgroundColor: 'primary.dark', color: 'primary.contrastText', py: 4 }}>
+      {/* Footer: paper surface with a divider, matching the header in both schemes */}
+      <Box sx={{ backgroundColor: 'background.paper', color: 'text.primary', borderTop: 1, borderColor: 'divider', py: 4 }}>
         <Container maxWidth="lg">
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ bgcolor: 'background.paper', color: 'text.primary', borderRadius: 2, px: 1.5, py: 0.5, display: 'inline-flex' }}>
-                <Logo variant="lockup" size={28} />
-              </Box>
-            </Box>
-            <Typography variant="body2" sx={{ opacity: 0.7, color: 'primary.contrastText' }}>
+            <Logo variant="lockup" size={28} />
+            <Typography variant="body2" color="text.secondary">
               © 2024 Farol dos Leilões. Todos os direitos reservados.
             </Typography>
           </Box>
