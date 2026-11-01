@@ -2,5 +2,8 @@
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 # GitHub honours this file automatically.
 
-# style: format backend and frontend with Prettier
-d943ac8b69b12f4dd172b8d3e91c9fe81ca71207
+# chore(tooling): ESLint, Prettier, husky pre-commit and pre-push hooks (#49)
+# The squash of #49 carries the Prettier reformat of both packages (branch commit d943ac8, which
+# does not exist on main). It also added the tool configs and hooks; lines git cannot pass on to
+# an earlier commit stay attributed to this one.
+3b179afe6d865e428a243c00a144003b57fadf68
