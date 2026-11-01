@@ -71,9 +71,8 @@ function getCountdownLabel(currentPhase?: Phase): { text: string; isToday: boole
     .filter((d) => d >= today)
     .sort((a, b) => a.getTime() - b.getTime());
 
-  if (futureDates.length === 0) return null;
-
   const nearest = futureDates[0];
+  if (!nearest) return null;
   const nearestDay = new Date(nearest.getFullYear(), nearest.getMonth(), nearest.getDate());
   const diffMs = nearestDay.getTime() - today.getTime();
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));

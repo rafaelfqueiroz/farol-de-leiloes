@@ -393,6 +393,8 @@ const PRICE_MARKS = [
 
 const DRAWER_WIDTH = 380;
 
+type PriceRange = [min: number, max: number];
+
 function formatCurrency(value: number): string {
   if (value >= 1000000) {
     return `R$ ${(value / 1000000).toFixed(1)}M`;
@@ -409,7 +411,7 @@ export default function SearchFilters({
   initialFilters = {},
 }: SearchFiltersProps) {
   const [filters, setFilters] = useState<AuctionFilters>(initialFilters);
-  const [priceRange, setPriceRange] = useState<number[]>([
+  const [priceRange, setPriceRange] = useState<PriceRange>([
     initialFilters.minMargin || 0,
     initialFilters.maxMargin || 2000000,
   ]);
@@ -523,7 +525,11 @@ export default function SearchFilters({
   };
 
   const handlePriceChange = (_: Event, newValue: number | number[]) => {
-    setPriceRange(newValue as number[]);
+    // a range Slider always reports [min, max]; a lone number is not a range and is ignored
+    if (!Array.isArray(newValue)) return;
+    const [min, max] = newValue;
+    if (min === undefined || max === undefined) return;
+    setPriceRange([min, max]);
   };
 
   // Get available cities based on selected state
