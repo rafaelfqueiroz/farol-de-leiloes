@@ -34,7 +34,7 @@ Technical decisions: [`docs/adr/`](docs/adr/README.md). Incidents: [`docs/runboo
 - **Never start the apps on the host** (`start:dev`, `dev`, `start`) — the developer runs them; E2E uses `npm run test:e2e` (DV-18).
 - Never read, print or edit `.env` files; never touch the developer's local database (DV-19).
 - Logging: NestJS `Logger` only, never `console.*` (AR-45).
-- Done means `npm run check` passes in every package touched and affected docs are updated in the same PR (DV-20, DV-29). Never bypass hooks with `--no-verify` (TS-30).
+- Done means `npm run check` passes in every package touched — the pre-push hook enforces it (DV-37) — and affected docs are updated in the same PR (DV-20, DV-29). Never bypass hooks with `--no-verify` (TS-30).
 - Out-of-scope findings become issues on the board, not silent PR growth (DV-23).
 
 ## Context Engineering (Main Agent Discipline)

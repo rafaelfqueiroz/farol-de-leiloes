@@ -30,7 +30,7 @@ One approved choice per concern. Adding a dependency that overlaps one of these 
 | Scraping | `puppeteer`, `cheerio` | — |
 | Tests | `jest`, `ts-jest`, `@testcontainers/mongodb`, `supertest` | `vitest`, `@testing-library/react`, `vitest-axe`, `@playwright/test`, `@axe-core/playwright` |
 | Lint / format | `eslint`, `typescript-eslint`, `prettier` | `eslint`, `eslint-config-next`, `prettier` |
-| Git hooks | `husky`, `lint-staged` (repository root) | |
+| Git hooks | `husky`, `lint-staged` (repository root, in a minimal `package.json` that holds only the hook tooling) | |
 
 **Not used:** `dayjs`, `moment` (replaced by date-fns), Tailwind (DS-23), `lodash` (native equivalents), `puppeteer-extra-plugin-stealth` and any other bot-detection evasion (SC-24), an HTTP client wrapper (native `fetch`), a second ORM.
 
@@ -80,7 +80,7 @@ cp frontend/.env.example frontend/.env.local
 (cd frontend && npm ci && npm run dev)         # web on :3001
 ```
 
-Both packages expose the same script names:
+Both packages expose the same script names (the backend has only `test` today; the rest arrive with #29):
 
 | Script | Does |
 |---|---|
@@ -92,7 +92,18 @@ Both packages expose the same script names:
 | `test:isolation` | Backend only — the isolation gate (TESTING §4) |
 | `test:e2e` | Frontend only — Playwright against the Compose stack |
 | `test:cov` | Tests with the coverage gate (TESTING §7) |
-| `check` | `typecheck` + `lint` + `format:check` + `test` — **run before pushing**. Until #29 adds lint and format, the frontend `check` is `typecheck` + `test` only. |
+| `check` | `typecheck` + `lint` + `format:check` + `test`. **The pre-push hook runs it** in every package the push changes (DV-37). Until #29 adds lint and format, the frontend `check` is `typecheck` + `test` only. |
+
+### Git hooks
+
+| Hook | Runs | Scope |
+|---|---|---|
+| `pre-commit` | lint-staged: `prettier --write`, `eslint --fix` | Staged files |
+| `pre-push` | `npm run check` | Each package the push changes (DV-37) |
+
+| | |
+|---|---|
+| **DV-37** | A **pre-push** hook runs `npm run check` in each package the push changes, measured against the branch's upstream (on a branch's first push, against its merge-base with `origin/main`). A change under `backend/` checks the backend; a change under `frontend/` checks the frontend; a change to shared root files (`.node-version`, `docker-compose.yml`, the hook tooling) checks both; a push that touches only `docs/` or `.github/` checks neither. Integration, isolation and E2E suites stay in CI: they need Docker and are too slow for every push. A failing hook blocks the push, and the failure is fixed, never bypassed (TS-30). |
 
 ### Rules for AI coding agents
 
@@ -101,7 +112,7 @@ Both packages expose the same script names:
 | **DV-17** | Agents may run the package scripts above on the host: `check`, `test`, `test:integration`, `test:isolation`, `test:cov`. Databases always come from containers (Testcontainers picks random ports, so they never collide with the developer's own). |
 | **DV-18** | Agents never start the applications on the host (`start:dev`, `dev`, `start`) — the developer runs them on the fixed ports. E2E runs through `test:e2e`, which brings up its own Compose stack. |
 | **DV-19** | Agents never read, print or edit `.env` / `.env.local`, and never point a test at the developer's local database. |
-| **DV-20** | An agent's work is not done until `npm run check` passes in every package it touched, and the docs it affects are updated in the same PR (§9). |
+| **DV-20** | An agent's work is not done until `npm run check` passes in every package it touched (the pre-push hook enforces this, DV-37), and the docs it affects are updated in the same PR (§9). |
 
 ## 7. Software development lifecycle
 
@@ -109,7 +120,9 @@ Product intent lives in the [wiki](https://github.com/rafaelfqueiroz/farol-de-le
 
 ```
 PRD (wiki) ─► Spec (wiki, BR/AC/DL) ─► Issue + implementation plan (board)
-   ─► branch ─► tests first for domain rules ─► code ─► npm run check
+   ─► branch ─► tests first for domain rules ─► code
+   ─► commit (pre-commit: format + lint staged files)
+   ─► push (pre-push: npm run check in each changed package, DV-37)
    ─► PR (template, rules cited) ─► CI gates ─► self-review ─► squash-merge
    ─► board updated, AC ticked ─► (deploy, once enabled)
 ```
@@ -139,7 +152,7 @@ An issue that adds a page or changes a page's layout also needs a **page frame a
 | **DV-24** | Branch names: `feat/spec-011-office-invites`, `fix/spec-004-bom-header`, `chore/…`, `docs/…`, `refactor/…`. Include the spec id when one applies. |
 | **DV-25** | [Conventional Commits](https://www.conventionalcommits.org/): `feat(journeys): block writes on read-only offices`. The squash-merge title follows the same format. |
 | **DV-26** | The commit/PR body names the rules implemented: `Implements SPEC-002 BR-002-30.` Breaking API, schema or config changes carry `BREAKING CHANGE:` in the footer. |
-| **DV-27** | Every change goes through a PR — self-reviewed when solo. `main` is protected: PR required, required status checks green, branch up to date, linear history, no force-push, no direct push. |
+| **DV-27** | Every change goes through a PR — self-reviewed when solo. `main` is protected: PR required, required status checks green, branch up to date, linear history, no force-push, no direct push. **Not in place yet** (#33): until then `main` is unprotected and the pre-push hook (DV-37) is the only automated gate. |
 | **DV-28** | Never commit `.env` files, real personal data, production exports, or anything copied from a user's account (SC-32). |
 
 The PR template lives at [`.github/pull_request_template.md`](../../.github/pull_request_template.md). A PR:
@@ -172,7 +185,9 @@ Spec Decision Logs record **product** decisions. ADRs record **technical** decis
 
 ## 12. CI/CD
 
-GitHub Actions. The repository is public, so minutes are not the constraint — the full suite runs on every PR and on `main`.
+GitHub Actions. The repository is public, so minutes are not the constraint — the full suite runs on every PR and on `main`. CI does not filter by path; only the pre-push hook (DV-37) skips unchanged packages.
+
+**Not set up yet:** the workflows below, CodeQL and branch protection arrive with #33.
 
 ### `ci.yml` — every PR and every push to `main`
 
