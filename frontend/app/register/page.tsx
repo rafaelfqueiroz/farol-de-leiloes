@@ -15,6 +15,7 @@ import {
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import Logo from '@/app/components/patterns/Logo';
+import { errorMessage } from '@/lib/error-message';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -45,8 +46,8 @@ export default function RegisterPage() {
     try {
       await register(email, password, name);
       router.push('/verify-email');
-    } catch (err: any) {
-      setError(err.message || 'Failed to register');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Failed to register');
     } finally {
       setLoading(false);
     }

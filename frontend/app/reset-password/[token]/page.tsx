@@ -12,6 +12,7 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
+import { errorMessage } from '@/lib/error-message';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -58,8 +59,8 @@ export default function ResetPasswordPage() {
       setTimeout(() => {
         router.push('/login');
       }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao redefinir senha');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao redefinir senha');
     } finally {
       setLoading(false);
     }

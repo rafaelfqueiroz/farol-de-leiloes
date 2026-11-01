@@ -6,6 +6,7 @@ import { Box, Card, CardContent, Typography, Alert, CircularProgress, Button } f
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import Link from 'next/link';
+import { errorMessage } from '@/lib/error-message';
 
 export default function VerifyEmailTokenPage() {
   const router = useRouter();
@@ -30,9 +31,9 @@ export default function VerifyEmailTokenPage() {
 
         setStatus('success');
         setTimeout(() => router.push('/login'), 3000);
-      } catch (err: any) {
+      } catch (err: unknown) {
         setStatus('error');
-        setError(err.message || 'Erro ao verificar email');
+        setError(errorMessage(err) || 'Erro ao verificar email');
       }
     };
 

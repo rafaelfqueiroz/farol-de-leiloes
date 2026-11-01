@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
 import { reportClientError } from '@/lib/report-client-error';
 
-interface Auction {
+export interface Auction {
   code: string;
   title: string;
   address: {

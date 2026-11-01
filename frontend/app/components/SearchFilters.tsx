@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type SyntheticEvent } from 'react';
 import {
   Box,
   Drawer,
@@ -33,11 +33,13 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
+import type { Auction } from './AuctionList';
 import { reportClientError } from '@/lib/report-client-error';
+import { errorMessage } from '@/lib/error-message';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
-  onAISearchResults?: (results: { total: number; items: any[] }) => void;
+  onAISearchResults?: (results: { total: number; items: Auction[] }) => void;
   isLoading?: boolean;
   initialFilters?: AuctionFilters;
 }
@@ -503,7 +505,7 @@ export default function SearchFilters({
     setPriceRange([0, 2000000]);
   };
 
-  const handleCityChange = (_: any, newValue: string[]) => {
+  const handleCityChange = (_: SyntheticEvent, newValue: string[]) => {
     setFilters({
       ...filters,
       city: newValue.length > 0 ? newValue : undefined,
@@ -512,7 +514,7 @@ export default function SearchFilters({
     });
   };
 
-  const handleNeighborhoodChange = (_: any, newValue: string[]) => {
+  const handleNeighborhoodChange = (_: SyntheticEvent, newValue: string[]) => {
     setFilters({
       ...filters,
       neighborhood: newValue.length > 0 ? newValue : undefined,
@@ -635,8 +637,8 @@ export default function SearchFilters({
       handleCloseSaveDialog();
       setSnackbarMessage('Filtro salvo com sucesso!');
       setSnackbarOpen(true);
-    } catch (error: any) {
-      setSaveError(error.message || 'Erro ao salvar filtro');
+    } catch (error: unknown) {
+      setSaveError(errorMessage(error) || 'Erro ao salvar filtro');
     } finally {
       setSavingFilter(false);
     }

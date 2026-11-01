@@ -20,6 +20,7 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import LockIcon from '@mui/icons-material/Lock';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 import { reportClientError } from '@/lib/report-client-error';
+import { errorMessage } from '@/lib/error-message';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();
@@ -111,8 +112,8 @@ export default function ProfilePage() {
       }
 
       setSuccess('Dados pessoais salvos com sucesso!');
-    } catch (err: any) {
-      setError(err.message || 'Erro ao salvar dados pessoais');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao salvar dados pessoais');
     } finally {
       setProfileLoading(false);
     }
@@ -141,8 +142,8 @@ export default function ProfilePage() {
       }
 
       setSuccess('Perfil atualizado com sucesso!');
-    } catch (err: any) {
-      setError(err.message || 'Erro ao atualizar perfil');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao atualizar perfil');
     } finally {
       setLoading(false);
     }
@@ -185,8 +186,8 @@ export default function ProfilePage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch (err: any) {
-      setError(err.message || 'Erro ao alterar senha');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao alterar senha');
     } finally {
       setLoading(false);
     }
@@ -229,8 +230,8 @@ export default function ProfilePage() {
       setNewPassword('');
       setConfirmPassword('');
       await loadUser();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao definir senha');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao definir senha');
     } finally {
       setLoading(false);
     }
