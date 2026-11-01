@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -18,10 +20,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(data, { status: response.status });
     }
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error fetching coupons:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/coupons GET' });
     return NextResponse.json(
-      { message: error.message || 'Failed to fetch coupons' },
+      { message: errorMessage(error) || 'Failed to fetch coupons' },
       { status: 500 },
     );
   }
@@ -49,10 +51,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: response.status });
     }
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error creating coupon:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/coupons POST' });
     return NextResponse.json(
-      { message: error.message || 'Failed to create coupon' },
+      { message: errorMessage(error) || 'Failed to create coupon' },
       { status: 500 },
     );
   }

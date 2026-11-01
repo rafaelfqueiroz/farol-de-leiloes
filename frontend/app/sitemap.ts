@@ -1,4 +1,5 @@
 import { MetadataRoute } from 'next';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://faroldosleiloes.com.br';
@@ -15,14 +16,14 @@ async function fetchAuctionCodes(): Promise<AuctionCode[]> {
     });
 
     if (!response.ok) {
-      console.error('Failed to fetch auction codes for sitemap');
+      reportClientError(new Error(`Backend returned ${response.status}`), { where: 'sitemap' });
       return [];
     }
 
     const data = await response.json();
     return data.codes || [];
   } catch (error) {
-    console.error('Error fetching auction codes for sitemap:', error);
+    reportClientError(error, { where: 'sitemap' });
     return [];
   }
 }

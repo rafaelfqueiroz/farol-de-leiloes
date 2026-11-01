@@ -19,6 +19,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import BadgeIcon from '@mui/icons-material/Badge';
 import LockIcon from '@mui/icons-material/Lock';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
+import { reportClientError } from '@/lib/report-client-error';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();
@@ -70,7 +71,7 @@ export default function ProfilePage() {
           setZipCode(data.address?.zipCode || '');
         }
       } catch (err) {
-        console.error('Error loading full profile:', err);
+        reportClientError(err, { where: 'profile page' });
       }
     };
     loadFullProfile();

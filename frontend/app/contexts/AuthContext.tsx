@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { reportClientError } from '@/lib/report-client-error';
 
 interface User {
   _id: string;
@@ -66,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('token');
       }
     } catch (error) {
-      console.error('Error loading user:', error);
+      reportClientError(error, { where: 'AuthContext.loadUser' });
       localStorage.removeItem('token');
     } finally {
       setLoading(false);
@@ -128,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (error) {
-      console.error('Error logging out:', error);
+      reportClientError(error, { where: 'AuthContext.logout' });
     } finally {
       localStorage.removeItem('token');
       setUser(null);

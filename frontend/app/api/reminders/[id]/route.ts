@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -32,10 +34,10 @@ export async function DELETE(
     }
 
     return new NextResponse(null, { status: 204 });
-  } catch (error: any) {
-    console.error('Error deleting reminder:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/reminders/[id] DELETE' });
     return NextResponse.json(
-      { error: error.message || 'Failed to delete reminder' },
+      { error: errorMessage(error) || 'Failed to delete reminder' },
       { status: 500 },
     );
   }
@@ -72,10 +74,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const data = await response.json();
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error updating reminder:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/reminders/[id] PATCH' });
     return NextResponse.json(
-      { error: error.message || 'Failed to update reminder' },
+      { error: errorMessage(error) || 'Failed to update reminder' },
       { status: 500 },
     );
   }

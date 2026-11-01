@@ -26,6 +26,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { reportClientError } from '@/lib/report-client-error';
 
 interface Coupon {
   _id: string;
@@ -71,7 +72,7 @@ export default function AdminCouponsPage() {
         setCoupons(data);
       }
     } catch (err) {
-      console.error('Error loading coupons:', err);
+      reportClientError(err, { where: 'admin/coupons page' });
     } finally {
       setLoading(false);
     }

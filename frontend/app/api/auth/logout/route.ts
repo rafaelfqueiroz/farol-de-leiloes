@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -19,8 +21,11 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ message: 'Logged out successfully' });
-  } catch (error: any) {
-    console.error('Error logging out:', error);
-    return NextResponse.json({ message: error.message || 'Failed to logout' }, { status: 500 });
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/auth/logout POST' });
+    return NextResponse.json(
+      { message: errorMessage(error) || 'Failed to logout' },
+      { status: 500 },
+    );
   }
 }

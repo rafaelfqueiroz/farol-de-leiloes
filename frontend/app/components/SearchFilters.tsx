@@ -33,6 +33,7 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
+import { reportClientError } from '@/lib/report-client-error';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
@@ -469,11 +470,16 @@ export default function SearchFilters({
           const data = await response.json();
           setAvailableNeighborhoods(data.neighborhoods || []);
         } else {
-          console.error('Failed to fetch neighborhoods');
+          reportClientError(
+            new Error(`Fetching neighborhoods failed with HTTP ${response.status}`),
+            {
+              where: 'SearchFilters.neighborhoods',
+            },
+          );
           setAvailableNeighborhoods([]);
         }
       } catch (error) {
-        console.error('Error fetching neighborhoods:', error);
+        reportClientError(error, { where: 'SearchFilters.neighborhoods' });
         setAvailableNeighborhoods([]);
       } finally {
         setLoadingNeighborhoods(false);
@@ -570,7 +576,7 @@ export default function SearchFilters({
       const results = await response.json();
       onAISearchResults(results);
     } catch (error) {
-      console.error('Erro na busca por IA:', error);
+      reportClientError(error, { where: 'SearchFilters.aiSearch' });
     } finally {
       setAiSearchLoading(false);
     }
