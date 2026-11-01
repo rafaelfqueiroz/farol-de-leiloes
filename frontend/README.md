@@ -20,7 +20,7 @@ AI-powered interface to search and query auctions from Caixa Econômica Federal 
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 24.22.2 (pinned in `.node-version`; DV-05)
 - OpenAI API key
 - Auctions API running on port 3000
 

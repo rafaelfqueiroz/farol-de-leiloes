@@ -6,7 +6,7 @@ Overview
 - Exposes REST endpoint to query by state, city, and modality.
 
 Requirements
-- Node.js >= 18
+- Node.js 24.22.2 (pinned in `.node-version`; DV-05)
 - MongoDB running locally or a connection string
 
 Setup
