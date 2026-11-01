@@ -7,9 +7,11 @@ import { SmsService } from '../notifications/sms.service';
 import { WhatsAppService } from '../notifications/whatsapp.service';
 import { JobExecutionService } from '../common/services/job-execution.service';
 import { RunMode } from '../common/schemas/job-execution.schema';
-import { ReminderChannel, ReminderDocument } from './schemas/reminder.schema';
+import { ReminderChannel } from './schemas/reminder.schema';
+import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface';
 import { ReminderEmailPayload } from './templates/reminder.template';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
+import { errorMessage } from '../common/error-message';
 
 @Injectable()
 export class RemindersScheduler implements OnModuleInit {
@@ -59,12 +61,12 @@ export class RemindersScheduler implements OnModuleInit {
       }
 
       await this.jobExecutionService.recordExecution(this.jobName, RunMode.AUTO);
-    } catch (error: any) {
-      this.logger.error(`Failed to process reminders: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Failed to process reminders: ${errorMessage(error)}`);
     }
   }
 
-  private async processReminder(reminder: ReminderDocument): Promise<void> {
+  private async processReminder(reminder: PopulatedReminder): Promise<void> {
     try {
       const user = await this.usersService.findByIdFull(reminder.userId.toString());
       if (!user) {
@@ -72,7 +74,7 @@ export class RemindersScheduler implements OnModuleInit {
         return;
       }
 
-      const auction = reminder.auction as any;
+      const auction = reminder.auction;
 
       let result: { success: boolean; errorMessage?: string };
       let recipient: string;
@@ -84,8 +86,13 @@ export class RemindersScheduler implements OnModuleInit {
           break;
 
         case ReminderChannel.SMS:
-          recipient = user.phone!;
-          result = await this.smsService.sendReminderSms(user.phone!, {
+          // The phone is checked when the reminder is saved but can be removed later (DV-03).
+          if (!user.phone) {
+            this.logger.error(`Error processing reminder ${reminder._id}: user has no phone`);
+            return;
+          }
+          recipient = user.phone;
+          result = await this.smsService.sendReminderSms(user.phone, {
             auctionTitle: auction?.title || auction?.code || '',
             auctionCode: auction?.code || '',
             auctionCity: auction?.address?.city ?? null,
@@ -95,8 +102,12 @@ export class RemindersScheduler implements OnModuleInit {
           break;
 
         case ReminderChannel.WHATSAPP:
-          recipient = user.phone!;
-          result = await this.whatsAppService.sendReminderWhatsApp(user.phone!, {
+          if (!user.phone) {
+            this.logger.error(`Error processing reminder ${reminder._id}: user has no phone`);
+            return;
+          }
+          recipient = user.phone;
+          result = await this.whatsAppService.sendReminderWhatsApp(user.phone, {
             userName: user.name,
             auctionTitle: auction?.title || auction?.code || '',
             auctionCode: auction?.code || '',
@@ -127,15 +138,15 @@ export class RemindersScheduler implements OnModuleInit {
       } else {
         this.logger.error(`Reminder ${reminder._id} failed: ${result.errorMessage}`);
       }
-    } catch (error: any) {
-      this.logger.error(`Error processing reminder ${reminder._id}: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Error processing reminder ${reminder._id}: ${errorMessage(error)}`);
     }
   }
 
   private async sendEmailReminder(
-    user: any,
-    auction: any,
-    reminder: ReminderDocument,
+    user: { name: string; email: string },
+    auction: ReminderAuction,
+    reminder: PopulatedReminder,
   ): Promise<{ success: boolean; errorMessage?: string }> {
     try {
       const payload: ReminderEmailPayload = {
@@ -150,8 +161,8 @@ export class RemindersScheduler implements OnModuleInit {
 
       await this.emailService.sendReminderEmail(user.email, payload);
       return { success: true };
-    } catch (error: any) {
-      return { success: false, errorMessage: error.message };
+    } catch (error) {
+      return { success: false, errorMessage: errorMessage(error) };
     }
   }
 }
