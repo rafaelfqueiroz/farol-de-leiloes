@@ -15,9 +15,8 @@
     "noImplicitAny": false,
     "skipLibCheck": true,
     "moduleResolution": "node",
-    "types": ["node","jest"],
+    "types": ["node", "jest"],
     "lib": ["es2021", "dom"]
   },
   "exclude": ["node_modules", "dist"]
 }
-

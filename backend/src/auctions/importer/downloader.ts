@@ -16,7 +16,7 @@ export async function downloadCsvAllStates(): Promise<string> {
     // The CSV is in Windows-1252/ISO-8859-1 encoding, so we convert it to UTF-8 using iconv
     const { stdout } = await execAsync(
       `curl -L "${url}" -H "User-Agent: Mozilla/5.0" --max-time 30 | iconv -f ISO-8859-1 -t UTF-8`,
-      { maxBuffer: 20 * 1024 * 1024, encoding: 'utf8' } // 20MB max
+      { maxBuffer: 20 * 1024 * 1024, encoding: 'utf8' }, // 20MB max
     );
     return stdout;
   } catch (error: any) {

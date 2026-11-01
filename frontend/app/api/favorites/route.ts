@@ -7,10 +7,7 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const url = `${BACKEND_URL}/api/favorites`;
@@ -19,7 +16,7 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
     });
 
@@ -34,23 +31,23 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching favorites:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to fetch favorites' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('[API Route] POST /api/favorites - All headers:', Object.fromEntries(request.headers.entries()));
+    console.log(
+      '[API Route] POST /api/favorites - All headers:',
+      Object.fromEntries(request.headers.entries()),
+    );
     const authHeader = request.headers.get('Authorization');
     console.log('[API Route] POST /api/favorites - Authorization header:', authHeader);
 
     if (!authHeader) {
       console.log('[API Route] POST /api/favorites - No Authorization header found, returning 401');
-      return NextResponse.json(
-        { error: 'Unauthorized - No token provided' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized - No token provided' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -62,7 +59,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
       body: JSON.stringify(body),
     });
@@ -74,7 +71,7 @@ export async function POST(request: NextRequest) {
       console.log('[API Route] Backend error:', errorData);
       return NextResponse.json(
         { error: errorData.message || `Backend error: ${response.statusText}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -86,7 +83,7 @@ export async function POST(request: NextRequest) {
     console.error('Error creating favorite:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to create favorite' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

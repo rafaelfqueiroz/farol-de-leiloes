@@ -4,13 +4,16 @@ import { axe, renderWithProviders } from '@/test/render';
 import Logo from './Logo';
 
 describe('Logo', () => {
-  it.each(['light', 'dark'] as const)('names the lockup once and passes axe (%s)', async (scheme) => {
-    const { container } = renderWithProviders(<Logo variant="lockup" />, { scheme });
+  it.each(['light', 'dark'] as const)(
+    'names the lockup once and passes axe (%s)',
+    async (scheme) => {
+      const { container } = renderWithProviders(<Logo variant="lockup" />, { scheme });
 
-    // the svg carries the name; the live wordmark is hidden so it is not announced twice
-    expect(screen.getAllByRole('img', { name: 'Farol dos Leilões' })).toHaveLength(1);
-    expect(await axe(container)).toHaveNoViolations();
-  });
+      // the svg carries the name; the live wordmark is hidden so it is not announced twice
+      expect(screen.getAllByRole('img', { name: 'Farol dos Leilões' })).toHaveLength(1);
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
 
   it('splits the wordmark into "Farol" and "dos Leilões"', () => {
     const { container } = renderWithProviders(<Logo variant="lockup" />);

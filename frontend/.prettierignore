@@ -1,0 +1,12 @@
+# Generated and installed
+node_modules/
+.next/
+out/
+build/
+coverage/
+package-lock.json
+*.tsbuildinfo
+next-env.d.ts
+
+# Machine-written by `eslint --suppress-all`
+eslint-suppressions.json

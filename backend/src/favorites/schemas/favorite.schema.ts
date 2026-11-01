@@ -7,7 +7,7 @@ export class FavoriteEntity extends Document {
     type: MongooseSchema.Types.ObjectId,
     ref: 'UserEntity',
     required: true,
-    index: true
+    index: true,
   })
   userId!: Types.ObjectId;
 
@@ -18,7 +18,7 @@ export class FavoriteEntity extends Document {
     type: MongooseSchema.Types.ObjectId,
     ref: 'AuctionEntity',
     required: true,
-    index: true
+    index: true,
   })
   auction!: Types.ObjectId;
 }

@@ -7,10 +7,7 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { message: 'No authorization header' },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: 'No authorization header' }, { status: 401 });
     }
 
     const url = `${BACKEND_URL}/api/auth/resend-verification`;
@@ -18,7 +15,7 @@ export async function POST(request: NextRequest) {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
     });
 
@@ -33,7 +30,7 @@ export async function POST(request: NextRequest) {
     console.error('Error resending verification email:', error);
     return NextResponse.json(
       { message: error.message || 'Failed to resend verification email' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

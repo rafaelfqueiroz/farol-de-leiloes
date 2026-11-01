@@ -18,14 +18,22 @@ describe('AuctionCleanupService.processAuction', () => {
   it('deletes the auction when every file deletion succeeds', async () => {
     const { service, auctionModel } = build(jest.fn().mockResolvedValue(true));
 
-    await expect(service.processAuction(auction)).resolves.toEqual({ removed: true, filesDeleted: 2 });
+    await expect(service.processAuction(auction)).resolves.toEqual({
+      removed: true,
+      filesDeleted: 2,
+    });
     expect(auctionModel.deleteOne).toHaveBeenCalledWith({ _id: 'id-1' });
   });
 
   it('keeps the auction when any file deletion fails', async () => {
-    const { service, auctionModel } = build(jest.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false));
+    const { service, auctionModel } = build(
+      jest.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false),
+    );
 
-    await expect(service.processAuction(auction)).resolves.toEqual({ removed: false, filesDeleted: 1 });
+    await expect(service.processAuction(auction)).resolves.toEqual({
+      removed: false,
+      filesDeleted: 1,
+    });
     expect(auctionModel.deleteOne).not.toHaveBeenCalled();
   });
 
@@ -33,7 +41,10 @@ describe('AuctionCleanupService.processAuction', () => {
     const deleteFile = jest.fn();
     const { service, auctionModel } = build(deleteFile, false);
 
-    await expect(service.processAuction(auction)).resolves.toEqual({ removed: false, filesDeleted: 0 });
+    await expect(service.processAuction(auction)).resolves.toEqual({
+      removed: false,
+      filesDeleted: 0,
+    });
     expect(deleteFile).not.toHaveBeenCalled();
     expect(auctionModel.deleteOne).not.toHaveBeenCalled();
   });
@@ -41,7 +52,10 @@ describe('AuctionCleanupService.processAuction', () => {
   it('deletes an auction without files', async () => {
     const { service, auctionModel } = build(jest.fn());
 
-    await expect(service.processAuction({ _id: 'id-2', code: 'A2' } as any)).resolves.toEqual({ removed: true, filesDeleted: 0 });
+    await expect(service.processAuction({ _id: 'id-2', code: 'A2' } as any)).resolves.toEqual({
+      removed: true,
+      filesDeleted: 0,
+    });
     expect(auctionModel.deleteOne).toHaveBeenCalled();
   });
 });

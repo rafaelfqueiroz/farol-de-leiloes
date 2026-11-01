@@ -37,13 +37,17 @@ export class AuctionDetailsScraper implements OnModuleInit {
       return;
     }
 
-    this.logger.log('Auction details scraper initialized. Scheduled to run daily at 6 AM BRT (9 AM UTC)');
+    this.logger.log(
+      'Auction details scraper initialized. Scheduled to run daily at 6 AM BRT (9 AM UTC)',
+    );
 
     if (onStartup) {
       this.logger.log('Running scraper on startup (SCRAPER_ON_START_UP=true)');
       setTimeout(() => this.runScraper(RunMode.MANUAL), 5000);
     } else {
-      this.logger.log('Skipping startup scraper (SCRAPER_ON_START_UP=false), will run on schedule only');
+      this.logger.log(
+        'Skipping startup scraper (SCRAPER_ON_START_UP=false), will run on schedule only',
+      );
     }
   }
 
@@ -100,10 +104,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
       const auctionsToScrape = await this.auctionModel
         .find({
           detailsUrl: { $exists: true, $ne: null },
-          $or: [
-            { fulfilled: { $exists: false } },
-            { fulfilled: false }
-          ]
+          $or: [{ fulfilled: { $exists: false } }, { fulfilled: false }],
         })
         .lean();
 
@@ -121,13 +122,15 @@ export class AuctionDetailsScraper implements OnModuleInit {
       for (let i = 0; i < auctionsToScrape.length; i += this.batchSize) {
         const batch = auctionsToScrape.slice(i, i + this.batchSize);
 
-        this.logger.log(`Processing batch ${Math.floor(i / this.batchSize) + 1}/${Math.ceil(auctionsToScrape.length / this.batchSize)}`);
+        this.logger.log(
+          `Processing batch ${Math.floor(i / this.batchSize) + 1}/${Math.ceil(auctionsToScrape.length / this.batchSize)}`,
+        );
 
         // Process concurrent groups within the batch
         for (let j = 0; j < batch.length; j += this.concurrency) {
           const group = batch.slice(j, j + this.concurrency);
           const results = await Promise.allSettled(
-            group.map(auction => this.processAuction(auction))
+            group.map((auction) => this.processAuction(auction)),
           );
 
           for (let k = 0; k < results.length; k++) {
@@ -137,7 +140,9 @@ export class AuctionDetailsScraper implements OnModuleInit {
             } else {
               errorCount++;
               const failedAuction = group[k];
-              this.logger.error(`Error scraping auction ${failedAuction.code}: ${result.reason?.message || result.reason}`);
+              this.logger.error(
+                `Error scraping auction ${failedAuction.code}: ${result.reason?.message || result.reason}`,
+              );
             }
           }
 
@@ -164,7 +169,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
     if (details.unavailable) {
       await this.auctionModel.updateOne(
         { code: auction.code },
-        { $set: { available: false, fulfilled: true, updatedAt: new Date() } }
+        { $set: { available: false, fulfilled: true, updatedAt: new Date() } },
       );
       this.logger.log(`Auction ${auction.code} marked as unavailable`);
       return true;
@@ -172,7 +177,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
 
     const updateData: Record<string, unknown> = {
       fulfilled: true,
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     if (details.description && !auction.description) {
@@ -187,7 +192,10 @@ export class AuctionDetailsScraper implements OnModuleInit {
           mimeType: 'image/jpeg',
         };
 
-        const imageResult = await this.storageService.uploadImageFromUrl(details.imageUrl, auction.code);
+        const imageResult = await this.storageService.uploadImageFromUrl(
+          details.imageUrl,
+          auction.code,
+        );
         if (imageResult) {
           imageFile.storageKey = imageResult.key;
           imageFile.publicUrl = imageResult.url;
@@ -201,7 +209,9 @@ export class AuctionDetailsScraper implements OnModuleInit {
 
       if (details.matriculaUrl && !auction.matricula?.publicUrl) {
         const result = await this.storageService.uploadDocumentFromUrl(
-          details.matriculaUrl, auction.code, 'matricula'
+          details.matriculaUrl,
+          auction.code,
+          'matricula',
         );
         if (result) {
           updateData.matricula = {
@@ -220,9 +230,10 @@ export class AuctionDetailsScraper implements OnModuleInit {
     if (details.phaseDetails && auction.phases && auction.phases.length > 0) {
       const lastPhaseIndex = auction.phases.length - 1;
       const lastPhase = auction.phases[lastPhaseIndex];
-      const hasPhaseDetails = (lastPhase.paymentMethods?.length ?? 0) > 0
-        || (lastPhase.expenseRules?.length ?? 0) > 0
-        || (lastPhase.phaseDates?.length ?? 0) > 0;
+      const hasPhaseDetails =
+        (lastPhase.paymentMethods?.length ?? 0) > 0 ||
+        (lastPhase.expenseRules?.length ?? 0) > 0 ||
+        (lastPhase.phaseDates?.length ?? 0) > 0;
 
       if (!hasPhaseDetails) {
         const updatedPhases: Phase[] = [...auction.phases];
@@ -235,14 +246,13 @@ export class AuctionDetailsScraper implements OnModuleInit {
         updatedPhases[lastPhaseIndex] = updatedLastPhase;
         updateData.phases = updatedPhases;
         updateData.currentPhase = updatedLastPhase;
-        this.logger.debug(`Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules, ${details.phaseDetails.phaseDates?.length || 0} phase dates`);
+        this.logger.debug(
+          `Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules, ${details.phaseDetails.phaseDates?.length || 0} phase dates`,
+        );
       }
     }
 
-    await this.auctionModel.updateOne(
-      { code: auction.code },
-      { $set: updateData }
-    );
+    await this.auctionModel.updateOne({ code: auction.code }, { $set: updateData });
     this.logger.log(`Auction ${auction.code} scraped successfully`);
     return true;
   }
@@ -251,6 +261,6 @@ export class AuctionDetailsScraper implements OnModuleInit {
    * Helper method to add delay between requests
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

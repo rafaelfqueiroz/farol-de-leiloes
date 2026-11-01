@@ -25,9 +25,9 @@ import schedulerConfig from './config/scheduler.config';
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
         return {
-          uri: configService.get("MONGODB_URI"),
+          uri: configService.get('MONGODB_URI'),
           retryAttempts: 3,
-        }
+        };
       },
     }),
     ScheduleModule.forRoot(),
@@ -44,4 +44,3 @@ import schedulerConfig from './config/scheduler.config';
   ],
 })
 export class AppModule {}
-

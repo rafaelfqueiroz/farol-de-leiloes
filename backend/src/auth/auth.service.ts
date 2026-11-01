@@ -31,11 +31,7 @@ export class AuthService {
     const verificationToken = await this.usersService.setEmailVerificationToken(
       user._id.toString(),
     );
-    await this.emailService.sendVerificationEmail(
-      user.email,
-      verificationToken,
-      user.name,
-    );
+    await this.emailService.sendVerificationEmail(user.email, verificationToken, user.name);
 
     const accessToken = this.generateToken(user);
     return {
@@ -45,10 +41,7 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto): Promise<AuthResult> {
-    const user = await this.usersService.validatePassword(
-      loginDto.email,
-      loginDto.password,
-    );
+    const user = await this.usersService.validatePassword(loginDto.email, loginDto.password);
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -84,7 +77,10 @@ export class AuthService {
     await this.usersService.resetPassword(token, newPassword);
   }
 
-  async updateProfile(userId: string, updateData: { name?: string; email?: string }): Promise<UserProfile> {
+  async updateProfile(
+    userId: string,
+    updateData: { name?: string; email?: string },
+  ): Promise<UserProfile> {
     const user = await this.usersService.update(userId, updateData);
     return this.toUserProfile(user);
   }
@@ -102,14 +98,20 @@ export class AuthService {
     return this.toUserProfile(user);
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
     if (!user.providers?.includes('local')) {
-      throw new UnauthorizedException('Cannot change password for OAuth-only accounts. Use "Set Password" instead.');
+      throw new UnauthorizedException(
+        'Cannot change password for OAuth-only accounts. Use "Set Password" instead.',
+      );
     }
 
     const validPassword = await this.usersService.validatePassword(user.email, currentPassword);
@@ -155,9 +157,7 @@ export class AuthService {
     }
 
     if (!user.providers?.includes('local')) {
-      throw new BadRequestException(
-        'OAuth users do not require email verification',
-      );
+      throw new BadRequestException('OAuth users do not require email verification');
     }
 
     if (user.emailVerified) {

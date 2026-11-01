@@ -12,21 +12,24 @@ const labels: Record<Status, string> = {
 };
 
 describe('StatusBadge', () => {
-  it.each(['light', 'dark'] as const)('shows every status label and passes axe (%s)', async (scheme) => {
-    const { container } = renderWithProviders(
-      <>
-        {(Object.keys(labels) as Status[]).map((status) => (
-          <StatusBadge key={status} status={status} />
-        ))}
-      </>,
-      { scheme },
-    );
+  it.each(['light', 'dark'] as const)(
+    'shows every status label and passes axe (%s)',
+    async (scheme) => {
+      const { container } = renderWithProviders(
+        <>
+          {(Object.keys(labels) as Status[]).map((status) => (
+            <StatusBadge key={status} status={status} />
+          ))}
+        </>,
+        { scheme },
+      );
 
-    for (const label of Object.values(labels)) {
-      expect(screen.getByText(label)).toBeInTheDocument();
-    }
-    expect(await axe(container)).toHaveNoViolations();
-  });
+      for (const label of Object.values(labels)) {
+        expect(screen.getByText(label)).toBeInTheDocument();
+      }
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
 
   it('hides the dot from assistive tech so only the label is read', () => {
     renderWithProviders(<StatusBadge status="late" />);

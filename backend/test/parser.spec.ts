@@ -65,4 +65,3 @@ describe('CSV parser', () => {
     expect(normalized[1].city).toBe('PARAISO DO TOCANTINS');
   });
 });
-

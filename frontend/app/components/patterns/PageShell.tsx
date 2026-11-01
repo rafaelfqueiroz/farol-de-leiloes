@@ -19,7 +19,8 @@ export default function PageShell({ width = 'app', children }: PageShellProps) {
       sx={{
         width: '100%',
         // DS-04: the widths come from the theme (theme.layout), not from tokens.ts
-        maxWidth: (theme) => (width === 'reading' ? theme.layout.readingWidth : theme.layout.containerWidth),
+        maxWidth: (theme) =>
+          width === 'reading' ? theme.layout.readingWidth : theme.layout.containerWidth,
         mx: 'auto',
         px: { xs: 2, sm: 3 },
         pt: 3,

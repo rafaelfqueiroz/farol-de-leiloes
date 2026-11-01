@@ -18,7 +18,10 @@ export default function RequireVerification({ children }: RequireVerificationPro
   useEffect(() => {
     if (!loading && isAuthenticated) {
       // Only enforce verification for local users (not Google OAuth)
-      const needsVerification = user?.providers?.includes('local') && !user?.providers?.includes('google') && !emailVerified;
+      const needsVerification =
+        user?.providers?.includes('local') &&
+        !user?.providers?.includes('google') &&
+        !emailVerified;
 
       if (needsVerification) {
         router.push('/verify-email');
@@ -43,7 +46,12 @@ export default function RequireVerification({ children }: RequireVerificationPro
   }
 
   // If authenticated but not verified (local user), don't render children
-  if (isAuthenticated && user?.providers?.includes('local') && !user?.providers?.includes('google') && !emailVerified) {
+  if (
+    isAuthenticated &&
+    user?.providers?.includes('local') &&
+    !user?.providers?.includes('google') &&
+    !emailVerified
+  ) {
     return (
       <Box
         sx={(theme) => ({

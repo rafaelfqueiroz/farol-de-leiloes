@@ -36,13 +36,15 @@ const FEATURES = [
   {
     icon: <HomeWorkIcon sx={{ fontSize: 40 }} />,
     title: 'Mais de 35 mil imóveis',
-    description: 'Acesse o maior catálogo de imóveis de leilão da Caixa com descontos de até 70% do valor de mercado.',
+    description:
+      'Acesse o maior catálogo de imóveis de leilão da Caixa com descontos de até 70% do valor de mercado.',
     highlight: 'até 70% de desconto',
   },
   {
     icon: <PaymentsIcon sx={{ fontSize: 40 }} />,
     title: 'Condições de Pagamento Flexíveis',
-    description: 'Escolha as condições que melhor se encaixam no seu bolso: financiamento, FGTS ou pagamento à vista.',
+    description:
+      'Escolha as condições que melhor se encaixam no seu bolso: financiamento, FGTS ou pagamento à vista.',
     highlight: 'Use seu FGTS',
   },
   {
@@ -255,8 +257,8 @@ export default function LandingPage() {
                     fontSize: { xs: '1rem', md: '1.25rem' },
                   }}
                 >
-                  Mais de 35 mil imóveis disponíveis em todo o Brasil. Casas, apartamentos,
-                  terrenos e imóveis comerciais com condições especiais de pagamento.
+                  Mais de 35 mil imóveis disponíveis em todo o Brasil. Casas, apartamentos, terrenos
+                  e imóveis comerciais com condições especiais de pagamento.
                 </Typography>
                 <Button
                   variant="contained"
@@ -276,16 +278,28 @@ export default function LandingPage() {
               {/* Stats */}
               <Box sx={{ display: 'flex', gap: 4, mt: 4, flexWrap: 'wrap' }}>
                 <Box>
-                  <Typography variant="h4" fontWeight={700}>35k+</Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>Imóveis disponíveis</Typography>
+                  <Typography variant="h4" fontWeight={700}>
+                    35k+
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    Imóveis disponíveis
+                  </Typography>
                 </Box>
                 <Box>
-                  <Typography variant="h4" fontWeight={700}>27</Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>Estados atendidos</Typography>
+                  <Typography variant="h4" fontWeight={700}>
+                    27
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    Estados atendidos
+                  </Typography>
                 </Box>
                 <Box>
-                  <Typography variant="h4" fontWeight={700}>70%</Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>Desconto máximo</Typography>
+                  <Typography variant="h4" fontWeight={700}>
+                    70%
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    Desconto máximo
+                  </Typography>
                 </Box>
               </Box>
             </Grid>
@@ -395,10 +409,26 @@ export default function LandingPage() {
 
           <Grid container spacing={4}>
             {[
-              { step: '1', title: 'Cadastre-se', description: 'Crie sua conta gratuitamente em poucos minutos' },
-              { step: '2', title: 'Busque', description: 'Filtre por estado, cidade, preço e tipo de imóvel' },
-              { step: '3', title: 'Analise', description: 'Verifique os detalhes, fotos e situação do imóvel' },
-              { step: '4', title: 'Arremate', description: 'Participe do leilão e conquiste seu imóvel' },
+              {
+                step: '1',
+                title: 'Cadastre-se',
+                description: 'Crie sua conta gratuitamente em poucos minutos',
+              },
+              {
+                step: '2',
+                title: 'Busque',
+                description: 'Filtre por estado, cidade, preço e tipo de imóvel',
+              },
+              {
+                step: '3',
+                title: 'Analise',
+                description: 'Verifique os detalhes, fotos e situação do imóvel',
+              },
+              {
+                step: '4',
+                title: 'Arremate',
+                description: 'Participe do leilão e conquiste seu imóvel',
+              },
             ].map((item, index) => (
               <Grid size={{ xs: 12, sm: 6, md: 3 }} key={index}>
                 <Box sx={{ textAlign: 'center' }}>
@@ -605,9 +635,25 @@ export default function LandingPage() {
       </Box>
 
       {/* Footer: paper surface with a divider, matching the header in both schemes */}
-      <Box sx={{ backgroundColor: 'background.paper', color: 'text.primary', borderTop: 1, borderColor: 'divider', py: 4 }}>
+      <Box
+        sx={{
+          backgroundColor: 'background.paper',
+          color: 'text.primary',
+          borderTop: 1,
+          borderColor: 'divider',
+          py: 4,
+        }}
+      >
         <Container maxWidth="lg">
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 2,
+            }}
+          >
             <Logo variant="lockup" size={28} />
             <Typography variant="body2" color="text.secondary">
               © 2024 Farol dos Leilões. Todos os direitos reservados.

@@ -24,7 +24,7 @@ export class CouponsController {
   @Roles('admin')
   async findAll(): Promise<CouponResponseDto[]> {
     const coupons = await this.couponsService.findAll();
-    return coupons.map(coupon => new CouponResponseDto(coupon));
+    return coupons.map((coupon) => new CouponResponseDto(coupon));
   }
 
   @Patch(':id/invalidate')

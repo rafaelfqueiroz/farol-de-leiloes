@@ -19,7 +19,9 @@ export function versionFromImageTag(tag: string): string {
 export function nodeImageTags(content: string): string[] {
   const tags: string[] = [];
   for (const line of content.split('\n')) {
-    const match = /^\s*(?:image:\s*|FROM\s+(?:--platform=\S+\s+)?)["']?node:([^\s"'@]+)/i.exec(line);
+    const match = /^\s*(?:image:\s*|FROM\s+(?:--platform=\S+\s+)?)["']?node:([^\s"'@]+)/i.exec(
+      line,
+    );
     if (match?.[1]) tags.push(match[1]);
   }
   return tags;

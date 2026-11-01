@@ -26,11 +26,7 @@ async function fetchAuction(code: string): Promise<Auction | null> {
 }
 
 function formatAddress(address: Auction['address']): string {
-  const parts = [
-    address.neighborhood,
-    address.city,
-    address.state,
-  ].filter(Boolean);
+  const parts = [address.neighborhood, address.city, address.state].filter(Boolean);
   return parts.join(', ') || 'Localização não informada';
 }
 
@@ -118,9 +114,7 @@ function generateJsonLd(auction: Auction) {
       '@type': 'Offer',
       price: lastPhase?.minimumPrice || undefined,
       priceCurrency: 'BRL',
-      availability: auction.available
-        ? 'https://schema.org/InStock'
-        : 'https://schema.org/SoldOut',
+      availability: auction.available ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut',
       url: `${SITE_URL}/auction/${auction.code}`,
     },
     ...(auction.address && {

@@ -89,33 +89,299 @@ const MODALITIES = [
 
 // Brazilian cities organized by state (major cities)
 const CITIES_BY_STATE: Record<string, string[]> = {
-  'AC': ['Rio Branco', 'Cruzeiro do Sul', 'Sena Madureira', 'Tarauacá', 'Feijó'],
-  'AL': ['Maceió', 'Arapiraca', 'Palmeira dos Índios', 'Rio Largo', 'Penedo'],
-  'AP': ['Macapá', 'Santana', 'Laranjal do Jari', 'Oiapoque', 'Mazagão'],
-  'AM': ['Manaus', 'Parintins', 'Itacoatiara', 'Manacapuru', 'Coari'],
-  'BA': ['Salvador', 'Feira de Santana', 'Vitória da Conquista', 'Camaçari', 'Itabuna', 'Juazeiro', 'Lauro de Freitas', 'Ilhéus', 'Jequié', 'Teixeira de Freitas'],
-  'CE': ['Fortaleza', 'Caucaia', 'Juazeiro do Norte', 'Maracanaú', 'Sobral', 'Crato', 'Itapipoca', 'Maranguape', 'Iguatu', 'Quixadá'],
-  'DF': ['Brasília', 'Taguatinga', 'Ceilândia', 'Samambaia', 'Planaltina'],
-  'ES': ['Vitória', 'Vila Velha', 'Serra', 'Cariacica', 'Cachoeiro de Itapemirim', 'Linhares', 'Colatina', 'Guarapari', 'São Mateus', 'Aracruz'],
-  'GO': ['Goiânia', 'Aparecida de Goiânia', 'Anápolis', 'Rio Verde', 'Luziânia', 'Águas Lindas de Goiás', 'Valparaíso de Goiás', 'Trindade', 'Formosa', 'Novo Gama'],
-  'MA': ['São Luís', 'Imperatriz', 'São José de Ribamar', 'Timon', 'Caxias', 'Codó', 'Paço do Lumiar', 'Açailândia', 'Bacabal', 'Balsas'],
-  'MT': ['Cuiabá', 'Várzea Grande', 'Rondonópolis', 'Sinop', 'Tangará da Serra', 'Cáceres', 'Sorriso', 'Lucas do Rio Verde', 'Barra do Garças', 'Primavera do Leste'],
-  'MS': ['Campo Grande', 'Dourados', 'Três Lagoas', 'Corumbá', 'Ponta Porã', 'Sidrolândia', 'Aquidauana', 'Naviraí', 'Nova Andradina', 'Paranaíba'],
-  'MG': ['Belo Horizonte', 'Uberlândia', 'Contagem', 'Juiz de Fora', 'Betim', 'Montes Claros', 'Ribeirão das Neves', 'Uberaba', 'Governador Valadares', 'Ipatinga', 'Sete Lagoas', 'Divinópolis', 'Santa Luzia', 'Ibirité', 'Poços de Caldas'],
-  'PA': ['Belém', 'Ananindeua', 'Santarém', 'Marabá', 'Castanhal', 'Parauapebas', 'Itaituba', 'Cametá', 'Bragança', 'Abaetetuba'],
-  'PB': ['João Pessoa', 'Campina Grande', 'Santa Rita', 'Patos', 'Bayeux', 'Sousa', 'Cajazeiras', 'Guarabira', 'Mamanguape', 'Cabedelo'],
-  'PR': ['Curitiba', 'Londrina', 'Maringá', 'Ponta Grossa', 'Cascavel', 'São José dos Pinhais', 'Foz do Iguaçu', 'Colombo', 'Guarapuava', 'Paranaguá', 'Araucária', 'Toledo', 'Apucarana', 'Pinhais', 'Campo Largo'],
-  'PE': ['Recife', 'Jaboatão dos Guararapes', 'Olinda', 'Caruaru', 'Petrolina', 'Paulista', 'Cabo de Santo Agostinho', 'Camaragibe', 'Garanhuns', 'Vitória de Santo Antão'],
-  'PI': ['Teresina', 'Parnaíba', 'Picos', 'Piripiri', 'Floriano', 'Campo Maior', 'Barras', 'Altos', 'Esperantina', 'Pedro II'],
-  'RJ': ['Rio de Janeiro', 'São Gonçalo', 'Duque de Caxias', 'Nova Iguaçu', 'Niterói', 'Belford Roxo', 'Campos dos Goytacazes', 'São João de Meriti', 'Petrópolis', 'Volta Redonda', 'Magé', 'Itaboraí', 'Mesquita', 'Nova Friburgo', 'Macaé'],
-  'RN': ['Natal', 'Mossoró', 'Parnamirim', 'São Gonçalo do Amarante', 'Macaíba', 'Ceará-Mirim', 'Caicó', 'Assu', 'Currais Novos', 'Touros'],
-  'RS': ['Porto Alegre', 'Caxias do Sul', 'Pelotas', 'Canoas', 'Santa Maria', 'Gravataí', 'Viamão', 'Novo Hamburgo', 'São Leopoldo', 'Rio Grande', 'Alvorada', 'Passo Fundo', 'Sapucaia do Sul', 'Uruguaiana', 'Santa Cruz do Sul'],
-  'RO': ['Porto Velho', 'Ji-Paraná', 'Ariquemes', 'Vilhena', 'Cacoal', 'Jaru', 'Rolim de Moura', 'Guajará-Mirim', 'Pimenta Bueno', 'Espigão do Oeste'],
-  'RR': ['Boa Vista', 'Rorainópolis', 'Caracaraí', 'Mucajaí', 'São João da Baliza'],
-  'SC': ['Florianópolis', 'Joinville', 'Blumenau', 'São José', 'Criciúma', 'Chapecó', 'Itajaí', 'Jaraguá do Sul', 'Lages', 'Palhoça', 'Balneário Camboriú', 'Brusque', 'Tubarão', 'São Bento do Sul', 'Caçador'],
-  'SP': ['São Paulo', 'Guarulhos', 'Campinas', 'São Bernardo do Campo', 'Santo André', 'Osasco', 'São José dos Campos', 'Ribeirão Preto', 'Sorocaba', 'Mauá', 'São José do Rio Preto', 'Santos', 'Diadema', 'Carapicuíba', 'Piracicaba', 'Bauru', 'Itaquaquecetuba', 'Mogi das Cruzes', 'Jundiaí', 'Franca'],
-  'SE': ['Aracaju', 'Nossa Senhora do Socorro', 'Lagarto', 'Itabaiana', 'Estância', 'São Cristóvão', 'Simão Dias', 'Propriá', 'Tobias Barreto', 'Laranjeiras'],
-  'TO': ['Palmas', 'Araguaína', 'Gurupi', 'Porto Nacional', 'Paraíso do Tocantins', 'Colinas do Tocantins', 'Guaraí', 'Miracema do Tocantins', 'Formoso do Araguaia', 'Tocantinópolis'],
+  AC: ['Rio Branco', 'Cruzeiro do Sul', 'Sena Madureira', 'Tarauacá', 'Feijó'],
+  AL: ['Maceió', 'Arapiraca', 'Palmeira dos Índios', 'Rio Largo', 'Penedo'],
+  AP: ['Macapá', 'Santana', 'Laranjal do Jari', 'Oiapoque', 'Mazagão'],
+  AM: ['Manaus', 'Parintins', 'Itacoatiara', 'Manacapuru', 'Coari'],
+  BA: [
+    'Salvador',
+    'Feira de Santana',
+    'Vitória da Conquista',
+    'Camaçari',
+    'Itabuna',
+    'Juazeiro',
+    'Lauro de Freitas',
+    'Ilhéus',
+    'Jequié',
+    'Teixeira de Freitas',
+  ],
+  CE: [
+    'Fortaleza',
+    'Caucaia',
+    'Juazeiro do Norte',
+    'Maracanaú',
+    'Sobral',
+    'Crato',
+    'Itapipoca',
+    'Maranguape',
+    'Iguatu',
+    'Quixadá',
+  ],
+  DF: ['Brasília', 'Taguatinga', 'Ceilândia', 'Samambaia', 'Planaltina'],
+  ES: [
+    'Vitória',
+    'Vila Velha',
+    'Serra',
+    'Cariacica',
+    'Cachoeiro de Itapemirim',
+    'Linhares',
+    'Colatina',
+    'Guarapari',
+    'São Mateus',
+    'Aracruz',
+  ],
+  GO: [
+    'Goiânia',
+    'Aparecida de Goiânia',
+    'Anápolis',
+    'Rio Verde',
+    'Luziânia',
+    'Águas Lindas de Goiás',
+    'Valparaíso de Goiás',
+    'Trindade',
+    'Formosa',
+    'Novo Gama',
+  ],
+  MA: [
+    'São Luís',
+    'Imperatriz',
+    'São José de Ribamar',
+    'Timon',
+    'Caxias',
+    'Codó',
+    'Paço do Lumiar',
+    'Açailândia',
+    'Bacabal',
+    'Balsas',
+  ],
+  MT: [
+    'Cuiabá',
+    'Várzea Grande',
+    'Rondonópolis',
+    'Sinop',
+    'Tangará da Serra',
+    'Cáceres',
+    'Sorriso',
+    'Lucas do Rio Verde',
+    'Barra do Garças',
+    'Primavera do Leste',
+  ],
+  MS: [
+    'Campo Grande',
+    'Dourados',
+    'Três Lagoas',
+    'Corumbá',
+    'Ponta Porã',
+    'Sidrolândia',
+    'Aquidauana',
+    'Naviraí',
+    'Nova Andradina',
+    'Paranaíba',
+  ],
+  MG: [
+    'Belo Horizonte',
+    'Uberlândia',
+    'Contagem',
+    'Juiz de Fora',
+    'Betim',
+    'Montes Claros',
+    'Ribeirão das Neves',
+    'Uberaba',
+    'Governador Valadares',
+    'Ipatinga',
+    'Sete Lagoas',
+    'Divinópolis',
+    'Santa Luzia',
+    'Ibirité',
+    'Poços de Caldas',
+  ],
+  PA: [
+    'Belém',
+    'Ananindeua',
+    'Santarém',
+    'Marabá',
+    'Castanhal',
+    'Parauapebas',
+    'Itaituba',
+    'Cametá',
+    'Bragança',
+    'Abaetetuba',
+  ],
+  PB: [
+    'João Pessoa',
+    'Campina Grande',
+    'Santa Rita',
+    'Patos',
+    'Bayeux',
+    'Sousa',
+    'Cajazeiras',
+    'Guarabira',
+    'Mamanguape',
+    'Cabedelo',
+  ],
+  PR: [
+    'Curitiba',
+    'Londrina',
+    'Maringá',
+    'Ponta Grossa',
+    'Cascavel',
+    'São José dos Pinhais',
+    'Foz do Iguaçu',
+    'Colombo',
+    'Guarapuava',
+    'Paranaguá',
+    'Araucária',
+    'Toledo',
+    'Apucarana',
+    'Pinhais',
+    'Campo Largo',
+  ],
+  PE: [
+    'Recife',
+    'Jaboatão dos Guararapes',
+    'Olinda',
+    'Caruaru',
+    'Petrolina',
+    'Paulista',
+    'Cabo de Santo Agostinho',
+    'Camaragibe',
+    'Garanhuns',
+    'Vitória de Santo Antão',
+  ],
+  PI: [
+    'Teresina',
+    'Parnaíba',
+    'Picos',
+    'Piripiri',
+    'Floriano',
+    'Campo Maior',
+    'Barras',
+    'Altos',
+    'Esperantina',
+    'Pedro II',
+  ],
+  RJ: [
+    'Rio de Janeiro',
+    'São Gonçalo',
+    'Duque de Caxias',
+    'Nova Iguaçu',
+    'Niterói',
+    'Belford Roxo',
+    'Campos dos Goytacazes',
+    'São João de Meriti',
+    'Petrópolis',
+    'Volta Redonda',
+    'Magé',
+    'Itaboraí',
+    'Mesquita',
+    'Nova Friburgo',
+    'Macaé',
+  ],
+  RN: [
+    'Natal',
+    'Mossoró',
+    'Parnamirim',
+    'São Gonçalo do Amarante',
+    'Macaíba',
+    'Ceará-Mirim',
+    'Caicó',
+    'Assu',
+    'Currais Novos',
+    'Touros',
+  ],
+  RS: [
+    'Porto Alegre',
+    'Caxias do Sul',
+    'Pelotas',
+    'Canoas',
+    'Santa Maria',
+    'Gravataí',
+    'Viamão',
+    'Novo Hamburgo',
+    'São Leopoldo',
+    'Rio Grande',
+    'Alvorada',
+    'Passo Fundo',
+    'Sapucaia do Sul',
+    'Uruguaiana',
+    'Santa Cruz do Sul',
+  ],
+  RO: [
+    'Porto Velho',
+    'Ji-Paraná',
+    'Ariquemes',
+    'Vilhena',
+    'Cacoal',
+    'Jaru',
+    'Rolim de Moura',
+    'Guajará-Mirim',
+    'Pimenta Bueno',
+    'Espigão do Oeste',
+  ],
+  RR: ['Boa Vista', 'Rorainópolis', 'Caracaraí', 'Mucajaí', 'São João da Baliza'],
+  SC: [
+    'Florianópolis',
+    'Joinville',
+    'Blumenau',
+    'São José',
+    'Criciúma',
+    'Chapecó',
+    'Itajaí',
+    'Jaraguá do Sul',
+    'Lages',
+    'Palhoça',
+    'Balneário Camboriú',
+    'Brusque',
+    'Tubarão',
+    'São Bento do Sul',
+    'Caçador',
+  ],
+  SP: [
+    'São Paulo',
+    'Guarulhos',
+    'Campinas',
+    'São Bernardo do Campo',
+    'Santo André',
+    'Osasco',
+    'São José dos Campos',
+    'Ribeirão Preto',
+    'Sorocaba',
+    'Mauá',
+    'São José do Rio Preto',
+    'Santos',
+    'Diadema',
+    'Carapicuíba',
+    'Piracicaba',
+    'Bauru',
+    'Itaquaquecetuba',
+    'Mogi das Cruzes',
+    'Jundiaí',
+    'Franca',
+  ],
+  SE: [
+    'Aracaju',
+    'Nossa Senhora do Socorro',
+    'Lagarto',
+    'Itabaiana',
+    'Estância',
+    'São Cristóvão',
+    'Simão Dias',
+    'Propriá',
+    'Tobias Barreto',
+    'Laranjeiras',
+  ],
+  TO: [
+    'Palmas',
+    'Araguaína',
+    'Gurupi',
+    'Porto Nacional',
+    'Paraíso do Tocantins',
+    'Colinas do Tocantins',
+    'Guaraí',
+    'Miracema do Tocantins',
+    'Formoso do Araguaia',
+    'Tocantinópolis',
+  ],
 };
 
 const PRICE_MARKS = [
@@ -136,11 +402,16 @@ function formatCurrency(value: number): string {
   return `R$ ${value}`;
 }
 
-export default function SearchFilters({ onSearch, onAISearchResults, isLoading = false, initialFilters = {} }: SearchFiltersProps) {
+export default function SearchFilters({
+  onSearch,
+  onAISearchResults,
+  isLoading = false,
+  initialFilters = {},
+}: SearchFiltersProps) {
   const [filters, setFilters] = useState<AuctionFilters>(initialFilters);
   const [priceRange, setPriceRange] = useState<number[]>([
     initialFilters.minMargin || 0,
-    initialFilters.maxMargin || 2000000
+    initialFilters.maxMargin || 2000000,
   ]);
   const [drawerOpen, setDrawerOpen] = useState(true);
 
@@ -162,7 +433,13 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
   const canUseSavedFilters = role === 'admin' || role === 'premium' || role === 'standard';
 
   // Saved filters state
-  const { savedFilters, isAuthenticated, saveFilter, deleteFilter, loading: savedFiltersLoading } = useSavedFilters();
+  const {
+    savedFilters,
+    isAuthenticated,
+    saveFilter,
+    deleteFilter,
+    loading: savedFiltersLoading,
+  } = useSavedFilters();
   const [selectedSavedFilterId, setSelectedSavedFilterId] = useState<string>('');
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [newFilterName, setNewFilterName] = useState('');
@@ -182,9 +459,9 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
 
       setLoadingNeighborhoods(true);
       try {
-        const cityParams = filters.city.map(c => `city=${encodeURIComponent(c)}`).join('&');
+        const cityParams = filters.city.map((c) => `city=${encodeURIComponent(c)}`).join('&');
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_AUCTIONS_API_URL}/api/auctions/neighborhoods?state=${filters.state}&${cityParams}`
+          `${process.env.NEXT_PUBLIC_AUCTIONS_API_URL}/api/auctions/neighborhoods?state=${filters.state}&${cityParams}`,
         );
         if (response.ok) {
           const data = await response.json();
@@ -237,7 +514,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
   const handleModalityChange = (modality: string) => {
     const currentModalities = filters.modality || [];
     const newModalities = currentModalities.includes(modality)
-      ? currentModalities.filter(m => m !== modality)
+      ? currentModalities.filter((m) => m !== modality)
       : [...currentModalities, modality];
     setFilters({
       ...filters,
@@ -277,7 +554,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: aiSearchInput })
+        body: JSON.stringify({ message: aiSearchInput }),
       });
 
       if (!response.ok) {
@@ -298,7 +575,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
     setSelectedSavedFilterId(filterId);
     if (!filterId) return;
 
-    const selectedFilter = savedFilters.find(f => f._id === filterId);
+    const selectedFilter = savedFilters.find((f) => f._id === filterId);
     if (selectedFilter) {
       const savedFilterData = selectedFilter.filters;
       setFilters({
@@ -307,10 +584,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
         neighborhood: savedFilterData.neighborhood,
         modality: savedFilterData.modality,
       });
-      setPriceRange([
-        savedFilterData.minMargin || 0,
-        savedFilterData.maxMargin || 2000000,
-      ]);
+      setPriceRange([savedFilterData.minMargin || 0, savedFilterData.maxMargin || 2000000]);
     }
   };
 
@@ -393,7 +667,13 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                   <Button
                     variant="contained"
                     color="primary"
-                    startIcon={aiSearchLoading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
+                    startIcon={
+                      aiSearchLoading ? (
+                        <CircularProgress size={20} color="inherit" />
+                      ) : (
+                        <SearchIcon />
+                      )
+                    }
                     onClick={handleAISearch}
                     disabled={aiSearchLoading || !aiSearchInput.trim()}
                     sx={{ ml: 1 }}
@@ -418,18 +698,14 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
               backgroundColor: 'background.muted',
             }}
           >
-            <LockIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7}} />
+            <LockIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7 }} />
             <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: 'text.primary' }}>
               Recurso disponivel no plano Premium
             </Typography>
             <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
               Assine o plano Premium para usar a busca por IA
             </Typography>
-            <Button
-              variant="contained"
-              href="/plans"
-              size="small"
-            >
+            <Button variant="contained" href="/plans" size="small">
               Assine agora
             </Button>
           </Box>
@@ -488,13 +764,26 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {/* Header */}
-          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box
+            sx={{
+              p: 2,
+              borderBottom: 1,
+              borderColor: 'divider',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
             <Typography variant="h6" fontWeight={600}>
               Filtros de Busca
             </Typography>
-            <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{
-            color: 'text.secondary',
-          }}>
+            <IconButton
+              size="small"
+              onClick={() => setDrawerOpen(false)}
+              sx={{
+                color: 'text.secondary',
+              }}
+            >
               <ChevronRightIcon />
             </IconButton>
           </Box>
@@ -504,7 +793,11 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
             {/* Saved Filters Section - Only shown for Standard+ users */}
             {isAuthenticated && canUseSavedFilters && (
               <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
+                <Typography
+                  variant="subtitle2"
+                  color="primary.main"
+                  sx={{ mb: 2, fontWeight: 600 }}
+                >
                   <BookmarkIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
                   Filtros Salvos
                 </Typography>
@@ -523,8 +816,19 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                     <em>Nenhum selecionado</em>
                   </MenuItem>
                   {savedFilters.map((filter) => (
-                    <MenuItem key={filter._id} value={filter._id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <MenuItem
+                      key={filter._id}
+                      value={filter._id}
+                      sx={{ display: 'flex', justifyContent: 'space-between' }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          width: '100%',
+                        }}
+                      >
                         <Typography variant="body2" noWrap sx={{ flex: 1 }}>
                           {filter.name}
                         </Typography>
@@ -548,7 +852,9 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                   onClick={handleOpenSaveDialog}
                   disabled={savedFilters.length >= 10}
                 >
-                  {savedFilters.length >= 10 ? 'Limite de 10 filtros atingido' : 'Salvar Filtros Atuais'}
+                  {savedFilters.length >= 10
+                    ? 'Limite de 10 filtros atingido'
+                    : 'Salvar Filtros Atuais'}
                 </Button>
 
                 <Divider sx={{ my: 3 }} />
@@ -588,7 +894,9 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                   <TextField
                     {...params}
                     label="Cidade"
-                    placeholder={filters.city && filters.city.length > 0 ? "" : "Digite para buscar cidade..."}
+                    placeholder={
+                      filters.city && filters.city.length > 0 ? '' : 'Digite para buscar cidade...'
+                    }
                     size="small"
                   />
                 )}
@@ -596,11 +904,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                   const { key, ...otherProps } = props;
                   return (
                     <li key={key} {...otherProps}>
-                      <Checkbox
-                        checked={selected}
-                        size="small"
-                        sx={{ mr: 1 }}
-                      />
+                      <Checkbox checked={selected} size="small" sx={{ mr: 1 }} />
                       {option}
                     </li>
                   );
@@ -608,7 +912,7 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                 sx={{ mb: 2 }}
                 noOptionsText="Nenhuma cidade encontrada"
                 ListboxProps={{
-                  style: { maxHeight: 250 }
+                  style: { maxHeight: 250 },
                 }}
               />
 
@@ -626,10 +930,10 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                     label="Bairro"
                     placeholder={
                       !filters.city || filters.city.length === 0
-                        ? "Selecione uma cidade primeiro"
+                        ? 'Selecione uma cidade primeiro'
                         : filters.neighborhood && filters.neighborhood.length > 0
-                          ? ""
-                          : "Digite para buscar bairro..."
+                          ? ''
+                          : 'Digite para buscar bairro...'
                     }
                     size="small"
                     slotProps={{
@@ -637,7 +941,9 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                         ...params.InputProps,
                         endAdornment: (
                           <>
-                            {loadingNeighborhoods ? <CircularProgress color="inherit" size={20} /> : null}
+                            {loadingNeighborhoods ? (
+                              <CircularProgress color="inherit" size={20} />
+                            ) : null}
                             {params.InputProps.endAdornment}
                           </>
                         ),
@@ -649,24 +955,20 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                   const { key, ...otherProps } = props;
                   return (
                     <li key={key} {...otherProps}>
-                      <Checkbox
-                        checked={selected}
-                        size="small"
-                        sx={{ mr: 1 }}
-                      />
+                      <Checkbox checked={selected} size="small" sx={{ mr: 1 }} />
                       {option}
                     </li>
                   );
                 }}
                 noOptionsText={
                   loadingNeighborhoods
-                    ? "Carregando..."
+                    ? 'Carregando...'
                     : !filters.city || filters.city.length === 0
-                      ? "Selecione uma cidade primeiro"
-                      : "Nenhum bairro encontrado"
+                      ? 'Selecione uma cidade primeiro'
+                      : 'Nenhum bairro encontrado'
                 }
                 ListboxProps={{
-                  style: { maxHeight: 250 }
+                  style: { maxHeight: 250 },
                 }}
               />
             </Box>
@@ -679,10 +981,12 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
                 Modalidade do Leilão
               </Typography>
 
-              <Box sx={{
-                borderRadius: 1,
-                p: 1.5,
-              }}>
+              <Box
+                sx={{
+                  borderRadius: 1,
+                  p: 1.5,
+                }}
+              >
                 <FormGroup>
                   {MODALITIES.map((modality) => (
                     <FormControlLabel
@@ -738,15 +1042,17 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
           </Box>
 
           {/* Fixed Action Buttons */}
-          <Box sx={{
-            p: 2,
-            borderTop: 1,
-            borderColor: 'divider',
-            backgroundColor: 'background.paper',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
-          }}>
+          <Box
+            sx={{
+              p: 2,
+              borderTop: 1,
+              borderColor: 'divider',
+              backgroundColor: 'background.paper',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+            }}
+          >
             <Button
               type="submit"
               variant="contained"

@@ -4,16 +4,19 @@ import { axe, renderWithProviders } from '@/test/render';
 import FigureDelta from './FigureDelta';
 
 describe('FigureDelta', () => {
-  it.each(['light', 'dark'] as const)('shows the value with a named arrow and passes axe (%s)', async (scheme) => {
-    const { container } = renderWithProviders(
-      <FigureDelta value="12,5%" tone="positive" direction="up" />,
-      { scheme },
-    );
+  it.each(['light', 'dark'] as const)(
+    'shows the value with a named arrow and passes axe (%s)',
+    async (scheme) => {
+      const { container } = renderWithProviders(
+        <FigureDelta value="12,5%" tone="positive" direction="up" />,
+        { scheme },
+      );
 
-    expect(screen.getByText('12,5%')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Aumento favorável' })).toBeInTheDocument();
-    expect(await axe(container)).toHaveNoViolations();
-  });
+      expect(screen.getByText('12,5%')).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Aumento favorável' })).toBeInTheDocument();
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
 
   it.each([
     ['up', 'positive', 'Aumento favorável'],
@@ -31,6 +34,8 @@ describe('FigureDelta', () => {
       <FigureDelta value="18%" tone="positive" direction="down" />,
     );
 
-    expect(container.querySelector('[data-testid="ArrowDownwardOutlinedIcon"]')).toBeInTheDocument();
+    expect(
+      container.querySelector('[data-testid="ArrowDownwardOutlinedIcon"]'),
+    ).toBeInTheDocument();
   });
 });

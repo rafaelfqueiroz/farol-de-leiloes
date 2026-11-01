@@ -42,7 +42,8 @@ export default function ReminderButton({
   auctionDate,
 }: ReminderButtonProps) {
   const { isAuthenticated, role } = useAuth();
-  const { hasReminderForAuction, getReminderForAuction, createReminder, deleteReminder } = useReminders();
+  const { hasReminderForAuction, getReminderForAuction, createReminder, deleteReminder } =
+    useReminders();
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
@@ -149,9 +150,7 @@ export default function ReminderButton({
       </IconButton>
 
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {hasReminder ? 'Gerenciar Lembrete' : 'Criar Lembrete'}
-        </DialogTitle>
+        <DialogTitle>{hasReminder ? 'Gerenciar Lembrete' : 'Criar Lembrete'}</DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 1 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -167,7 +166,8 @@ export default function ReminderButton({
             {hasReminder && existingReminder ? (
               <Box sx={{ mb: 2 }}>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Lembrete agendado para {formatDisplayDate(existingReminder.scheduledAt)} via {existingReminder.channel}
+                  Lembrete agendado para {formatDisplayDate(existingReminder.scheduledAt)} via{' '}
+                  {existingReminder.channel}
                 </Alert>
                 {existingReminder.description && (
                   <Typography variant="body2" color="text.secondary">

@@ -43,7 +43,11 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
           boxSizing: 'border-box',
           // cancelled: hollow dot, a second cue besides the label
           ...(hollow
-            ? { borderWidth: theme.spacing(0.25), borderStyle: 'solid', borderColor: 'currentColor' }
+            ? {
+                borderWidth: theme.spacing(0.25),
+                borderStyle: 'solid',
+                borderColor: 'currentColor',
+              }
             : { bgcolor: 'currentColor' }),
         })}
       />

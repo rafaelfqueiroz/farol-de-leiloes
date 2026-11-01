@@ -56,7 +56,7 @@ export default function ProfilePage() {
       try {
         const token = localStorage.getItem('token');
         const response = await fetch('/api/auth/profile/full', {
-          headers: { 'Authorization': `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (response.ok) {
           const data = await response.json();
@@ -88,7 +88,7 @@ export default function ProfilePage() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           phone: phone || undefined,
@@ -129,7 +129,7 @@ export default function ProfilePage() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ name, email }),
       });
@@ -170,7 +170,7 @@ export default function ProfilePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ currentPassword, newPassword }),
       });
@@ -214,7 +214,7 @@ export default function ProfilePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ newPassword }),
       });
@@ -239,7 +239,12 @@ export default function ProfilePage() {
     return (
       <Box
         // #42: fills the AppShell content area, not the whole viewport
-        sx={(theme) => ({ ...shellContentMinHeight(theme), display: 'flex', justifyContent: 'center', alignItems: 'center' })}
+        sx={(theme) => ({
+          ...shellContentMinHeight(theme),
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+        })}
       >
         <CircularProgress />
       </Box>
@@ -286,9 +291,7 @@ export default function ProfilePage() {
               >
                 <PersonIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
               </Box>
-              <Typography variant="h6">
-                Informações do Perfil
-              </Typography>
+              <Typography variant="h6">Informações do Perfil</Typography>
             </Box>
             <Divider sx={{ mb: 2 }} />
             <form onSubmit={handleUpdateProfile}>
@@ -309,15 +312,13 @@ export default function ProfilePage() {
                 margin="normal"
                 required
                 disabled={user?.providers?.includes('google')}
-                helperText={user?.providers?.includes('google') ? 'Email não pode ser alterado para contas Google' : ''}
+                helperText={
+                  user?.providers?.includes('google')
+                    ? 'Email não pode ser alterado para contas Google'
+                    : ''
+                }
               />
-              <Button
-                type="submit"
-                variant="contained"
-                fullWidth
-                disabled={loading}
-                sx={{ mt: 2 }}
-              >
+              <Button type="submit" variant="contained" fullWidth disabled={loading} sx={{ mt: 2 }}>
                 {loading ? <CircularProgress size={24} /> : 'Atualizar Perfil'}
               </Button>
             </form>
@@ -341,9 +342,7 @@ export default function ProfilePage() {
               >
                 <BadgeIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
               </Box>
-              <Typography variant="h6">
-                Dados Pessoais
-              </Typography>
+              <Typography variant="h6">Dados Pessoais</Typography>
             </Box>
             <Divider sx={{ mb: 2 }} />
             <form onSubmit={handleSavePersonalData}>
@@ -452,9 +451,7 @@ export default function ProfilePage() {
                 >
                   <LockIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
                 </Box>
-                <Typography variant="h6">
-                  Alterar Senha
-                </Typography>
+                <Typography variant="h6">Alterar Senha</Typography>
               </Box>
               <Divider sx={{ mb: 2 }} />
               <form onSubmit={handleChangePassword}>
@@ -514,12 +511,11 @@ export default function ProfilePage() {
                 >
                   <LockIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
                 </Box>
-                <Typography variant="h6">
-                  Definir Senha
-                </Typography>
+                <Typography variant="h6">Definir Senha</Typography>
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Você entrou com o Google. Defina uma senha para também poder entrar com email e senha.
+                Você entrou com o Google. Defina uma senha para também poder entrar com email e
+                senha.
               </Typography>
               <Divider sx={{ mb: 2 }} />
               <form onSubmit={handleSetPassword}>

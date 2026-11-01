@@ -13,7 +13,11 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      if (user?.providers?.includes('local') && !user?.providers?.includes('google') && !emailVerified) {
+      if (
+        user?.providers?.includes('local') &&
+        !user?.providers?.includes('google') &&
+        !emailVerified
+      ) {
         router.push('/verify-email');
       } else {
         router.push('/search');

@@ -37,17 +37,11 @@ export class EmailService {
       });
       this.logger.log('Email transporter initialized');
     } else {
-      this.logger.warn(
-        'SMTP configuration not found. Emails will be logged to console.',
-      );
+      this.logger.warn('SMTP configuration not found. Emails will be logged to console.');
     }
   }
 
-  async sendVerificationEmail(
-    email: string,
-    token: string,
-    name: string,
-  ): Promise<void> {
+  async sendVerificationEmail(email: string, token: string, name: string): Promise<void> {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     const verificationUrl = `${frontendUrl}/verify-email/${token}`;
 
@@ -61,9 +55,7 @@ export class EmailService {
       return;
     }
 
-    const emailFrom =
-      this.configService.get<string>('EMAIL_FROM') ||
-      'noreply@faroldosleiloes.com';
+    const emailFrom = this.configService.get<string>('EMAIL_FROM') || 'noreply@faroldosleiloes.com';
 
     await this.transporter.sendMail({
       from: emailFrom,
@@ -75,11 +67,7 @@ export class EmailService {
     this.logger.log(`Verification email sent to ${email}`);
   }
 
-  async sendPasswordResetEmail(
-    email: string,
-    token: string,
-    name: string,
-  ): Promise<void> {
+  async sendPasswordResetEmail(email: string, token: string, name: string): Promise<void> {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     const resetUrl = `${frontendUrl}/reset-password/${token}`;
 
@@ -93,9 +81,7 @@ export class EmailService {
       return;
     }
 
-    const emailFrom =
-      this.configService.get<string>('EMAIL_FROM') ||
-      'noreply@faroldosleiloes.com';
+    const emailFrom = this.configService.get<string>('EMAIL_FROM') || 'noreply@faroldosleiloes.com';
 
     await this.transporter.sendMail({
       from: emailFrom,
@@ -135,9 +121,7 @@ export class EmailService {
       return;
     }
 
-    const emailFrom =
-      this.configService.get<string>('EMAIL_FROM') ||
-      'noreply@faroldosleiloes.com';
+    const emailFrom = this.configService.get<string>('EMAIL_FROM') || 'noreply@faroldosleiloes.com';
 
     await this.transporter.sendMail({
       from: emailFrom,
@@ -150,10 +134,7 @@ export class EmailService {
     this.logger.log(`Support email sent to ${to} from ${userEmail}`);
   }
 
-  async sendReminderEmail(
-    email: string,
-    payload: ReminderEmailPayload,
-  ): Promise<void> {
+  async sendReminderEmail(email: string, payload: ReminderEmailPayload): Promise<void> {
     if (!this.transporter) {
       this.logger.log('='.repeat(60));
       this.logger.log('AUCTION REMINDER EMAIL (Development Mode)');
@@ -166,9 +147,7 @@ export class EmailService {
       return;
     }
 
-    const emailFrom =
-      this.configService.get<string>('EMAIL_FROM') ||
-      'noreply@faroldosleiloes.com';
+    const emailFrom = this.configService.get<string>('EMAIL_FROM') || 'noreply@faroldosleiloes.com';
 
     await this.transporter.sendMail({
       from: emailFrom,

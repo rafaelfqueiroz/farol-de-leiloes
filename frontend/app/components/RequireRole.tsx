@@ -68,7 +68,8 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
   const requiredLevel = ROLE_HIERARCHY[minimumRole];
 
   if (userLevel < requiredLevel) {
-    const planName = minimumRole === 'standard' ? 'Standard' : minimumRole === 'premium' ? 'Premium' : 'Admin';
+    const planName =
+      minimumRole === 'standard' ? 'Standard' : minimumRole === 'premium' ? 'Premium' : 'Admin';
     return (
       <Box
         sx={(theme) => ({

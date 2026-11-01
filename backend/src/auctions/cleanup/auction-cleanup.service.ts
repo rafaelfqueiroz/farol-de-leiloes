@@ -43,14 +43,13 @@ export class AuctionCleanupService implements OnModuleInit {
         .find({
           available: false,
           updatedAt: { $lte: thresholdDate },
-          $or: [
-            { image: { $exists: true } },
-            { matricula: { $exists: true } },
-          ],
+          $or: [{ image: { $exists: true } }, { matricula: { $exists: true } }],
         })
         .lean();
 
-      this.logger.log(`Found ${auctions.length} unavailable auctions older than ${CLEANUP_THRESHOLD_DAYS} days`);
+      this.logger.log(
+        `Found ${auctions.length} unavailable auctions older than ${CLEANUP_THRESHOLD_DAYS} days`,
+      );
 
       if (auctions.length === 0) {
         this.logger.log('No auctions to clean up');
@@ -64,12 +63,14 @@ export class AuctionCleanupService implements OnModuleInit {
 
       for (let i = 0; i < auctions.length; i += this.batchSize) {
         const batch = auctions.slice(i, i + this.batchSize);
-        this.logger.log(`Processing batch ${Math.floor(i / this.batchSize) + 1}/${Math.ceil(auctions.length / this.batchSize)}`);
+        this.logger.log(
+          `Processing batch ${Math.floor(i / this.batchSize) + 1}/${Math.ceil(auctions.length / this.batchSize)}`,
+        );
 
         for (let j = 0; j < batch.length; j += this.concurrency) {
           const group = batch.slice(j, j + this.concurrency);
           const results = await Promise.allSettled(
-            group.map(auction => this.processAuction(auction)),
+            group.map((auction) => this.processAuction(auction)),
           );
 
           for (let k = 0; k < results.length; k++) {
@@ -83,7 +84,9 @@ export class AuctionCleanupService implements OnModuleInit {
               }
             } else {
               errorCount++;
-              this.logger.error(`Error cleaning auction ${group[k].code}: ${result.reason?.message || result.reason}`);
+              this.logger.error(
+                `Error cleaning auction ${group[k].code}: ${result.reason?.message || result.reason}`,
+              );
             }
           }
 
@@ -91,7 +94,9 @@ export class AuctionCleanupService implements OnModuleInit {
         }
       }
 
-      this.logger.log(`Cleanup completed: ${deletedCount} auctions removed, ${filesDeleted} files deleted, ${retainedCount} retained for retry, ${errorCount} errors`);
+      this.logger.log(
+        `Cleanup completed: ${deletedCount} auctions removed, ${filesDeleted} files deleted, ${retainedCount} retained for retry, ${errorCount} errors`,
+      );
     } catch (error: any) {
       this.logger.error(`Cleanup failed: ${error?.message || error}`);
     }
@@ -110,7 +115,9 @@ export class AuctionCleanupService implements OnModuleInit {
 
     if (storageKeys.length > 0) {
       if (!this.storageService.isConfigured()) {
-        this.logger.warn(`Keeping auction ${auction.code}: storage not configured, files cannot be deleted`);
+        this.logger.warn(
+          `Keeping auction ${auction.code}: storage not configured, files cannot be deleted`,
+        );
         return { removed: false, filesDeleted };
       }
 
@@ -126,7 +133,9 @@ export class AuctionCleanupService implements OnModuleInit {
 
       // Keep the document (and its storage keys) so the next run retries the failed deletions
       if (!allFilesDeleted) {
-        this.logger.warn(`Keeping auction ${auction.code}: some files could not be deleted, will retry on next cleanup`);
+        this.logger.warn(
+          `Keeping auction ${auction.code}: some files could not be deleted, will retry on next cleanup`,
+        );
         return { removed: false, filesDeleted };
       }
     }
@@ -138,6 +147,6 @@ export class AuctionCleanupService implements OnModuleInit {
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

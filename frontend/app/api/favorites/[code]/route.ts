@@ -4,16 +4,13 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhos
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ code: string }> }
+  { params }: { params: Promise<{ code: string }> },
 ) {
   try {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { code } = await params;
@@ -22,7 +19,7 @@ export async function DELETE(
     const response = await fetch(url, {
       method: 'DELETE',
       headers: {
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
     });
 
@@ -35,7 +32,7 @@ export async function DELETE(
     console.error('Error deleting favorite:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to delete favorite' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

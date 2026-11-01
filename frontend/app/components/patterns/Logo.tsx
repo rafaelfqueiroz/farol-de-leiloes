@@ -62,16 +62,14 @@ export default function Logo({ variant, size = 32 }: LogoProps) {
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
       <Mark size={size} label={name} />
       {/* the mark already announces the name: hide the live text from assistive tech */}
-      <Typography
-        component="span"
-        variant="wordmark"
-        aria-hidden
-        sx={{ whiteSpace: 'nowrap' }}
-      >
+      <Typography component="span" variant="wordmark" aria-hidden sx={{ whiteSpace: 'nowrap' }}>
         {first}{' '}
         <Box
           component="span"
-          sx={(theme) => ({ color: 'text.secondary', fontWeight: theme.typography.fontWeightMedium })}
+          sx={(theme) => ({
+            color: 'text.secondary',
+            fontWeight: theme.typography.fontWeightMedium,
+          })}
         >
           {rest}
         </Box>

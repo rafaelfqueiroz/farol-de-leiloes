@@ -2,12 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  Box,
-  Container,
-  Typography,
-  CircularProgress,
-} from '@mui/material';
+import { Box, Container, Typography, CircularProgress } from '@mui/material';
 import { hasMinimumRole } from '@/app/components/RequireRole';
 import { useAuth } from '@/app/contexts/AuthContext';
 import SearchFilters, { AuctionFilters } from '@/app/components/SearchFilters';
@@ -47,11 +42,11 @@ function filtersFromQuery(query: QueryReader): AuctionFilters {
 function hasFilters(filters: AuctionFilters): boolean {
   return Boolean(
     filters.state ||
-      filters.city?.length ||
-      filters.neighborhood?.length ||
-      filters.modality?.length ||
-      filters.minMargin ||
-      filters.maxMargin,
+    filters.city?.length ||
+    filters.neighborhood?.length ||
+    filters.modality?.length ||
+    filters.minMargin ||
+    filters.maxMargin,
   );
 }
 
@@ -59,8 +54,10 @@ function searchQuery(filters: AuctionFilters, page: number): string {
   const params = new URLSearchParams();
   if (filters.state) params.set('state', filters.state);
   if (filters.city && filters.city.length > 0) params.set('city', filters.city.join(','));
-  if (filters.neighborhood && filters.neighborhood.length > 0) params.set('neighborhood', filters.neighborhood.join(','));
-  if (filters.modality && filters.modality.length > 0) params.set('modality', filters.modality.join(','));
+  if (filters.neighborhood && filters.neighborhood.length > 0)
+    params.set('neighborhood', filters.neighborhood.join(','));
+  if (filters.modality && filters.modality.length > 0)
+    params.set('modality', filters.modality.join(','));
   if (filters.minMargin) params.set('minMargin', filters.minMargin.toString());
   if (filters.maxMargin) params.set('maxMargin', filters.maxMargin.toString());
   if (page > 1) params.set('page', page.toString());
@@ -74,7 +71,8 @@ function SearchPageContent() {
   const canAccessFavorites = hasMinimumRole(role, 'standard');
   // #42: the view follows the URL, so the AppShell's Favoritos link (/search?view=favorites) and
   // Buscar imóveis link (/search) switch it without a callback into the page
-  const activeView = searchParams.get('view') === 'favorites' && canAccessFavorites ? 'favorites' : 'search';
+  const activeView =
+    searchParams.get('view') === 'favorites' && canAccessFavorites ? 'favorites' : 'search';
   const queryKey = searchParams.toString();
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -98,9 +96,11 @@ function SearchPageContent() {
       // Handle city as array - join with comma for API
       if (filters.city && filters.city.length > 0) params.set('city', filters.city.join(','));
       // Handle neighborhood as array - join with comma for API
-      if (filters.neighborhood && filters.neighborhood.length > 0) params.set('neighborhood', filters.neighborhood.join(','));
+      if (filters.neighborhood && filters.neighborhood.length > 0)
+        params.set('neighborhood', filters.neighborhood.join(','));
       // Handle modality as array - join with comma for API
-      if (filters.modality && filters.modality.length > 0) params.set('modality', filters.modality.join(','));
+      if (filters.modality && filters.modality.length > 0)
+        params.set('modality', filters.modality.join(','));
       if (filters.minMargin) params.set('minMargin', filters.minMargin.toString());
       if (filters.maxMargin) params.set('maxMargin', filters.maxMargin.toString());
       params.set('limit', pageSize.toString());
@@ -172,7 +172,14 @@ function SearchPageContent() {
 
   return (
     // #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar
-    <Box sx={{ pt: 2, pb: 4, pr: activeView === 'search' ? '380px' : 0, transition: 'padding-right 0.3s' }}>
+    <Box
+      sx={{
+        pt: 2,
+        pb: 4,
+        pr: activeView === 'search' ? '380px' : 0,
+        transition: 'padding-right 0.3s',
+      }}
+    >
       <Container maxWidth="xl">
         {activeView === 'search' && (
           <>
@@ -201,9 +208,7 @@ function SearchPageContent() {
           </>
         )}
 
-        {activeView === 'favorites' && canAccessFavorites && (
-          <FavoritesView />
-        )}
+        {activeView === 'favorites' && canAccessFavorites && <FavoritesView />}
 
         {/* Search Results */}
         {searchResults && activeView === 'search' && (

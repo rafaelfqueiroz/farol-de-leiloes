@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const response = await fetch('/api/auth/me', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await fetch('/api/auth/logout', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
           },
         });
       }
@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await fetch('/api/auth/resend-verification', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
     });
 
@@ -160,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const response = await fetch('/api/auth/verification-status', {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
     });
 

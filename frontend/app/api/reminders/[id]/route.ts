@@ -4,16 +4,13 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhos
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id } = await params;
@@ -22,7 +19,7 @@ export async function DELETE(
     const response = await fetch(url, {
       method: 'DELETE',
       headers: {
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
     });
 
@@ -30,7 +27,7 @@ export async function DELETE(
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
       return NextResponse.json(
         { error: errorData.message || `Backend error: ${response.statusText}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -39,23 +36,17 @@ export async function DELETE(
     console.error('Error deleting reminder:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to delete reminder' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id } = await params;
@@ -66,7 +57,7 @@ export async function PATCH(
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
       body: JSON.stringify(body),
     });
@@ -75,7 +66,7 @@ export async function PATCH(
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
       return NextResponse.json(
         { error: errorData.message || `Backend error: ${response.statusText}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -85,7 +76,7 @@ export async function PATCH(
     console.error('Error updating reminder:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to update reminder' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -6,9 +6,7 @@ import { SavedFilterEntity, SavedFilterSchema } from './schemas/saved-filter.sch
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: SavedFilterEntity.name, schema: SavedFilterSchema },
-    ]),
+    MongooseModule.forFeature([{ name: SavedFilterEntity.name, schema: SavedFilterSchema }]),
   ],
   controllers: [SavedFiltersController],
   providers: [SavedFiltersService],

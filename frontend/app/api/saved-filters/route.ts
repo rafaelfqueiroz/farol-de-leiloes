@@ -7,10 +7,7 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const url = `${BACKEND_URL}/api/saved-filters`;
@@ -19,7 +16,7 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
     });
 
@@ -27,7 +24,7 @@ export async function GET(request: NextRequest) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
       return NextResponse.json(
         { error: errorData.message || `Backend error: ${response.statusText}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -37,7 +34,7 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching saved filters:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to fetch saved filters' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -47,10 +44,7 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -60,7 +54,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
       body: JSON.stringify(body),
     });
@@ -69,7 +63,7 @@ export async function POST(request: NextRequest) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
       return NextResponse.json(
         { error: errorData.message || `Backend error: ${response.statusText}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -79,7 +73,7 @@ export async function POST(request: NextRequest) {
     console.error('Error creating saved filter:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to create saved filter' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

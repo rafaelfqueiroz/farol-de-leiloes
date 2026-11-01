@@ -41,7 +41,8 @@ export function parseCsv(csv: string): ParsedAuctionRow[] {
     const labels = row.map((col) => normalizeKey(col));
     const hasUF = labels.includes('uf');
     const hasCidade = labels.includes('cidade');
-    const hasModalidade = labels.includes('modalidade de venda') || labels.includes('modalidadedevenda');
+    const hasModalidade =
+      labels.includes('modalidade de venda') || labels.includes('modalidadedevenda');
 
     if (hasUF && hasCidade && hasModalidade) {
       header = row.map((col) => col.trim());
@@ -78,10 +79,23 @@ export function normalizeRows(rows: ParsedAuctionRow[]): NormalizedAuctionRow[] 
     const street = pick(r, ['Endereço', 'Endereco', 'Logradouro']);
     const neighborhood = pick(r, ['Bairro']);
     const modality = pick(r, ['Modalidade de venda', 'Modalidade', 'TipoVenda']);
-    const appraisalPrice = parseMoney(pick(r, ['Valor de avaliação', 'ValorAvaliacao', 'Valor Avaliacao', 'Valor de avaliacao']));
-    const minimumPrice = parseMoney(pick(r, ['Preço', 'Preco', 'ValorMinimo', 'Valor Minimo', 'Valor de Venda', 'Valor Venda']));
+    const appraisalPrice = parseMoney(
+      pick(r, ['Valor de avaliação', 'ValorAvaliacao', 'Valor Avaliacao', 'Valor de avaliacao']),
+    );
+    const minimumPrice = parseMoney(
+      pick(r, ['Preço', 'Preco', 'ValorMinimo', 'Valor Minimo', 'Valor de Venda', 'Valor Venda']),
+    );
     const detailsUrl = pick(r, ['Link de acesso', 'Link', 'URL', 'Url']);
-    let code = pick(r, ['N° do imóvel', 'Nº do imóvel', 'No do imovel', 'Numero do imovel', 'Código', 'Codigo', 'Identificador', 'Matricula']);
+    let code = pick(r, [
+      'N° do imóvel',
+      'Nº do imóvel',
+      'No do imovel',
+      'Numero do imovel',
+      'Código',
+      'Codigo',
+      'Identificador',
+      'Matricula',
+    ]);
 
     // If code is not available from the column, extract it from detailsUrl
     // Example: https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=1444419970935
@@ -113,9 +127,7 @@ function pick(row: Record<string, string>, keys: string[]): string {
 }
 
 function findKey(row: Record<string, string>, keys: string[]): string | undefined {
-  const lower = Object.fromEntries(
-    Object.entries(row).map(([k]) => [normalizeKey(k), k]),
-  );
+  const lower = Object.fromEntries(Object.entries(row).map(([k]) => [normalizeKey(k), k]));
   for (const k of keys) {
     const norm = normalizeKey(k);
     if (lower[norm]) return lower[norm];
@@ -125,7 +137,11 @@ function findKey(row: Record<string, string>, keys: string[]): string | undefine
 
 function parseMoney(s: string): number | null {
   if (!s) return null;
-  const t = s.replace(/\./g, '').replace(/\s/g, '').replace(/R\$\s*/i, '').replace(/,/g, '.');
+  const t = s
+    .replace(/\./g, '')
+    .replace(/\s/g, '')
+    .replace(/R\$\s*/i, '')
+    .replace(/,/g, '.');
   const n = Number(t);
   return isFinite(n) && !isNaN(n) ? n : null;
 }
@@ -135,7 +151,10 @@ function removeDiacritics(s: string) {
 }
 
 function normalizeKey(s: string): string {
-  return removeDiacritics(String(s || '')).replace(/\s+/g, ' ').trim().toLowerCase();
+  return removeDiacritics(String(s || ''))
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 function stripBom(s: string): string {

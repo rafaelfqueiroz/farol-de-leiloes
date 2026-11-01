@@ -111,7 +111,8 @@ export default function SupportPage() {
           Suporte
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Encontre respostas para as perguntas mais frequentes ou envie uma solicitação para nossa equipe.
+          Encontre respostas para as perguntas mais frequentes ou envie uma solicitação para nossa
+          equipe.
         </Typography>
       </Box>
 

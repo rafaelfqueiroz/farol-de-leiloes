@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
 
     if (searchParams.get('state')) params.set('state', searchParams.get('state')!);
     if (searchParams.get('city')) params.set('city', searchParams.get('city')!);
-    if (searchParams.get('neighborhood')) params.set('neighborhood', searchParams.get('neighborhood')!);
+    if (searchParams.get('neighborhood'))
+      params.set('neighborhood', searchParams.get('neighborhood')!);
     if (searchParams.get('modality')) params.set('modality', searchParams.get('modality')!);
     if (searchParams.get('minMargin')) params.set('minMargin', searchParams.get('minMargin')!);
     if (searchParams.get('maxMargin')) params.set('maxMargin', searchParams.get('maxMargin')!);
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching auctions:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to fetch auctions' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

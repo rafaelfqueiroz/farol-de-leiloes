@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     }
 
     const response = await fetch(`${BACKEND_URL}/api/payments/subscription-status`, {
-      headers: { 'Authorization': authHeader },
+      headers: { Authorization: authHeader },
     });
 
     const data = await response.json();

@@ -22,7 +22,7 @@ export class FavoritesController {
   @Get()
   async findAll(@CurrentUser() user: any): Promise<AuctionResponseDto[]> {
     const auctions = await this.favoritesService.findAll(user.userId);
-    return auctions.map(auction => new AuctionResponseDto(auction));
+    return auctions.map((auction) => new AuctionResponseDto(auction));
   }
 
   @Post()

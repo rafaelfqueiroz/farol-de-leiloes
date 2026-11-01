@@ -32,7 +32,9 @@ export class WhatsAppService {
       this.logger.log(`To: ${phoneNumber}`);
       this.logger.log(`User: ${payload.userName}`);
       this.logger.log(`Auction: ${payload.auctionTitle || payload.auctionCode}`);
-      this.logger.log(`Location: ${payload.auctionCity ?? 'N/A'}, ${payload.auctionState ?? 'N/A'}`);
+      this.logger.log(
+        `Location: ${payload.auctionCity ?? 'N/A'}, ${payload.auctionState ?? 'N/A'}`,
+      );
       this.logger.log(`Details URL: ${payload.auctionDetailsUrl ?? 'N/A'}`);
       this.logger.log(`Description: ${payload.description ?? 'N/A'}`);
       this.logger.log('='.repeat(60));

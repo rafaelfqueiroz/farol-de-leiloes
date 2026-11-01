@@ -19,13 +19,15 @@ function AuthCallbackContent() {
       localStorage.setItem('token', token);
 
       // Load user data
-      loadUser().then(() => {
-        // Redirect to home page
-        router.push('/');
-      }).catch((error) => {
-        console.error('Error loading user after OAuth:', error);
-        router.push('/login');
-      });
+      loadUser()
+        .then(() => {
+          // Redirect to home page
+          router.push('/');
+        })
+        .catch((error) => {
+          console.error('Error loading user after OAuth:', error);
+          router.push('/login');
+        });
     } else {
       // No token, redirect to login
       router.push('/login');

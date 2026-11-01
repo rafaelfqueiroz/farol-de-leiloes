@@ -48,7 +48,12 @@ export default function EmptyState({
         </Typography>
       </Stack>
       {actions ? (
-        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ flexWrap: 'wrap', justifyContent: 'center' }}
+        >
           {actions}
         </Stack>
       ) : null}

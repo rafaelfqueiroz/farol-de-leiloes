@@ -23,9 +23,7 @@ export class SupportService {
       dto.description,
     );
 
-    this.logger.log(
-      `Support request submitted by ${userEmail}: "${dto.title}"`,
-    );
+    this.logger.log(`Support request submitted by ${userEmail}: "${dto.title}"`);
 
     return { message: 'Solicitação de suporte enviada com sucesso.' };
   }

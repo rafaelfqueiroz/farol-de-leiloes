@@ -29,10 +29,7 @@ export class RemindersController {
   }
 
   @Get(':id')
-  async findOne(
-    @CurrentUser() user: any,
-    @Param('id') id: string,
-  ): Promise<ReminderResponseDto> {
+  async findOne(@CurrentUser() user: any, @Param('id') id: string): Promise<ReminderResponseDto> {
     const reminder = await this.remindersService.findOne(user.userId, id);
     return new ReminderResponseDto(reminder);
   }

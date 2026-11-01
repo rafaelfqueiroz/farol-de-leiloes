@@ -1,0 +1,2 @@
+# prettier --write and eslint --fix on staged files, per package (lint-staged config in each).
+npx --no-install lint-staged

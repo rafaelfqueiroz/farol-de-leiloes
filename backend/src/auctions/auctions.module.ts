@@ -35,8 +35,13 @@ import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
     StorageModule,
   ],
   controllers: [AuctionsController],
-  providers: [AuctionsService, AuctionsImporter, CsvCacheService, AuctionDetailsScraper, AuctionCleanupService],
+  providers: [
+    AuctionsService,
+    AuctionsImporter,
+    CsvCacheService,
+    AuctionDetailsScraper,
+    AuctionCleanupService,
+  ],
   exports: [AuctionsService, CacheModule],
 })
 export class AuctionsModule {}
-

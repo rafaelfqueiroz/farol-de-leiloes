@@ -53,7 +53,10 @@ export class AuctionsService {
     const codes = items.map((item) => item.code).filter(Boolean) as string[];
     this.logger.log(`[upsertMany] Valid codes: ${codes.length}`);
 
-    const existing = await this.auctionRepository.find({ code: { $in: codes } }).select('code phases').lean();
+    const existing = await this.auctionRepository
+      .find({ code: { $in: codes } })
+      .select('code phases')
+      .lean();
     this.logger.log(`[upsertMany] Found ${existing.length} existing auctions in DB`);
 
     const existingMap = new Map(existing.map((doc) => [doc.code, doc]));
@@ -130,8 +133,12 @@ export class AuctionsService {
       }
     }
 
-    this.logger.log(`[upsertMany] Skipped - no code: ${skippedNoCode}, no phases: ${skippedNoPhases}, same modality: ${skippedSameModality}`);
-    this.logger.log(`[upsertMany] Operations - inserts: ${insertOps}, updates: ${updateOps}, total: ${ops.length}`);
+    this.logger.log(
+      `[upsertMany] Skipped - no code: ${skippedNoCode}, no phases: ${skippedNoPhases}, same modality: ${skippedSameModality}`,
+    );
+    this.logger.log(
+      `[upsertMany] Operations - inserts: ${insertOps}, updates: ${updateOps}, total: ${ops.length}`,
+    );
 
     if (ops.length === 0) {
       this.logger.log(`[upsertMany] No operations to execute`);
@@ -139,7 +146,9 @@ export class AuctionsService {
     }
 
     const res = await this.auctionRepository.bulkWrite(ops, { ordered: false });
-    this.logger.log(`[upsertMany] BulkWrite result - matched: ${res.matchedCount}, upserted: ${res.upsertedCount}, modified: ${res.modifiedCount}`);
+    this.logger.log(
+      `[upsertMany] BulkWrite result - matched: ${res.matchedCount}, upserted: ${res.upsertedCount}, modified: ${res.modifiedCount}`,
+    );
     return {
       matched: res.matchedCount,
       upserted: res.upsertedCount,
@@ -177,19 +186,21 @@ export class AuctionsService {
         query['address.city'] = new RegExp(`^${escapeRegExp(cities[0])}`, 'i');
       } else {
         query['address.city'] = {
-          $in: cities.map(c => new RegExp(`^${escapeRegExp(c)}`, 'i')),
+          $in: cities.map((c) => new RegExp(`^${escapeRegExp(c)}`, 'i')),
         };
       }
     }
 
     // Handle neighborhood filter (single value or array)
     if (filters.neighborhood) {
-      const neighborhoods = Array.isArray(filters.neighborhood) ? filters.neighborhood : [filters.neighborhood];
+      const neighborhoods = Array.isArray(filters.neighborhood)
+        ? filters.neighborhood
+        : [filters.neighborhood];
       if (neighborhoods.length === 1) {
         query['address.neighborhood'] = new RegExp(`^${escapeRegExp(neighborhoods[0])}`, 'i');
       } else {
         query['address.neighborhood'] = {
-          $in: neighborhoods.map(n => new RegExp(`^${escapeRegExp(n)}`, 'i')),
+          $in: neighborhoods.map((n) => new RegExp(`^${escapeRegExp(n)}`, 'i')),
         };
       }
     }
@@ -231,7 +242,7 @@ export class AuctionsService {
       .exec();
 
     this.logger.log(`[query] Found ${docs.length} docs, total: ${total}`);
-    return { total, items: docs.map(doc => this.toAuction(doc)) };
+    return { total, items: docs.map((doc) => this.toAuction(doc)) };
   }
 
   async findByCode(code: string): Promise<Auction | null> {
@@ -255,7 +266,7 @@ export class AuctionsService {
       .lean()
       .exec();
 
-    return docs.map(doc => ({
+    return docs.map((doc) => ({
       code: doc.code,
       updatedAt: doc.updatedAt,
     }));
@@ -331,27 +342,29 @@ export class AuctionsService {
       matchStage['address.city'] = new RegExp(`^${escapeRegExp(cities[0])}`, 'i');
     } else {
       matchStage['address.city'] = {
-        $in: cities.map(c => new RegExp(`^${escapeRegExp(c)}`, 'i')),
+        $in: cities.map((c) => new RegExp(`^${escapeRegExp(c)}`, 'i')),
       };
     }
 
     this.logger.debug(`[getNeighborhoods] Filter: ${JSON.stringify(matchStage)}`);
 
     // Aggregate to get distinct neighborhoods
-    const result = await this.auctionRepository.aggregate([
-      { $match: matchStage },
-      { $group: { _id: '$address.neighborhood' } },
-      { $sort: { _id: 1 } },
-    ]).exec();
+    const result = await this.auctionRepository
+      .aggregate([
+        { $match: matchStage },
+        { $group: { _id: '$address.neighborhood' } },
+        { $sort: { _id: 1 } },
+      ])
+      .exec();
 
-    const neighborhoods = result
-      .map(doc => doc._id as string)
-      .filter(Boolean);
+    const neighborhoods = result.map((doc) => doc._id as string).filter(Boolean);
 
     // Cache the result (if enabled)
     if (this.cacheEnabled) {
       await this.cacheManager.set(cacheKey, neighborhoods);
-      this.logger.debug(`[getNeighborhoods] Cached ${neighborhoods.length} neighborhoods for ${cacheKey}`);
+      this.logger.debug(
+        `[getNeighborhoods] Cached ${neighborhoods.length} neighborhoods for ${cacheKey}`,
+      );
     }
 
     return neighborhoods;
@@ -361,7 +374,9 @@ export class AuctionsService {
    * Checks availability of fulfilled auctions whose codes are not in the CSV.
    * Fetches each auction's details page and marks as unavailable if Caixa confirms it.
    */
-  async verifyAvailability(csvCodes: string[]): Promise<{ checked: number; unavailable: number; errors: number }> {
+  async verifyAvailability(
+    csvCodes: string[],
+  ): Promise<{ checked: number; unavailable: number; errors: number }> {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const missingAuctions = await this.auctionRepository
       .find({
@@ -379,7 +394,9 @@ export class AuctionsService {
       .limit(1000)
       .lean();
 
-    this.logger.log(`[verifyAvailability] Found ${missingAuctions.length} auctions not in CSV to check (max 1000)`);
+    this.logger.log(
+      `[verifyAvailability] Found ${missingAuctions.length} auctions not in CSV to check (max 1000)`,
+    );
 
     if (missingAuctions.length === 0) {
       return { checked: 0, unavailable: 0, errors: 0 };
@@ -395,7 +412,9 @@ export class AuctionsService {
 
     for (let i = 0; i < missingAuctions.length; i += batchSize) {
       const batch = missingAuctions.slice(i, i + batchSize);
-      this.logger.log(`[verifyAvailability] Processing batch ${Math.floor(i / batchSize) + 1}/${totalBatches}`);
+      this.logger.log(
+        `[verifyAvailability] Processing batch ${Math.floor(i / batchSize) + 1}/${totalBatches}`,
+      );
 
       for (let j = 0; j < batch.length; j += concurrency) {
         const group = batch.slice(j, j + concurrency);
@@ -405,21 +424,31 @@ export class AuctionsService {
             try {
               available = await fetchAndCheckAvailability(auction.detailsUrl!);
             } catch (error) {
-              this.logger.error(`[verifyAvailability] Auction ${auction.code} fetch failed for ${auction.detailsUrl}: ${error instanceof Error ? error.message : error}`);
+              this.logger.error(
+                `[verifyAvailability] Auction ${auction.code} fetch failed for ${auction.detailsUrl}: ${error instanceof Error ? error.message : error}`,
+              );
               throw error;
             }
             if (!available) {
               await this.auctionRepository.updateOne(
                 { code: auction.code },
-                { $set: { available: false, availabilityCheckedAt: new Date(), updatedAt: new Date() } },
+                {
+                  $set: {
+                    available: false,
+                    availabilityCheckedAt: new Date(),
+                    updatedAt: new Date(),
+                  },
+                },
               );
-              this.logger.debug(`[verifyAvailability] Auction ${auction.code} marked as unavailable`);
+              this.logger.debug(
+                `[verifyAvailability] Auction ${auction.code} marked as unavailable`,
+              );
               return false;
             }
             await this.auctionRepository.updateOne(
-                { code: auction.code },
-                { $set: { availabilityCheckedAt: new Date() } },
-              );
+              { code: auction.code },
+              { $set: { availabilityCheckedAt: new Date() } },
+            );
             this.logger.debug(`[verifyAvailability] Auction ${auction.code} still available`);
             return true;
           }),
@@ -431,11 +460,13 @@ export class AuctionsService {
             if (!result.value) unavailableCount++;
           } else {
             errorCount++;
-            this.logger.error(`[verifyAvailability] Error checking ${group[k].code}: ${result.reason?.message || result.reason}`);
+            this.logger.error(
+              `[verifyAvailability] Error checking ${group[k].code}: ${result.reason?.message || result.reason}`,
+            );
           }
         }
 
-        await new Promise(resolve => setTimeout(resolve, delayBetweenGroups));
+        await new Promise((resolve) => setTimeout(resolve, delayBetweenGroups));
       }
     }
 
@@ -455,10 +486,8 @@ export class AuctionsService {
     }
     this.logger.log('[invalidateNeighborhoodsCache] Cache cleared');
   }
-
 }
 
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-

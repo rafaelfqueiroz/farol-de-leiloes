@@ -9,9 +9,7 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    @InjectModel(UserEntity.name) private readonly userRepository: Model<UserDocument>,
-  ) {}
+  constructor(@InjectModel(UserEntity.name) private readonly userRepository: Model<UserDocument>) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserDocument> {
     // Check if user already exists
@@ -56,21 +54,26 @@ export class UsersService {
   }
 
   async findByIdFull(id: string): Promise<UserDocument | null> {
-    return this.userRepository.findById(id)
-      .select('-password -resetPasswordToken -resetPasswordExpires -emailVerificationToken -emailVerificationExpires')
+    return this.userRepository
+      .findById(id)
+      .select(
+        '-password -resetPasswordToken -resetPasswordExpires -emailVerificationToken -emailVerificationExpires',
+      )
       .exec();
   }
 
   async linkGoogleAccount(userId: string, googleId: string): Promise<UserDocument> {
-    const updatedUser = await this.userRepository.findByIdAndUpdate(
-      userId,
-      {
-        googleId,
-        emailVerified: true,
-        $addToSet: { providers: 'google' },
-      },
-      { new: true },
-    ).exec();
+    const updatedUser = await this.userRepository
+      .findByIdAndUpdate(
+        userId,
+        {
+          googleId,
+          emailVerified: true,
+          $addToSet: { providers: 'google' },
+        },
+        { new: true },
+      )
+      .exec();
 
     if (!updatedUser) {
       throw new NotFoundException(`User with ID ${userId} not found`);
@@ -82,14 +85,17 @@ export class UsersService {
   async setPassword(userId: string, newPassword: string): Promise<UserDocument> {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    const updatedUser = await this.userRepository.findByIdAndUpdate(
-      userId,
-      {
-        password: hashedPassword,
-        $addToSet: { providers: 'local' },
-      },
-      { new: true },
-    ).select('-password').exec();
+    const updatedUser = await this.userRepository
+      .findByIdAndUpdate(
+        userId,
+        {
+          password: hashedPassword,
+          $addToSet: { providers: 'local' },
+        },
+        { new: true },
+      )
+      .select('-password')
+      .exec();
 
     if (!updatedUser) {
       throw new NotFoundException(`User with ID ${userId} not found`);
@@ -148,7 +154,8 @@ export class UsersService {
     }
 
     // Generate random token
-    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const token =
+      Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     const hashedToken = await bcrypt.hash(token, 10);
 
     // Set expiration to 1 hour from now
@@ -164,9 +171,11 @@ export class UsersService {
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    const users = await this.userRepository.find({
-      resetPasswordExpires: { $gt: new Date() },
-    }).exec();
+    const users = await this.userRepository
+      .find({
+        resetPasswordExpires: { $gt: new Date() },
+      })
+      .exec();
 
     // Find user with matching token
     let matchedUser: UserDocument | null = null;
@@ -227,10 +236,7 @@ export class UsersService {
     let matchedUser: UserDocument | null = null;
     for (const user of users) {
       if (user.emailVerificationToken) {
-        const isTokenValid = await bcrypt.compare(
-          token,
-          user.emailVerificationToken,
-        );
+        const isTokenValid = await bcrypt.compare(token, user.emailVerificationToken);
         if (isTokenValid) {
           matchedUser = user;
           break;

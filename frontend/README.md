@@ -26,17 +26,20 @@ AI-powered interface to search and query auctions from Caixa Econômica Federal 
 
 ## Installation
 
-1. Install dependencies:
+1. Install dependencies (and, once at the repository root, run `npm install` to install the git hooks: husky + lint-staged):
+
 ```bash
 npm install
 ```
 
 2. Create `.env` file:
+
 ```bash
 cp .env.example .env
 ```
 
 3. Add your OpenAI API key to `.env`:
+
 ```
 OPENAI_API_KEY=sk-...
 NEXT_PUBLIC_AUCTIONS_API_URL=http://localhost:3000
@@ -45,6 +48,7 @@ NEXT_PUBLIC_AUCTIONS_API_URL=http://localhost:3000
 ## Running the Application
 
 Development mode:
+
 ```bash
 npm run dev
 ```
@@ -52,6 +56,7 @@ npm run dev
 The frontend will be available at http://localhost:3001
 
 Production build:
+
 ```bash
 npm run build
 npm start
@@ -59,13 +64,17 @@ npm start
 
 ## Scripts
 
-| Script | What it does |
-|---|---|
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest (unit, component and structural tests) |
-| `npm run check` | `typecheck` + `test` — provisional until lint and format land (#29); run before pushing |
-| `npm run build` | Next.js production build |
-| `npm run lint` | `next lint` — currently broken, to be replaced by ESLint in #29 |
+| Script                 | What it does                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck`    | `tsc --noEmit`                                                                                             |
+| `npm test`             | Vitest (unit, component and structural tests)                                                              |
+| `npm run lint`         | ESLint (legacy violations are suppressed in `eslint-suppressions.json` until #30)                          |
+| `npm run lint:fix`     | ESLint with `--fix`                                                                                        |
+| `npm run lint:prune`   | Drops suppressions that no longer occur, after fixing a legacy violation                                   |
+| `npm run format`       | Prettier, write                                                                                            |
+| `npm run format:check` | Prettier, check only                                                                                       |
+| `npm run check`        | `typecheck` + `lint` + `format:check` + `test`; the pre-push hook runs it when `frontend/` changes (DV-37) |
+| `npm run build`        | Next.js production build                                                                                   |
 
 ## Usage Examples
 
@@ -76,6 +85,7 @@ Ask questions in natural Portuguese:
 - "Quais são os imóveis em São Paulo com preço entre R$100.000,00 e R$300.000,00?"
 
 The AI agent will:
+
 1. Extract filters (state, city, neighborhood, modality, price range)
 2. Map state names to abbreviations (e.g., "Rio Grande do Norte" → "RN")
 3. Map auction modalities to enum values (e.g., "Licitação Aberta" → "OPEN_BIDDING")

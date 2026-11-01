@@ -28,7 +28,7 @@ export class SavedFiltersController {
   @Get()
   async findAll(@CurrentUser() user: any): Promise<SavedFilterResponseDto[]> {
     const filters = await this.savedFiltersService.findAll(user.userId);
-    return filters.map(filter => new SavedFilterResponseDto(filter));
+    return filters.map((filter) => new SavedFilterResponseDto(filter));
   }
 
   @Post()

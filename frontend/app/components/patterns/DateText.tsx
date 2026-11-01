@@ -27,14 +27,24 @@ function RelativeText({ parts }: { parts: RelativeParts }) {
     unit === 'now' || unit === 'today' ? t(unit) : t(`${unit}.${direction}`, { count });
   return (
     // the server clock and the browser clock can differ at a unit boundary
-    <Typography component="span" variant="inherit" sx={{ color: 'text.secondary' }} suppressHydrationWarning>
+    <Typography
+      component="span"
+      variant="inherit"
+      sx={{ color: 'text.secondary' }}
+      suppressHydrationWarning
+    >
       {t('joined', { relative: phrase })}
     </Typography>
   );
 }
 
 // DS-29, AR-23: the only place dates are rendered, in Brasília time, inside <time>.
-export default function DateText({ value, withTime = false, relative = false, now }: DateTextProps) {
+export default function DateText({
+  value,
+  withTime = false,
+  relative = false,
+  now,
+}: DateTextProps) {
   return (
     <Typography component="span" variant="inherit" sx={{ fontVariantNumeric: 'tabular-nums' }}>
       <time dateTime={toDateTimeAttribute(value)}>
