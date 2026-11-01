@@ -1,0 +1,55 @@
+# DV-37: run `npm run check` in each package the push changes. POSIX sh.
+# PRE_PUSH_DRY_RUN=1 prints the selection without running the checks (used to test the selection).
+
+root=$(git rev-parse --show-toplevel)
+. "$root/.husky/lib/changed-packages.sh"
+
+# A push that only deletes refs sends nothing to check.
+if [ ! -t 0 ]; then
+  seen=0
+  only_deletes=1
+  while read -r _local_ref local_sha _remote_ref _remote_sha; do
+    seen=1
+    case "$local_sha" in
+      *[!0]*) only_deletes=0 ;;
+    esac
+  done
+  if [ "$seen" = 1 ] && [ "$only_deletes" = 1 ]; then
+    echo "pre-push: only deleting remote refs, nothing to check."
+    exit 0
+  fi
+fi
+
+if base_info=$(resolve_push_base); then
+  base=${base_info%%|*}
+  echo "pre-push: measuring against ${base_info#*|}."
+  if ! changed=$(git diff --name-only "$base...HEAD"); then
+    echo "pre-push: could not diff against $base, checking both packages."
+    changed=$(printf '%s\n' backend/ frontend/)
+  fi
+else
+  echo "pre-push: no upstream and no origin/main to compare with, checking both packages."
+  changed=$(printf '%s\n' backend/ frontend/)
+fi
+
+selected=$(printf '%s\n' "$changed" | select_packages)
+
+if [ -z "$selected" ]; then
+  echo "pre-push: no package changed (only docs/, .github/ or other non-code files), nothing to check."
+  exit 0
+fi
+
+status=0
+for package in backend frontend; do
+  reason=$(printf '%s\n' "$selected" | sed -n "s/^$package //p")
+  [ -n "$reason" ] || continue
+  echo "pre-push: checking $package ($reason)."
+  if [ -n "$PRE_PUSH_DRY_RUN" ]; then
+    continue
+  fi
+  if ! (cd "$root/$package" && npm run check); then
+    echo "pre-push: $package check FAILED. Fix it; do not bypass the hook (TS-30)." >&2
+    status=1
+  fi
+done
+exit $status

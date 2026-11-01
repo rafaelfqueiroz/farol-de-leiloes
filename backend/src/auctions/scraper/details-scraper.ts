@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import puppeteer from 'puppeteer-extra';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema';
 
@@ -55,7 +55,9 @@ export function scrapeAuctionDetails(html: string): ScrapedDetails {
 
     // Extract description
     // Format: <p style="margin-bottom: 0.5em;"><strong>Descrição:</strong><br>...</p>
-    const descriptionMatch = relatedBoxHtml.match(/<strong>Descrição:<\/strong><br\s*\/?>([\s\S]*?)<\/p>/i);
+    const descriptionMatch = relatedBoxHtml.match(
+      /<strong>Descrição:<\/strong><br\s*\/?>([\s\S]*?)<\/p>/i,
+    );
     if (descriptionMatch) {
       details.description = descriptionMatch[1]
         .replace(/&nbsp;/g, ' ')
@@ -90,7 +92,9 @@ function extractPaymentMethods(html: string): PaymentMethod[] {
   const paymentMethods: PaymentMethod[] = [];
 
   // Find the section starting with "FORMAS DE PAGAMENTO ACEITAS:"
-  const paymentSectionMatch = html.match(/FORMAS DE PAGAMENTO ACEITAS:<br\s*\/?>([\s\S]*?)(?:REGRAS PARA PAGAMENTO|<\/p>)/i);
+  const paymentSectionMatch = html.match(
+    /FORMAS DE PAGAMENTO ACEITAS:<br\s*\/?>([\s\S]*?)(?:REGRAS PARA PAGAMENTO|<\/p>)/i,
+  );
   if (!paymentSectionMatch) return paymentMethods;
 
   const paymentSection = paymentSectionMatch[1];
@@ -121,7 +125,9 @@ function extractExpenseRules(html: string): ExpenseRule[] {
   const expenseRules: ExpenseRule[] = [];
 
   // Find the section starting with "REGRAS PARA PAGAMENTO DAS DESPESAS"
-  const expenseSectionMatch = html.match(/REGRAS PARA PAGAMENTO DAS DESPESAS[^:]*:<br\s*\/?>([\s\S]*?)(?:<span|<\/p>|$)/i);
+  const expenseSectionMatch = html.match(
+    /REGRAS PARA PAGAMENTO DAS DESPESAS[^:]*:<br\s*\/?>([\s\S]*?)(?:<span|<\/p>|$)/i,
+  );
   if (!expenseSectionMatch) return expenseRules;
 
   const expenseSection = expenseSectionMatch[1];
@@ -181,8 +187,12 @@ function extractPhaseDates(html: string): Date[] {
   const phaseDates: Date[] = [];
 
   // Try SFI Auction pattern - "Data do 1º Leilão" and "Data do 2º Leilão"
-  const firstAuctionMatch = html.match(/Data do 1º Leilão\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i);
-  const secondAuctionMatch = html.match(/Data do 2º Leilão\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i);
+  const firstAuctionMatch = html.match(
+    /Data do 1º Leilão\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i,
+  );
+  const secondAuctionMatch = html.match(
+    /Data do 2º Leilão\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i,
+  );
 
   if (firstAuctionMatch) {
     const date = parseBrazilianDate(firstAuctionMatch[1]);
@@ -198,7 +208,9 @@ function extractPhaseDates(html: string): Date[] {
   }
 
   // Try Open Bidding pattern - "Data da Licitação Aberta"
-  const openBiddingMatch = html.match(/Data da Licitação Aberta\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i);
+  const openBiddingMatch = html.match(
+    /Data da Licitação Aberta\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i,
+  );
   if (openBiddingMatch) {
     const date = parseBrazilianDate(openBiddingMatch[1]);
     if (date) phaseDates.push(date);
@@ -208,10 +220,13 @@ function extractPhaseDates(html: string): Date[] {
   // Try Online Sales pattern - extract date from strLista in carregaContador()
   // Format: strLista: "1@@" + "DD/MM/YYYY HH:MM:SS" + "@@" + "0,00" + "||"
   // Direct Online Sales has an empty date string, so no date is extracted
-  const strListaMatch = html.match(/strLista:\s*"1@@"\s*\+\s*"(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})"/);
+  const strListaMatch = html.match(
+    /strLista:\s*"1@@"\s*\+\s*"(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})"/,
+  );
   if (strListaMatch) {
-    const [, day, month, year, hours, minutes, seconds] =
-      strListaMatch[1].match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/)!;
+    const [, day, month, year, hours, minutes, seconds] = strListaMatch[1].match(
+      /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/,
+    )!;
     const date = new Date(
       parseInt(year),
       parseInt(month) - 1,
@@ -257,7 +272,11 @@ async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
     }
     const html = await page.content();
 
-    if (html.includes('Radware Bot Manager') || html.includes('cdn.perfdrive.com') || html.includes('ShieldSquare')) {
+    if (
+      html.includes('Radware Bot Manager') ||
+      html.includes('cdn.perfdrive.com') ||
+      html.includes('ShieldSquare')
+    ) {
       throw new Error('Bot protection page detected instead of auction content');
     }
 
@@ -277,7 +296,9 @@ export async function fetchAndScrapeDetails(detailsUrl: string): Promise<Scraped
     const html = await fetchAuctionDetailHtml(detailsUrl);
     return scrapeAuctionDetails(html);
   } catch (error) {
-    throw new Error(`Failed to scrape details from ${detailsUrl}: ${error instanceof Error ? error.message : error}`);
+    throw new Error(
+      `Failed to scrape details from ${detailsUrl}: ${error instanceof Error ? error.message : error}`,
+    );
   }
 }
 

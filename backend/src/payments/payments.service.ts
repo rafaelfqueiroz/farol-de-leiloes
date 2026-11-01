@@ -34,7 +34,7 @@ export class PaymentsService {
     }
 
     // Look up or create Stripe customer
-    let user = await this.usersService.findByIdFull(userId);
+    const user = await this.usersService.findByIdFull(userId);
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
     }
@@ -125,9 +125,7 @@ export class PaymentsService {
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
-        const user = await this.usersService.findByStripeCustomerId(
-          invoice.customer as string,
-        );
+        const user = await this.usersService.findByStripeCustomerId(invoice.customer as string);
         if (user) {
           await this.usersService.update(user._id.toString(), {
             subscriptionStatus: 'past_due',
@@ -177,9 +175,7 @@ export class PaymentsService {
   }
 
   private async syncSubscription(subscription: Stripe.Subscription): Promise<void> {
-    const user = await this.usersService.findByStripeCustomerId(
-      subscription.customer as string,
-    );
+    const user = await this.usersService.findByStripeCustomerId(subscription.customer as string);
     if (!user) return;
 
     const status = subscription.status;

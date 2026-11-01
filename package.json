@@ -1,0 +1,16 @@
+{
+  "name": "farol-dos-leiloes-hooks",
+  "private": true,
+  "description": "Git hook tooling only (husky + lint-staged). The applications live in backend/ and frontend/, each with its own package.json and lockfile.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": "24.22.2"
+  },
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0"
+  }
+}

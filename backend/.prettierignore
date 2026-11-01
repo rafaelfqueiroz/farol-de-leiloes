@@ -1,0 +1,15 @@
+# Generated and installed
+node_modules/
+dist/
+coverage/
+package-lock.json
+*.tsbuildinfo
+
+# Data the app reads at runtime
+/data/
+
+# Test fixtures are captured Caixa pages and CSVs: reformatting would change their meaning
+/test/fixtures/
+
+# Machine-written by `eslint --suppress-all`
+eslint-suppressions.json

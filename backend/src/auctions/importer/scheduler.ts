@@ -34,7 +34,9 @@ export class AuctionsImporter {
       this.logger.log('Running import on startup (IMPORT_ON_START_UP=true)');
       setTimeout(() => this.runImport(RunMode.MANUAL), 5000);
     } else {
-      this.logger.log('Skipping startup import (IMPORT_ON_START_UP=false), will run on schedule only');
+      this.logger.log(
+        'Skipping startup import (IMPORT_ON_START_UP=false), will run on schedule only',
+      );
     }
   }
 
@@ -71,7 +73,7 @@ export class AuctionsImporter {
       const normalizedRows = normalizeRows(parsed);
       this.logger.log(`Normalized rows: ${normalizedRows.length}`);
 
-      let skippedNoModality = 0;
+      const skippedNoModality = 0;
       let skippedUnknownModality = 0;
 
       const normalized = normalizedRows.map((n) => {
@@ -111,16 +113,20 @@ export class AuctionsImporter {
       this.logger.log(`Items without modality: ${skippedNoModality}`);
       this.logger.log(`Items with unknown modality: ${skippedUnknownModality}`);
 
-      const withPhases = normalized.filter(n => n.phases.length > 0);
-      const withoutPhases = normalized.filter(n => n.phases.length === 0);
-      this.logger.log(`Items with phases: ${withPhases.length}, without phases: ${withoutPhases.length}`);
+      const withPhases = normalized.filter((n) => n.phases.length > 0);
+      const withoutPhases = normalized.filter((n) => n.phases.length === 0);
+      this.logger.log(
+        `Items with phases: ${withPhases.length}, without phases: ${withoutPhases.length}`,
+      );
 
       const res = await this.auctions.upsertMany(normalized);
-      this.logger.log(`Import result - matched: ${res.matched}, upserted: ${res.upserted}, modified: ${res.modified}`);
+      this.logger.log(
+        `Import result - matched: ${res.matched}, upserted: ${res.upserted}, modified: ${res.modified}`,
+      );
       this.logger.log(`Auctions import completed.`);
 
       // Auctions present in the CSV are available again (e.g. previously marked unavailable)
-      const csvCodes = normalized.map(n => n.code).filter(Boolean) as string[];
+      const csvCodes = normalized.map((n) => n.code).filter(Boolean) as string[];
       if (csvCodes.length > 0) {
         const markedAvailable = await this.auctions.markAvailable(csvCodes);
         this.logger.log(`Availability restore - marked available: ${markedAvailable}`);
@@ -129,7 +135,9 @@ export class AuctionsImporter {
       // Verify availability of auctions not present in the CSV
       if (csvCodes.length > 0) {
         const availabilityResult = await this.auctions.verifyAvailability(csvCodes);
-        this.logger.log(`Availability check - checked: ${availabilityResult.checked}, unavailable: ${availabilityResult.unavailable}, errors: ${availabilityResult.errors}`);
+        this.logger.log(
+          `Availability check - checked: ${availabilityResult.checked}, unavailable: ${availabilityResult.unavailable}, errors: ${availabilityResult.errors}`,
+        );
       } else {
         this.logger.warn('Skipping availability check — CSV returned no auction codes');
       }
@@ -149,9 +157,18 @@ export class AuctionsImporter {
 
   private mapModalityToPhase(modality: string): PhaseModality | null {
     const normalized = modality.toUpperCase();
-    if (normalized.includes('SFI') || normalized.includes('EDITAL ÚNICO') || normalized.includes('EDITAL UNICO') || normalized.includes('LEILÃO') || normalized.includes('LEILAO')) return PhaseModality.SFI_AUCTION;
-    if (normalized.includes('LICITACAO') || normalized.includes('LICITAÇÃO')) return PhaseModality.OPEN_BIDDING;
-    if (normalized.includes('VENDA DIRETA') || normalized.includes('VENDA DIRETA ONLINE')) return PhaseModality.DIRECT_ONLINE_SALES;
+    if (
+      normalized.includes('SFI') ||
+      normalized.includes('EDITAL ÚNICO') ||
+      normalized.includes('EDITAL UNICO') ||
+      normalized.includes('LEILÃO') ||
+      normalized.includes('LEILAO')
+    )
+      return PhaseModality.SFI_AUCTION;
+    if (normalized.includes('LICITACAO') || normalized.includes('LICITAÇÃO'))
+      return PhaseModality.OPEN_BIDDING;
+    if (normalized.includes('VENDA DIRETA') || normalized.includes('VENDA DIRETA ONLINE'))
+      return PhaseModality.DIRECT_ONLINE_SALES;
     if (normalized.includes('VENDA ONLINE')) return PhaseModality.ONLINE_SALES;
     return null;
   }
