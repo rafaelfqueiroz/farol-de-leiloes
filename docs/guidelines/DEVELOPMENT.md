@@ -76,34 +76,39 @@ One approved choice per concern. Adding a dependency that overlaps one of these 
 cp backend/.env.example backend/.env           # fill in what you need
 cp frontend/.env.example frontend/.env.local
 # MongoDB 7 on localhost:27017 — a local install or `docker run -d -p 27017:27017 mongo:7`
+npm install                                    # once, at the repository root: installs the git hooks
 (cd backend && npm ci && npm run start:dev)    # API on :3000
 (cd frontend && npm ci && npm run dev)         # web on :3001
 ```
 
-Both packages expose the same script names (the backend has only `test` today; the rest arrive with #29):
+The root `package.json` holds only the hook tooling (husky + lint-staged); its `prepare` script wires `.husky/` into git, so a fresh clone gets the hooks from one `npm install` at the root.
+
+Both packages expose the same script names:
 
 | Script | Does |
 |---|---|
 | `typecheck` | `tsc --noEmit` |
-| `lint` / `lint:fix` | ESLint |
+| `lint` / `lint:fix` | ESLint. Legacy violations are bulk suppressions in `eslint-suppressions.json` until #30: `lint` fails on a new violation and on a suppression that no longer occurs, which `npm run lint:prune` removes |
 | `format` / `format:check` | Prettier |
 | `test` | Unit tests (backend: unit + `domain/`; frontend: Vitest) |
 | `test:integration` | Backend only — Testcontainers MongoDB (TESTING §2) |
 | `test:isolation` | Backend only — the isolation gate (TESTING §4) |
 | `test:e2e` | Frontend only — Playwright against the Compose stack |
 | `test:cov` | Tests with the coverage gate (TESTING §7) |
-| `check` | `typecheck` + `lint` + `format:check` + `test`. **The pre-push hook runs it** in every package the push changes (DV-37). Until #29 adds lint and format, the frontend `check` is `typecheck` + `test` only. |
+| `check` | `typecheck` + `lint` + `format:check` + `test`. **The pre-push hook runs it** in every package the push changes (DV-37). |
 
 ### Git hooks
 
 | Hook | Runs | Scope |
 |---|---|---|
-| `pre-commit` | lint-staged: `prettier --write`, `eslint --fix` | Staged files |
+| `pre-commit` | lint-staged: `prettier --write`, `eslint --fix` (each package's own binaries and config; config in each package's `lint-staged.config.mjs`) | Staged files |
 | `pre-push` | `npm run check` | Each package the push changes (DV-37) |
 
 | | |
 |---|---|
 | **DV-37** | A **pre-push** hook runs `npm run check` in each package the push changes, measured against the branch's upstream (on a branch's first push, against its merge-base with `origin/main`). A change under `backend/` checks the backend; a change under `frontend/` checks the frontend; a change to shared root files (`.node-version`, `docker-compose.yml`, the hook tooling) checks both; a push that touches only `docs/` or `.github/` checks neither. Integration, isolation and E2E suites stay in CI: they need Docker and are too slow for every push. A failing hook blocks the push, and the failure is fixed, never bypassed (TS-30). |
+
+The one-off formatting commit is listed in [`.git-blame-ignore-revs`](../../.git-blame-ignore-revs) (GitHub honours it; locally run `git config blame.ignoreRevsFile .git-blame-ignore-revs`). A later commit that only reformats code is added there too.
 
 ### Rules for AI coding agents
 

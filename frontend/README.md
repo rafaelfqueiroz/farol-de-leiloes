@@ -26,7 +26,7 @@ AI-powered interface to search and query auctions from Caixa Econômica Federal 
 
 ## Installation
 
-1. Install dependencies:
+1. Install dependencies (and, once at the repository root, run `npm install` to install the git hooks: husky + lint-staged):
 
 ```bash
 npm install
@@ -64,13 +64,17 @@ npm start
 
 ## Scripts
 
-| Script              | What it does                                                                            |
-| ------------------- | --------------------------------------------------------------------------------------- |
-| `npm run typecheck` | `tsc --noEmit`                                                                          |
-| `npm test`          | Vitest (unit, component and structural tests)                                           |
-| `npm run check`     | `typecheck` + `test` — provisional until lint and format land (#29); run before pushing |
-| `npm run build`     | Next.js production build                                                                |
-| `npm run lint`      | `next lint` — currently broken, to be replaced by ESLint in #29                         |
+| Script                 | What it does                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck`    | `tsc --noEmit`                                                                                             |
+| `npm test`             | Vitest (unit, component and structural tests)                                                              |
+| `npm run lint`         | ESLint (legacy violations are suppressed in `eslint-suppressions.json` until #30)                          |
+| `npm run lint:fix`     | ESLint with `--fix`                                                                                        |
+| `npm run lint:prune`   | Drops suppressions that no longer occur, after fixing a legacy violation                                   |
+| `npm run format`       | Prettier, write                                                                                            |
+| `npm run format:check` | Prettier, check only                                                                                       |
+| `npm run check`        | `typecheck` + `lint` + `format:check` + `test`; the pre-push hook runs it when `frontend/` changes (DV-37) |
+| `npm run build`        | Next.js production build                                                                                   |
 
 ## Usage Examples
 

@@ -128,7 +128,7 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | `npm audit` (high+) | — | — | — | ✅ |
 | CodeQL | — | — | — | ✅ |
 
-The pre-push hook runs `npm run check` in each package the push changes and blocks the push if it fails (DEVELOPMENT DV-37). CI always runs everything, whichever packages changed. **Not set up yet:** the hooks and the missing scripts arrive with #29, CI with #33. Until then, nothing in this table runs automatically.
+The pre-push hook runs `npm run check` in each package the push changes and blocks the push if it fails (DEVELOPMENT DV-37). CI always runs everything, whichever packages changed. **Not set up yet:** the CI column arrives with #33. Until then the pre-commit and pre-push hooks are the only checks that run automatically.
 
 ESLint rules that carry weight (beyond the recommended sets):
 

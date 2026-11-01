@@ -14,9 +14,10 @@ Requirements
 Setup
 
 1. Copy `.env.example` to `.env` and set `MONGODB_URI` if needed.
-2. Install deps: `npm install`
+2. Install deps: `npm install`, and once at the repository root run `npm install` too to install the git hooks (husky + lint-staged)
 3. Dev run: `npm run start:dev`
 4. Build: `npm run build`, then `npm start`
+5. Before pushing: `npm run check` (typecheck + lint + format check + tests); the pre-push hook runs it when `backend/` changes (DV-37)
 
 API
 
