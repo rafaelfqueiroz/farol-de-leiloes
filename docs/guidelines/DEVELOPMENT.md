@@ -102,11 +102,11 @@ Both packages expose the same script names:
 | Hook | Runs | Scope |
 |---|---|---|
 | `pre-commit` | lint-staged: `prettier --write`, `eslint --fix` (each package's own binaries and config; config in each package's `lint-staged.config.mjs`) | Staged files |
-| `pre-push` | `npm run check` | Each package the push changes (DV-37) |
+| `pre-push` | `npm run check` | Each package each pushed ref changes, on the pushed revision (DV-37) |
 
 | | |
 |---|---|
-| **DV-37** | A **pre-push** hook runs `npm run check` in each package the push changes, measured against the branch's upstream (on a branch's first push, against its merge-base with `origin/main`). A change under `backend/` checks the backend; a change under `frontend/` checks the frontend; a change to shared root files (`.node-version`, `docker-compose.yml`, the hook tooling) checks both; a push that touches only `docs/` or `.github/` checks neither. Integration, isolation and E2E suites stay in CI: they need Docker and are too slow for every push. A failing hook blocks the push, and the failure is fixed, never bypassed (TS-30). |
+| **DV-37** | A **pre-push** hook runs `npm run check` in each package the push changes. It measures **every pushed ref** (so `git push other-branch` and `--all` are covered, whatever is checked out), against that ref's current remote revision (for a new remote branch, or a force-push over a revision not available locally, against its merge-base with `origin/main`). It checks the revision being pushed: in place when that is the checked-out HEAD and the package has no uncommitted changes, otherwise in a temporary detached worktree (full `npm ci`) that is always removed. A change under `backend/` checks the backend; a change under `frontend/` checks the frontend; a change to shared root files (`.node-version`, `docker-compose.yml`, the hook tooling) checks both; a push that touches only `docs/` or `.github/` checks neither. Integration, isolation and E2E suites stay in CI: they need Docker and are too slow for every push. A failing hook blocks the push, and the failure is fixed, never bypassed (TS-30). |
 
 The one-off formatting commit is listed in [`.git-blame-ignore-revs`](../../.git-blame-ignore-revs) (GitHub honours it; locally run `git config blame.ignoreRevsFile .git-blame-ignore-revs`). A later commit that only reformats code is added there too.
 

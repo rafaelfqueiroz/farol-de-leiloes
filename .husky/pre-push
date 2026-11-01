@@ -1,55 +1,134 @@
-# DV-37: run `npm run check` in each package the push changes. POSIX sh.
-# PRE_PUSH_DRY_RUN=1 prints the selection without running the checks (used to test the selection).
+# DV-37: run `npm run check` in each package a push changes, on the revision being pushed. POSIX sh.
+# Git feeds one line per pushed ref on stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>.
+# Every pushed ref is measured (not only the checked-out HEAD), and a ref that is not the clean
+# checked-out revision is checked in a temporary detached worktree.
+# PRE_PUSH_DRY_RUN=1 prints the plan (refs, bases, packages, in place or worktree) without running
+# the checks or creating worktrees (used to test the selection).
 
 root=$(git rev-parse --show-toplevel)
+cd "$root" || exit 1
 . "$root/.husky/lib/changed-packages.sh"
 
-# A push that only deletes refs sends nothing to check.
-if [ ! -t 0 ]; then
-  seen=0
-  only_deletes=1
-  while read -r _local_ref local_sha _remote_ref _remote_sha; do
-    seen=1
-    case "$local_sha" in
-      *[!0]*) only_deletes=0 ;;
-    esac
-  done
-  if [ "$seen" = 1 ] && [ "$only_deletes" = 1 ]; then
-    echo "pre-push: only deleting remote refs, nothing to check."
-    exit 0
-  fi
-fi
-
-if base_info=$(resolve_push_base); then
-  base=${base_info%%|*}
-  echo "pre-push: measuring against ${base_info#*|}."
-  if ! changed=$(git diff --name-only "$base...HEAD"); then
-    echo "pre-push: could not diff against $base, checking both packages."
-    changed=$(printf '%s\n' backend/ frontend/)
-  fi
+# Read stdin exactly once. Run by hand from a terminal there is no stdin: plan the checked-out HEAD
+# against its upstream, so `.husky/pre-push` still does something useful.
+if [ -t 0 ]; then
+  head_sha=$(git rev-parse HEAD)
+  upstream_sha=$(git rev-parse --verify --quiet '@{upstream}' 2>/dev/null) || upstream_sha=""
+  input=$(printf 'HEAD %s HEAD %s\n' "$head_sha" "${upstream_sha:-0000000000000000000000000000000000000000}")
 else
-  echo "pre-push: no upstream and no origin/main to compare with, checking both packages."
-  changed=$(printf '%s\n' backend/ frontend/)
+  input=$(cat)
 fi
 
-selected=$(printf '%s\n' "$changed" | select_packages)
+work=$(mktemp -d) || exit 1
+plan_file="$work/plan"
+worktree=""
 
-if [ -z "$selected" ]; then
-  echo "pre-push: no package changed (only docs/, .github/ or other non-code files), nothing to check."
-  exit 0
-fi
+# Always remove the temporary worktree and scratch files, also on failure or interrupt.
+remove_worktree() {
+  if [ -n "$worktree" ]; then
+    git -C "$root" worktree remove --force "$worktree" >/dev/null 2>&1
+    git -C "$root" worktree prune
+    worktree=""
+  fi
+}
+cleanup() {
+  remove_worktree
+  rm -rf "$work"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' HUP TERM
+
+# Runs `npm run check` for $2 (a package) at revision $1 in a temporary detached worktree.
+# The install is a full one, because native dependencies such as bcrypt need their install
+# scripts: `npm ci` when the package has a package-lock.json (this repository always does), and
+# `npm install` otherwise, so a package without a lockfile (a fixture) still works.
+check_in_worktree() {
+  worktree="$work/worktree"
+  if ! git worktree add --detach "$worktree" "$1" >/dev/null; then
+    echo "pre-push: could not create a worktree at $1." >&2
+    worktree=""
+    return 1
+  fi
+  (
+    # Hooks can run with git variables that would point git at the real checkout.
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    cd "$worktree/$2" || exit 1
+    if [ -f package-lock.json ]; then
+      npm ci --no-audit --no-fund
+    else
+      npm install --no-audit --no-fund
+    fi && npm run check
+  ) </dev/null
+  worktree_status=$?
+  remove_worktree
+  return $worktree_status
+}
+
+printf '%s\n' "$input" | while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "$local_ref" ] || continue
+  plan_push_line "$local_ref" "$local_sha" "$remote_ref" "$remote_sha"
+done >"$plan_file"
 
 status=0
-for package in backend frontend; do
-  reason=$(printf '%s\n' "$selected" | sed -n "s/^$package //p")
-  [ -n "$reason" ] || continue
-  echo "pre-push: checking $package ($reason)."
-  if [ -n "$PRE_PUSH_DRY_RUN" ]; then
-    continue
-  fi
-  if ! (cd "$root/$package" && npm run check); then
-    echo "pre-push: $package check FAILED. Fix it; do not bypass the hook (TS-30)." >&2
-    status=1
-  fi
-done
+checks=0
+seen=" "
+# Plan records (see plan_push_line): skip <ref> <why> | ref <ref> <sha> <how> | none <ref> <sha>
+# | pkg <ref> <sha> <package> <place> <why> <reason>.
+while IFS=$PLAN_SEP read -r kind f1 f2 f3 f4 f5 f6; do
+  case "$kind" in
+    skip)
+      echo "pre-push: $f1: $f2, skipped."
+      ;;
+    ref)
+      echo "pre-push: $f1 at $(printf '%s' "$f2" | cut -c1-7): $f3."
+      ;;
+    none)
+      echo "pre-push: $f1 at $(printf '%s' "$f2" | cut -c1-7): no package changed (only docs/, .github/ or other non-code files)."
+      ;;
+    pkg)
+      ref=$f1
+      sha=$f2
+      package=$f3
+      place=$f4
+      why=$f5
+      reason=$f6
+      short=$(printf '%s' "$sha" | cut -c1-7)
+      case "$seen" in
+        *" $sha:$package "*)
+          echo "pre-push: $package at $short already planned for another pushed ref, not repeating it."
+          continue
+          ;;
+      esac
+      seen="$seen$sha:$package "
+      checks=$((checks + 1))
+      if [ "$place" = in-place ]; then
+        where="in place ($why)"
+      else
+        where="in a temporary worktree ($why)"
+      fi
+      echo "pre-push: checking $package ($reason) for $ref at $short, $where."
+      if [ -n "$PRE_PUSH_DRY_RUN" ]; then
+        continue
+      fi
+      if [ "$place" = in-place ]; then
+        (cd "$root/$package" && npm run check) </dev/null
+        result=$?
+      else
+        check_in_worktree "$sha" "$package"
+        result=$?
+      fi
+      if [ "$result" -ne 0 ]; then
+        echo "pre-push: $package check FAILED for $ref at $short. Fix it; do not bypass the hook (TS-30)." >&2
+        status=1
+      fi
+      ;;
+  esac
+done <"$plan_file"
+
+if [ "$checks" -eq 0 ]; then
+  echo "pre-push: nothing to check."
+elif [ -n "$PRE_PUSH_DRY_RUN" ]; then
+  echo "pre-push: dry run, $checks check(s) planned, none executed."
+fi
 exit $status
