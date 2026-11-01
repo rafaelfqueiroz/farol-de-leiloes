@@ -83,6 +83,10 @@ function SearchPageContent() {
   const [pageSize, setPageSize] = useState(10);
   // only the latest search may write results: an older, slower response is dropped
   const searchSequence = useRef(0);
+  // the query of a navigation the page started itself (a search, a page change). It searches even
+  // when it carries no filters — an empty-form search lands on the bare /search — while a bare
+  // /search reached any other way (the AppShell link, Back) resets.
+  const ownNavigation = useRef<string | null>(null);
 
   const performSearch = async (filters: AuctionFilters, page: number) => {
     const sequence = ++searchSequence.current;
@@ -115,14 +119,18 @@ function SearchPageContent() {
   };
 
   // URL → state, on every change of the query. In the favourites view the search state is left
-  // alone; back in the search view, a URL with no filters clears the form and the results.
+  // alone. In the search view, filters or a `page` mean a search (so /search?page=2 is page 2 of
+  // the unfiltered search); a bare /search clears the form and the results, unless the page
+  // navigated there itself to search.
   useEffect(() => {
     if (activeView !== 'search') return;
+    const ownSearch = ownNavigation.current === queryKey;
+    ownNavigation.current = null;
     const filters = filtersFromQuery(searchParams);
     const pageNum = Number(searchParams.get('page')) || 1;
     setCurrentFilters(filters);
     setCurrentPage(pageNum);
-    if (hasFilters(filters)) {
+    if (hasFilters(filters) || searchParams.has('page') || ownSearch) {
       performSearch(filters, pageNum);
     } else {
       searchSequence.current++;
@@ -134,6 +142,7 @@ function SearchPageContent() {
   // state → URL; the effect above then runs the search
   const updateURL = (filters: AuctionFilters, page: number) => {
     const queryString = searchQuery(filters, page);
+    ownNavigation.current = queryString;
     router.push(queryString ? `/search?${queryString}` : '/search');
   };
 

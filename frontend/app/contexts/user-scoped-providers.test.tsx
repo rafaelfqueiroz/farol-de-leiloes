@@ -1,4 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FavoritesProvider, useFavorites } from './FavoritesContext';
@@ -33,7 +34,8 @@ const resolvedAs = (id: string | null) => ({ user: id ? { _id: id } : null, load
 
 interface Pending {
   url: string;
-  resolve: (items: unknown[]) => void;
+  method: string;
+  resolve: (body: unknown) => void;
 }
 let pending: Pending[] = [];
 
@@ -60,11 +62,12 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(
-      (url: string) =>
+      (url: string, init?: RequestInit) =>
         new Promise((resolve) => {
           pending.push({
             url,
-            resolve: (items) => resolve({ ok: true, status: 200, json: async () => items }),
+            method: init?.method ?? 'GET',
+            resolve: (body) => resolve({ ok: true, status: 200, json: async () => body }),
           });
         }),
     ),
@@ -75,10 +78,24 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function answer(index: number, count: number) {
+async function answerWith(index: number, body: unknown) {
   await act(async () => {
-    pending[index]?.resolve(Array.from({ length: count }, (_, i) => ({ code: String(i) })));
+    pending[index]?.resolve(body);
   });
+}
+
+async function answer(index: number, count: number) {
+  await answerWith(index, Array.from({ length: count }, (_, i) => ({ _id: `r${i}`, code: String(i) })));
+}
+
+// A signs in with a request in flight, signs out, B signs in and loads `bItems`.
+async function switchAccountTo(bItems: unknown[], bLoadIndex: number) {
+  window.localStorage.removeItem('token');
+  setAuth(resolvedAs(null));
+  window.localStorage.setItem('token', 'token-b');
+  setAuth(resolvedAs('user-b'));
+  expect(pending[bLoadIndex]?.method).toBe('GET');
+  await answerWith(bLoadIndex, bItems);
 }
 
 describe.each(providers)('%s', (_name, url, Provider, Probe) => {
@@ -156,5 +173,130 @@ describe.each(providers)('%s', (_name, url, Provider, Probe) => {
 
     await answer(0, 4);
     expect(screen.getByText('itens 0')).toBeInTheDocument();
+  });
+});
+
+// #42: a mutation started by A must not touch B's state after A signs out and B signs in.
+describe('mutations across an account change', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    window.localStorage.setItem('token', 'token-a');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function FavoritesActions() {
+    const { favorites, toggleFavorite, removeFavorite } = useFavorites();
+    return (
+      <>
+        <p>{`itens ${favorites.length}`}</p>
+        <button type="button" onClick={() => toggleFavorite({ code: 'X' } as never)}>
+          Favoritar
+        </button>
+        <button type="button" onClick={() => removeFavorite('0')}>
+          Remover
+        </button>
+      </>
+    );
+  }
+
+  function RemindersActions() {
+    const { reminders, createReminder, updateReminder, deleteReminder } = useReminders();
+    return (
+      <>
+        <p>{`itens ${reminders.length} ${reminders.map((r) => r.description ?? '-').join(',')}`}</p>
+        <button
+          type="button"
+          onClick={() =>
+            createReminder({ auctionId: 'a', channel: 'EMAIL', scheduledAt: '2026-11-14T13:00:00Z' })
+          }
+        >
+          Criar
+        </button>
+        <button type="button" onClick={() => updateReminder('r0', { description: 'de A' })}>
+          Editar
+        </button>
+        <button type="button" onClick={() => deleteReminder('r0')}>
+          Apagar
+        </button>
+      </>
+    );
+  }
+
+  it("drops A's favourite add once B is signed in", async () => {
+    const user = userEvent.setup();
+    render(
+      <FavoritesProvider>
+        <FavoritesActions />
+      </FavoritesProvider>,
+    );
+    await answer(0, 0);
+    setAuth(resolvedAs('user-a'));
+
+    await user.click(screen.getByRole('button', { name: 'Favoritar' }));
+    expect(pending[1]?.method).toBe('POST');
+    await switchAccountTo([], 2);
+
+    await answerWith(1, { code: 'X' });
+    expect(screen.getByText('itens 0')).toBeInTheDocument();
+  });
+
+  it("drops A's favourite removal once B is signed in", async () => {
+    const user = userEvent.setup();
+    render(
+      <FavoritesProvider>
+        <FavoritesActions />
+      </FavoritesProvider>,
+    );
+    await answer(0, 1);
+    setAuth(resolvedAs('user-a'));
+
+    await user.click(screen.getByRole('button', { name: 'Remover' }));
+    expect(pending[1]?.method).toBe('DELETE');
+    // B happens to have the same property saved
+    await switchAccountTo([{ code: '0' }], 2);
+
+    await answerWith(1, {});
+    expect(screen.getByText('itens 1')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Criar', 'POST', { _id: 'r9', description: 'de A' }],
+    ['Editar', 'PATCH', { _id: 'r0', description: 'de A' }],
+    ['Apagar', 'DELETE', {}],
+  ])("drops A's reminder %s once B is signed in", async (button, method, response) => {
+    const user = userEvent.setup();
+    render(
+      <RemindersProvider>
+        <RemindersActions />
+      </RemindersProvider>,
+    );
+    await answerWith(0, [{ _id: 'r0', description: 'de A' }]);
+    setAuth(resolvedAs('user-a'));
+
+    await user.click(screen.getByRole('button', { name: button }));
+    expect(pending[1]?.method).toBe(method);
+    // B's own reminder happens to share the id
+    await switchAccountTo([{ _id: 'r0', description: 'de B' }], 2);
+
+    await answerWith(1, response);
+    expect(screen.getByText('itens 1 de B')).toBeInTheDocument();
+  });
+
+  it('still applies a mutation when the account did not change', async () => {
+    const user = userEvent.setup();
+    render(
+      <FavoritesProvider>
+        <FavoritesActions />
+      </FavoritesProvider>,
+    );
+    await answer(0, 0);
+    setAuth(resolvedAs('user-a'));
+
+    await user.click(screen.getByRole('button', { name: 'Favoritar' }));
+    await answerWith(1, { code: 'X' });
+    expect(screen.getByText('itens 1')).toBeInTheDocument();
   });
 });

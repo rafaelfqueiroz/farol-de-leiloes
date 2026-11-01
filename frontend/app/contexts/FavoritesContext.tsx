@@ -47,6 +47,9 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   // #42: only the latest load (or clear) may write, so a slow response for a previous user
   // cannot overwrite the current one's favourites
   const latestRequest = useRef(0);
+  // #42: bumped on every account change (sign-out, another user). A mutation started under an
+  // older generation must not touch state: its response belongs to the previous account.
+  const accountGeneration = useRef(0);
 
   const loadFavorites = useCallback(async () => {
     const request = ++latestRequest.current;
@@ -79,6 +82,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
 
   const clearFavorites = useCallback(() => {
     latestRequest.current++;
+    accountGeneration.current++;
     setFavorites([]);
     setLoading(false);
   }, []);
@@ -102,6 +106,8 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     }
 
     const exists = isFavorite(auction.code);
+    const generation = accountGeneration.current;
+    const sameAccount = () => generation === accountGeneration.current;
 
     if (exists) {
       // Remove from favorites
@@ -112,6 +118,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
           method: 'DELETE',
           headers,
         });
+        if (!sameAccount()) return; // #42: started by an account that has since signed out
         if (response.ok || response.status === 204) {
           setFavorites(prev => prev.filter(fav => fav.code !== auction.code));
         } else if (response.status === 401) {
@@ -140,9 +147,11 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         });
 
         console.log('[FavoritesContext] POST - Response status:', response.status);
+        if (!sameAccount()) return; // #42: started by an account that has since signed out
 
         if (response.ok) {
           const savedAuction = await response.json();
+          if (!sameAccount()) return;
           setFavorites(prev => [...prev, savedAuction]);
         } else if (response.status === 401) {
           // Token expired or invalid, redirect to login
@@ -160,11 +169,14 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   };
 
   const removeFavorite = async (code: string) => {
+    const generation = accountGeneration.current;
     try {
       const response = await fetch(`/api/favorites/${code}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
+      // #42: started by an account that has since signed out
+      if (generation !== accountGeneration.current) return;
       if (response.ok || response.status === 204) {
         setFavorites(prev => prev.filter(fav => fav.code !== code));
       }

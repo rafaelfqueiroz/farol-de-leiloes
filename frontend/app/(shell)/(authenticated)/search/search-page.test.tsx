@@ -34,12 +34,28 @@ vi.mock('@/app/components/SearchFilters', () => ({
       <button type="button" onClick={() => onSearch({ state: 'RN' })}>
         Buscar RN
       </button>
+      <button type="button" onClick={() => onSearch({})}>
+        Buscar tudo
+      </button>
     </div>
   ),
 }));
 vi.mock('@/app/components/AuctionList', () => ({
-  default: ({ total, page }: { total: number; page: number }) => (
-    <p data-testid="results">{`total ${total} página ${page}`}</p>
+  default: ({
+    total,
+    page,
+    onPageChange,
+  }: {
+    total: number;
+    page: number;
+    onPageChange: (page: number) => void;
+  }) => (
+    <div>
+      <p data-testid="results">{`total ${total} página ${page}`}</p>
+      <button type="button" onClick={() => onPageChange(page + 1)}>
+        Próxima página
+      </button>
+    </div>
   ),
 }));
 vi.mock('@/app/components/FavoritesView', () => ({
@@ -57,6 +73,7 @@ beforeEach(() => {
   env.role = 'standard';
   env.push.mockReset();
   pending = [];
+  vi.stubGlobal('scrollTo', vi.fn());
   vi.stubGlobal(
     'fetch',
     vi.fn(
@@ -157,5 +174,53 @@ describe('search page — URL-driven state', () => {
     await user.click(screen.getByRole('button', { name: 'Buscar RN' }));
     expect(pending).toHaveLength(2);
     expect(env.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('pages through an unfiltered search, and Back to the bare /search resets', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<SearchPage />);
+
+    // empty form on /search: the URL does not change, so the page searches directly
+    await user.click(screen.getByRole('button', { name: 'Buscar tudo' }));
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.url).not.toContain('state=');
+    expect(pending[0]?.url).toContain('offset=0');
+    await answer(0, 30);
+
+    await user.click(screen.getByRole('button', { name: 'Próxima página' }));
+    expect(env.push).toHaveBeenLastCalledWith('/search?page=2');
+    navigate(rerender, 'page=2');
+    // page 2 of the unfiltered search: offset 10, still no filters
+    expect(pending).toHaveLength(2);
+    expect(pending[1]?.url).not.toContain('state=');
+    expect(pending[1]?.url).toContain('offset=10');
+    await answer(1, 30);
+    expect(screen.getByTestId('results')).toHaveTextContent('total 30 página 2');
+
+    // Back lands on the bare /search, which was not this page's own navigation: it resets
+    navigate(rerender, '');
+    expect(screen.queryByTestId('results')).not.toBeInTheDocument();
+    expect(pending).toHaveLength(2);
+  });
+
+  it('searches again from page 2 when the empty form is re-submitted', async () => {
+    const user = userEvent.setup();
+    env.search = 'page=2';
+    const { rerender } = render(<SearchPage />);
+    expect(pending[0]?.url).toContain('offset=10');
+    await answer(0, 30);
+
+    await user.click(screen.getByRole('button', { name: 'Buscar tudo' }));
+    expect(env.push).toHaveBeenLastCalledWith('/search');
+    navigate(rerender, '');
+    // the page's own navigation to the bare /search searches page 1
+    expect(pending).toHaveLength(2);
+    expect(pending[1]?.url).toContain('offset=0');
+    await answer(1, 30);
+    expect(screen.getByTestId('results')).toHaveTextContent('total 30 página 1');
+
+    // and re-submitting on the same URL searches once more
+    await user.click(screen.getByRole('button', { name: 'Buscar tudo' }));
+    expect(pending).toHaveLength(3);
   });
 });
