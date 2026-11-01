@@ -20,7 +20,7 @@ describe('CSV parser', () => {
     expect(normalized.length).toBe(4);
 
     // Test each row has the required fields (except phase minimumPrice/date and address zipcode)
-    normalized.forEach((row, index) => {
+    normalized.forEach((row) => {
       // Code should be present (either from column or extracted from URL)
       expect(row.code).toBeDefined();
       expect(row.code).not.toBe('');
@@ -52,16 +52,18 @@ describe('CSV parser', () => {
     });
 
     // Specific assertions for known data
+    const [first, second] = normalized;
+
     // First row
-    expect(normalized[0].code).toBe('1444419970935');
-    expect(normalized[0].state).toBe('AC');
-    expect(normalized[0].city).toBe('CRUZEIRO DO SUL');
-    expect(normalized[0].neighborhood).toBe('ZONA RURAL');
-    expect(normalized[0].detailsUrl).toContain('hdnimovel=1444419970935');
+    expect(first?.code).toBe('1444419970935');
+    expect(first?.state).toBe('AC');
+    expect(first?.city).toBe('CRUZEIRO DO SUL');
+    expect(first?.neighborhood).toBe('ZONA RURAL');
+    expect(first?.detailsUrl).toContain('hdnimovel=1444419970935');
 
     // Second row
-    expect(normalized[1].code).toBe('1444418010407');
-    expect(normalized[1].state).toBe('TO');
-    expect(normalized[1].city).toBe('PARAISO DO TOCANTINS');
+    expect(second?.code).toBe('1444418010407');
+    expect(second?.state).toBe('TO');
+    expect(second?.city).toBe('PARAISO DO TOCANTINS');
   });
 });

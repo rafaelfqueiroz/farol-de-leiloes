@@ -3,11 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { Model } from 'mongoose';
+import { Model, mongo } from 'mongoose';
 import { AuctionEntity, AuctionDocument, Address, Phase } from './schemas/auction.schema';
-import { Auction, AuctionListResult } from './interfaces/auction.interface';
+import { Auction, AuctionListResult, AuctionRecord } from './interfaces/auction.interface';
 import { fetchAndCheckAvailability } from './scraper/details-scraper';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
+import { errorMessage } from '../common/error-message';
 
 export interface AuctionUpsert {
   code?: string;
@@ -30,6 +31,10 @@ export interface QueryFilters {
 }
 
 const NEIGHBORHOODS_CACHE_PREFIX = 'neighborhoods';
+
+// The fields upsertMany writes. Partial because the schema defaults fill `fulfilled` and
+// `available` on insert; createdAt is set by hand alongside the schema's own timestamp.
+type AuctionWrite = Partial<AuctionEntity> & { createdAt?: Date };
 
 @Injectable()
 export class AuctionsService {
@@ -62,7 +67,7 @@ export class AuctionsService {
     const existingMap = new Map(existing.map((doc) => [doc.code, doc]));
 
     // Step 2: Build bulk operations
-    const ops: any[] = [];
+    const ops: mongo.AnyBulkWriteOperation<AuctionWrite>[] = [];
     let skippedNoCode = 0;
     let skippedNoPhases = 0;
     let skippedSameModality = 0;
@@ -85,7 +90,9 @@ export class AuctionsService {
         continue;
       }
 
-      const newPhase = newPhases[0]; // CSV imports have single phase
+      const [newPhase] = newPhases; // CSV imports have single phase
+      // Unreachable: the empty case was skipped above. Narrows the type (DV-03).
+      if (!newPhase) continue;
       const existingDoc = existingMap.get(code);
 
       if (!existingDoc) {
@@ -183,7 +190,7 @@ export class AuctionsService {
     if (filters.city) {
       const cities = Array.isArray(filters.city) ? filters.city : [filters.city];
       if (cities.length === 1) {
-        query['address.city'] = new RegExp(`^${escapeRegExp(cities[0])}`, 'i');
+        query['address.city'] = new RegExp(`^${escapeRegExp(cities[0] ?? '')}`, 'i');
       } else {
         query['address.city'] = {
           $in: cities.map((c) => new RegExp(`^${escapeRegExp(c)}`, 'i')),
@@ -197,7 +204,7 @@ export class AuctionsService {
         ? filters.neighborhood
         : [filters.neighborhood];
       if (neighborhoods.length === 1) {
-        query['address.neighborhood'] = new RegExp(`^${escapeRegExp(neighborhoods[0])}`, 'i');
+        query['address.neighborhood'] = new RegExp(`^${escapeRegExp(neighborhoods[0] ?? '')}`, 'i');
       } else {
         query['address.neighborhood'] = {
           $in: neighborhoods.map((n) => new RegExp(`^${escapeRegExp(n)}`, 'i')),
@@ -272,7 +279,7 @@ export class AuctionsService {
     }));
   }
 
-  private toAuction(doc: any): Auction {
+  private toAuction(doc: AuctionRecord): Auction {
     const phases = doc.phases ?? [];
 
     // Compute URLs from file objects (prefer publicUrl, fallback to originalUrl)
@@ -339,7 +346,7 @@ export class AuctionsService {
 
     // Match cities with case-insensitive regex
     if (cities.length === 1) {
-      matchStage['address.city'] = new RegExp(`^${escapeRegExp(cities[0])}`, 'i');
+      matchStage['address.city'] = new RegExp(`^${escapeRegExp(cities[0] ?? '')}`, 'i');
     } else {
       matchStage['address.city'] = {
         $in: cities.map((c) => new RegExp(`^${escapeRegExp(c)}`, 'i')),
@@ -422,7 +429,10 @@ export class AuctionsService {
           group.map(async (auction) => {
             let available: boolean;
             try {
-              available = await fetchAndCheckAvailability(auction.detailsUrl!);
+              // The query only selects auctions with a detailsUrl; a missing one fails like a
+              // failed fetch (DV-03).
+              if (!auction.detailsUrl) throw new Error('auction has no details URL');
+              available = await fetchAndCheckAvailability(auction.detailsUrl);
             } catch (error) {
               this.logger.error(
                 `[verifyAvailability] Auction ${auction.code} fetch failed for ${auction.detailsUrl}: ${error instanceof Error ? error.message : error}`,
@@ -454,14 +464,13 @@ export class AuctionsService {
           }),
         );
 
-        for (let k = 0; k < results.length; k++) {
-          const result = results[k];
+        for (const [k, result] of results.entries()) {
           if (result.status === 'fulfilled') {
             if (!result.value) unavailableCount++;
           } else {
             errorCount++;
             this.logger.error(
-              `[verifyAvailability] Error checking ${group[k].code}: ${result.reason?.message || result.reason}`,
+              `[verifyAvailability] Error checking ${group[k]?.code}: ${errorMessage(result.reason)}`,
             );
           }
         }
@@ -480,12 +489,21 @@ export class AuctionsService {
   async invalidateNeighborhoodsCache(): Promise<void> {
     this.logger.log('[invalidateNeighborhoodsCache] Clearing neighborhoods cache');
     // cache-manager uses stores array, access first store and call reset
-    const stores = (this.cacheManager as any).stores;
-    if (stores && stores[0] && typeof stores[0].reset === 'function') {
-      await stores[0].reset();
+    const [store] = this.cacheManager.stores;
+    if (hasReset(store)) {
+      await store.reset();
     }
     this.logger.log('[invalidateNeighborhoodsCache] Cache cleared');
   }
+}
+
+function hasReset(store: unknown): store is { reset: () => unknown } {
+  return (
+    typeof store === 'object' &&
+    store !== null &&
+    'reset' in store &&
+    typeof store.reset === 'function'
+  );
 }
 
 function escapeRegExp(s: string) {

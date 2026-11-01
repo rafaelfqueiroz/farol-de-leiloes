@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { CsvUpload, CsvUploadDocument } from './schemas/csv-upload.schema';
 import { StorageService } from '../../storage/storage.service';
 import { downloadCsvAllStates } from './downloader';
+import { errorMessage } from '../../common/error-message';
 
 @Injectable()
 export class CsvCacheService {
@@ -28,8 +29,8 @@ export class CsvCacheService {
       this.logger.log('CSV already uploaded today, fetching from R2');
       try {
         return await this.fetchFromR2();
-      } catch (error: any) {
-        this.logger.warn(`R2 fetch failed, falling back to Caixa: ${error.message}`);
+      } catch (error) {
+        this.logger.warn(`R2 fetch failed, falling back to Caixa: ${errorMessage(error)}`);
       }
     }
 
@@ -69,8 +70,8 @@ export class CsvCacheService {
         { lastUpload: new Date(), fileName, fileSize },
         { upsert: true, new: true },
       );
-    } catch (error: any) {
-      this.logger.error(`Failed to save CSV upload record: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Failed to save CSV upload record: ${errorMessage(error)}`);
     }
   }
 }

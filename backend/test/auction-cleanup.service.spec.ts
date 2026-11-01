@@ -1,18 +1,27 @@
 import { AuctionCleanupService } from '../src/auctions/cleanup/auction-cleanup.service';
 
+type ServiceDeps = ConstructorParameters<typeof AuctionCleanupService>;
+type CleanupTarget = Parameters<AuctionCleanupService['processAuction']>[0];
+
 describe('AuctionCleanupService.processAuction', () => {
   const auction = {
     _id: 'id-1',
     code: 'A1',
     image: { storageKey: 'img' },
     matricula: { storageKey: 'mat' },
-  } as any;
+  } as unknown as CleanupTarget;
 
   function build(deleteFile: jest.Mock, configured = true) {
     const auctionModel = { deleteOne: jest.fn().mockResolvedValue({}) };
     const storage = { isConfigured: jest.fn().mockReturnValue(configured), deleteFile };
-    const service = new AuctionCleanupService(auctionModel as any, storage as any, {} as any);
-    return { service: service as any, auctionModel };
+    const cleanup = new AuctionCleanupService(
+      auctionModel as unknown as ServiceDeps[0],
+      storage as unknown as ServiceDeps[1],
+      {} as ServiceDeps[2],
+    );
+    // processAuction is private; bracket access keeps its signature type-checked.
+    const service = { processAuction: (a: CleanupTarget) => cleanup['processAuction'](a) };
+    return { service, auctionModel };
   }
 
   it('deletes the auction when every file deletion succeeds', async () => {
@@ -52,7 +61,9 @@ describe('AuctionCleanupService.processAuction', () => {
   it('deletes an auction without files', async () => {
     const { service, auctionModel } = build(jest.fn());
 
-    await expect(service.processAuction({ _id: 'id-2', code: 'A2' } as any)).resolves.toEqual({
+    await expect(
+      service.processAuction({ _id: 'id-2', code: 'A2' } as unknown as CleanupTarget),
+    ).resolves.toEqual({
       removed: true,
       filesDeleted: 0,
     });

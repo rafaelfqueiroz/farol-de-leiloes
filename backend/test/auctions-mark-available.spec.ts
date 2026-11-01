@@ -1,10 +1,16 @@
 import { AuctionsService } from '../src/auctions/auctions.service';
 
+type ServiceDeps = ConstructorParameters<typeof AuctionsService>;
+
 describe('AuctionsService.markAvailable', () => {
   function build(modifiedCount = 0) {
     const repo = { updateMany: jest.fn().mockResolvedValue({ modifiedCount }) };
     const configService = { get: jest.fn().mockReturnValue(undefined) };
-    const service = new AuctionsService(repo as any, {} as any, configService as any);
+    const service = new AuctionsService(
+      repo as unknown as ServiceDeps[0],
+      {} as ServiceDeps[1],
+      configService as unknown as ServiceDeps[2],
+    );
     return { service, repo };
   }
 
