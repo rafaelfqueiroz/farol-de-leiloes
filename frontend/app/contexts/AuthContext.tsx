@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Load user on mount
   useEffect(() => {
-    loadUser();
+    void loadUser();
   }, [loadUser]);
 
   const login = async (email: string, password: string) => {

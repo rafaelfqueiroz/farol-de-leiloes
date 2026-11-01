@@ -1,23 +1,9 @@
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 
-// Routes that require authentication
-const protectedRoutes = ['/profile'];
-
-// Routes that should redirect to home if already authenticated
-const authRoutes = ['/login', '/register'];
-
-export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // Check if the route is protected
-  const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
-  const isAuthRoute = authRoutes.some((route) => pathname.startsWith(route));
-
-  // For protected routes, we can't check the token server-side since it's in localStorage
-  // The page itself will handle redirecting if no token is found
-  // This proxy is mainly for future enhancements (e.g., if we use cookies)
-
+// The token lives in localStorage, so the server cannot tell whether a request is authenticated:
+// each page redirects to /login (or home) on its own. This proxy only exists for future
+// enhancements, such as route protection once the session moves to a cookie.
+export function proxy() {
   return NextResponse.next();
 }
 

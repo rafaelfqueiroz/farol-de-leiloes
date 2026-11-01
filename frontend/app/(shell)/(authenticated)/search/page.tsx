@@ -131,7 +131,7 @@ function SearchPageContent() {
     setCurrentFilters(filters);
     setCurrentPage(pageNum);
     if (hasFilters(filters) || searchParams.has('page') || ownSearch) {
-      performSearch(filters, pageNum);
+      void performSearch(filters, pageNum);
     } else {
       searchSequence.current++;
       setSearchResults(null);

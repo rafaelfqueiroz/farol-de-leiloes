@@ -38,7 +38,7 @@ export default function VerifyEmailTokenPage() {
     };
 
     if (token) {
-      verifyEmail();
+      void verifyEmail();
     }
   }, [token, router]);
 

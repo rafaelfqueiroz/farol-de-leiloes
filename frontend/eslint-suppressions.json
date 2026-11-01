@@ -1,15 +1,6 @@
 {
   "app/(shell)/(authenticated)/admin/coupons/page.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "jsx-a11y/no-autofocus": {
-      "count": 1
-    },
-    "no-console": {
       "count": 1
     },
     "react-hooks/set-state-in-effect": {
@@ -20,9 +11,6 @@
     }
   },
   "app/(shell)/(authenticated)/plans/page.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "react-hooks/immutability": {
       "count": 1
     },
@@ -31,15 +19,6 @@
     }
   },
   "app/(shell)/(authenticated)/profile/page.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    },
     "react-hooks/set-state-in-effect": {
       "count": 1
     },
@@ -48,15 +27,6 @@
     }
   },
   "app/(shell)/(authenticated)/search/page.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 1
     },
@@ -74,9 +44,6 @@
     "@next/next/no-img-element": {
       "count": 1
     },
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 1
     },
@@ -89,255 +56,7 @@
       "count": 3
     }
   },
-  "app/(shell)/auction/[code]/page.tsx": {
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auctions/[code]/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/change-password/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/login/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/logout/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/me/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/profile/complete/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/profile/full/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/profile/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/register/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/resend-verification/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/reset-password-request/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/reset-password/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/set-password/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/verification-status/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/auth/verify-email/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/chat/route.ts": {
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/coupons/[id]/invalidate/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/coupons/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "no-console": {
-      "count": 2
-    }
-  },
-  "app/api/coupons/validate/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/favorites/[code]/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/favorites/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "no-console": {
-      "count": 10
-    }
-  },
-  "app/api/payments/cancel-subscription/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/payments/create-checkout-session/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/payments/subscription-status/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/reminders/[id]/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "no-console": {
-      "count": 2
-    }
-  },
-  "app/api/reminders/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "no-console": {
-      "count": 2
-    }
-  },
-  "app/api/saved-filters/[id]/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/saved-filters/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "no-console": {
-      "count": 2
-    }
-  },
-  "app/api/search/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 8
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/api/support/route.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
   "app/auth/callback/page.tsx": {
-    "no-console": {
-      "count": 1
-    },
     "react/jsx-no-literals": {
       "count": 2
     }
@@ -362,9 +81,6 @@
     }
   },
   "app/components/FavoritesView.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 1
     },
@@ -381,17 +97,11 @@
     }
   },
   "app/components/ReminderButton.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
     "react/jsx-no-literals": {
       "count": 10
     }
   },
   "app/components/RemindersPage.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
     "react/jsx-no-literals": {
       "count": 21
     }
@@ -402,17 +112,8 @@
     }
   },
   "app/components/SearchFilters.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    },
     "jsx-a11y/no-autofocus": {
       "count": 1
-    },
-    "no-console": {
-      "count": 3
     },
     "no-restricted-syntax": {
       "count": 1
@@ -428,9 +129,6 @@
     }
   },
   "app/components/SupportPage.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 5
     },
@@ -443,44 +141,17 @@
       "count": 1
     }
   },
-  "app/components/patterns/ConfirmDialog.test.tsx": {
-    "testing-library/no-node-access": {
-      "count": 1
-    }
-  },
   "app/components/patterns/ConfirmDialog.tsx": {
     "jsx-a11y/no-autofocus": {
       "count": 1
     }
   },
   "app/contexts/AuthContext.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 2
-    },
     "react-hooks/set-state-in-effect": {
       "count": 1
     }
   },
-  "app/contexts/FavoritesContext.tsx": {
-    "no-console": {
-      "count": 10
-    }
-  },
-  "app/contexts/RemindersContext.tsx": {
-    "no-console": {
-      "count": 6
-    }
-  },
   "app/contexts/SavedFiltersContext.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 5
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     },
@@ -490,9 +161,6 @@
   },
   "app/login/page.tsx": {
     "@next/next/no-location-assign-relative-destination": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
     "react/jsx-no-literals": {
@@ -510,25 +178,16 @@
     }
   },
   "app/plans/success/page.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    },
     "react/jsx-no-literals": {
       "count": 3
     }
   },
   "app/register/page.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "react/jsx-no-literals": {
       "count": 3
     }
   },
   "app/reset-password/[token]/page.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "jsx-a11y/no-autofocus": {
       "count": 1
     },
@@ -537,9 +196,6 @@
     }
   },
   "app/reset-password/page.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "jsx-a11y/no-autofocus": {
       "count": 1
     },
@@ -547,41 +203,14 @@
       "count": 5
     }
   },
-  "app/sitemap.ts": {
-    "no-console": {
-      "count": 2
-    }
-  },
   "app/verify-email/[token]/page.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    },
     "react/jsx-no-literals": {
       "count": 8
     }
   },
   "app/verify-email/page.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "react/jsx-no-literals": {
       "count": 6
-    }
-  },
-  "proxy.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "test/vitest-axe.d.ts": {
-    "@typescript-eslint/no-empty-object-type": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   }
 }

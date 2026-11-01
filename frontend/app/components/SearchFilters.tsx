@@ -488,7 +488,7 @@ export default function SearchFilters({
       }
     };
 
-    fetchNeighborhoods();
+    void fetchNeighborhoods();
   }, [filters.state, filters.city]);
 
   const handleSubmit = (e: React.FormEvent) => {

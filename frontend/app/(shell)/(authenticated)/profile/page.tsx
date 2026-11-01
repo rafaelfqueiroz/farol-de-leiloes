@@ -75,7 +75,7 @@ export default function ProfilePage() {
         reportClientError(err, { where: 'profile page' });
       }
     };
-    loadFullProfile();
+    void loadFullProfile();
   }, [isAuthenticated]);
 
   const handleSavePersonalData = async (e: React.FormEvent) => {

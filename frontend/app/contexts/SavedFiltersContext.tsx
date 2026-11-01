@@ -37,7 +37,7 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    loadSavedFilters();
+    void loadSavedFilters();
   }, []);
 
   const getAuthHeaders = (): Record<string, string> => {
