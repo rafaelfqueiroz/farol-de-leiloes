@@ -5,12 +5,14 @@ export function createStableId(obj: unknown): string {
   return crypto.createHash('sha1').update(s).digest('hex');
 }
 
-function replacer(_key: string, value: any) {
+// Sorts object keys so equal objects hash equally whatever their key order.
+function replacer(_key: string, value: unknown): unknown {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const entries = new Map(Object.entries(value));
     return Object.keys(value)
       .sort()
-      .reduce((acc: any, k) => {
-        acc[k] = value[k];
+      .reduce<Record<string, unknown>>((acc, k) => {
+        acc[k] = entries.get(k);
         return acc;
       }, {});
   }
