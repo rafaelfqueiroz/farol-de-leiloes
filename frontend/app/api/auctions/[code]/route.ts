@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -21,10 +23,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const data = await response.json();
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error fetching auction detail:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/auctions/[code] GET' });
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch auction detail' },
+      { error: errorMessage(error) || 'Failed to fetch auction detail' },
       { status: 500 },
     );
   }

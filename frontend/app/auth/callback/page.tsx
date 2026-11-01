@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { reportClientError } from '@/lib/report-client-error';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -25,7 +26,7 @@ function AuthCallbackContent() {
           router.push('/');
         })
         .catch((error) => {
-          console.error('Error loading user after OAuth:', error);
+          reportClientError(error, { where: 'auth/callback' });
           router.push('/login');
         });
     } else {

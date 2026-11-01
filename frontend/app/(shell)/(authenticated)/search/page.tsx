@@ -6,14 +6,14 @@ import { Box, Container, Typography, CircularProgress } from '@mui/material';
 import { hasMinimumRole } from '@/app/components/RequireRole';
 import { useAuth } from '@/app/contexts/AuthContext';
 import SearchFilters, { AuctionFilters } from '@/app/components/SearchFilters';
-import AuctionList from '@/app/components/AuctionList';
+import AuctionList, { type Auction } from '@/app/components/AuctionList';
 import FavoritesView from '@/app/components/FavoritesView';
 import { SavedFiltersProvider } from '@/app/contexts/SavedFiltersContext';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 
 interface SearchResult {
   total: number;
-  items: any[];
+  items: Auction[];
 }
 
 interface QueryReader {
@@ -111,7 +111,7 @@ function SearchPageContent() {
       if (!response.ok) throw new Error(data.error || 'Failed to fetch auctions');
 
       if (sequence === searchSequence.current) setSearchResults(data);
-    } catch (error: any) {
+    } catch {
       if (sequence === searchSequence.current) setSearchResults({ total: 0, items: [] });
     } finally {
       if (sequence === searchSequence.current) setSearchLoading(false);
@@ -131,7 +131,7 @@ function SearchPageContent() {
     setCurrentFilters(filters);
     setCurrentPage(pageNum);
     if (hasFilters(filters) || searchParams.has('page') || ownSearch) {
-      performSearch(filters, pageNum);
+      void performSearch(filters, pageNum);
     } else {
       searchSequence.current++;
       setSearchResults(null);

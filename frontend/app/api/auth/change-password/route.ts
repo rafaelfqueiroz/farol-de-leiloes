@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -29,10 +31,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error changing password:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/auth/change-password POST' });
     return NextResponse.json(
-      { message: error.message || 'Failed to change password' },
+      { message: errorMessage(error) || 'Failed to change password' },
       { status: 500 },
     );
   }

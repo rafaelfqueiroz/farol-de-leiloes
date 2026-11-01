@@ -17,6 +17,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SendIcon from '@mui/icons-material/Send';
+import { errorMessage } from '@/lib/error-message';
 
 const faqItems = [
   {
@@ -92,10 +93,10 @@ export default function SupportPage() {
       });
       setTitle('');
       setDescription('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       setSnackbar({
         open: true,
-        message: error.message || 'Erro ao enviar solicitação de suporte.',
+        message: errorMessage(error) || 'Erro ao enviar solicitação de suporte.',
         severity: 'error',
       });
     } finally {

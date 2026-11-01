@@ -26,6 +26,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { reportClientError } from '@/lib/report-client-error';
 
 interface Coupon {
   _id: string;
@@ -39,7 +40,7 @@ interface Coupon {
 
 export default function AdminCouponsPage() {
   const router = useRouter();
-  const { user, role, loading: authLoading } = useAuth();
+  const { role, loading: authLoading } = useAuth();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -71,7 +72,7 @@ export default function AdminCouponsPage() {
         setCoupons(data);
       }
     } catch (err) {
-      console.error('Error loading coupons:', err);
+      reportClientError(err, { where: 'admin/coupons page' });
     } finally {
       setLoading(false);
     }
@@ -83,7 +84,7 @@ export default function AdminCouponsPage() {
       return;
     }
     if (!authLoading && role === 'admin') {
-      loadCoupons();
+      void loadCoupons();
     }
   }, [authLoading, role, router, loadCoupons]);
 
@@ -114,7 +115,7 @@ export default function AdminCouponsPage() {
         setNewDiscountValue('');
         setNewValidTo('');
         setNewDescription('');
-        loadCoupons();
+        void loadCoupons();
       } else {
         const error = await response.json();
         setSnackbar({
@@ -140,7 +141,7 @@ export default function AdminCouponsPage() {
 
       if (response.ok) {
         setSnackbar({ open: true, message: 'Cupom invalidado', severity: 'success' });
-        loadCoupons();
+        void loadCoupons();
       } else {
         const error = await response.json();
         setSnackbar({

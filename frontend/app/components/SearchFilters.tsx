@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type SyntheticEvent } from 'react';
 import {
   Box,
   Drawer,
@@ -33,10 +33,13 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
+import type { Auction } from './AuctionList';
+import { reportClientError } from '@/lib/report-client-error';
+import { errorMessage } from '@/lib/error-message';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
-  onAISearchResults?: (results: { total: number; items: any[] }) => void;
+  onAISearchResults?: (results: { total: number; items: Auction[] }) => void;
   isLoading?: boolean;
   initialFilters?: AuctionFilters;
 }
@@ -393,6 +396,8 @@ const PRICE_MARKS = [
 
 const DRAWER_WIDTH = 380;
 
+type PriceRange = [min: number, max: number];
+
 function formatCurrency(value: number): string {
   if (value >= 1000000) {
     return `R$ ${(value / 1000000).toFixed(1)}M`;
@@ -409,7 +414,7 @@ export default function SearchFilters({
   initialFilters = {},
 }: SearchFiltersProps) {
   const [filters, setFilters] = useState<AuctionFilters>(initialFilters);
-  const [priceRange, setPriceRange] = useState<number[]>([
+  const [priceRange, setPriceRange] = useState<PriceRange>([
     initialFilters.minMargin || 0,
     initialFilters.maxMargin || 2000000,
   ]);
@@ -467,18 +472,23 @@ export default function SearchFilters({
           const data = await response.json();
           setAvailableNeighborhoods(data.neighborhoods || []);
         } else {
-          console.error('Failed to fetch neighborhoods');
+          reportClientError(
+            new Error(`Fetching neighborhoods failed with HTTP ${response.status}`),
+            {
+              where: 'SearchFilters.neighborhoods',
+            },
+          );
           setAvailableNeighborhoods([]);
         }
       } catch (error) {
-        console.error('Error fetching neighborhoods:', error);
+        reportClientError(error, { where: 'SearchFilters.neighborhoods' });
         setAvailableNeighborhoods([]);
       } finally {
         setLoadingNeighborhoods(false);
       }
     };
 
-    fetchNeighborhoods();
+    void fetchNeighborhoods();
   }, [filters.state, filters.city]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -495,7 +505,7 @@ export default function SearchFilters({
     setPriceRange([0, 2000000]);
   };
 
-  const handleCityChange = (_: any, newValue: string[]) => {
+  const handleCityChange = (_: SyntheticEvent, newValue: string[]) => {
     setFilters({
       ...filters,
       city: newValue.length > 0 ? newValue : undefined,
@@ -504,7 +514,7 @@ export default function SearchFilters({
     });
   };
 
-  const handleNeighborhoodChange = (_: any, newValue: string[]) => {
+  const handleNeighborhoodChange = (_: SyntheticEvent, newValue: string[]) => {
     setFilters({
       ...filters,
       neighborhood: newValue.length > 0 ? newValue : undefined,
@@ -523,7 +533,11 @@ export default function SearchFilters({
   };
 
   const handlePriceChange = (_: Event, newValue: number | number[]) => {
-    setPriceRange(newValue as number[]);
+    // a range Slider always reports [min, max]; a lone number is not a range and is ignored
+    if (!Array.isArray(newValue)) return;
+    const [min, max] = newValue;
+    if (min === undefined || max === undefined) return;
+    setPriceRange([min, max]);
   };
 
   // Get available cities based on selected state
@@ -564,7 +578,7 @@ export default function SearchFilters({
       const results = await response.json();
       onAISearchResults(results);
     } catch (error) {
-      console.error('Erro na busca por IA:', error);
+      reportClientError(error, { where: 'SearchFilters.aiSearch' });
     } finally {
       setAiSearchLoading(false);
     }
@@ -623,8 +637,8 @@ export default function SearchFilters({
       handleCloseSaveDialog();
       setSnackbarMessage('Filtro salvo com sucesso!');
       setSnackbarOpen(true);
-    } catch (error: any) {
-      setSaveError(error.message || 'Erro ao salvar filtro');
+    } catch (error: unknown) {
+      setSaveError(errorMessage(error) || 'Erro ao salvar filtro');
     } finally {
       setSavingFilter(false);
     }

@@ -1,10 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { FavoriteEntity, FavoriteDocument } from './schemas/favorite.schema';
 import { AuctionsService } from '../auctions/auctions.service';
-import { Auction } from '../auctions/interfaces/auction.interface';
+import { Auction, AuctionRecord } from '../auctions/interfaces/auction.interface';
 import { isAuctionActive } from '../auctions/utils/auction-filters';
+
+// `auction` once populated: the auction record, or null when the reference is stale.
+type PopulatedAuction = { auction: AuctionRecord | null };
 
 @Injectable()
 export class FavoritesService {
@@ -16,7 +19,7 @@ export class FavoritesService {
   async findAll(userId: string): Promise<Auction[]> {
     const favorites = await this.favoriteRepository
       .find({ userId })
-      .populate('auction')
+      .populate<PopulatedAuction>('auction')
       .sort({ createdAt: -1 })
       .exec();
 
@@ -24,8 +27,7 @@ export class FavoritesService {
 
     for (const fav of favorites) {
       if (fav.auction != null) {
-        const auctionDoc = fav.auction as any;
-        const auction = this.toAuction(auctionDoc);
+        const auction = this.toAuction(fav.auction);
         // Skip inactive auctions (unavailable, past date, etc.)
         if (!isAuctionActive(auction)) {
           continue;
@@ -48,7 +50,10 @@ export class FavoritesService {
     return results;
   }
 
-  private async updateAuctionId(favoriteId: any, auctionId: any): Promise<void> {
+  private async updateAuctionId(
+    favoriteId: Types.ObjectId,
+    auctionId: Types.ObjectId,
+  ): Promise<void> {
     await this.favoriteRepository.updateOne({ _id: favoriteId }, { $set: { auction: auctionId } });
   }
 
@@ -61,7 +66,7 @@ export class FavoritesService {
     if (existingFavorite) {
       const populated = await this.favoriteRepository
         .findById(existingFavorite._id)
-        .populate('auction')
+        .populate<PopulatedAuction>('auction')
         .exec();
       if (populated?.auction) {
         return this.toAuction(populated.auction);
@@ -81,8 +86,13 @@ export class FavoritesService {
     });
     await favorite.save();
 
+    // findByCode only returns available auctions; an unavailable one is reported as not found
+    // (DV-03) instead of returning null to the controller.
     const auction = await this.auctionsService.findByCode(auctionCode);
-    return auction!;
+    if (!auction) {
+      throw new NotFoundException(`Auction with code ${auctionCode} not found`);
+    }
+    return auction;
   }
 
   async remove(userId: string, auctionCode: string): Promise<boolean> {
@@ -90,7 +100,7 @@ export class FavoritesService {
     return result.deletedCount > 0;
   }
 
-  private toAuction(doc: any): Auction {
+  private toAuction(doc: AuctionRecord): Auction {
     const phases = doc.phases ?? [];
 
     // Compute URLs from file objects (prefer publicUrl, fallback to originalUrl)

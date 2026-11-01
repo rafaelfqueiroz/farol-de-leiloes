@@ -58,7 +58,7 @@ One approved choice per concern. Adding a dependency that overlaps one of these 
 | **DV-08** | Directories are domain concepts (`journeys/`, `viability/`), lowercase with hyphens. Never `services/`, `helpers/`, `utils/` at module level. |
 | **DV-09** | Frontend imports use the `@/` alias. Backend imports stay relative inside a module; another module is reached only through its exported service (AR-09). |
 | **DV-10** | No barrel files (`index.ts` re-exports) except a module's public surface. They hide the import graph the boundary lint depends on. |
-| **DV-11** | Never `console.*` — use NestJS `Logger` (AR-45). Enforced by ESLint `no-console: error` in the backend; in the frontend, client logging goes to Sentry. |
+| **DV-11** | Never `console.*` — use NestJS `Logger` (AR-45). Enforced by ESLint `no-console: error` in both packages. In the frontend, handled client errors go through `reportClientError` (`frontend/lib/report-client-error.ts`), which logs only `[where] Name: message`; it sends to Sentry once #36 lands. |
 | **DV-12** | Prettier owns formatting (2 spaces, semicolons, single quotes, trailing commas, 100 columns). Nobody formats by hand and no review comment is about formatting. |
 
 ## 5. Comments
@@ -88,7 +88,7 @@ Both packages expose the same script names:
 | Script | Does |
 |---|---|
 | `typecheck` | `tsc --noEmit` |
-| `lint` / `lint:fix` | ESLint. Legacy violations are bulk suppressions in `eslint-suppressions.json` until #30: `lint` fails on a new violation and on a suppression that no longer occurs, which `npm run lint:prune` removes |
+| `lint` / `lint:fix` | ESLint. The remaining legacy violations are bulk suppressions in `eslint-suppressions.json`, each owned by an issue: backend AR-09 imports (#51); frontend JSX literals (#39), `px` in `sx` (#43), and the React hooks, a11y and Next rules (#52). `lint` fails on a new violation and on a suppression that no longer occurs, which `npm run lint:prune` removes |
 | `format` / `format:check` | Prettier |
 | `test` | Unit tests (backend: unit + `domain/`; frontend: Vitest) |
 | `test:integration` | Backend only — Testcontainers MongoDB (TESTING §2) |

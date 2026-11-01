@@ -8,8 +8,8 @@ import { CouponsService } from '../coupons/coupons.service';
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
   private stripe: Stripe;
-  private webhookSecret: string;
-  private standardPriceId: string;
+  private webhookSecret: string | undefined;
+  private standardPriceId: string | undefined;
   private frontendUrl: string;
 
   constructor(
@@ -17,9 +17,10 @@ export class PaymentsService {
     private usersService: UsersService,
     private couponsService: CouponsService,
   ) {
-    this.stripe = new Stripe(this.configService.get<string>('STRIPE_SECRET_KEY')!);
-    this.webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET')!;
-    this.standardPriceId = this.configService.get<string>('STRIPE_STANDARD_PRICE_ID')!;
+    // Stripe refuses to construct without a key, so a missing one already failed the boot.
+    this.stripe = new Stripe(this.configService.getOrThrow<string>('STRIPE_SECRET_KEY'));
+    this.webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
+    this.standardPriceId = this.configService.get<string>('STRIPE_STANDARD_PRICE_ID');
     this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
   }
 
@@ -81,6 +82,10 @@ export class PaymentsService {
     let event: Stripe.Event;
 
     try {
+      // Without a secret no signature can be verified: same rejection as a bad one (DV-03).
+      if (!this.webhookSecret) {
+        throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
+      }
       event = this.stripe.webhooks.constructEvent(rawBody, signature, this.webhookSecret);
     } catch (err) {
       this.logger.error(`Webhook signature verification failed: ${err}`);

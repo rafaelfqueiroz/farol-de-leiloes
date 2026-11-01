@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -28,10 +30,10 @@ export async function DELETE(
     }
 
     return new NextResponse(null, { status: 204 });
-  } catch (error: any) {
-    console.error('Error deleting favorite:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/favorites/[code] DELETE' });
     return NextResponse.json(
-      { error: error.message || 'Failed to delete favorite' },
+      { error: errorMessage(error) || 'Failed to delete favorite' },
       { status: 500 },
     );
   }

@@ -13,6 +13,7 @@ import {
 import { RemindersService } from './reminders.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
 import { CreateReminderDto } from './dto/create-reminder.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { ReminderResponseDto } from './dto/reminder-response.dto';
@@ -23,20 +24,23 @@ export class RemindersController {
   constructor(private readonly remindersService: RemindersService) {}
 
   @Get()
-  async findAll(@CurrentUser() user: any): Promise<ReminderResponseDto[]> {
+  async findAll(@CurrentUser() user: AuthenticatedUser): Promise<ReminderResponseDto[]> {
     const reminders = await this.remindersService.findAllByUser(user.userId);
     return reminders.map((r) => new ReminderResponseDto(r));
   }
 
   @Get(':id')
-  async findOne(@CurrentUser() user: any, @Param('id') id: string): Promise<ReminderResponseDto> {
+  async findOne(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<ReminderResponseDto> {
     const reminder = await this.remindersService.findOne(user.userId, id);
     return new ReminderResponseDto(reminder);
   }
 
   @Post()
   async create(
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateReminderDto,
   ): Promise<ReminderResponseDto> {
     const reminder = await this.remindersService.create(user.userId, dto);
@@ -45,7 +49,7 @@ export class RemindersController {
 
   @Patch(':id')
   async update(
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateReminderDto,
   ): Promise<ReminderResponseDto> {
@@ -55,7 +59,7 @@ export class RemindersController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async delete(@CurrentUser() user: any, @Param('id') id: string): Promise<void> {
+  async delete(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string): Promise<void> {
     await this.remindersService.delete(user.userId, id);
   }
 }

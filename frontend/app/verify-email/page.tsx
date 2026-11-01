@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Box, Card, CardContent, Typography, Button, Alert, CircularProgress } from '@mui/material';
 import EmailIcon from '@mui/icons-material/Email';
 import { useAuth } from '../contexts/AuthContext';
+import { errorMessage } from '@/lib/error-message';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -32,8 +33,8 @@ export default function VerifyEmailPage() {
     try {
       await resendVerificationEmail();
       setSent(true);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao enviar email de verificacao');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao enviar email de verificacao');
     } finally {
       setSending(false);
     }

@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography } from '@mui/material';
-import { useFavorites } from '../contexts/FavoritesContext';
+import { useFavorites, type Auction } from '../contexts/FavoritesContext';
 import { useAuth } from '../contexts/AuthContext';
 import AuctionCard from './AuctionCard';
 
@@ -41,7 +41,7 @@ export default function FavoritesView() {
     );
   }
 
-  const renderAuctionCard = (auction: any) => (
+  const renderAuctionCard = (auction: Auction) => (
     <AuctionCard
       key={auction.code}
       auction={auction}

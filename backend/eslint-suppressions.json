@@ -1,54 +1,12 @@
 {
-  "src/auctions/auctions.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    }
-  },
-  "src/auctions/cleanup/auction-cleanup.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/auctions/importer/csv-cache.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/auctions/importer/downloader.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/auctions/importer/scheduler.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/auctions/scraper/details-scraper.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    },
-    "@typescript-eslint/no-require-imports": {
       "count": 1
     }
   },
   "src/auctions/scraper/scraper-scheduler.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/auth/auth.controller.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 9
     }
   },
   "src/auth/auth.service.ts": {
@@ -56,131 +14,8 @@
       "count": 1
     }
   },
-  "src/auth/strategies/google.strategy.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/auth/strategies/jwt.strategy.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/common/hash.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/coupons/coupons.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    }
-  },
-  "src/favorites/favorites.controller.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    }
-  },
-  "src/favorites/favorites.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    }
-  },
-  "src/main.ts": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    }
-  },
-  "src/notifications/sms.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/notifications/whatsapp.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/payments/payments.controller.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    }
-  },
-  "src/payments/payments.service.ts": {
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 3
-    }
-  },
-  "src/reminders/dto/reminder-response.dto.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/reminders/reminders.controller.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    }
-  },
   "src/reminders/reminders.scheduler.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
-    },
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 4
-    },
     "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/reminders/reminders.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    }
-  },
-  "src/saved-filters/saved-filters.controller.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/saved-filters/saved-filters.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/storage/storage.service.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 1
-    }
-  },
-  "src/support/support.controller.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "test/auction-cleanup.service.spec.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
-    }
-  },
-  "test/auctions-mark-available.spec.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "test/parser.spec.ts": {
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   }

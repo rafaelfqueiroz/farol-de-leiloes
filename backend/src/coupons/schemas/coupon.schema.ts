@@ -25,6 +25,10 @@ export class CouponEntity extends Document {
 
   @Prop({ required: false })
   description?: string;
+
+  // Set by Mongoose (timestamps: true), not a @Prop.
+  createdAt!: Date;
+  updatedAt!: Date;
 }
 
 export const CouponSchema = SchemaFactory.createForClass(CouponEntity);

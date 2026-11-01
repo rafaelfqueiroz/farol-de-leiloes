@@ -19,6 +19,23 @@ export interface UserProfile {
   updatedAt: Date;
 }
 
+/** The claims AuthService signs into the access token. */
+export interface JwtPayload {
+  sub: string;
+  email: string;
+  name: string;
+}
+
+/** What JwtStrategy.validate puts on `request.user`, read through @CurrentUser(). */
+export interface AuthenticatedUser {
+  userId: string;
+  email: string;
+  name: string;
+  emailVerified: boolean;
+  providers: string[];
+  role: string;
+}
+
 export interface AuthResult {
   accessToken: string;
   user: UserProfile;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://localhost:3000';
 
@@ -55,8 +56,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(results);
   } catch (error: unknown) {
-    console.error('Error in chat API:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    reportClientError(error, { where: 'api/chat POST' });
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

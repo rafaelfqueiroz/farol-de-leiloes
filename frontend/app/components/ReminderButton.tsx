@@ -29,6 +29,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { useReminders, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import { errorMessage } from '@/lib/error-message';
 
 interface ReminderButtonProps {
   auctionCode: string;
@@ -99,8 +100,8 @@ export default function ReminderButton({
       } else {
         setError('Erro ao criar lembrete. Tente novamente.');
       }
-    } catch (err: any) {
-      setError(err.message || 'Erro ao criar lembrete');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao criar lembrete');
     } finally {
       setLoading(false);
     }
@@ -119,8 +120,8 @@ export default function ReminderButton({
       } else {
         setError('Erro ao remover lembrete. Tente novamente.');
       }
-    } catch (err: any) {
-      setError(err.message || 'Erro ao remover lembrete');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao remover lembrete');
     } finally {
       setLoading(false);
     }

@@ -363,6 +363,6 @@ The theme, tokens, shared patterns, formatters and logo from issue #38 are in pl
 | DS-01, DS-11, DS-14, DS-15 | Numeric `fontSize` / `fontWeight` literals in 25 files; pages do not yet use `PageShell` / `PageHeader` | #43 |
 | DS-27 | Destructive confirmations are hand-rolled `Dialog`s (`RemindersPage` delete reminder, `plans` cancel subscription) instead of `ConfirmDialog`; some destructive actions have no confirmation at all (admin coupons "Invalidar", `ReminderButton` delete, `SearchFilters` delete saved filter) | no issue yet |
 | §6 | Busca com IA, Jornadas, Relatórios, Investidores and Equipe are not in the navigation yet; Escritório is reserved and empty | each destination's spec issue |
-| TESTING §9 | Lint enforces hex/px in `sx` (DS-01) and JSX string literals (DS-20), but today's violations are bulk-suppressed in `frontend/eslint-suppressions.json` | #30 |
+| TESTING §9 | Lint enforces hex/px in `sx` (DS-01) and JSX string literals (DS-20), but today's violations are bulk-suppressed in `frontend/eslint-suppressions.json` | #39 (literals), #43 (`px`) |
 | TS-24 | No frontend coverage gate | #32 |
 | Logo | First version: the SVGs in `frontend/public/brand/` are replaceable (see Brand) | — |

@@ -7,6 +7,7 @@ import { JobExecutionService } from '../../common/services/job-execution.service
 import { RunMode } from '../../common/schemas/job-execution.schema';
 import { CsvCacheService } from './csv-cache.service';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
+import { errorMessage } from '../../common/error-message';
 
 @Injectable()
 export class AuctionsImporter {
@@ -149,8 +150,8 @@ export class AuctionsImporter {
       // Record execution in database
       await this.jobExecutionService.recordExecution(this.jobName, runMode);
       this.logger.log(`Execution recorded in database`);
-    } catch (e: any) {
-      this.logger.error(`Failed import: ${e?.message || e}`);
+    } catch (e) {
+      this.logger.error(`Failed import: ${errorMessage(e)}`);
       throw e;
     }
   }
