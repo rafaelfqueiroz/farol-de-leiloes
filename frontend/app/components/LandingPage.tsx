@@ -144,9 +144,10 @@ export default function LandingPage() {
 
   return (
     <Box sx={{ minHeight: '100vh' }}>
-      {/* Header: same surface as the app TopBar. MUI's AppBar repaints a coloured bar with its dark
-          background in dark mode, which left primary.contrastText unreadable on it, so the bar is
-          background.paper with text.primary links, legible in both schemes (DS-05, DS-24). */}
+      {/* Header: same surface as the AppShell top bar. MUI's AppBar repaints a coloured bar with
+          its dark background in dark mode, which left primary.contrastText unreadable on it, so
+          the bar is background.paper with text.primary links, legible in both schemes (DS-05,
+          DS-24). */}
       <AppBar
         position="fixed"
         elevation={0}

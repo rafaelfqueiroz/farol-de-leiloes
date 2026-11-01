@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { useReloadOnUserChange } from './use-reload-on-user-change';
 
 interface Auction {
   code: string;
@@ -37,42 +38,54 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const [favorites, setFavorites] = useState<Auction[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-
-  // Load favorites from API on mount
-  useEffect(() => {
-    loadFavorites();
-  }, []);
-
   const getAuthHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('token');
     if (!token) return {};
     return { 'Authorization': `Bearer ${token}` };
   };
 
-  const loadFavorites = async () => {
+  // #42: only the latest load (or clear) may write, so a slow response for a previous user
+  // cannot overwrite the current one's favourites
+  const latestRequest = useRef(0);
+
+  const loadFavorites = useCallback(async () => {
+    const request = ++latestRequest.current;
+    const isLatest = () => request === latestRequest.current;
     try {
       const token = localStorage.getItem('token');
       if (!token) {
+        setFavorites([]);
         setLoading(false);
         return;
       }
 
+      setLoading(true);
       const response = await fetch('/api/favorites', {
-        headers: getAuthHeaders(),
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.ok) {
         const data = await response.json();
-        setFavorites(data);
-      } else if (response.status === 401) {
+        if (isLatest()) setFavorites(data);
+      } else if (response.status === 401 && isLatest()) {
         // Unauthorized - clear favorites
         setFavorites([]);
       }
     } catch (error) {
-      console.error('Error loading favorites:', error);
+      if (isLatest()) console.error('Error loading favorites:', error);
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
-  };
+  }, []);
+
+  const clearFavorites = useCallback(() => {
+    latestRequest.current++;
+    setFavorites([]);
+    setLoading(false);
+  }, []);
+
+  // #42: fetch at once when a token exists, reload on a change of user, clear on sign-out, so
+  // the AppShell's Favoritos count matches the page
+  useReloadOnUserChange(loadFavorites, clearFavorites);
 
   const isFavorite = (code: string): boolean => {
     return favorites.some(fav => fav.code === code);

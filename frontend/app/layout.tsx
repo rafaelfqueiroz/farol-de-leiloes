@@ -4,7 +4,6 @@ import { getLocale, getMessages, getTimeZone } from 'next-intl/server';
 import { AuthProvider } from './contexts/AuthContext';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { RemindersProvider } from './contexts/RemindersContext';
-import { SidebarProvider } from './contexts/SidebarContext';
 import AppThemeProvider from './theme/AppThemeProvider';
 import { inter } from './theme/fonts';
 
@@ -32,9 +31,7 @@ export default async function RootLayout({
         <AppThemeProvider locale={locale} timeZone={timeZone} messages={messages}>
           <AuthProvider>
             <FavoritesProvider>
-              <SidebarProvider>
-                <RemindersProvider>{children}</RemindersProvider>
-              </SidebarProvider>
+              <RemindersProvider>{children}</RemindersProvider>
             </FavoritesProvider>
           </AuthProvider>
         </AppThemeProvider>

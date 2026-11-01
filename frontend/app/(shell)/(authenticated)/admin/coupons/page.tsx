@@ -25,10 +25,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import Sidebar from '../../components/Sidebar';
-import TopBar from '../../components/TopBar';
-import RequireAuthentication from '../../components/RequireAuthentication';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '@/app/contexts/AuthContext';
 
 interface Coupon {
   _id: string;
@@ -150,115 +147,110 @@ export default function AdminCouponsPage() {
   if (!authLoading && role !== 'admin') return null;
 
   return (
-    <RequireAuthentication>
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar activeView="admin" />
-      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-        <TopBar />
-        <Container maxWidth="lg" sx={{ pt: 12, pb: 4, flexGrow: 1 }}>
-          {authLoading || loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}>
-              <CircularProgress />
+    <>
+      {/* #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar */}
+      <Container maxWidth="lg" sx={{ pt: 4, pb: 4, flexGrow: 1 }}>
+        {authLoading || loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h4" sx={{ fontWeight: 700 }}>
+                Gerenciar Cupons
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setDialogOpen(true)}
+              >
+                Novo Cupom
+              </Button>
             </Box>
-          ) : (
-            <>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                  Gerenciar Cupons
-                </Typography>
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={() => setDialogOpen(true)}
-                >
-                  Novo Cupom
-                </Button>
-              </Box>
 
-              <TableContainer component={Paper} variant="outlined">
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 700 }}>Codigo</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Desconto</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Valido ate</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Descricao</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Acoes</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {coupons.map((coupon) => {
-                      const expired = isExpired(coupon.validTo);
-                      const inactive = !coupon.active || expired;
-                      return (
-                        <TableRow
-                          key={coupon._id}
-                          sx={{ opacity: inactive ? 0.5 : 1 }}
-                        >
-                          <TableCell>
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                fontWeight: 700,
-                                fontFamily: 'monospace',
-                                textDecoration: inactive ? 'line-through' : 'none',
-                              }}
-                            >
-                              {coupon.code}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            R$ {(coupon.discountValue / 100).toFixed(2).replace('.', ',')}
-                          </TableCell>
-                          <TableCell>
-                            {new Date(coupon.validTo).toLocaleDateString('pt-BR')}
-                          </TableCell>
-                          <TableCell>
-                            {!coupon.active ? (
-                              <Chip label="Invalidado" size="small" color="error" variant="outlined" />
-                            ) : expired ? (
-                              <Chip label="Expirado" size="small" color="warning" variant="outlined" />
-                            ) : (
-                              <Chip label="Ativo" size="small" color="success" variant="outlined" />
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" color="text.secondary">
-                              {coupon.description || '-'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            {coupon.active && !expired && (
-                              <Button
-                                size="small"
-                                color="destructive"
-                                onClick={() => handleInvalidate(coupon._id)}
-                              >
-                                Invalidar
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    {coupons.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6} align="center">
-                          <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
-                            Nenhum cupom cadastrado
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>Codigo</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Desconto</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Valido ate</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Descricao</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Acoes</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {coupons.map((coupon) => {
+                    const expired = isExpired(coupon.validTo);
+                    const inactive = !coupon.active || expired;
+                    return (
+                      <TableRow
+                        key={coupon._id}
+                        sx={{ opacity: inactive ? 0.5 : 1 }}
+                      >
+                        <TableCell>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 700,
+                              fontFamily: 'monospace',
+                              textDecoration: inactive ? 'line-through' : 'none',
+                            }}
+                          >
+                            {coupon.code}
                           </Typography>
                         </TableCell>
+                        <TableCell>
+                          R$ {(coupon.discountValue / 100).toFixed(2).replace('.', ',')}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(coupon.validTo).toLocaleDateString('pt-BR')}
+                        </TableCell>
+                        <TableCell>
+                          {!coupon.active ? (
+                            <Chip label="Invalidado" size="small" color="error" variant="outlined" />
+                          ) : expired ? (
+                            <Chip label="Expirado" size="small" color="warning" variant="outlined" />
+                          ) : (
+                            <Chip label="Ativo" size="small" color="success" variant="outlined" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">
+                            {coupon.description || '-'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {coupon.active && !expired && (
+                            <Button
+                              size="small"
+                              color="destructive"
+                              onClick={() => handleInvalidate(coupon._id)}
+                            >
+                              Invalidar
+                            </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </>
-          )}
-        </Container>
-      </Box>
-    </Box>
+                    );
+                  })}
+                  {coupons.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center">
+                        <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
+                          Nenhum cupom cadastrado
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )}
+      </Container>
 
     {/* Create Coupon Dialog */}
     <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
@@ -325,6 +317,6 @@ export default function AdminCouponsPage() {
         {snackbar.message}
       </Alert>
     </Snackbar>
-    </RequireAuthentication>
+    </>
   );
 }

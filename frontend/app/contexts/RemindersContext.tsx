@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, useRef, ReactNode, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useReloadOnUserChange } from './use-reload-on-user-change';
 
 export type ReminderChannel = 'EMAIL' | 'SMS' | 'WHATSAPP';
 export type ReminderStatus = 'PENDING' | 'SENT';
@@ -60,34 +61,48 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     return { 'Authorization': `Bearer ${token}` };
   };
 
+  // #42: only the latest load (or clear) may write, so a slow response for a previous user
+  // cannot overwrite the current one's reminders
+  const latestRequest = useRef(0);
+
   const loadReminders = useCallback(async () => {
+    const request = ++latestRequest.current;
+    const isLatest = () => request === latestRequest.current;
     try {
       const token = localStorage.getItem('token');
       if (!token) {
+        setReminders([]);
         setLoading(false);
         return;
       }
 
+      setLoading(true);
       const response = await fetch('/api/reminders', {
-        headers: getAuthHeaders(),
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.ok) {
         const data = await response.json();
-        setReminders(data);
-      } else if (response.status === 401) {
+        if (isLatest()) setReminders(data);
+      } else if (response.status === 401 && isLatest()) {
         setReminders([]);
       }
     } catch (error) {
-      console.error('Error loading reminders:', error);
+      if (isLatest()) console.error('Error loading reminders:', error);
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadReminders();
-  }, [loadReminders]);
+  const clearReminders = useCallback(() => {
+    latestRequest.current++;
+    setReminders([]);
+    setLoading(false);
+  }, []);
+
+  // #42: fetch at once when a token exists, reload on a change of user, clear on sign-out, so
+  // the AppShell's Lembretes count matches the page
+  useReloadOnUserChange(loadReminders, clearReminders);
 
   const hasReminderForAuction = (auctionCode: string): boolean => {
     return reminders.some(r => r.auction.code === auctionCode);
