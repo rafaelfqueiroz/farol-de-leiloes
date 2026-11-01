@@ -56,7 +56,7 @@ export class SavedFiltersService {
       _id: doc._id.toString(),
       name: doc.name,
       filters: doc.filters,
-      createdAt: (doc as any).createdAt,
+      createdAt: doc.createdAt,
     };
   }
 }
