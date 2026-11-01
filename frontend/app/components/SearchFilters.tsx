@@ -143,6 +143,14 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
     initialFilters.maxMargin || 2000000
   ]);
   const [drawerOpen, setDrawerOpen] = useState(true);
+
+  // #42: the search page's filters follow the URL (Back/Forward, the AppShell links), so the form
+  // follows them too instead of keeping the values it mounted with
+  const initialFiltersKey = JSON.stringify(initialFilters);
+  useEffect(() => {
+    setFilters(initialFilters);
+    setPriceRange([initialFilters.minMargin || 0, initialFilters.maxMargin || 2000000]);
+  }, [initialFiltersKey]);
   const [aiSearchInput, setAiSearchInput] = useState('');
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const [availableNeighborhoods, setAvailableNeighborhoods] = useState<string[]>([]);
@@ -458,19 +466,25 @@ export default function SearchFilters({ onSearch, onAISearchResults, isLoading =
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         variant="persistent"
-        sx={{
+        sx={(theme) => ({
           width: DRAWER_WIDTH,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
             width: DRAWER_WIDTH,
             boxSizing: 'border-box',
-            mt: '65px', // TopBar height
-            height: 'calc(100vh - 65px)',
+            // #42, DS-04: sits right under the AppShell top bar (its border is inside its height):
+            // 56px below md, 64px from md, from theme.layout rather than a literal
+            top: theme.layout.topbarCompactHeight,
+            height: `calc(100dvh - ${theme.layout.topbarCompactHeight}px)`,
+            [theme.breakpoints.up('md')]: {
+              top: theme.layout.topbarHeight,
+              height: `calc(100dvh - ${theme.layout.topbarHeight}px)`,
+            },
             borderLeft: 1,
             borderColor: 'divider',
             backgroundColor: 'background.paper',
           },
-        }}
+        })}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {/* Header */}

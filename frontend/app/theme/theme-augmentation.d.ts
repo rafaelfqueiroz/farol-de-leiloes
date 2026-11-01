@@ -85,10 +85,18 @@ declare module '@mui/material/styles' {
     wordmark?: CSSProperties;
   }
 
-  /** Page container widths in px (DESIGN.md §6), exposed so components never import tokens.ts. */
+  /** Layout sizes in px (DESIGN.md §2 Sizes, §6), exposed so components never import tokens.ts. */
   interface Layout {
     containerWidth: number;
     readingWidth: number;
+    /** `size-sidebar`: the AppShell sidebar from lg, and pinned open from md. */
+    sidebarWidth: number;
+    /** `size-sidebar` rail: the AppShell icon rail from md to lg. */
+    railWidth: number;
+    /** `size-topbar`: the top bar from md. */
+    topbarHeight: number;
+    /** `size-topbar` below md. */
+    topbarCompactHeight: number;
   }
 
   interface Theme {

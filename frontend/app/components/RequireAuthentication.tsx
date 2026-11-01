@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
+import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 
 interface RequireAuthenticationProps {
   children: React.ReactNode;
@@ -22,12 +23,13 @@ export default function RequireAuthentication({ children }: RequireAuthenticatio
   if (loading) {
     return (
       <Box
-        sx={{
-          minHeight: '100vh',
+        sx={(theme) => ({
+          // #42: fills the AppShell content area, not the whole viewport
+          ...shellContentMinHeight(theme),
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-        }}
+        })}
       >
         <CircularProgress />
       </Box>
@@ -37,12 +39,13 @@ export default function RequireAuthentication({ children }: RequireAuthenticatio
   if (!isAuthenticated) {
     return (
       <Box
-        sx={{
-          minHeight: '100vh',
+        sx={(theme) => ({
+          // #42: fills the AppShell content area, not the whole viewport
+          ...shellContentMinHeight(theme),
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-        }}
+        })}
       >
         <CircularProgress />
       </Box>

@@ -65,7 +65,7 @@ The vocabulary is MUI's palette, extended through module augmentation (`frontend
 | `typography.*` variants | The only font sizes and weights in the product (DS-11) |
 | `spacing` | The 8 px base unit; every gap, margin and padding is a multiple via `theme.spacing` |
 
-**Module augmentation** (`theme-augmentation.d.ts`) adds, beyond MUI's defaults: `status.*` (+ `*Surface`), `figure.*`, `destructive`, `background.raised` / `background.muted`, `primary.soft`, `secondary.soft` / `secondary.ink`, `*.soft` on `error`, `warning`, `info` and `success`, `border.control`, `focus`, `overlay`, `shape.panelRadius` / `shape.pillRadius`, and the typography variant `metric`.
+**Module augmentation** (`theme-augmentation.d.ts`) adds, beyond MUI's defaults: `status.*` (+ `*Surface`), `figure.*`, `destructive`, `background.raised` / `background.muted`, `primary.soft`, `secondary.soft` / `secondary.ink`, `*.soft` on `error`, `warning`, `info` and `success`, `border.control`, `focus`, `overlay`, `shape.panelRadius` / `shape.pillRadius`, the typography variant `metric`, and `theme.layout` (container, reading, sidebar, rail and top-bar sizes in px).
 
 **Contrast, measured at design time:** 82 text/surface pairs were computed. All are at least 4.5:1 (text) or 3:1 (`line-strong`, `primary`, focus) in both schemes; the minimum is 4.7:1 (`success` on `success-soft`, light). The structural test (DS-08) keeps it that way in code.
 
@@ -227,24 +227,36 @@ Weights: 400 text · 500 emphasis and labels · 600 headings, buttons and figure
 
 ### Navigation — sidebar + drawer
 
-`AppShell` is the signed-in frame: one instance in the authenticated layout, never per page. Navigation is a **sidebar that becomes a drawer**, chosen over a bottom bar because there are more than five destinations and hiding items by role would be inconsistent.
+`AppShell` (`patterns/AppShell.tsx`) is the frame: one instance in the `app/(shell)` route-group layout, never per page. `app/(shell)/(authenticated)/layout.tsx` adds the `RequireAuthentication` guard for the signed-in pages; each page keeps its own `RequireRole` or admin check. The root `not-found.tsx` mounts the shell itself (it cannot sit in a group). Landing, login, register, password reset, email verification, the auth callback and `plans/success` / `plans/cancel` stay outside it. Navigation is a **sidebar that becomes a drawer**, chosen over a bottom bar because there are more than five destinations and hiding items by role would be inconsistent. Approved frame: the [design-system artifact](https://claude.ai/artifact/A4Y69knqEHAqZfQKPLrKCf), card `AppShellFrame` (DS-30).
 
 | Width | Navigation |
 |---|---|
-| ≥ `lg` | Permanent sidebar, 264 px (`size-sidebar`) |
-| `md` to `lg` | 72 px icon rail with tooltips; the user can pin it open |
-| < `md` | No sidebar. A 56 px top bar (menu button, mark, reminders) opens the *same list* in a temporary drawer |
+| ≥ `lg` | Permanent sidebar, 264 px (`size-sidebar`), `background.paper` with a `divider` right border. No toggle |
+| `md` to `lg` | 72 px icon rail: groups split by a short divider, no labels; each item has an `aria-label` (name and count) and a tooltip on the right on hover and focus; the count is a small pill on the icon's corner. **Expandir menu** pins the 264 px sidebar open, pushing the content; pinned, **Recolher menu** sits at the bottom (the label carries the state, so no `aria-pressed`). The choice is kept in `localStorage` (`farol.appShell.railPinned`), read and written in `try/catch` — without storage it lasts the visit |
+| < `md` | No sidebar. A 56 px top bar — menu button (`aria-expanded`, `aria-controls`), mark, theme button, reminders shortcut (standard and up), avatar — opens the *same list* in a temporary 300 px drawer on the `overlay` scrim, `background.raised` (DS-09) |
 
-Destinations are grouped under `overline` labels:
+The shell's sizes come from `theme.layout` (`sidebarWidth`, `railWidth`, `topbarHeight`, `topbarCompactHeight`), never from `tokens.ts`. The top bar's bottom border is inside its height, so anything placed under the bar (the sidebar, the search filter drawer) offsets by `topbarHeight` / `topbarCompactHeight` alone, and placeholders inside the shell fill the content area with `shellContentMinHeight` (`patterns/shell-content.ts`), not `100vh`. Layout switches on theme breakpoints (DS-14): presentational swaps (mark vs lockup) are breakpoint `display` in `sx`, so the server markup is right; `useMediaQuery` is kept for behaviour (drawer, rail, pin).
 
-| Group | Destinations |
-|---|---|
-| Busca | Buscar imóveis · Busca com IA · Favoritos |
-| Acompanhamento | Jornadas · Lembretes · Relatórios |
-| Escritório | Investidores · Equipe · Assinatura |
-| Conta | Perfil · Suporte |
+Destinations are grouped under `overline` labels, in this fixed order:
 
-A role sees only the groups it can use (an investor has no *Escritório*), and **groups never reorder between roles**, so a shared destination is always in the same place. The navigation model (groups, items, permission, count source) is one config file owned by the shell. The current item is `primary-soft` with `primary` text, a filled icon and `aria-current="page"`.
+| Group | Destinations | Who |
+|---|---|---|
+| Busca | Buscar imóveis (`/search`) · Favoritos (`/search?view=favorites`, count) | Favoritos from standard |
+| Acompanhamento | Lembretes (`/reminders`, count of upcoming reminders) | standard and up |
+| Escritório | — reserved, empty until its routes exist, so it never renders | — |
+| Conta | Perfil (`/profile`) · Assinatura (`/plans`) · Suporte (`/support`) | everyone |
+| Administração | Cupons (`/admin/coupons`) | admin only |
+
+There is no "Início": `/` sends signed-in users to `/search`. Busca com IA, Jornadas, Relatórios, Investidores and Equipe join their groups when their specs ship.
+
+A role sees only the groups where it has a destination — a group with none disappears with its label — and **groups never reorder between roles**, so a shared destination is always in the same place. The navigation model (groups, items, minimum role, count source, how an item matches the location) is one config file owned by the shell, `patterns/app-shell-navigation.ts`; no component keeps its own list of destinations.
+
+- **Current item**: `primary-soft` with `primary` text, a filled icon and `aria-current="page"`. The most specific match wins: `/search?view=favorites` is Favoritos, any other `/search` is Buscar imóveis; nested paths match by prefix (`/admin/coupons/…` is Cupons); a signed-in visitor of `/auction/[code]` is in Buscar imóveis. The search page reads its view from the URL, so the links switch it.
+- **Counts** are neutral pills (`background.muted`, `text.primary`, pill radius), only from what `FavoritesContext` and `RemindersContext` already hold (upcoming = `PENDING` reminders). While they load, on failure or at zero there is no pill; above 99 it reads "99+". The item's accessible name carries the count ("Favoritos, 24"; "Lembretes, 3 próximos").
+- **Top bar** (`md` and up, 64 px): the Logo lockup linking home; the theme control (`ColorSchemeControl`, light / dark / system) behind an icon button — also in the < `md` bar, so the scheme can be chosen on a phone; the reminders shortcut (standard and up); the avatar menu button ("Conta de <nome>"). The avatar menu has a header with name, email and the plan chip, then Perfil, Assinatura, a divider and Sair. Sair unmounts the page first and then signs out, so it always lands on `/` (never on the guard's `/login`). Suporte is in the navigation, not in the menu.
+- **Guest mode** (signed out): the same top bar with no navigation and no menu button — Logo, theme control and "Entrar" (`/login`). `/auction/[code]` and the 404 pages use it for visitors; signed in, they get the full shell. While auth is still loading the bar shows only the Logo and the theme control, so "Entrar" never flashes for a member.
+- **Focus** (DS-21): "Pular para o conteúdo" is the first focusable element at every width and targets the shell's single `<main id="app-content">`, so pages never add their own `<main>`. The drawer is a labelled dialog: on open focus goes to "Fechar menu", it is trapped inside, and Esc, the scrim or choosing a destination close it and return focus to the menu button.
+- **Targets**: every item and control is at least 44 px (DS-16).
 
 ### Page widths
 
@@ -289,7 +301,7 @@ Every component the design system specifies. Each has a card in the artifact wit
 | `Toast` | Primitive | A short past-tense confirmation (Snackbar) through one `useToast()` hook |
 | `Skeleton` | Primitive | The loading state, shaped like the content that will arrive |
 | `Dialog` | Primitive | A focused task or decision on top of the page |
-| `AppShell` | Pattern | The signed-in frame: top bar, sidebar/drawer navigation, content slot (§6) |
+| `AppShell` | Pattern | The app frame: top bar, sidebar / rail / drawer navigation from one config, the skip link and the `<main>` slot; guest mode with no navigation (§6) |
 | `PageShell` | Pattern | The content frame of every page: width, gutters, vertical rhythm (§6) |
 | `PageHeader` | Pattern | Breadcrumbs, the page's only `h1`, a summary line and the page actions (DS-15) |
 | `Logo` | Pattern | The lighthouse mark and wordmark, rendered inline so the scheme switch recolours it |
@@ -350,7 +362,7 @@ The theme, tokens, shared patterns, formatters and logo from issue #38 are in pl
 | DS-29 | Inline currency and date formatters (`Intl`, `toLocaleString`, `toFixed`) remain in about 8 files — `AuctionCard`, `AuctionDetailClient`, `auction/[code]/page`, `plans/page`, `admin/coupons/page`, `RemindersPage`, `ReminderButton`, `SearchFilters`, `AuctionList` — and are not yet replaced by `Money` / `DateText` | #39 / #34 |
 | DS-01, DS-11, DS-14, DS-15 | Numeric `fontSize` / `fontWeight` literals in 25 files; pages do not yet use `PageShell` / `PageHeader` | #43 |
 | DS-27 | Destructive confirmations are hand-rolled `Dialog`s (`RemindersPage` delete reminder, `plans` cancel subscription) instead of `ConfirmDialog`; some destructive actions have no confirmation at all (admin coupons "Invalidar", `ReminderButton` delete, `SearchFilters` delete saved filter) | no issue yet |
-| §6 | `Sidebar` and `TopBar` are recoloured but the `AppShell` is not built (sidebar groups, rail, drawer); each page still mounts them itself | #42 |
+| §6 | Busca com IA, Jornadas, Relatórios, Investidores and Equipe are not in the navigation yet; Escritório is reserved and empty | each destination's spec issue |
 | TESTING §9 | No lint enforcement yet of hex/px and JSX string literals; `npm run check` is typecheck + test until lint and format land | #29 |
 | TS-24 | No frontend coverage gate | #32 |
 | Logo | First version: the SVGs in `frontend/public/brand/` are replaceable (see Brand) | — |

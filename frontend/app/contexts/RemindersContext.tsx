@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, useRef, ReactNode, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useReloadOnUserChange } from './use-reload-on-user-change';
 
 export type ReminderChannel = 'EMAIL' | 'SMS' | 'WHATSAPP';
 export type ReminderStatus = 'PENDING' | 'SENT';
@@ -60,34 +61,52 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     return { 'Authorization': `Bearer ${token}` };
   };
 
+  // #42: only the latest load (or clear) may write, so a slow response for a previous user
+  // cannot overwrite the current one's reminders
+  const latestRequest = useRef(0);
+  // #42: bumped on every account change (sign-out, another user). A mutation started under an
+  // older generation must not touch state: its response belongs to the previous account.
+  const accountGeneration = useRef(0);
+
   const loadReminders = useCallback(async () => {
+    const request = ++latestRequest.current;
+    const isLatest = () => request === latestRequest.current;
     try {
       const token = localStorage.getItem('token');
       if (!token) {
+        setReminders([]);
         setLoading(false);
         return;
       }
 
+      setLoading(true);
       const response = await fetch('/api/reminders', {
-        headers: getAuthHeaders(),
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.ok) {
         const data = await response.json();
-        setReminders(data);
-      } else if (response.status === 401) {
+        if (isLatest()) setReminders(data);
+      } else if (response.status === 401 && isLatest()) {
         setReminders([]);
       }
     } catch (error) {
-      console.error('Error loading reminders:', error);
+      if (isLatest()) console.error('Error loading reminders:', error);
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadReminders();
-  }, [loadReminders]);
+  const clearReminders = useCallback(() => {
+    latestRequest.current++;
+    accountGeneration.current++;
+    setReminders([]);
+    setLoading(false);
+  }, []);
+
+  // #42: fetch at once when a token exists, reload on a change of user, clear on sign-out, so
+  // the AppShell's Lembretes count matches the page
+  useReloadOnUserChange(loadReminders, clearReminders);
 
   const hasReminderForAuction = (auctionCode: string): boolean => {
     return reminders.some(r => r.auction.code === auctionCode);
@@ -103,6 +122,8 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       router.push('/login');
       return null;
     }
+    const generation = accountGeneration.current;
+    const sameAccount = () => generation === accountGeneration.current;
 
     try {
       const response = await fetch('/api/reminders', {
@@ -114,8 +135,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(data),
       });
 
+      // #42: started by an account that has since signed out — its response is not this one's
+      if (!sameAccount()) return null;
+
       if (response.ok) {
         const newReminder = await response.json();
+        if (!sameAccount()) return null;
         setReminders(prev => [...prev, newReminder]);
         return newReminder;
       } else if (response.status === 401) {
@@ -138,6 +163,8 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       router.push('/login');
       return false;
     }
+    const generation = accountGeneration.current;
+    const sameAccount = () => generation === accountGeneration.current;
 
     try {
       const response = await fetch(`/api/reminders/${id}`, {
@@ -149,8 +176,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(data),
       });
 
+      // #42: started by an account that has since signed out — its response is not this one's
+      if (!sameAccount()) return false;
+
       if (response.ok) {
         const updatedReminder = await response.json();
+        if (!sameAccount()) return false;
         setReminders(prev => prev.map(r => r._id === id ? updatedReminder : r));
         return true;
       } else if (response.status === 401) {
@@ -173,12 +204,17 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       router.push('/login');
       return false;
     }
+    const generation = accountGeneration.current;
+    const sameAccount = () => generation === accountGeneration.current;
 
     try {
       const response = await fetch(`/api/reminders/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
+
+      // #42: started by an account that has since signed out — its response is not this one's
+      if (!sameAccount()) return false;
 
       if (response.ok || response.status === 204) {
         setReminders(prev => prev.filter(r => r._id !== id));

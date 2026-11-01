@@ -140,7 +140,14 @@ export const theme = createTheme({
   shape: { borderRadius: radius.control, panelRadius: radius.panel, pillRadius: radius.pill },
   typography,
   shadows,
-  layout: { containerWidth: size.container, readingWidth: size.reading },
+  layout: {
+    containerWidth: size.container,
+    readingWidth: size.reading,
+    sidebarWidth: size.sidebar,
+    railWidth: size.sidebarRail,
+    topbarHeight: size.topbar,
+    topbarCompactHeight: size.topbarCompact,
+  },
   // DS-18: product-wide restyling happens here, once
   components: {
     MuiCssBaseline: {

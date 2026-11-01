@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Box, CircularProgress, Typography, Button } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import { useAuth } from '../contexts/AuthContext';
+import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 
-type UserRole = 'free' | 'standard' | 'premium' | 'admin';
+export type UserRole = 'free' | 'standard' | 'premium' | 'admin';
 
 const ROLE_HIERARCHY: Record<UserRole, number> = {
   free: 0,
@@ -34,12 +35,13 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
   if (loading) {
     return (
       <Box
-        sx={{
-          minHeight: '100vh',
+        sx={(theme) => ({
+          // #42: fills the AppShell content area, not the whole viewport
+          ...shellContentMinHeight(theme),
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-        }}
+        })}
       >
         <CircularProgress />
       </Box>
@@ -49,12 +51,13 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
   if (!isAuthenticated) {
     return (
       <Box
-        sx={{
-          minHeight: '100vh',
+        sx={(theme) => ({
+          // #42: fills the AppShell content area, not the whole viewport
+          ...shellContentMinHeight(theme),
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-        }}
+        })}
       >
         <CircularProgress />
       </Box>
@@ -68,12 +71,13 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
     const planName = minimumRole === 'standard' ? 'Standard' : minimumRole === 'premium' ? 'Premium' : 'Admin';
     return (
       <Box
-        sx={{
-          minHeight: '100vh',
+        sx={(theme) => ({
+          // #42: fills the AppShell content area, not the whole viewport
+          ...shellContentMinHeight(theme),
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-        }}
+        })}
       >
         <Box sx={{ textAlign: 'center', maxWidth: 400 }}>
           <LockIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />

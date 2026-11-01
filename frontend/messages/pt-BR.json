@@ -50,6 +50,38 @@
       "upNegative": "Aumento desfavorável",
       "downPositive": "Redução favorável",
       "downNegative": "Redução desfavorável"
+    },
+    "appShell": {
+      "skipToContent": "Pular para o conteúdo",
+      "navigation": "Principal",
+      "home": "{name}, início",
+      "openMenu": "Abrir menu",
+      "closeMenu": "Fechar menu",
+      "menu": "Menu",
+      "expandMenu": "Expandir menu",
+      "collapseMenu": "Recolher menu",
+      "signIn": "Entrar",
+      "signOut": "Sair",
+      "account": "Conta de {name}",
+      "plan": "Plano {plan, select, admin {Admin} premium {Premium} standard {Standard} other {Gratuito}}",
+      "withCount": "{label}, {count}",
+      "upcomingReminders": "{label}, {count, plural, one {# próximo} other {# próximos}}",
+      "groups": {
+        "search": "Busca",
+        "tracking": "Acompanhamento",
+        "office": "Escritório",
+        "account": "Conta",
+        "admin": "Administração"
+      },
+      "items": {
+        "search": "Buscar imóveis",
+        "favorites": "Favoritos",
+        "reminders": "Lembretes",
+        "profile": "Perfil",
+        "subscription": "Assinatura",
+        "support": "Suporte",
+        "coupons": "Cupons"
+      }
     }
   }
 }
