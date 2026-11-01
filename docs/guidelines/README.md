@@ -27,7 +27,7 @@ Alongside: [`docs/adr/`](../adr/README.md) for technical decisions, [`docs/runbo
 | Integrations | Stripe · OpenAI · Cloudflare R2 · SMTP · Google sign-in · Caixa |
 | Observability | `nestjs-pino` · Sentry (scrubbed) · `/api/health` |
 | Testing | Jest + Testcontainers (backend) · Vitest + Testing Library (frontend) · Playwright |
-| Quality gates | ESLint · Prettier · husky + lint-staged · GitHub Actions · CodeQL |
+| Quality gates | ESLint · Prettier · husky (pre-commit lint-staged, pre-push `check` per changed package) · GitHub Actions · CodeQL — pending #29, #33 |
 | Package manager | npm, one lockfile per package |
 | Hosting | Undecided — deploy gated off (BL-001) |
 

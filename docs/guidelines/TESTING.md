@@ -117,16 +117,18 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 
 ## 9. Static checks — what runs, when, where
 
-| Check | Pre-commit (husky + lint-staged) | `npm run check` (local) | CI on PR and `main` |
-|---|---|---|---|
-| Prettier | `--write` on staged files | `format:check` | `format:check` ✅ |
-| ESLint | `--fix` on staged files | `lint` | `lint` ✅ |
-| Typecheck | — (too slow per commit) | `typecheck` | ✅ |
-| Unit + component tests | — | `test` | with coverage ✅ |
-| Integration + isolation | — | `test:integration`, `test:isolation` on demand | ✅ |
-| E2E | — | `test:e2e` on demand | ✅ |
-| `npm audit` (high+) | — | — | ✅ |
-| CodeQL | — | — | ✅ |
+| Check | Pre-commit (husky + lint-staged) | Pre-push (husky, changed packages only) | `npm run check` (local) | CI on PR and `main` |
+|---|---|---|---|---|
+| Prettier | `--write` on staged files | `format:check` | `format:check` | `format:check` ✅ |
+| ESLint | `--fix` on staged files | `lint` | `lint` | `lint` ✅ |
+| Typecheck | — (too slow per commit) | `typecheck` | `typecheck` | ✅ |
+| Unit + component tests | — | `test` | `test` | with coverage ✅ |
+| Integration + isolation | — | — (needs Docker; CI) | `test:integration`, `test:isolation` on demand | ✅ |
+| E2E | — | — | `test:e2e` on demand | ✅ |
+| `npm audit` (high+) | — | — | — | ✅ |
+| CodeQL | — | — | — | ✅ |
+
+The pre-push hook runs `npm run check` in each package the push changes and blocks the push if it fails (DEVELOPMENT DV-37). CI always runs everything, whichever packages changed. **Not set up yet:** the hooks and the missing scripts arrive with #29, CI with #33. Until then, nothing in this table runs automatically.
 
 ESLint rules that carry weight (beyond the recommended sets):
 
@@ -143,7 +145,7 @@ ESLint rules that carry weight (beyond the recommended sets):
 
 | | |
 |---|---|
-| **TS-30** | Hooks are never bypassed (`--no-verify`) by agents, and a lint rule is never disabled to make a change pass without a justification comment on that line. |
+| **TS-30** | Hooks (pre-commit and pre-push) are never bypassed (`--no-verify`) by agents — a push the pre-push hook rejects is fixed, not forced — and a lint rule is never disabled to make a change pass without a justification comment on that line. |
 | **TS-31** | A failing check is fixed, not retried. A flaky test is quarantined with an issue link and fixed within the milestone — it is never re-run until green. |
 
 ## 10. Performance
