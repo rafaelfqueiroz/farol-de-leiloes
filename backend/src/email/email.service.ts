@@ -10,6 +10,8 @@ import {
   ReminderEmailPayload,
 } from '../reminders/templates/reminder.template';
 
+// SC-15: no recipient address, name or message content in any log line below; the development
+// fallback logs only what a developer needs to follow the link.
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter | null = null;
@@ -48,8 +50,6 @@ export class EmailService {
     if (!this.transporter) {
       this.logger.log('='.repeat(60));
       this.logger.log('VERIFICATION EMAIL (Development Mode)');
-      this.logger.log(`To: ${email}`);
-      this.logger.log(`Name: ${name}`);
       this.logger.log(`Verification URL: ${verificationUrl}`);
       this.logger.log('='.repeat(60));
       return;
@@ -64,7 +64,7 @@ export class EmailService {
       html: getVerificationEmailTemplate(name, verificationUrl),
     });
 
-    this.logger.log(`Verification email sent to ${email}`);
+    this.logger.log('Verification email sent');
   }
 
   async sendPasswordResetEmail(email: string, token: string, name: string): Promise<void> {
@@ -74,8 +74,6 @@ export class EmailService {
     if (!this.transporter) {
       this.logger.log('='.repeat(60));
       this.logger.log('PASSWORD RESET EMAIL (Development Mode)');
-      this.logger.log(`To: ${email}`);
-      this.logger.log(`Name: ${name}`);
       this.logger.log(`Reset URL: ${resetUrl}`);
       this.logger.log('='.repeat(60));
       return;
@@ -90,7 +88,7 @@ export class EmailService {
       html: getPasswordResetEmailTemplate(name, resetUrl),
     });
 
-    this.logger.log(`Password reset email sent to ${email}`);
+    this.logger.log('Password reset email sent');
   }
 
   async sendSupportEmail(
@@ -114,9 +112,6 @@ export class EmailService {
       this.logger.log('='.repeat(60));
       this.logger.log('SUPPORT REQUEST EMAIL (Development Mode)');
       this.logger.log(`To: ${to}`);
-      this.logger.log(`From User: ${userName} (${userEmail})`);
-      this.logger.log(`Title: ${title}`);
-      this.logger.log(`Description: ${description}`);
       this.logger.log('='.repeat(60));
       return;
     }
@@ -131,18 +126,15 @@ export class EmailService {
       html,
     });
 
-    this.logger.log(`Support email sent to ${to} from ${userEmail}`);
+    this.logger.log(`Support email sent to ${to}`);
   }
 
   async sendReminderEmail(email: string, payload: ReminderEmailPayload): Promise<void> {
     if (!this.transporter) {
       this.logger.log('='.repeat(60));
       this.logger.log('AUCTION REMINDER EMAIL (Development Mode)');
-      this.logger.log(`To: ${email}`);
-      this.logger.log(`User: ${payload.userName}`);
       this.logger.log(`Auction: ${payload.auctionTitle || payload.auctionCode}`);
       this.logger.log(`Location: ${payload.auctionCity}, ${payload.auctionState}`);
-      this.logger.log(`Description: ${payload.description ?? 'N/A'}`);
       this.logger.log('='.repeat(60));
       return;
     }
@@ -156,6 +148,6 @@ export class EmailService {
       html: getAuctionReminderEmailTemplate(payload),
     });
 
-    this.logger.log(`Reminder email sent to ${email}`);
+    this.logger.log('Reminder email sent');
   }
 }
