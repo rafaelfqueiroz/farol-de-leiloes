@@ -40,6 +40,6 @@ export class AuctionListResponseDto {
 
   constructor(result: AuctionListResult) {
     this.total = result.total;
-    this.items = result.items.map(item => new AuctionResponseDto(item));
+    this.items = result.items.map((item) => new AuctionResponseDto(item));
   }
 }

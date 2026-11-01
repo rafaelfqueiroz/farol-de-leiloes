@@ -1,7 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Typography, ToggleButtonGroup, ToggleButton, Pagination, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import {
+  Box,
+  Typography,
+  ToggleButtonGroup,
+  ToggleButton,
+  Pagination,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+} from '@mui/material';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import { useFavorites } from '../contexts/FavoritesContext';
@@ -44,7 +54,6 @@ interface AuctionListProps {
   onPageSizeChange?: (pageSize: number) => void;
 }
 
-
 export default function AuctionList({
   auctions,
   total,
@@ -52,7 +61,7 @@ export default function AuctionList({
   page = 1,
   pageSize = 10,
   onPageChange,
-  onPageSizeChange
+  onPageSizeChange,
 }: AuctionListProps) {
   const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
   const totalPages = Math.ceil(total / pageSize);
@@ -129,7 +138,14 @@ export default function AuctionList({
       </Box>
 
       {/* Auction Cards/List */}
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: viewMode === 'cards' ? 'repeat(auto-fill, minmax(350px, 1fr))' : '1fr' }}>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 2,
+          gridTemplateColumns:
+            viewMode === 'cards' ? 'repeat(auto-fill, minmax(350px, 1fr))' : '1fr',
+        }}
+      >
         {auctions.map((auction) => (
           <AuctionCard
             key={auction.code}

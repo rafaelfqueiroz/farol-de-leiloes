@@ -75,7 +75,8 @@ export default function ResetPasswordRequestPage() {
           {success ? (
             <>
               <Alert severity="success" sx={{ mb: 2 }}>
-                Um email foi enviado com instruções para redefinir sua senha. Verifique sua caixa de entrada.
+                Um email foi enviado com instruções para redefinir sua senha. Verifique sua caixa de
+                entrada.
               </Alert>
               <Button
                 variant="contained"

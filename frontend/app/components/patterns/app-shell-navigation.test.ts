@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import messages from '@/messages/pt-BR.json';
-import {
-  NAV_GROUPS,
-  currentItemId,
-  formatCount,
-  visibleGroups,
-} from './app-shell-navigation';
+import { NAV_GROUPS, currentItemId, formatCount, visibleGroups } from './app-shell-navigation';
 
 const query = (search = '') => new URLSearchParams(search);
 const ids = (role: string) => visibleGroups(role).map((group) => group.id);
@@ -52,10 +47,13 @@ describe('app-shell navigation config', () => {
       ['search', 'tracking', 'account', 'admin'],
       ['search', 'favorites', 'reminders', 'profile', 'subscription', 'support', 'coupons'],
     ],
-  ])('shows %s only its groups, in the fixed order, without the empty Escritório', (role, groups, items) => {
-    expect(ids(role)).toEqual(groups);
-    expect(itemIds(role)).toEqual(items);
-  });
+  ])(
+    'shows %s only its groups, in the fixed order, without the empty Escritório',
+    (role, groups, items) => {
+      expect(ids(role)).toEqual(groups);
+      expect(itemIds(role)).toEqual(items);
+    },
+  );
 
   it('treats an unknown or empty role as free', () => {
     expect(ids('')).toEqual(ids('free'));

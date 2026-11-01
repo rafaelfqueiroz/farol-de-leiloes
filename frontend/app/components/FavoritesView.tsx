@@ -60,12 +60,19 @@ export default function FavoritesView() {
           Leilões Favoritos
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          {favorites.length} {favorites.length === 1 ? 'leilão marcado' : 'leilões marcados'} como {favorites.length === 1 ? 'favorito' : 'favoritos'}
+          {favorites.length} {favorites.length === 1 ? 'leilão marcado' : 'leilões marcados'} como{' '}
+          {favorites.length === 1 ? 'favorito' : 'favoritos'}
         </Typography>
       </Box>
 
       {/* Active Favorites */}
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))' }}>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 2,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+        }}
+      >
         {favorites.map(renderAuctionCard)}
       </Box>
     </Box>

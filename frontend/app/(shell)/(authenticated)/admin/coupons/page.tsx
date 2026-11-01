@@ -44,7 +44,11 @@ export default function AdminCouponsPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({
     open: false,
     message: '',
     severity: 'success',
@@ -60,7 +64,7 @@ export default function AdminCouponsPage() {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch('/api/coupons', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
         const data = await response.json();
@@ -93,7 +97,7 @@ export default function AdminCouponsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           code: newCode.toUpperCase(),
@@ -113,7 +117,11 @@ export default function AdminCouponsPage() {
         loadCoupons();
       } else {
         const error = await response.json();
-        setSnackbar({ open: true, message: error.message || 'Erro ao criar cupom', severity: 'error' });
+        setSnackbar({
+          open: true,
+          message: error.message || 'Erro ao criar cupom',
+          severity: 'error',
+        });
       }
     } catch {
       setSnackbar({ open: true, message: 'Erro ao criar cupom', severity: 'error' });
@@ -127,7 +135,7 @@ export default function AdminCouponsPage() {
       const token = localStorage.getItem('token');
       const response = await fetch(`/api/coupons/${couponId}/invalidate`, {
         method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
@@ -135,7 +143,11 @@ export default function AdminCouponsPage() {
         loadCoupons();
       } else {
         const error = await response.json();
-        setSnackbar({ open: true, message: error.message || 'Erro ao invalidar cupom', severity: 'error' });
+        setSnackbar({
+          open: true,
+          message: error.message || 'Erro ao invalidar cupom',
+          severity: 'error',
+        });
       }
     } catch {
       setSnackbar({ open: true, message: 'Erro ao invalidar cupom', severity: 'error' });
@@ -156,7 +168,9 @@ export default function AdminCouponsPage() {
           </Box>
         ) : (
           <>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box
+              sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}
+            >
               <Typography variant="h4" sx={{ fontWeight: 700 }}>
                 Gerenciar Cupons
               </Typography>
@@ -186,10 +200,7 @@ export default function AdminCouponsPage() {
                     const expired = isExpired(coupon.validTo);
                     const inactive = !coupon.active || expired;
                     return (
-                      <TableRow
-                        key={coupon._id}
-                        sx={{ opacity: inactive ? 0.5 : 1 }}
-                      >
+                      <TableRow key={coupon._id} sx={{ opacity: inactive ? 0.5 : 1 }}>
                         <TableCell>
                           <Typography
                             variant="body2"
@@ -210,9 +221,19 @@ export default function AdminCouponsPage() {
                         </TableCell>
                         <TableCell>
                           {!coupon.active ? (
-                            <Chip label="Invalidado" size="small" color="error" variant="outlined" />
+                            <Chip
+                              label="Invalidado"
+                              size="small"
+                              color="error"
+                              variant="outlined"
+                            />
                           ) : expired ? (
-                            <Chip label="Expirado" size="small" color="warning" variant="outlined" />
+                            <Chip
+                              label="Expirado"
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                            />
                           ) : (
                             <Chip label="Ativo" size="small" color="success" variant="outlined" />
                           )}
@@ -252,71 +273,77 @@ export default function AdminCouponsPage() {
         )}
       </Container>
 
-    {/* Create Coupon Dialog */}
-    <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-      <DialogTitle>Novo Cupom</DialogTitle>
-      <DialogContent>
-        <TextField
-          autoFocus
-          fullWidth
-          label="Codigo do cupom"
-          value={newCode}
-          onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-          margin="normal"
-          placeholder="EX: DESCONTO10"
-        />
-        <TextField
-          fullWidth
-          label="Valor do desconto (R$)"
-          type="number"
-          value={newDiscountValue}
-          onChange={(e) => setNewDiscountValue(e.target.value)}
-          margin="normal"
-          placeholder="10.00"
-          slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
-        />
-        <TextField
-          fullWidth
-          label="Valido ate"
-          type="date"
-          value={newValidTo}
-          onChange={(e) => setNewValidTo(e.target.value)}
-          margin="normal"
-          slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: new Date().toISOString().split('T')[0] } }}
-        />
-        <TextField
-          fullWidth
-          label="Descricao (opcional)"
-          value={newDescription}
-          onChange={(e) => setNewDescription(e.target.value)}
-          margin="normal"
-          multiline
-          rows={2}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setDialogOpen(false)} disabled={saving}>
-          Cancelar
-        </Button>
-        <Button
-          onClick={handleCreateCoupon}
-          variant="contained"
-          disabled={saving || !newCode.trim() || !newDiscountValue || !newValidTo}
-        >
-          {saving ? <CircularProgress size={20} /> : 'Criar Cupom'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      {/* Create Coupon Dialog */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Novo Cupom</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Codigo do cupom"
+            value={newCode}
+            onChange={(e) => setNewCode(e.target.value.toUpperCase())}
+            margin="normal"
+            placeholder="EX: DESCONTO10"
+          />
+          <TextField
+            fullWidth
+            label="Valor do desconto (R$)"
+            type="number"
+            value={newDiscountValue}
+            onChange={(e) => setNewDiscountValue(e.target.value)}
+            margin="normal"
+            placeholder="10.00"
+            slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
+          />
+          <TextField
+            fullWidth
+            label="Valido ate"
+            type="date"
+            value={newValidTo}
+            onChange={(e) => setNewValidTo(e.target.value)}
+            margin="normal"
+            slotProps={{
+              inputLabel: { shrink: true },
+              htmlInput: { min: new Date().toISOString().split('T')[0] },
+            }}
+          />
+          <TextField
+            fullWidth
+            label="Descricao (opcional)"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            margin="normal"
+            multiline
+            rows={2}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleCreateCoupon}
+            variant="contained"
+            disabled={saving || !newCode.trim() || !newDiscountValue || !newValidTo}
+          >
+            {saving ? <CircularProgress size={20} /> : 'Criar Cupom'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-    <Snackbar
-      open={snackbar.open}
-      autoHideDuration={4000}
-      onClose={() => setSnackbar({ ...snackbar, open: false })}
-    >
-      <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-        {snackbar.message}
-      </Alert>
-    </Snackbar>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          severity={snackbar.severity}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 }

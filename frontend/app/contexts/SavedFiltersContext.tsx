@@ -94,7 +94,7 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const newFilter = await response.json();
-        setSavedFilters(prev => [newFilter, ...prev]);
+        setSavedFilters((prev) => [newFilter, ...prev]);
         return newFilter;
       } else {
         const errorData = await response.json().catch(() => ({}));
@@ -119,7 +119,7 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok || response.status === 204) {
-        setSavedFilters(prev => prev.filter(f => f._id !== id));
+        setSavedFilters((prev) => prev.filter((f) => f._id !== id));
         return true;
       } else {
         const errorData = await response.json().catch(() => ({}));

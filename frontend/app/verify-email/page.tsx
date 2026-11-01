@@ -2,21 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  Alert,
-  CircularProgress,
-} from '@mui/material';
+import { Box, Card, CardContent, Typography, Button, Alert, CircularProgress } from '@mui/material';
 import EmailIcon from '@mui/icons-material/Email';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
-  const { user, loading, isAuthenticated, emailVerified, resendVerificationEmail, logout } = useAuth();
+  const { user, loading, isAuthenticated, emailVerified, resendVerificationEmail, logout } =
+    useAuth();
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -89,15 +82,13 @@ export default function VerifyEmailPage() {
           </Typography>
 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Enviamos um email de verificacao para{' '}
-            <strong>{user?.email}</strong>. Por favor, verifique sua caixa de
-            entrada e clique no link para ativar sua conta.
+            Enviamos um email de verificacao para <strong>{user?.email}</strong>. Por favor,
+            verifique sua caixa de entrada e clique no link para ativar sua conta.
           </Typography>
 
           {sent && (
             <Alert severity="success" sx={{ mb: 3 }}>
-              Email de verificacao enviado com sucesso! Verifique sua caixa de
-              entrada.
+              Email de verificacao enviado com sucesso! Verifique sua caixa de entrada.
             </Alert>
           )}
 
@@ -117,18 +108,13 @@ export default function VerifyEmailPage() {
             {sending ? 'Enviando...' : 'Reenviar email de verificacao'}
           </Button>
 
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={handleLogout}
-            sx={{ py: 1.5 }}
-          >
+          <Button fullWidth variant="outlined" onClick={handleLogout} sx={{ py: 1.5 }}>
             Sair
           </Button>
 
           <Typography variant="caption" color="text.secondary" sx={{ mt: 3, display: 'block' }}>
-            O link de verificacao expira em 24 horas. Se nao encontrar o email,
-            verifique sua pasta de spam.
+            O link de verificacao expira em 24 horas. Se nao encontrar o email, verifique sua pasta
+            de spam.
           </Typography>
         </CardContent>
       </Card>

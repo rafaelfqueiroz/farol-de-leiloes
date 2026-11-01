@@ -14,24 +14,15 @@ export class SavedFiltersService {
   ) {}
 
   async findAll(userId: string): Promise<SavedFilter[]> {
-    const docs = await this.savedFilterRepository
-      .find({ userId })
-      .sort({ createdAt: -1 })
-      .exec();
-    return docs.map(doc => this.toSavedFilter(doc));
+    const docs = await this.savedFilterRepository.find({ userId }).sort({ createdAt: -1 }).exec();
+    return docs.map((doc) => this.toSavedFilter(doc));
   }
 
-  async create(
-    userId: string,
-    name: string,
-    filters: FilterData,
-  ): Promise<SavedFilter> {
+  async create(userId: string, name: string, filters: FilterData): Promise<SavedFilter> {
     // Check if user has reached the limit
     const count = await this.savedFilterRepository.countDocuments({ userId });
     if (count >= MAX_SAVED_FILTERS) {
-      throw new BadRequestException(
-        `Maximum of ${MAX_SAVED_FILTERS} saved filters allowed`,
-      );
+      throw new BadRequestException(`Maximum of ${MAX_SAVED_FILTERS} saved filters allowed`);
     }
 
     // Check for duplicate name
@@ -51,9 +42,7 @@ export class SavedFiltersService {
   }
 
   async delete(userId: string, id: string): Promise<boolean> {
-    const result = await this.savedFilterRepository
-      .deleteOne({ _id: id, userId })
-      .exec();
+    const result = await this.savedFilterRepository.deleteOne({ _id: id, userId }).exec();
 
     if (result.deletedCount === 0) {
       throw new NotFoundException('Saved filter not found');

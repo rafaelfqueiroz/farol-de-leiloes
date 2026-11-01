@@ -31,7 +31,13 @@ export default function Money({ value, variant = 'inherit', compact = false }: M
 
   if (compact) {
     return (
-      <Typography component="span" variant={variant} role="img" aria-label={formatMoney(value)} sx={sx}>
+      <Typography
+        component="span"
+        variant={variant}
+        role="img"
+        aria-label={formatMoney(value)}
+        sx={sx}
+      >
         {formatMoneyCompact(value)}
       </Typography>
     );

@@ -1,7 +1,4 @@
-export const getVerificationEmailTemplate = (
-  name: string,
-  verificationUrl: string,
-): string => `
+export const getVerificationEmailTemplate = (name: string, verificationUrl: string): string => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -92,10 +89,7 @@ export const getVerificationEmailTemplate = (
 </html>
 `;
 
-export const getPasswordResetEmailTemplate = (
-  name: string,
-  resetUrl: string,
-): string => `
+export const getPasswordResetEmailTemplate = (name: string, resetUrl: string): string => `
 <!DOCTYPE html>
 <html>
 <head>

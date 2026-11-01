@@ -1,10 +1,4 @@
-import {
-  IsEnum,
-  IsOptional,
-  IsDateString,
-  MaxLength,
-  IsString,
-} from 'class-validator';
+import { IsEnum, IsOptional, IsDateString, MaxLength, IsString } from 'class-validator';
 import { ReminderChannel } from '../schemas/reminder.schema';
 
 export class UpdateReminderDto {

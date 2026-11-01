@@ -109,12 +109,7 @@ function formatDate(dateString?: string): string {
 }
 
 function formatAddress(address: Address): string {
-  const parts = [
-    address.street,
-    address.neighborhood,
-    address.city,
-    address.state,
-  ].filter(Boolean);
+  const parts = [address.street, address.neighborhood, address.city, address.state].filter(Boolean);
   return parts.join(', ') || 'Endereço não informado';
 }
 
@@ -145,9 +140,10 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
   };
 
   const lastPhase = auction.phases[auction.phases.length - 1];
-  const discount = auction.appraisalPrice && lastPhase?.minimumPrice
-    ? ((auction.appraisalPrice - lastPhase.minimumPrice) / auction.appraisalPrice) * 100
-    : null;
+  const discount =
+    auction.appraisalPrice && lastPhase?.minimumPrice
+      ? ((auction.appraisalPrice - lastPhase.minimumPrice) / auction.appraisalPrice) * 100
+      : null;
 
   return (
     // #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar
@@ -155,11 +151,16 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
       <Container maxWidth="xl">
         <Box>
           {/* Header */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3,  }}>
-            <IconButton onClick={() => router.push(getReturnUrl())} size="large" 
-              sx={{'&:hover': {
-                  backgroundColor: 'action.hover'
-                }}}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+            <IconButton
+              onClick={() => router.push(getReturnUrl())}
+              size="large"
+              sx={{
+                '&:hover': {
+                  backgroundColor: 'action.hover',
+                },
+              }}
+            >
               <ArrowBackIcon />
             </IconButton>
             <Box sx={{ flex: 1 }}>
@@ -178,11 +179,15 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                   color: isFavorite(auction.code) ? 'error.main' : 'action.active',
                   '&:hover': {
                     color: 'error.main',
-                    backgroundColor: 'action.hover'
+                    backgroundColor: 'action.hover',
                   },
                 }}
               >
-                {isFavorite(auction.code) ? <FavoriteIcon fontSize="large" /> : <FavoriteBorderIcon fontSize="large" />}
+                {isFavorite(auction.code) ? (
+                  <FavoriteIcon fontSize="large" />
+                ) : (
+                  <FavoriteBorderIcon fontSize="large" />
+                )}
               </IconButton>
             )}
           </Box>
@@ -269,9 +274,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                     Endereço
                   </Typography>
-                  <Typography variant="body1">
-                    {formatAddress(auction.address)}
-                  </Typography>
+                  <Typography variant="body1">{formatAddress(auction.address)}</Typography>
                   {auction.address.zipcode && (
                     <Typography variant="body2" color="text.secondary">
                       CEP: {auction.address.zipcode}
@@ -281,7 +284,14 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
               </Box>
 
               {/* Prices */}
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 3, mb: 3 }}>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: 3,
+                  mb: 3,
+                }}
+              >
                 {auction.appraisalPrice && (
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                     <HomeIcon sx={{ color: 'info.main' }} />
@@ -327,7 +337,8 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                       </Typography>
                       {lastPhase.phaseDates.map((date, idx) => (
                         <Typography key={idx} variant="body1" fontWeight={600}>
-                          {lastPhase.phaseDates!.length > 1 ? `${idx + 1}º Leilão: ` : ''}{formatDate(date)}
+                          {lastPhase.phaseDates!.length > 1 ? `${idx + 1}º Leilão: ` : ''}
+                          {formatDate(date)}
                         </Typography>
                       ))}
                     </Box>
@@ -373,7 +384,10 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                       </Typography>
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                         {lastPhase.expenseRules.map((rule, idx) => (
-                          <Box key={idx} sx={{ backgroundColor: 'background.muted', p: 1.5, borderRadius: 1 }}>
+                          <Box
+                            key={idx}
+                            sx={{ backgroundColor: 'background.muted', p: 1.5, borderRadius: 1 }}
+                          >
                             <Typography variant="body2" fontWeight={600} color="text.primary">
                               {rule.type}
                             </Typography>
@@ -453,23 +467,37 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                   Histórico de Fases
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  {auction.phases.length} fase{auction.phases.length !== 1 ? 's' : ''} registrada{auction.phases.length !== 1 ? 's' : ''}
+                  {auction.phases.length} fase{auction.phases.length !== 1 ? 's' : ''} registrada
+                  {auction.phases.length !== 1 ? 's' : ''}
                 </Typography>
 
                 <TableContainer component={Paper} variant="outlined">
                   <Table>
                     <TableHead>
                       <TableRow>
-                        <TableCell><strong>Fase</strong></TableCell>
-                        <TableCell><strong>Modalidade</strong></TableCell>
-                        <TableCell align="right"><strong>Lance Mínimo</strong></TableCell>
-                        <TableCell><strong>Data(s)</strong></TableCell>
-                        <TableCell><strong>Pagamento</strong></TableCell>
+                        <TableCell>
+                          <strong>Fase</strong>
+                        </TableCell>
+                        <TableCell>
+                          <strong>Modalidade</strong>
+                        </TableCell>
+                        <TableCell align="right">
+                          <strong>Lance Mínimo</strong>
+                        </TableCell>
+                        <TableCell>
+                          <strong>Data(s)</strong>
+                        </TableCell>
+                        <TableCell>
+                          <strong>Pagamento</strong>
+                        </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {auction.phases.map((phase, index) => (
-                        <TableRow key={index} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                        <TableRow
+                          key={index}
+                          sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                        >
                           <TableCell>#{index + 1}</TableCell>
                           <TableCell>
                             <Chip
@@ -478,16 +506,17 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                               color={index === auction.phases.length - 1 ? 'primary' : 'default'}
                             />
                           </TableCell>
-                          <TableCell align="right">
-                            {formatCurrency(phase.minimumPrice)}
-                          </TableCell>
+                          <TableCell align="right">{formatCurrency(phase.minimumPrice)}</TableCell>
                           <TableCell>
                             {phase.phaseDates && phase.phaseDates.length > 0
                               ? phase.phaseDates.map((d, i) => (
                                   <Box key={i} component="span" sx={{ display: 'block' }}>
-                                    {new Date(d).toLocaleDateString('pt-BR', { dateStyle: 'short' })}
-                                    {' '}
-                                    {new Date(d).toLocaleTimeString('pt-BR', { timeStyle: 'short' })}
+                                    {new Date(d).toLocaleDateString('pt-BR', {
+                                      dateStyle: 'short',
+                                    })}{' '}
+                                    {new Date(d).toLocaleTimeString('pt-BR', {
+                                      timeStyle: 'short',
+                                    })}
                                   </Box>
                                 ))
                               : 'Não informado'}
@@ -505,7 +534,9 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                                 ))}
                               </Box>
                             ) : (
-                              <Typography variant="body2" color="text.secondary">-</Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                -
+                              </Typography>
                             )}
                           </TableCell>
                         </TableRow>
@@ -519,7 +550,11 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
 
           {/* Last Updated */}
           {auction.updatedAt && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 3 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', textAlign: 'center', mt: 3 }}
+            >
               Última atualização: {formatDate(auction.updatedAt)}
             </Typography>
           )}

@@ -10,23 +10,17 @@ export async function POST(request: NextRequest) {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': authHeader || '',
+        Authorization: authHeader || '',
       },
     });
 
     if (!response.ok) {
-      return NextResponse.json(
-        { message: 'Logout failed' },
-        { status: response.status }
-      );
+      return NextResponse.json({ message: 'Logout failed' }, { status: response.status });
     }
 
     return NextResponse.json({ message: 'Logged out successfully' });
   } catch (error: any) {
     console.error('Error logging out:', error);
-    return NextResponse.json(
-      { message: error.message || 'Failed to logout' },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: error.message || 'Failed to logout' }, { status: 500 });
   }
 }

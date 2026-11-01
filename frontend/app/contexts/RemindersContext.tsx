@@ -58,7 +58,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   const getAuthHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('token');
     if (!token) return {};
-    return { 'Authorization': `Bearer ${token}` };
+    return { Authorization: `Bearer ${token}` };
   };
 
   // #42: only the latest load (or clear) may write, so a slow response for a previous user
@@ -81,7 +81,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
 
       setLoading(true);
       const response = await fetch('/api/reminders', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
@@ -109,11 +109,11 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   useReloadOnUserChange(loadReminders, clearReminders);
 
   const hasReminderForAuction = (auctionCode: string): boolean => {
-    return reminders.some(r => r.auction.code === auctionCode);
+    return reminders.some((r) => r.auction.code === auctionCode);
   };
 
   const getReminderForAuction = (auctionCode: string): Reminder | undefined => {
-    return reminders.find(r => r.auction.code === auctionCode);
+    return reminders.find((r) => r.auction.code === auctionCode);
   };
 
   const createReminder = async (data: CreateReminderData): Promise<Reminder | null> => {
@@ -141,7 +141,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const newReminder = await response.json();
         if (!sameAccount()) return null;
-        setReminders(prev => [...prev, newReminder]);
+        setReminders((prev) => [...prev, newReminder]);
         return newReminder;
       } else if (response.status === 401) {
         localStorage.removeItem('token');
@@ -182,7 +182,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const updatedReminder = await response.json();
         if (!sameAccount()) return false;
-        setReminders(prev => prev.map(r => r._id === id ? updatedReminder : r));
+        setReminders((prev) => prev.map((r) => (r._id === id ? updatedReminder : r)));
         return true;
       } else if (response.status === 401) {
         localStorage.removeItem('token');
@@ -217,7 +217,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       if (!sameAccount()) return false;
 
       if (response.ok || response.status === 204) {
-        setReminders(prev => prev.filter(r => r._id !== id));
+        setReminders((prev) => prev.filter((r) => r._id !== id));
         return true;
       } else if (response.status === 401) {
         localStorage.removeItem('token');

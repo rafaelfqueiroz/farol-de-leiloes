@@ -2,15 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Alert,
-  CircularProgress,
-  Button,
-} from '@mui/material';
+import { Box, Card, CardContent, Typography, Alert, CircularProgress, Button } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import Link from 'next/link';
@@ -75,22 +67,15 @@ export default function VerifyEmailTokenPage() {
 
           {status === 'success' && (
             <>
-              <CheckCircleIcon
-                sx={{ fontSize: 64, color: 'success.main', mb: 2 }}
-              />
+              <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
               <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
                 Email verificado!
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Seu email foi verificado com sucesso. Voce sera redirecionado
-                para a pagina de login.
+                Seu email foi verificado com sucesso. Voce sera redirecionado para a pagina de
+                login.
               </Typography>
-              <Button
-                component={Link}
-                href="/login"
-                variant="contained"
-                fullWidth
-              >
+              <Button component={Link} href="/login" variant="contained" fullWidth>
                 Ir para Login
               </Button>
             </>
@@ -106,15 +91,10 @@ export default function VerifyEmailTokenPage() {
                 {error}
               </Alert>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                O link de verificacao pode estar expirado ou ser invalido. Faca
-                login para solicitar um novo email de verificacao.
+                O link de verificacao pode estar expirado ou ser invalido. Faca login para solicitar
+                um novo email de verificacao.
               </Typography>
-              <Button
-                component={Link}
-                href="/login"
-                variant="contained"
-                fullWidth
-              >
+              <Button component={Link} href="/login" variant="contained" fullWidth>
                 Ir para Login
               </Button>
             </>

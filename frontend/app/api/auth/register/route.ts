@@ -24,9 +24,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error: any) {
     console.error('Error registering:', error);
-    return NextResponse.json(
-      { message: error.message || 'Failed to register' },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: error.message || 'Failed to register' }, { status: 500 });
   }
 }

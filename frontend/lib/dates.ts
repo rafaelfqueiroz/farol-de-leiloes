@@ -11,8 +11,7 @@ const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
 
 export type ParsedDate =
-  | { kind: 'calendar'; year: number; month: number; day: number }
-  | { kind: 'instant'; date: Date };
+  { kind: 'calendar'; year: number; month: number; day: number } | { kind: 'instant'; date: Date };
 
 export function parseDate(value: string): ParsedDate {
   const match = CALENDAR_DATE.exec(value);

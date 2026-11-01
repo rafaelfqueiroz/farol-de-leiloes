@@ -5,10 +5,7 @@ import { RemindersController } from './reminders.controller';
 import { RemindersService } from './reminders.service';
 import { RemindersScheduler } from './reminders.scheduler';
 import { ReminderEntity, ReminderSchema } from './schemas/reminder.schema';
-import {
-  NotificationLog,
-  NotificationLogSchema,
-} from './schemas/notification-log.schema';
+import { NotificationLog, NotificationLogSchema } from './schemas/notification-log.schema';
 import { AuctionsModule } from '../auctions/auctions.module';
 import { UsersModule } from '../users/users.module';
 import { EmailModule } from '../email/email.module';

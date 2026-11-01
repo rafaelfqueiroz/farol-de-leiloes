@@ -52,7 +52,7 @@ export class CouponsService {
 
   async findAll(): Promise<Coupon[]> {
     const docs = await this.couponModel.find().sort({ createdAt: -1 }).exec();
-    return docs.map(doc => this.toCoupon(doc));
+    return docs.map((doc) => this.toCoupon(doc));
   }
 
   async validateCoupon(code: string): Promise<Coupon> {

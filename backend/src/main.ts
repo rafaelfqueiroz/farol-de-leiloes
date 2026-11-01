@@ -13,15 +13,16 @@ async function bootstrap() {
   });
 
   // Enable validation pipes globally
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   app.setGlobalPrefix('api');
   await app.listen(process.env.PORT ? Number(process.env.PORT) : 3000);
 }
 
 bootstrap();
-

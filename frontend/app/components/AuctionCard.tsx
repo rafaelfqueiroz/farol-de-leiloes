@@ -84,12 +84,7 @@ function getCountdownLabel(currentPhase?: Phase): { text: string; isToday: boole
 }
 
 function formatAddress(address: Address): string {
-  const parts = [
-    address.street,
-    address.neighborhood,
-    address.city,
-    address.state,
-  ].filter(Boolean);
+  const parts = [address.street, address.neighborhood, address.city, address.state].filter(Boolean);
   return parts.join(', ') || 'Endereço não informado';
 }
 

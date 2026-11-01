@@ -19,7 +19,9 @@ import { EmailModule } from '../email/email.module';
       useFactory: async (configService: ConfigService) => {
         const logger = new Logger('AuthModule');
         const jwtSecret = configService.get<string>('JWT_SECRET') || 'your-secret-key';
-        logger.log(`JWT_SECRET loaded: ${jwtSecret.substring(0, 10)}... (length: ${jwtSecret.length})`);
+        logger.log(
+          `JWT_SECRET loaded: ${jwtSecret.substring(0, 10)}... (length: ${jwtSecret.length})`,
+        );
         return {
           secret: jwtSecret,
           signOptions: {

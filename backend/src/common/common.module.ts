@@ -4,11 +4,7 @@ import { JobExecution, JobExecutionSchema } from './schemas/job-execution.schema
 import { JobExecutionService } from './services/job-execution.service';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([
-      { name: JobExecution.name, schema: JobExecutionSchema },
-    ]),
-  ],
+  imports: [MongooseModule.forFeature([{ name: JobExecution.name, schema: JobExecutionSchema }])],
   providers: [JobExecutionService],
   exports: [JobExecutionService],
 })

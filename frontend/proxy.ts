@@ -11,8 +11,8 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Check if the route is protected
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
-  const isAuthRoute = authRoutes.some(route => pathname.startsWith(route));
+  const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
+  const isAuthRoute = authRoutes.some((route) => pathname.startsWith(route));
 
   // For protected routes, we can't check the token server-side since it's in localStorage
   // The page itself will handle redirecting if no token is found

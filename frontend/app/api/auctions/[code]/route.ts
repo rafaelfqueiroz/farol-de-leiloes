@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ code: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params;
     const url = `${BACKEND_URL}/api/auctions/${code}`;
@@ -28,7 +25,7 @@ export async function GET(
     console.error('Error fetching auction detail:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to fetch auction detail' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

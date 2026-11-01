@@ -18,10 +18,7 @@ export async function POST(req: NextRequest) {
     const { message } = await req.json();
 
     if (!message) {
-      return NextResponse.json(
-        { error: 'Message is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
     // Step 1: Extract query parameters using backend AI/NLP service
@@ -60,9 +57,6 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     console.error('Error in chat API:', error);
     const errorMessage = error instanceof Error ? error.message : 'Internal server error';
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

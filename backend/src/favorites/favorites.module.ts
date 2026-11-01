@@ -7,9 +7,7 @@ import { AuctionsModule } from '../auctions/auctions.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: FavoriteEntity.name, schema: FavoriteSchema },
-    ]),
+    MongooseModule.forFeature([{ name: FavoriteEntity.name, schema: FavoriteSchema }]),
     AuctionsModule,
   ],
   controllers: [FavoritesController],

@@ -7,10 +7,7 @@ export async function PATCH(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -20,7 +17,7 @@ export async function PATCH(request: NextRequest) {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
       body: JSON.stringify(body),
     });
@@ -36,7 +33,7 @@ export async function PATCH(request: NextRequest) {
     console.error('Error updating profile:', error);
     return NextResponse.json(
       { message: error.message || 'Failed to update profile' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

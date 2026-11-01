@@ -35,7 +35,7 @@ export function isAuctionActive(auction: Auction): boolean {
   }
 
   const now = new Date();
-  return phaseDates.some(date => new Date(date) >= now);
+  return phaseDates.some((date) => new Date(date) >= now);
 }
 
 /**

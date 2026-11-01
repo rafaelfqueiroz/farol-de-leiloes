@@ -86,7 +86,10 @@ export class AuthController {
 
   @Patch('profile')
   @UseGuards(JwtAuthGuard)
-  async updateProfile(@CurrentUser() user: any, @Body() updateData: { name?: string; email?: string }): Promise<UserProfileResponseDto> {
+  async updateProfile(
+    @CurrentUser() user: any,
+    @Body() updateData: { name?: string; email?: string },
+  ): Promise<UserProfileResponseDto> {
     const profile = await this.authService.updateProfile(user.userId, updateData);
     return new UserProfileResponseDto(profile);
   }
@@ -94,8 +97,15 @@ export class AuthController {
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async changePassword(@CurrentUser() user: any, @Body() passwordData: { currentPassword: string; newPassword: string }) {
-    await this.authService.changePassword(user.userId, passwordData.currentPassword, passwordData.newPassword);
+  async changePassword(
+    @CurrentUser() user: any,
+    @Body() passwordData: { currentPassword: string; newPassword: string },
+  ) {
+    await this.authService.changePassword(
+      user.userId,
+      passwordData.currentPassword,
+      passwordData.newPassword,
+    );
     return { message: 'Password changed successfully' };
   }
 
@@ -130,7 +140,10 @@ export class AuthController {
 
   @Patch('profile/complete')
   @UseGuards(JwtAuthGuard)
-  async completeProfile(@CurrentUser() user: any, @Body() dto: CompleteProfileDto): Promise<UserProfileResponseDto> {
+  async completeProfile(
+    @CurrentUser() user: any,
+    @Body() dto: CompleteProfileDto,
+  ): Promise<UserProfileResponseDto> {
     const profile = await this.authService.completeProfile(user.userId, dto);
     return new UserProfileResponseDto(profile);
   }

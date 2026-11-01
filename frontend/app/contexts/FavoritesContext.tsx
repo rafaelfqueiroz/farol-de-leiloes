@@ -41,7 +41,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const getAuthHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('token');
     if (!token) return {};
-    return { 'Authorization': `Bearer ${token}` };
+    return { Authorization: `Bearer ${token}` };
   };
 
   // #42: only the latest load (or clear) may write, so a slow response for a previous user
@@ -64,7 +64,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
 
       setLoading(true);
       const response = await fetch('/api/favorites', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
         const data = await response.json();
@@ -92,7 +92,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   useReloadOnUserChange(loadFavorites, clearFavorites);
 
   const isFavorite = (code: string): boolean => {
-    return favorites.some(fav => fav.code === code);
+    return favorites.some((fav) => fav.code === code);
   };
 
   const toggleFavorite = async (auction: Auction) => {
@@ -120,7 +120,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         });
         if (!sameAccount()) return; // #42: started by an account that has since signed out
         if (response.ok || response.status === 204) {
-          setFavorites(prev => prev.filter(fav => fav.code !== auction.code));
+          setFavorites((prev) => prev.filter((fav) => fav.code !== auction.code));
         } else if (response.status === 401) {
           // Token expired or invalid, redirect to login
           localStorage.removeItem('token');
@@ -152,7 +152,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         if (response.ok) {
           const savedAuction = await response.json();
           if (!sameAccount()) return;
-          setFavorites(prev => [...prev, savedAuction]);
+          setFavorites((prev) => [...prev, savedAuction]);
         } else if (response.status === 401) {
           // Token expired or invalid, redirect to login
           localStorage.removeItem('token');
@@ -178,7 +178,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       // #42: started by an account that has since signed out
       if (generation !== accountGeneration.current) return;
       if (response.ok || response.status === 204) {
-        setFavorites(prev => prev.filter(fav => fav.code !== code));
+        setFavorites((prev) => prev.filter((fav) => fav.code !== code));
       }
     } catch (error) {
       console.error('Error removing favorite:', error);
@@ -186,7 +186,9 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <FavoritesContext.Provider value={{ favorites, isFavorite, toggleFavorite, removeFavorite, loading }}>
+    <FavoritesContext.Provider
+      value={{ favorites, isFavorite, toggleFavorite, removeFavorite, loading }}
+    >
       {children}
     </FavoritesContext.Provider>
   );

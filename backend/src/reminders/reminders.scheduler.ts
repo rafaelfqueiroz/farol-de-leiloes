@@ -123,18 +123,12 @@ export class RemindersScheduler implements OnModuleInit {
 
       if (result.success) {
         await this.remindersService.markAsSent(reminder._id.toString());
-        this.logger.log(
-          `Reminder ${reminder._id} sent successfully via ${reminder.channel}`,
-        );
+        this.logger.log(`Reminder ${reminder._id} sent successfully via ${reminder.channel}`);
       } else {
-        this.logger.error(
-          `Reminder ${reminder._id} failed: ${result.errorMessage}`,
-        );
+        this.logger.error(`Reminder ${reminder._id} failed: ${result.errorMessage}`);
       }
     } catch (error: any) {
-      this.logger.error(
-        `Error processing reminder ${reminder._id}: ${error.message}`,
-      );
+      this.logger.error(`Error processing reminder ${reminder._id}: ${error.message}`);
     }
   }
 

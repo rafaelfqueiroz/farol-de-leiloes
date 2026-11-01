@@ -98,6 +98,8 @@ describe('node image parsing', () => {
   it('keeps a floating tag as is so it fails the exact-version check', () => {
     expect(versionFromImageTag('24-slim')).toBe('24-slim');
     expect(versionFromImageTag('24.22.2-slim')).toBe('24.22.2');
-    expect(findNodeVersionDrift('24.22.2', [{ file: 'f', version: versionFromImageTag('lts') }])).toHaveLength(1);
+    expect(
+      findNodeVersionDrift('24.22.2', [{ file: 'f', version: versionFromImageTag('lts') }]),
+    ).toHaveLength(1);
   });
 });

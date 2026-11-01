@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  formatDate,
-  formatDateTime,
-  parseDate,
-  relativeParts,
-  toDateTimeAttribute,
-} from './dates';
+import { formatDate, formatDateTime, parseDate, relativeParts, toDateTimeAttribute } from './dates';
 
 // America/Sao_Paulo is UTC-3 all year (no DST since 2019), so the expectations are fixed.
 

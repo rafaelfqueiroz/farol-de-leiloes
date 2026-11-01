@@ -7,10 +7,7 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -20,7 +17,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
       body: JSON.stringify(body),
     });
@@ -36,7 +33,7 @@ export async function POST(request: NextRequest) {
     console.error('Error setting password:', error);
     return NextResponse.json(
       { message: error.message || 'Failed to set password' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

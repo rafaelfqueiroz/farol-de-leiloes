@@ -1,6 +1,11 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import r2Config from './r2.config';
 
@@ -59,10 +64,7 @@ export class StorageService {
    * Upload an image from a URL to R2
    * Images are stored publicly for direct frontend access
    */
-  async uploadImageFromUrl(
-    sourceUrl: string,
-    auctionCode: string,
-  ): Promise<UploadResult | null> {
+  async uploadImageFromUrl(sourceUrl: string, auctionCode: string): Promise<UploadResult | null> {
     if (!this.s3Client) {
       this.logger.debug('R2 not configured, skipping image upload');
       return null;
@@ -87,12 +89,14 @@ export class StorageService {
       const ext = this.getExtensionFromMimeType(contentType);
       const key = `images/${auctionCode}${ext}`;
 
-      await this.s3Client.send(new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: buffer,
-        ContentType: contentType,
-      }));
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: buffer,
+          ContentType: contentType,
+        }),
+      );
 
       const url = this.publicUrl ? `${this.publicUrl}/${key}` : key;
 
@@ -140,12 +144,14 @@ export class StorageService {
 
       const key = `documents/${auctionCode}/${type}.pdf`;
 
-      await this.s3Client.send(new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: buffer,
-        ContentType: contentType,
-      }));
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: buffer,
+          ContentType: contentType,
+        }),
+      );
 
       const url = this.publicUrl ? `${this.publicUrl}/${key}` : key;
 
@@ -197,10 +203,12 @@ export class StorageService {
     }
 
     try {
-      await this.s3Client.send(new DeleteObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-      }));
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+        }),
+      );
 
       this.logger.debug(`Deleted file from R2: ${key}`);
       return true;
@@ -222,12 +230,14 @@ export class StorageService {
       throw new Error('R2 not configured');
     }
 
-    await this.s3Client.send(new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType,
-    }));
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      }),
+    );
 
     this.logger.debug(`Uploaded buffer: ${key} (${buffer.length} bytes)`);
 
@@ -242,10 +252,12 @@ export class StorageService {
       throw new Error('R2 not configured');
     }
 
-    const response = await this.s3Client.send(new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-    }));
+    const response = await this.s3Client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+    );
 
     const bytes = await response.Body!.transformToByteArray();
     this.logger.debug(`Downloaded buffer: ${key} (${bytes.length} bytes)`);

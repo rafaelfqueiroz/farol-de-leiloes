@@ -49,10 +49,7 @@ export class FavoritesService {
   }
 
   private async updateAuctionId(favoriteId: any, auctionId: any): Promise<void> {
-    await this.favoriteRepository.updateOne(
-      { _id: favoriteId },
-      { $set: { auction: auctionId } },
-    );
+    await this.favoriteRepository.updateOne({ _id: favoriteId }, { $set: { auction: auctionId } });
   }
 
   async findOne(userId: string, auctionCode: string): Promise<FavoriteDocument | null> {

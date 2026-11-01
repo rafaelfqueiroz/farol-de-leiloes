@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     }
 
     const response = await fetch(`${BACKEND_URL}/api/coupons`, {
-      headers: { 'Authorization': authHeader },
+      headers: { Authorization: authHeader },
     });
 
     const data = await response.json();
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
       body: JSON.stringify(body),
     });

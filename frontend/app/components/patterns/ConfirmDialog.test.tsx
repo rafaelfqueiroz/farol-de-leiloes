@@ -23,24 +23,27 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof ConfirmDial
 }
 
 describe('ConfirmDialog', () => {
-  it.each(['light', 'dark'] as const)('is a labelled alertdialog and passes axe (%s)', async (scheme) => {
-    const onClose = vi.fn();
-    renderWithProviders(
-      <ConfirmDialog
-        open
-        title="Cancelar a jornada?"
-        description="Esta ação não pode ser desfeita."
-        confirmLabel="Cancelar jornada"
-        onConfirm={() => undefined}
-        onClose={onClose}
-      />,
-      { scheme },
-    );
+  it.each(['light', 'dark'] as const)(
+    'is a labelled alertdialog and passes axe (%s)',
+    async (scheme) => {
+      const onClose = vi.fn();
+      renderWithProviders(
+        <ConfirmDialog
+          open
+          title="Cancelar a jornada?"
+          description="Esta ação não pode ser desfeita."
+          confirmLabel="Cancelar jornada"
+          onConfirm={() => undefined}
+          onClose={onClose}
+        />,
+        { scheme },
+      );
 
-    const dialog = screen.getByRole('alertdialog', { name: 'Cancelar a jornada?' });
-    expect(dialog).toHaveAccessibleDescription('Esta ação não pode ser desfeita.');
-    expect(await axe(dialog)).toHaveNoViolations();
-  });
+      const dialog = screen.getByRole('alertdialog', { name: 'Cancelar a jornada?' });
+      expect(dialog).toHaveAccessibleDescription('Esta ação não pode ser desfeita.');
+      expect(await axe(dialog)).toHaveNoViolations();
+    },
+  );
 
   it('defaults the safe action to the catalogue "Cancelar", first and focused', () => {
     renderDialog({ cancelLabel: undefined });
@@ -107,6 +110,8 @@ describe('ConfirmDialog', () => {
   it('uses the primary colour when the action is not destructive', () => {
     renderDialog({ destructive: false });
 
-    expect(screen.getByRole('button', { name: 'Cancelar jornada' }).className).toContain('colorPrimary');
+    expect(screen.getByRole('button', { name: 'Cancelar jornada' }).className).toContain(
+      'colorPrimary',
+    );
   });
 });

@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(`${BACKEND_URL}/api/payments/cancel-subscription`, {
       method: 'POST',
-      headers: { 'Authorization': authHeader },
+      headers: { Authorization: authHeader },
     });
 
     const data = await response.json();

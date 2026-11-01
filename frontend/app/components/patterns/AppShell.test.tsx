@@ -169,14 +169,17 @@ afterEach(() => {
 });
 
 describe('AppShell — accessibility (TS-19, DS-22)', () => {
-  it.each(['light', 'dark'] as const)('passes axe with the desktop sidebar (%s)', async (scheme) => {
-    setViewport(DESKTOP);
-    setCounts({ favorites: 24, reminders: 3 });
-    const { container } = renderShell(scheme);
+  it.each(['light', 'dark'] as const)(
+    'passes axe with the desktop sidebar (%s)',
+    async (scheme) => {
+      setViewport(DESKTOP);
+      setCounts({ favorites: 24, reminders: 3 });
+      const { container } = renderShell(scheme);
 
-    expect(mainNav()).toBeInTheDocument();
-    expect(await axe(container)).toHaveNoViolations();
-  });
+      expect(mainNav()).toBeInTheDocument();
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
 
   it.each(['light', 'dark'] as const)('passes axe with the md–lg rail (%s)', async (scheme) => {
     setViewport(RAIL);
@@ -187,15 +190,18 @@ describe('AppShell — accessibility (TS-19, DS-22)', () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it.each(['light', 'dark'] as const)('passes axe with the phone drawer open (%s)', async (scheme) => {
-    setViewport(PHONE);
-    const user = userEvent.setup();
-    renderShell(scheme);
+  it.each(['light', 'dark'] as const)(
+    'passes axe with the phone drawer open (%s)',
+    async (scheme) => {
+      setViewport(PHONE);
+      const user = userEvent.setup();
+      renderShell(scheme);
 
-    await user.click(screen.getByRole('button', { name: 'Abrir menu' }));
-    expect(await screen.findByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
-    expect(await axe(document.body)).toHaveNoViolations();
-  });
+      await user.click(screen.getByRole('button', { name: 'Abrir menu' }));
+      expect(await screen.findByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
+      expect(await axe(document.body)).toHaveNoViolations();
+    },
+  );
 
   it.each([
     ['light', DESKTOP],
@@ -430,7 +436,9 @@ describe('AppShell — phone drawer', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Menu' });
     expect(dialog).toHaveAttribute('id', 'app-shell-drawer');
     expect(menuButton).toHaveAttribute('aria-expanded', 'true');
-    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Fechar menu' })).toHaveFocus());
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: 'Fechar menu' })).toHaveFocus(),
+    );
     const nav = within(dialog).getByRole('navigation', { name: 'Principal' });
     expect(groupLabels(nav)).toEqual(['Busca', 'Acompanhamento', 'Conta', 'Administração']);
 
@@ -485,11 +493,11 @@ describe('AppShell — account menu', () => {
     const menu = await screen.findByRole('menu', { name: 'Conta de Ana Teste' });
     expect(screen.getByText('ana@exemplo.test')).toBeInTheDocument();
     expect(screen.getByText('Plano Premium')).toBeInTheDocument();
-    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-      'Perfil',
-      'Assinatura',
-      'Sair',
-    ]);
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Perfil', 'Assinatura', 'Sair']);
 
     await user.click(within(menu).getByRole('menuitem', { name: 'Sair' }));
     await waitFor(() => expect(env.push).toHaveBeenCalledWith('/'));

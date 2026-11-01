@@ -49,7 +49,12 @@ function RemindersProbe() {
   return <p>{loading ? 'carregando' : `itens ${reminders.length}`}</p>;
 }
 
-const providers: [string, string, (props: { children: ReactNode }) => ReactNode, () => ReactNode][] = [
+const providers: [
+  string,
+  string,
+  (props: { children: ReactNode }) => ReactNode,
+  () => ReactNode,
+][] = [
   ['FavoritesProvider', '/api/favorites', FavoritesProvider, FavoritesProbe],
   ['RemindersProvider', '/api/reminders', RemindersProvider, RemindersProbe],
 ];
@@ -85,7 +90,10 @@ async function answerWith(index: number, body: unknown) {
 }
 
 async function answer(index: number, count: number) {
-  await answerWith(index, Array.from({ length: count }, (_, i) => ({ _id: `r${i}`, code: String(i) })));
+  await answerWith(
+    index,
+    Array.from({ length: count }, (_, i) => ({ _id: `r${i}`, code: String(i) })),
+  );
 }
 
 // A signs in with a request in flight, signs out, B signs in and loads `bItems`.
@@ -210,7 +218,11 @@ describe('mutations across an account change', () => {
         <button
           type="button"
           onClick={() =>
-            createReminder({ auctionId: 'a', channel: 'EMAIL', scheduledAt: '2026-11-14T13:00:00Z' })
+            createReminder({
+              auctionId: 'a',
+              channel: 'EMAIL',
+              scheduledAt: '2026-11-14T13:00:00Z',
+            })
           }
         >
           Criar

@@ -8,12 +8,9 @@ export interface ReminderEmailPayload {
   description: string | null;
 }
 
-export const getAuctionReminderEmailTemplate = (
-  payload: ReminderEmailPayload,
-): string => {
+export const getAuctionReminderEmailTemplate = (payload: ReminderEmailPayload): string => {
   const location =
-    [payload.auctionCity, payload.auctionState].filter(Boolean).join(', ') ||
-    'Local nao informado';
+    [payload.auctionCity, payload.auctionState].filter(Boolean).join(', ') || 'Local nao informado';
 
   const detailsButton = payload.auctionDetailsUrl
     ? `<div style="text-align: center;">

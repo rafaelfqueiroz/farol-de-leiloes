@@ -1,14 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-} from '@mui/material';
+import { Box, Container, Typography, Card, CardContent, Button } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 

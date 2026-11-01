@@ -7,17 +7,14 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { message: 'No authorization header' },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: 'No authorization header' }, { status: 401 });
     }
 
     const url = `${BACKEND_URL}/api/auth/verification-status`;
 
     const response = await fetch(url, {
       headers: {
-        'Authorization': authHeader,
+        Authorization: authHeader,
       },
     });
 
@@ -32,7 +29,7 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching verification status:', error);
     return NextResponse.json(
       { message: error.message || 'Failed to fetch verification status' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

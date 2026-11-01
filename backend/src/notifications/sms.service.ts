@@ -20,10 +20,7 @@ export class SmsService {
 
   constructor(private configService: ConfigService) {}
 
-  async sendReminderSms(
-    phoneNumber: string,
-    payload: SmsPayload,
-  ): Promise<SmsResult> {
+  async sendReminderSms(phoneNumber: string, payload: SmsPayload): Promise<SmsResult> {
     const message = this.formatMessage(payload);
 
     if (!this.isConfigured()) {
@@ -49,9 +46,9 @@ export class SmsService {
   }
 
   private formatMessage(payload: SmsPayload): string {
-    const location = [payload.auctionCity, payload.auctionState]
-      .filter(Boolean)
-      .join('/') || 'Local nao informado';
+    const location =
+      [payload.auctionCity, payload.auctionState].filter(Boolean).join('/') ||
+      'Local nao informado';
 
     let message = `Lembrete: Leilao "${payload.auctionTitle || payload.auctionCode}" em ${location} comeca em breve!`;
 

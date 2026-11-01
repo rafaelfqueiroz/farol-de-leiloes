@@ -1,4 +1,14 @@
-import { IsString, IsNotEmpty, IsNumber, IsDateString, IsOptional, Min, Validate, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsDateString,
+  IsOptional,
+  Min,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+} from 'class-validator';
 
 @ValidatorConstraint({ name: 'isFutureDate', async: false })
 class IsFutureDateConstraint implements ValidatorConstraintInterface {

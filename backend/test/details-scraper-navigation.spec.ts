@@ -8,7 +8,10 @@ jest.mock('puppeteer-extra', () => ({
 
 const URL = 'https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=1';
 
-function mockBrowser(response: { ok: () => boolean; status: () => number } | null, html = '<html></html>') {
+function mockBrowser(
+  response: { ok: () => boolean; status: () => number } | null,
+  html = '<html></html>',
+) {
   const close = jest.fn();
   const page = {
     goto: jest.fn().mockResolvedValue(response),
@@ -34,7 +37,9 @@ describe('fetchAuctionDetailHtml navigation checks', () => {
   it('throws when navigation returns no response', async () => {
     mockBrowser(null);
 
-    await expect(fetchAndCheckAvailability(URL)).rejects.toThrow('No response received from navigation');
+    await expect(fetchAndCheckAvailability(URL)).rejects.toThrow(
+      'No response received from navigation',
+    );
   });
 
   it('returns true for an available auction on a 200 response', async () => {

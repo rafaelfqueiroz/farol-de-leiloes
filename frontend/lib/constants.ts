@@ -33,4 +33,7 @@ export interface AuctionResult {
 }
 
 // API URL
-export const AUCTIONS_API_URL = process.env.AUCTIONS_API_URL || process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
+export const AUCTIONS_API_URL =
+  process.env.AUCTIONS_API_URL ||
+  process.env.NEXT_PUBLIC_AUCTIONS_API_URL ||
+  'http://localhost:3000';

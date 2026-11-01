@@ -12,11 +12,7 @@ export const metadata: Metadata = {
   description: 'Encontre imóveis em leilão da Caixa Econômica Federal',
 };
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [locale, timeZone, messages] = await Promise.all([
     getLocale(),
     getTimeZone(),

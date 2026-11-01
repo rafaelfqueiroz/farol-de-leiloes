@@ -13,10 +13,7 @@ import {
   ReminderChannel,
   ReminderStatus,
 } from './schemas/reminder.schema';
-import {
-  NotificationLog,
-  NotificationLogDocument,
-} from './schemas/notification-log.schema';
+import { NotificationLog, NotificationLogDocument } from './schemas/notification-log.schema';
 import { AuctionsService } from '../auctions/auctions.service';
 import { UsersService } from '../users/users.service';
 import { CreateReminderDto } from './dto/create-reminder.dto';
@@ -75,15 +72,10 @@ export class RemindersService {
     }
 
     if (new Date(auctionStartDate) <= new Date()) {
-      throw new BadRequestException(
-        'Nao e possivel criar lembrete para leilao que ja iniciou',
-      );
+      throw new BadRequestException('Nao e possivel criar lembrete para leilao que ja iniciou');
     }
 
-    const scheduledAt = this.validateAndNormalizeScheduledAt(
-      dto.scheduledAt,
-      auctionStartDate,
-    );
+    const scheduledAt = this.validateAndNormalizeScheduledAt(dto.scheduledAt, auctionStartDate);
 
     const reminder = new this.reminderModel({
       userId: new Types.ObjectId(userId),
@@ -137,9 +129,7 @@ export class RemindersService {
     }
 
     if (reminder.status !== ReminderStatus.PENDING) {
-      throw new BadRequestException(
-        'Nao e possivel editar um lembrete que ja foi enviado',
-      );
+      throw new BadRequestException('Nao e possivel editar um lembrete que ja foi enviado');
     }
 
     if (dto.channel && dto.channel !== reminder.channel) {
@@ -189,9 +179,7 @@ export class RemindersService {
     }
 
     if (reminder.status !== ReminderStatus.PENDING) {
-      throw new BadRequestException(
-        'Nao e possivel remover um lembrete que ja foi enviado',
-      );
+      throw new BadRequestException('Nao e possivel remover um lembrete que ja foi enviado');
     }
 
     await this.reminderModel.deleteOne({ _id: reminderId });
@@ -209,10 +197,7 @@ export class RemindersService {
   }
 
   async markAsSent(reminderId: string): Promise<void> {
-    await this.reminderModel.updateOne(
-      { _id: reminderId },
-      { status: ReminderStatus.SENT },
-    );
+    await this.reminderModel.updateOne({ _id: reminderId }, { status: ReminderStatus.SENT });
   }
 
   async logNotification(
@@ -251,9 +236,7 @@ export class RemindersService {
     switch (channel) {
       case ReminderChannel.EMAIL:
         if (!user.email || !user.emailVerified) {
-          throw new BadRequestException(
-            'Email verificado e necessario para lembretes por email',
-          );
+          throw new BadRequestException('Email verificado e necessario para lembretes por email');
         }
         break;
       case ReminderChannel.SMS:
@@ -278,10 +261,7 @@ export class RemindersService {
     return new Date(phaseDates[0]);
   }
 
-  private validateAndNormalizeScheduledAt(
-    scheduledAtStr: string,
-    auctionStartDate: Date,
-  ): Date {
+  private validateAndNormalizeScheduledAt(scheduledAtStr: string, auctionStartDate: Date): Date {
     const scheduledAt = new Date(scheduledAtStr);
 
     if (scheduledAt <= new Date()) {
@@ -289,9 +269,7 @@ export class RemindersService {
     }
 
     if (scheduledAt >= auctionStartDate) {
-      throw new BadRequestException(
-        'A data do lembrete deve ser antes do inicio do leilao',
-      );
+      throw new BadRequestException('A data do lembrete deve ser antes do inicio do leilao');
     }
 
     const minutes = scheduledAt.getMinutes();

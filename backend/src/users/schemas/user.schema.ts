@@ -46,7 +46,12 @@ export class UserEntity extends Document {
   @Prop({ required: false })
   stripeSubscriptionId?: string;
 
-  @Prop({ type: String, required: false, enum: ['active', 'canceled', 'past_due', 'incomplete', null], default: null })
+  @Prop({
+    type: String,
+    required: false,
+    enum: ['active', 'canceled', 'past_due', 'incomplete', null],
+    default: null,
+  })
   subscriptionStatus?: string | null;
 
   // Profile fields

@@ -5,13 +5,16 @@ import { axe, renderWithProviders } from '@/test/render';
 import Money from './Money';
 
 describe('Money', () => {
-  it.each(['light', 'dark'] as const)('formats a BRL amount and passes axe (%s)', async (scheme) => {
-    const { container } = renderWithProviders(<Money value="1234.56" />, { scheme });
+  it.each(['light', 'dark'] as const)(
+    'formats a BRL amount and passes axe (%s)',
+    async (scheme) => {
+      const { container } = renderWithProviders(<Money value="1234.56" />, { scheme });
 
-    // non-breaking space after the symbol
-    expect(container.textContent).toBe('R$\u00a01.234,56');
-    expect(await axe(container)).toHaveNoViolations();
-  });
+      // non-breaking space after the symbol
+      expect(container.textContent).toBe('R$\u00a01.234,56');
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
 
   it('accepts a Decimal and rounds half to even', () => {
     const { container } = renderWithProviders(<Money value={new Decimal('0.125')} />);
@@ -38,6 +41,9 @@ describe('Money', () => {
   it('uses tabular numerals so columns line up (DS-12)', () => {
     renderWithProviders(<Money value="10" variant="metric" />);
 
-    expect(getComputedStyle(screen.getByText('R$\u00a010,00', { normalizer: (text) => text })).fontVariantNumeric).toBe('tabular-nums');
+    expect(
+      getComputedStyle(screen.getByText('R$\u00a010,00', { normalizer: (text) => text }))
+        .fontVariantNumeric,
+    ).toBe('tabular-nums');
   });
 });

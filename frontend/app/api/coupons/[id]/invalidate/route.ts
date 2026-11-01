@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) {
@@ -15,7 +12,7 @@ export async function PATCH(
     const { id } = await params;
     const response = await fetch(`${BACKEND_URL}/api/coupons/${id}/invalidate`, {
       method: 'PATCH',
-      headers: { 'Authorization': authHeader },
+      headers: { Authorization: authHeader },
     });
 
     const data = await response.json();

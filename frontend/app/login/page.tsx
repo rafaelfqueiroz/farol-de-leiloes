@@ -130,7 +130,11 @@ export default function LoginPage() {
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
               Não tem uma conta?{' '}
-              <MuiLink component={Link} href="/register" sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}>
+              <MuiLink
+                component={Link}
+                href="/register"
+                sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}
+              >
                 Cadastre-se
               </MuiLink>
             </Typography>

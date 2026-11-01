@@ -44,9 +44,7 @@ const plans: Plan[] = [
     name: 'Gratuito',
     price: 'R$ 0',
     period: '/mes',
-    features: [
-      'Busca manual por filtros',
-    ],
+    features: ['Busca manual por filtros'],
     highlighted: false,
   },
   {
@@ -86,7 +84,11 @@ export default function PlansPage() {
   const [couponDiscount, setCouponDiscount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({
     open: false,
     message: '',
     severity: 'success',
@@ -105,7 +107,7 @@ export default function PlansPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ code: couponCode }),
       });
@@ -142,7 +144,7 @@ export default function PlansPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(body),
       });
@@ -152,7 +154,11 @@ export default function PlansPage() {
         window.location.href = data.url;
       } else {
         const error = await response.json();
-        setSnackbar({ open: true, message: error.message || 'Erro ao criar sessao de pagamento', severity: 'error' });
+        setSnackbar({
+          open: true,
+          message: error.message || 'Erro ao criar sessao de pagamento',
+          severity: 'error',
+        });
       }
     } catch {
       setSnackbar({ open: true, message: 'Erro ao processar pagamento', severity: 'error' });
@@ -167,17 +173,25 @@ export default function PlansPage() {
       const token = localStorage.getItem('token');
       const response = await fetch('/api/payments/cancel-subscription', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
-        setSnackbar({ open: true, message: 'Assinatura cancelada com sucesso', severity: 'success' });
+        setSnackbar({
+          open: true,
+          message: 'Assinatura cancelada com sucesso',
+          severity: 'success',
+        });
         setCancelDialogOpen(false);
         // Reload user data
         window.location.reload();
       } else {
         const error = await response.json();
-        setSnackbar({ open: true, message: error.message || 'Erro ao cancelar assinatura', severity: 'error' });
+        setSnackbar({
+          open: true,
+          message: error.message || 'Erro ao cancelar assinatura',
+          severity: 'error',
+        });
       }
     } catch {
       setSnackbar({ open: true, message: 'Erro ao cancelar assinatura', severity: 'error' });
@@ -292,7 +306,8 @@ export default function PlansPage() {
                     </Box>
                     {couponValid === true && couponDiscount && (
                       <Alert severity="success" sx={{ mt: 1 }}>
-                        Cupom aplicado! Desconto de R$ {(couponDiscount / 100).toFixed(2).replace('.', ',')}
+                        Cupom aplicado! Desconto de R${' '}
+                        {(couponDiscount / 100).toFixed(2).replace('.', ',')}
                       </Alert>
                     )}
                   </Box>
@@ -300,12 +315,7 @@ export default function PlansPage() {
 
                 {currentPlanId === plan.id ? (
                   <Box>
-                    <Button
-                      variant="outlined"
-                      fullWidth
-                      disabled
-                      sx={{ mb: 1 }}
-                    >
+                    <Button variant="outlined" fullWidth disabled sx={{ mb: 1 }}>
                       Plano Atual
                     </Button>
                     {plan.id === 'standard' && hasSubscription && (
@@ -344,30 +354,34 @@ export default function PlansPage() {
         </Box>
       </Container>
 
-    <Dialog open={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)}>
-      <DialogTitle>Cancelar assinatura</DialogTitle>
-      <DialogContent>
-        <DialogContentText>
-          Tem certeza que deseja cancelar sua assinatura? Voce perdera acesso aos recursos do plano Standard.
-        </DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setCancelDialogOpen(false)}>Voltar</Button>
-        <Button onClick={handleCancelSubscription} color="destructive" disabled={canceling}>
-          {canceling ? <CircularProgress size={20} /> : 'Confirmar cancelamento'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      <Dialog open={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)}>
+        <DialogTitle>Cancelar assinatura</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Tem certeza que deseja cancelar sua assinatura? Voce perdera acesso aos recursos do
+            plano Standard.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelDialogOpen(false)}>Voltar</Button>
+          <Button onClick={handleCancelSubscription} color="destructive" disabled={canceling}>
+            {canceling ? <CircularProgress size={20} /> : 'Confirmar cancelamento'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-    <Snackbar
-      open={snackbar.open}
-      autoHideDuration={4000}
-      onClose={() => setSnackbar({ ...snackbar, open: false })}
-    >
-      <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-        {snackbar.message}
-      </Alert>
-    </Snackbar>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          severity={snackbar.severity}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 }

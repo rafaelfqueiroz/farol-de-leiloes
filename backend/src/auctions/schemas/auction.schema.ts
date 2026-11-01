@@ -22,12 +22,12 @@ export interface ExpenseRule {
 }
 
 export interface AuctionFile {
-  originalUrl: string;      // Caixa URL (kept for reference/fallback)
-  storageKey?: string;      // R2 object key (for signed URL generation)
-  publicUrl?: string;       // R2 public URL (only for images)
-  mimeType: string;         // e.g., 'image/jpeg', 'application/pdf'
-  size?: number;            // File size in bytes
-  uploadedAt?: Date;        // When uploaded to R2
+  originalUrl: string; // Caixa URL (kept for reference/fallback)
+  storageKey?: string; // R2 object key (for signed URL generation)
+  publicUrl?: string; // R2 public URL (only for images)
+  mimeType: string; // e.g., 'image/jpeg', 'application/pdf'
+  size?: number; // File size in bytes
+  uploadedAt?: Date; // When uploaded to R2
 }
 
 export enum PaymentMethod {
@@ -100,4 +100,3 @@ AuctionSchema.index({ 'address.state': 1, 'address.city': 1 });
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1, 'address.neighborhood': 1 });
 AuctionSchema.index({ 'currentPhase.modality': 1 });
 AuctionSchema.index({ 'currentPhase.minimumPrice': 1 });
-

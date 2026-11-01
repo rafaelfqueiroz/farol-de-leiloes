@@ -1,12 +1,17 @@
-import { BadRequestException, Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { AuctionsService } from './auctions.service';
 import { AuctionResponseDto, AuctionListResponseDto } from './dto/auction-response.dto';
 
 @Controller('auctions')
 export class AuctionsController {
-  constructor(
-    private readonly auctions: AuctionsService,
-  ) {}
+  constructor(private readonly auctions: AuctionsService) {}
 
   @Get()
   async list(
@@ -26,7 +31,7 @@ export class AuctionsController {
     const parseMultiple = (value: string | string[] | undefined): string | string[] | undefined => {
       if (!value) return undefined;
       if (Array.isArray(value)) return value;
-      if (value.includes(',')) return value.split(',').map(v => v.trim());
+      if (value.includes(',')) return value.split(',').map((v) => v.trim());
       return value;
     };
 
@@ -45,10 +50,7 @@ export class AuctionsController {
   }
 
   @Get('neighborhoods')
-  async getNeighborhoods(
-    @Query('state') state?: string,
-    @Query('city') city?: string | string[],
-  ) {
+  async getNeighborhoods(@Query('state') state?: string, @Query('city') city?: string | string[]) {
     if (!state) {
       throw new BadRequestException('State is required');
     }
@@ -60,7 +62,7 @@ export class AuctionsController {
     const cities = Array.isArray(city)
       ? city
       : city.includes(',')
-        ? city.split(',').map(c => c.trim())
+        ? city.split(',').map((c) => c.trim())
         : [city];
 
     const neighborhoods = await this.auctions.getNeighborhoods(state, cities);
@@ -77,7 +79,7 @@ export class AuctionsController {
   async getAuction(@Param('code') code: string): Promise<AuctionResponseDto> {
     const auction = await this.auctions.findByCode(code);
     if (!auction) {
-      throw new NotFoundException(`Auction with code ${code} not found`)
+      throw new NotFoundException(`Auction with code ${code} not found`);
     }
     return new AuctionResponseDto(auction);
   }

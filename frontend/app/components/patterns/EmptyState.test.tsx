@@ -5,26 +5,38 @@ import { axe, renderWithProviders } from '@/test/render';
 import EmptyState from './EmptyState';
 
 describe('EmptyState', () => {
-  it.each(['light', 'dark'] as const)('renders title, description and action, and passes axe (%s)', async (scheme) => {
-    const { container } = renderWithProviders(
-      <EmptyState
-        icon={FavoriteBorderOutlined}
-        title="Você ainda não tem favoritos"
-        description="Toque no coração de um imóvel para guardá-lo aqui."
-        actions={<button type="button">Buscar imóveis</button>}
-      />,
-      { scheme },
-    );
+  it.each(['light', 'dark'] as const)(
+    'renders title, description and action, and passes axe (%s)',
+    async (scheme) => {
+      const { container } = renderWithProviders(
+        <EmptyState
+          icon={FavoriteBorderOutlined}
+          title="Você ainda não tem favoritos"
+          description="Toque no coração de um imóvel para guardá-lo aqui."
+          actions={<button type="button">Buscar imóveis</button>}
+        />,
+        { scheme },
+      );
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Você ainda não tem favoritos' })).toBeInTheDocument();
-    expect(screen.getByText('Toque no coração de um imóvel para guardá-lo aqui.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Buscar imóveis' })).toBeInTheDocument();
-    expect(await axe(container)).toHaveNoViolations();
-  });
+      expect(
+        screen.getByRole('heading', { level: 2, name: 'Você ainda não tem favoritos' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('Toque no coração de um imóvel para guardá-lo aqui.'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Buscar imóveis' })).toBeInTheDocument();
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
 
   it('follows the page outline through titleComponent', () => {
     renderWithProviders(
-      <EmptyState icon={FavoriteBorderOutlined} title="Nada aqui" description="Sem itens." titleComponent="h3" />,
+      <EmptyState
+        icon={FavoriteBorderOutlined}
+        title="Nada aqui"
+        description="Sem itens."
+        titleComponent="h3"
+      />,
     );
 
     expect(screen.getByRole('heading', { level: 3, name: 'Nada aqui' })).toBeInTheDocument();

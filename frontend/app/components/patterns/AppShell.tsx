@@ -155,7 +155,11 @@ function NavLists({ groups, currentId, counts, variant, onNavigate }: NavListsPr
               href={item.href}
               onClick={onNavigate}
               aria-current={current ? 'page' : undefined}
-              aria-label={variant === 'rail' ? (itemName(label, item.count) ?? label) : itemName(label, item.count)}
+              aria-label={
+                variant === 'rail'
+                  ? (itemName(label, item.count) ?? label)
+                  : itemName(label, item.count)
+              }
               sx={(theme) => ({
                 // DS-16: 44px targets
                 minHeight: theme.spacing(5.5),
@@ -209,7 +213,10 @@ function NavLists({ groups, currentId, counts, variant, onNavigate }: NavListsPr
           return (
             <Box key={group.id}>
               {index > 0 && (
-                <Divider aria-hidden sx={{ width: (theme) => theme.spacing(4), mx: 'auto', my: 1 }} />
+                <Divider
+                  aria-hidden
+                  sx={{ width: (theme) => theme.spacing(4), mx: 'auto', my: 1 }}
+                />
               )}
               <List disablePadding aria-label={groupLabel}>
                 {items}
@@ -242,7 +249,11 @@ function NavLists({ groups, currentId, counts, variant, onNavigate }: NavListsPr
 function LocatedNavLists(props: Omit<NavListsProps, 'currentId'>) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const currentId = currentItemId(props.groups, pathname ?? '', searchParams ?? new URLSearchParams());
+  const currentId = currentItemId(
+    props.groups,
+    pathname ?? '',
+    searchParams ?? new URLSearchParams(),
+  );
   return <NavLists {...props} currentId={currentId} />;
 }
 
@@ -653,7 +664,9 @@ export default function AppShell({ children }: AppShellProps) {
               />
             </Box>
             {mode === 'rail' && (
-              <Box sx={{ p: 1, display: 'flex', justifyContent: railPinned ? 'flex-start' : 'center' }}>
+              <Box
+                sx={{ p: 1, display: 'flex', justifyContent: railPinned ? 'flex-start' : 'center' }}
+              >
                 {railPinned ? (
                   <Button
                     variant="text"
