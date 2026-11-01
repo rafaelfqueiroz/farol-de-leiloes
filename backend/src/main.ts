@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { errorMessage } from './common/error-message';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
@@ -25,4 +26,11 @@ async function bootstrap() {
   await app.listen(process.env.PORT ? Number(process.env.PORT) : 3000);
 }
 
-bootstrap();
+// A failed boot is logged (AR-45) and exits non-zero, as the unhandled rejection did before.
+bootstrap().catch((error: unknown) => {
+  new Logger('Bootstrap').error(
+    `Failed to start: ${errorMessage(error)}`,
+    error instanceof Error ? error.stack : undefined,
+  );
+  process.exit(1);
+});
