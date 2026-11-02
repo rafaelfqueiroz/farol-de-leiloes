@@ -28,7 +28,7 @@ Tests (TESTING §2, §7)
 - `npm run test:integration` — `test/integration/` against MongoDB from Testcontainers; needs Docker
 - `npm run test:isolation` — `test/isolation/`, the owner-isolation gate; needs Docker (empty until #2)
 - `npm run test:structural` — `test/structural/` alone: checks on the repository itself (Node pins, workflows, Dockerfiles, pre-push selection); the CI `structural` job
-- Helpers: `test/support/` (database harness, fixture paths), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`
+- Helpers: `test/support/` (database harness, fixture paths, `silence-logger.ts`: the Nest Logger is silent in every test project; to assert on a log, `vi.spyOn(Logger.prototype, 'error')`, see TESTING.md), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`
 
 API
 

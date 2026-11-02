@@ -7,7 +7,19 @@
 // Specs import `describe`, `it`, `expect` and `vi` from 'vitest' explicitly; there are no globals.
 import { defineConfig } from 'vitest/config';
 
-const shared = { environment: 'node' as const, clearMocks: true };
+// Every project runs test/support/silence-logger.ts first: the Nest Logger is silent in tests, so
+// the expected ERROR/WARN lines of error-path specs do not bury real failures (TESTING §2). A spec
+// that asserts on logging spies on the logger explicitly. It applies to all four projects,
+// including the Nest apps booted by integration and isolation specs, which log just as much.
+const shared = {
+  environment: 'node' as const,
+  clearMocks: true,
+  setupFiles: ['./test/support/silence-logger.ts'],
+  // tr46 (a transitive dependency of the MongoDB driver's connection-string parser) still requires
+  // Node's deprecated `punycode`, and Node printed that DEP0040 warning once per worker. Not our
+  // code, and nothing to act on: silence this one warning, every other still shows.
+  execArgv: ['--disable-warning=DEP0040'],
+};
 
 // One mongo:7 container per run, shared by both projects; each spec file uses its own database
 // on it (TS-05, test/support/test-database.ts). A real database round trip (plus Nest
