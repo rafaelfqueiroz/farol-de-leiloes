@@ -6,7 +6,7 @@ import { PaymentMethod } from '../src/auctions/schemas/auction.schema';
 describe('Details Scraper', () => {
   describe('SFI Auction', () => {
     it('extracts phase dates for 1st and 2nd auction', () => {
-      const fixturePath = path.join(__dirname, 'fixtures', 'sfi-auction.html');
+      const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'sfi-auction.html');
       const html = fs.readFileSync(fixturePath, 'utf8');
       const details = scrapeAuctionDetails(html);
 
@@ -32,7 +32,7 @@ describe('Details Scraper', () => {
     });
 
     it('extracts payment methods and expense rules', () => {
-      const fixturePath = path.join(__dirname, 'fixtures', 'sfi-auction.html');
+      const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'sfi-auction.html');
       const html = fs.readFileSync(fixturePath, 'utf8');
       const details = scrapeAuctionDetails(html);
 
@@ -47,7 +47,7 @@ describe('Details Scraper', () => {
 
   describe('Open Bidding', () => {
     it('extracts phase date for open bidding auction', () => {
-      const fixturePath = path.join(__dirname, 'fixtures', 'open-bidding.html');
+      const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'open-bidding.html');
       const html = fs.readFileSync(fixturePath, 'utf8');
       const details = scrapeAuctionDetails(html);
 
@@ -68,7 +68,7 @@ describe('Details Scraper', () => {
   describe('Online Sales', () => {
     it('extracts end date from strLista in carregaContador()', () => {
       // Fixture strLista contains: "30/01/2026 18:00:00"
-      const fixturePath = path.join(__dirname, 'fixtures', 'online-sales.html');
+      const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'online-sales.html');
       const html = fs.readFileSync(fixturePath, 'utf8');
       const details = scrapeAuctionDetails(html);
 
@@ -83,7 +83,7 @@ describe('Details Scraper', () => {
 
   describe('Direct Online Sales', () => {
     it('returns empty phase dates array (no end date)', () => {
-      const fixturePath = path.join(__dirname, 'fixtures', 'direct-online-sales.html');
+      const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'direct-online-sales.html');
       const html = fs.readFileSync(fixturePath, 'utf8');
       const details = scrapeAuctionDetails(html);
 
@@ -95,7 +95,7 @@ describe('Details Scraper', () => {
 
   describe('Unavailable property', () => {
     it('returns unavailable when property is no longer for sale', () => {
-      const fixturePath = path.join(__dirname, 'fixtures', 'unavailable-property.html');
+      const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'unavailable-property.html');
       const html = fs.readFileSync(fixturePath, 'utf8');
       const details = scrapeAuctionDetails(html);
 
@@ -108,7 +108,7 @@ describe('Details Scraper', () => {
 
   describe('Common extractions', () => {
     it('extracts image URL', () => {
-      const fixturePath = path.join(__dirname, 'fixtures', 'sfi-auction.html');
+      const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'sfi-auction.html');
       const html = fs.readFileSync(fixturePath, 'utf8');
       const details = scrapeAuctionDetails(html);
 
@@ -117,7 +117,7 @@ describe('Details Scraper', () => {
     });
 
     it('extracts description', () => {
-      const fixturePath = path.join(__dirname, 'fixtures', 'sfi-auction.html');
+      const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'sfi-auction.html');
       const html = fs.readFileSync(fixturePath, 'utf8');
       const details = scrapeAuctionDetails(html);
 

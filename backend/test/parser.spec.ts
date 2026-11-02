@@ -4,7 +4,7 @@ import { parseCsv, normalizeRows } from '../src/auctions/importer/parser';
 
 describe('CSV parser', () => {
   it('parses Lista_imoveis_geral.csv and returns 4 rows', () => {
-    const fixturePath = path.join(__dirname, 'fixtures', 'Lista_imoveis_geral.csv');
+    const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'Lista_imoveis_geral.csv');
     const csv = fs.readFileSync(fixturePath, 'utf8');
     const rows = parseCsv(csv);
     expect(Array.isArray(rows)).toBe(true);
@@ -12,7 +12,7 @@ describe('CSV parser', () => {
   });
 
   it('normalizes rows and extracts all required fields', () => {
-    const fixturePath = path.join(__dirname, 'fixtures', 'Lista_imoveis_geral.csv');
+    const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'Lista_imoveis_geral.csv');
     const csv = fs.readFileSync(fixturePath, 'utf8');
     const parsed = parseCsv(csv);
     const normalized = normalizeRows(parsed);

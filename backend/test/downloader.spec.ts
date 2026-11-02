@@ -29,7 +29,7 @@ jest.mock('child_process', () => {
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 const CAIXA_CSV_LATIN1 = path.join(FIXTURES, 'caixa', 'Lista_imoveis_geral.latin1.csv');
-const BOT_PROTECTION_HTML = path.join(FIXTURES, 'bot-protection.html');
+const BOT_PROTECTION_HTML = path.join(FIXTURES, 'caixa', 'bot-protection.html');
 
 const execMock = exec as unknown as jest.Mock;
 const realExecAsync = promisify(
