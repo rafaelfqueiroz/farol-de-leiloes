@@ -1,15 +1,15 @@
 // TS-07 / TS-28: the detail-page fetch never reaches the live Caixa site in tests. Navigation is
 // stubbed and the page body is a captured fixture from test/fixtures/caixa/.
 //
-// TS-03: puppeteer-extra has no port yet, so it is the one module replaced with vi.mock here.
+// TS-03: puppeteer has no port yet, so it is the one module replaced with vi.mock here.
 // The CaixaSource port arrives with SPEC-004 (#4); this spec then moves to a hand-written fake.
 import { describe, expect, it, type Mock, vi } from 'vitest';
-import puppeteer from 'puppeteer-extra';
+import puppeteer from 'puppeteer';
 import { fetchAndCheckAvailability } from './details-scraper';
 import { readCaixaFixture } from '../../../test/support/fixtures';
 
-vi.mock('puppeteer-extra', () => ({
-  default: { use: vi.fn(), launch: vi.fn() },
+vi.mock('puppeteer', () => ({
+  default: { launch: vi.fn() },
 }));
 
 // Never requested: navigation is stubbed. Shaped like a real detail URL for realism only.
