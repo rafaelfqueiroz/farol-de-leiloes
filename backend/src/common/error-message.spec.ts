@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { errorMessage } from './error-message';
 
 describe('errorMessage', () => {

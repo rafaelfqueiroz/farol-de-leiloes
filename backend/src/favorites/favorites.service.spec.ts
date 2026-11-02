@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { FavoritesService } from './favorites.service';
@@ -18,9 +19,9 @@ describe('FavoritesService.create', () => {
       }
     }
     const auctionsService = {
-      findDocumentByCode: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+      findDocumentByCode: vi.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
       // findByCode only returns available auctions
-      findByCode: jest.fn().mockResolvedValue(null),
+      findByCode: vi.fn().mockResolvedValue(null),
     };
     const service = new FavoritesService(
       FakeFavoriteModel as unknown as ServiceDeps[0],

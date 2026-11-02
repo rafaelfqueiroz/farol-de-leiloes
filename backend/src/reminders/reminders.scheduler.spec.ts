@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from 'vitest';
 import { RemindersScheduler } from './reminders.scheduler';
 import { ReminderChannel } from './schemas/reminder.schema';
 import { PopulatedReminder } from './interfaces/reminder.interface';
@@ -6,17 +7,17 @@ type SchedulerDeps = ConstructorParameters<typeof RemindersScheduler>;
 
 describe('RemindersScheduler.processReminder', () => {
   function build() {
-    const remindersService = { logNotification: jest.fn(), markAsSent: jest.fn() };
+    const remindersService = { logNotification: vi.fn(), markAsSent: vi.fn() };
     const usersService = {
-      findByIdFull: jest.fn().mockResolvedValue({
+      findByIdFull: vi.fn().mockResolvedValue({
         _id: 'user-1',
         name: 'Test User',
         email: 'user@example.test',
         phone: undefined,
       }),
     };
-    const smsService = { sendReminderSms: jest.fn() };
-    const whatsAppService = { sendReminderWhatsApp: jest.fn() };
+    const smsService = { sendReminderSms: vi.fn() };
+    const whatsAppService = { sendReminderWhatsApp: vi.fn() };
     const scheduler = new RemindersScheduler(
       remindersService as unknown as SchedulerDeps[0],
       usersService as unknown as SchedulerDeps[1],

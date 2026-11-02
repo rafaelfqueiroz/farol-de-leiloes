@@ -1,5 +1,5 @@
-// State shared by mongo-global-setup.ts and mongo-global-teardown.ts. Jest runs global setup and
-// teardown in its parent process and only shares `globalThis` between them, so the started
+// State shared by mongo-global-setup.ts and mongo-global-teardown.ts. Vitest runs global setup and
+// teardown in its main process and only shares `globalThis` between them, so the started
 // container is kept there rather than in a module variable.
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 

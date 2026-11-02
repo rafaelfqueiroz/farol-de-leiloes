@@ -1,5 +1,6 @@
-// Jest globalTeardown of the integration and isolation projects: stops the container started by
-// mongo-global-setup.ts once the last project using it is done.
+// Vitest global teardown of the integration and isolation projects (re-exported as `teardown` by
+// mongo-global-setup.ts): stops the container started there once the last project using it is
+// done.
 import { TEST_MONGODB_URI, setSharedMongo, sharedMongo } from './mongo-container';
 
 export default async function mongoGlobalTeardown(): Promise<void> {

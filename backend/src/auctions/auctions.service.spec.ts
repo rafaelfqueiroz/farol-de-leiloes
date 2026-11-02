@@ -1,11 +1,12 @@
+import { describe, expect, it, vi } from 'vitest';
 import { AuctionsService } from './auctions.service';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionsService>;
 
 describe('AuctionsService.markAvailable', () => {
   function build(modifiedCount = 0) {
-    const repo = { updateMany: jest.fn().mockResolvedValue({ modifiedCount }) };
-    const configService = { get: jest.fn().mockReturnValue(undefined) };
+    const repo = { updateMany: vi.fn().mockResolvedValue({ modifiedCount }) };
+    const configService = { get: vi.fn().mockReturnValue(undefined) };
     const service = new AuctionsService(
       repo as unknown as ServiceDeps[0],
       {} as ServiceDeps[1],

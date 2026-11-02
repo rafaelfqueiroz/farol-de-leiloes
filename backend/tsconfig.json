@@ -17,7 +17,7 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "moduleResolution": "node",
-    "types": ["node", "jest"],
+    "types": ["node"],
     "lib": ["es2021", "dom"]
   },
   "exclude": ["node_modules", "dist"]

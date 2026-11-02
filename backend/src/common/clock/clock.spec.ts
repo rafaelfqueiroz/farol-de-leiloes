@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { SystemClock } from './clock';
 
 describe('SystemClock (AR-24)', () => {

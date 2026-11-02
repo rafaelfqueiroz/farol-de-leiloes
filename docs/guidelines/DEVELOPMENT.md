@@ -28,7 +28,7 @@ One approved choice per concern. Adding a dependency that overlaps one of these 
 | Payments | `stripe` | `@stripe/stripe-js` |
 | Files | `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` (R2) | — |
 | Scraping | `puppeteer`, `cheerio` | — |
-| Tests | `jest`, `ts-jest`, `@testcontainers/mongodb`, `supertest` | `vitest`, `@testing-library/react`, `vitest-axe`, `@playwright/test`, `@axe-core/playwright` |
+| Tests | `vitest`, `@testcontainers/mongodb`, `supertest` | `vitest`, `@testing-library/react`, `vitest-axe`, `@playwright/test`, `@axe-core/playwright` |
 | Lint / format | `eslint`, `typescript-eslint`, `prettier` | `eslint`, `eslint-config-next`, `prettier` |
 | Git hooks | `husky`, `lint-staged` (repository root, in a minimal `package.json` that holds only the hook tooling) | |
 
@@ -90,11 +90,11 @@ Both packages expose the same script names:
 | `typecheck` | `tsc --noEmit` |
 | `lint` / `lint:fix` | ESLint. The remaining legacy violations are bulk suppressions in `eslint-suppressions.json`, each owned by an issue: backend AR-09 imports (#51); frontend JSX literals (#39), `px` in `sx` (#43), and the React hooks, a11y and Next rules (#52). `lint` fails on a new violation and on a suppression that no longer occurs, which `npm run lint:prune` removes |
 | `format` / `format:check` | Prettier |
-| `test` | Fast tests, no Docker. Backend: Jest projects `unit` (specs next to their source, `domain/` included) and `structural` (`test/structural/`); frontend: Vitest |
+| `test` | Fast tests, no Docker. Backend: Vitest projects `unit` (specs next to their source, `domain/` included) and `structural` (`test/structural/`); frontend: Vitest |
 | `test:integration` | Backend only — `test/integration/` on a Testcontainers MongoDB (TESTING §2). **Needs Docker running**; without it, stops with "Docker is required (DV-17)" |
 | `test:isolation` | Backend only — the isolation gate, `test/isolation/` (TESTING §4), on a Testcontainers MongoDB; needs Docker running. Passes with no tests until the first isolation spec lands (#2) |
 | `test:e2e` | Frontend only — Playwright against the Compose stack |
-| `test:cov` | `test` with the coverage gate (TESTING §7): backend `unit` + `structural` with Jest coverage, frontend Vitest with V8 coverage; lcov in `coverage/` |
+| `test:cov` | `test` with the coverage gate (TESTING §7): backend `unit` + `structural` with V8 coverage, frontend Vitest with V8 coverage; lcov in `coverage/` |
 | `check` | `typecheck` + `lint` + `format:check` + `test`. **The pre-push hook runs it** in every package the push changes (DV-37). |
 
 ### Git hooks
@@ -201,7 +201,7 @@ GitHub Actions. The repository is public, so minutes are not the constraint — 
 | `backend-static` | `npm ci` · typecheck · lint · format check | ✅ |
 | `backend-test` | `npm run test:cov`: unit (`domain/` included) + structural, coverage gate | ✅ |
 | `backend-integration` | `test:integration` + `test:isolation` on Testcontainers MongoDB | ✅ |
-| `backend-build` | `nest build` | ✅ |
+| `backend-build` | `npm run build` (`tsc`) | ✅ |
 | `frontend-static` | `npm ci` · typecheck · lint · format check | ✅ |
 | `frontend-test` | `npm run test:cov`: Vitest components + axe, coverage gate | ✅ |
 | `frontend-build` | `next build` | ✅ |

@@ -1,3 +1,4 @@
+import { describe, expect, it, type Mock, vi } from 'vitest';
 import * as fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -11,9 +12,9 @@ import { caixaFixturePath } from '../../../test/support/fixtures';
 // Only the `curl` stage is replaced: the stub feeds a captured fixture into the very
 // same pipeline, so the real `iconv` ISO-8859-1 -> UTF-8 decoding and the real parser
 // still run.
-jest.mock('child_process', () => {
-  const { promisify: realPromisify } = jest.requireActual<typeof import('util')>('util');
-  const fake = jest.fn();
+vi.mock('child_process', async () => {
+  const { promisify: realPromisify } = await vi.importActual<typeof import('util')>('util');
+  const fake = vi.fn();
   // Mirror the real `exec`, whose promisified form resolves `{ stdout, stderr }`.
   (fake as unknown as Record<symbol, unknown>)[realPromisify.custom] = (
     command: string,
@@ -30,10 +31,13 @@ jest.mock('child_process', () => {
 const CAIXA_CSV_LATIN1 = caixaFixturePath('Lista_imoveis_geral.latin1.csv');
 const BOT_PROTECTION_HTML = caixaFixturePath('bot-protection.html');
 
-const execMock = exec as unknown as jest.Mock;
-const realExecAsync = promisify(
-  jest.requireActual<typeof import('child_process')>('child_process').exec,
-);
+const execMock = exec as unknown as Mock;
+// No top-level await under CommonJS (TS1378): load the real `exec` when first needed.
+const realExecAsync = async (command: string, options: unknown) =>
+  promisify((await vi.importActual<typeof import('child_process')>('child_process')).exec)(
+    command,
+    options as object,
+  );
 
 // Replays `body` instead of `curl`: the command's first pipeline stage (curl) is swapped
 // for `cat <fixture>` and the remaining stages (iconv) run for real. Returns the commands

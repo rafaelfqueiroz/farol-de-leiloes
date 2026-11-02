@@ -1,4 +1,4 @@
-// Jest globalSetup of the integration and isolation projects (jest.config.ts): one MongoDB
+// Vitest globalSetup of the integration and isolation projects (vitest.config.mts): one MongoDB
 // container per run, shared by every spec file, each of which uses its own database on it
 // (TS-05, test/support/test-database.ts). DV-17: databases always come from containers;
 // Testcontainers maps a random host port, so the developer's own MongoDB is never touched.
@@ -19,15 +19,15 @@ function dockerRequired(cause: unknown): Error {
     '',
   ].join('\n');
   const error = new Error(message);
-  // Jest prints the stack of a global-setup failure; a library stack trace would bury the fix.
+  // Vitest prints the stack of a global-setup failure; a library stack trace would bury the fix.
   error.stack = message;
   return error;
 }
 
-export default async function mongoGlobalSetup(): Promise<void> {
+export async function setup(): Promise<void> {
   const running = sharedMongo();
-  // Both projects may run in one invocation (`jest --selectProjects integration isolation`):
-  // the second one reuses the container instead of starting another.
+  // Both projects may run in one invocation (`vitest run --project integration --project
+  // isolation`): the second one reuses the container instead of starting another.
   if (running) {
     running.users += 1;
     return;
@@ -47,6 +47,10 @@ export default async function mongoGlobalSetup(): Promise<void> {
   }
 
   setSharedMongo({ container, users: 1 });
-  // Workers are spawned after global setup and inherit this environment.
+  // Test workers are started after global setup and inherit this environment.
   process.env[TEST_MONGODB_URI] = container.getConnectionString();
 }
+
+// Vitest ignores a named `teardown` export when the module also has a default export, so both
+// hooks are named exports of this one module.
+export { default as teardown } from './mongo-global-teardown';

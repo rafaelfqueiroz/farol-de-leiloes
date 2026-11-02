@@ -22,8 +22,8 @@ Setup
 
 Tests (TESTING §2, §7)
 
-- `npm test` — Jest projects `unit` (`src/**/*.spec.ts`, next to the source) and `structural` (`test/structural/`); no Docker
-- `npm run test:cov` — the same with the coverage gate; lcov report in `coverage/`
+- `npm test` — Vitest projects `unit` (`src/**/*.spec.ts`, next to the source) and `structural` (`test/structural/`); no Docker
+- `npm run test:cov` — the same with the V8 coverage gate (`backend/vitest.config.mts`); lcov report in `coverage/`
 - `npm run test:integration` — `test/integration/` against MongoDB from Testcontainers; needs Docker
 - `npm run test:isolation` — `test/isolation/`, the owner-isolation gate; needs Docker (empty until #2)
 - Helpers: `test/support/` (database harness, fixture paths), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`

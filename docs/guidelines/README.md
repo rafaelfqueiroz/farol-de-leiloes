@@ -26,7 +26,7 @@ Alongside: [`docs/adr/`](../adr/README.md) for technical decisions, [`docs/runbo
 | Money / time | `Decimal128` + `decimal.js` · `date-fns` + `@date-fns/tz` (Brasília) |
 | Integrations | Stripe · OpenAI · Cloudflare R2 · SMTP · Google sign-in · Caixa |
 | Observability | `nestjs-pino` · Sentry (scrubbed) · `/api/health` |
-| Testing | Jest + Testcontainers (backend) · Vitest + Testing Library (frontend) · Playwright |
+| Testing | Vitest + Testcontainers (backend) · Vitest + Testing Library (frontend) · Playwright |
 | Quality gates | ESLint · Prettier · husky (pre-commit lint-staged, pre-push `check` per changed package) · GitHub Actions · CodeQL — hooks and lint in place (#29); CI pending #33 |
 | Package manager | npm, one lockfile per package |
 | Hosting | Undecided — deploy gated off (BL-001) |

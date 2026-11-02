@@ -3,6 +3,7 @@
 // `.husky/lib/changed-packages.sh`, a POSIX sh function, so it is driven here through `sh`
 // with fabricated file lists; the whole hook is driven against scratch git repos (each with a
 // bare origin) fed the real pre-push stdin format.
+import { afterAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
