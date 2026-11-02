@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -32,10 +34,10 @@ export async function DELETE(
     }
 
     return new NextResponse(null, { status: 204 });
-  } catch (error: any) {
-    console.error('Error deleting saved filter:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/saved-filters/[id] DELETE' });
     return NextResponse.json(
-      { error: error.message || 'Failed to delete saved filter' },
+      { error: errorMessage(error) || 'Failed to delete saved filter' },
       { status: 500 },
     );
   }

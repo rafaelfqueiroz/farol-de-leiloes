@@ -46,6 +46,10 @@ export class ReminderEntity extends Document {
     default: ReminderStatus.PENDING,
   })
   status!: ReminderStatus;
+
+  // Set by Mongoose (timestamps: true), not a @Prop.
+  createdAt!: Date;
+  updatedAt!: Date;
 }
 
 export type ReminderDocument = HydratedDocument<ReminderEntity>;

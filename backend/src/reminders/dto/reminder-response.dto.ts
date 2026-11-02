@@ -1,4 +1,5 @@
-import { ReminderChannel, ReminderStatus, ReminderDocument } from '../schemas/reminder.schema';
+import { ReminderChannel, ReminderStatus } from '../schemas/reminder.schema';
+import { PopulatedReminder } from '../interfaces/reminder.interface';
 
 export class ReminderResponseDto {
   _id: string;
@@ -16,17 +17,17 @@ export class ReminderResponseDto {
     detailsUrl: string | null;
   };
 
-  constructor(reminder: ReminderDocument) {
+  constructor(reminder: PopulatedReminder) {
     this._id = reminder._id.toString();
     this.channel = reminder.channel;
     this.scheduledAt = reminder.scheduledAt;
     this.description = reminder.description ?? null;
     this.status = reminder.status;
-    this.createdAt = (reminder as any).createdAt;
+    this.createdAt = reminder.createdAt;
 
-    const auction = reminder.auction as any;
+    const auction = reminder.auction;
     this.auction = {
-      _id: auction?._id?.toString() ?? '',
+      _id: auction?._id.toString() ?? '',
       code: auction?.code ?? '',
       title: auction?.title ?? null,
       city: auction?.address?.city ?? null,

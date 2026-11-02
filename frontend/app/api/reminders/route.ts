@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -30,10 +32,10 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error fetching reminders:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/reminders GET' });
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch reminders' },
+      { error: errorMessage(error) || 'Failed to fetch reminders' },
       { status: 500 },
     );
   }
@@ -69,10 +71,10 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error creating reminder:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/reminders POST' });
     return NextResponse.json(
-      { error: error.message || 'Failed to create reminder' },
+      { error: errorMessage(error) || 'Failed to create reminder' },
       { status: 500 },
     );
   }

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -22,10 +24,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error requesting password reset:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/auth/reset-password-request POST' });
     return NextResponse.json(
-      { message: error.message || 'Failed to request password reset' },
+      { message: errorMessage(error) || 'Failed to request password reset' },
       { status: 500 },
     );
   }

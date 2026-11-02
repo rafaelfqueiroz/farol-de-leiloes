@@ -25,6 +25,10 @@ export class SavedFilterEntity extends Document {
 
   @Prop({ type: Object, required: true })
   filters!: FilterData;
+
+  // Set by Mongoose (timestamps: true), not a @Prop.
+  createdAt!: Date;
+  updatedAt!: Date;
 }
 
 export type SavedFilterDocument = HydratedDocument<SavedFilterEntity>;

@@ -135,7 +135,7 @@ export default function PlansPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const body: any = { planId };
+      const body: { planId: string; couponCode?: string } = { planId };
       if (couponCode.trim() && couponValid) {
         body.couponCode = couponCode.trim();
       }

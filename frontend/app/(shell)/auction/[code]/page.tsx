@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import AuctionDetailClient, { Auction } from './AuctionDetailClient';
+import { reportClientError } from '@/lib/report-client-error';
 
 // ISR: Revalidate every hour
 export const revalidate = 3600;
@@ -20,7 +21,7 @@ async function fetchAuction(code: string): Promise<Auction | null> {
 
     return response.json();
   } catch (error) {
-    console.error('Error fetching auction:', error);
+    reportClientError(error, { where: 'auction/[code] page' });
     return null;
   }
 }

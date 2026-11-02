@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy, VerifyCallback } from 'passport-google-oauth20';
+import { Profile, Strategy, VerifyCallback } from 'passport-google-oauth20';
 import { UsersService } from '../../users/users.service';
 
 @Injectable()
@@ -18,11 +18,15 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   async validate(
     accessToken: string,
     refreshToken: string,
-    profile: any,
+    profile: Profile,
     done: VerifyCallback,
-  ): Promise<any> {
+  ): Promise<void> {
     const { id, emails, displayName } = profile;
-    const email = emails[0].value;
+    const email = emails?.[0]?.value;
+    // The 'email' scope is requested, so Google always sends one; refuse the sign-in if not.
+    if (!email) {
+      throw new UnauthorizedException('Google account has no email address');
+    }
 
     // Try to find user by Google ID (already linked)
     let user = await this.usersService.findByGoogleId(id);

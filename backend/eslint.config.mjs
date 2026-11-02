@@ -102,6 +102,9 @@ export default defineConfig(
       '@typescript-eslint/no-explicit-any': 'error', // DV-02
       '@typescript-eslint/no-non-null-assertion': 'error', // DV-03
       '@typescript-eslint/no-floating-promises': 'error', // an un-awaited write is silent data loss
+      // `import x = require('pkg')` is the typed import of an `export =` package without
+      // esModuleInterop; a bare require() stays banned.
+      '@typescript-eslint/no-require-imports': ['error', { allowAsImport: true }],
       'no-console': 'error', // DV-11, AR-45: NestJS Logger only
     },
   },

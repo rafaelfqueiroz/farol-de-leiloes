@@ -22,7 +22,7 @@ export function parseCsv(csv: string): ParsedAuctionRow[] {
   csv = stripBom(csv);
 
   // Parse CSV with papaparse using semicolon delimiter
-  const parseResult = Papa.parse(csv, {
+  const parseResult = Papa.parse<string[]>(csv, {
     delimiter: ';',
     skipEmptyLines: true,
     transformHeader: (header: string) => header.trim(),
@@ -30,14 +30,13 @@ export function parseCsv(csv: string): ParsedAuctionRow[] {
 
   if (!parseResult.data || parseResult.data.length === 0) return [];
 
-  const allRows = parseResult.data as string[][];
+  const allRows = parseResult.data;
 
   // Find the true header row; skip title lines like "Lista de Imóveis..."
   let headerIndex = -1;
   let header: string[] | null = null;
 
-  for (let i = 0; i < allRows.length; i++) {
-    const row = allRows[i];
+  for (const [i, row] of allRows.entries()) {
     const labels = row.map((col) => normalizeKey(col));
     const hasUF = labels.includes('uf');
     const hasCidade = labels.includes('cidade');
@@ -55,15 +54,13 @@ export function parseCsv(csv: string): ParsedAuctionRow[] {
 
   // Convert rows to objects using the found header
   const rows: ParsedAuctionRow[] = [];
-  for (let i = headerIndex + 1; i < allRows.length; i++) {
-    const rowData = allRows[i];
-
+  for (const rowData of allRows.slice(headerIndex + 1)) {
     // Skip empty rows
     if (rowData.every((cell) => !cell || cell.trim() === '')) continue;
 
     const row: ParsedAuctionRow = {};
-    for (let j = 0; j < header.length; j++) {
-      row[header[j]] = (rowData[j] ?? '').trim();
+    for (const [j, column] of header.entries()) {
+      row[column] = (rowData[j] ?? '').trim();
     }
     rows.push(row);
   }
@@ -123,7 +120,7 @@ export function normalizeRows(rows: ParsedAuctionRow[]): NormalizedAuctionRow[] 
 
 function pick(row: Record<string, string>, keys: string[]): string {
   const k = findKey(row, keys);
-  return k ? row[k] : '';
+  return k ? (row[k] ?? '') : '';
 }
 
 function findKey(row: Record<string, string>, keys: string[]): string | undefined {

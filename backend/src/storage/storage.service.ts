@@ -8,6 +8,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import r2Config from './r2.config';
+import { errorMessage } from '../common/error-message';
 
 export interface UploadResult {
   key: string;
@@ -107,8 +108,8 @@ export class StorageService {
         url,
         size: buffer.length,
       };
-    } catch (error: any) {
-      this.logger.error(`Failed to upload image from ${sourceUrl}: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Failed to upload image from ${sourceUrl}: ${errorMessage(error)}`);
       return null;
     }
   }
@@ -162,8 +163,8 @@ export class StorageService {
         url,
         size: buffer.length,
       };
-    } catch (error: any) {
-      this.logger.error(`Failed to upload document from ${sourceUrl}: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Failed to upload document from ${sourceUrl}: ${errorMessage(error)}`);
       return null;
     }
   }
@@ -187,8 +188,8 @@ export class StorageService {
 
       const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn });
       return signedUrl;
-    } catch (error: any) {
-      this.logger.error(`Failed to generate signed URL for ${key}: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Failed to generate signed URL for ${key}: ${errorMessage(error)}`);
       return null;
     }
   }
@@ -212,8 +213,8 @@ export class StorageService {
 
       this.logger.debug(`Deleted file from R2: ${key}`);
       return true;
-    } catch (error: any) {
-      this.logger.error(`Failed to delete file ${key}: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Failed to delete file ${key}: ${errorMessage(error)}`);
       return false;
     }
   }
@@ -259,7 +260,11 @@ export class StorageService {
       }),
     );
 
-    const bytes = await response.Body!.transformToByteArray();
+    // An object read always carries a body; fail clearly if one ever does not (DV-03).
+    if (!response.Body) {
+      throw new Error(`R2 object ${key} has no body`);
+    }
+    const bytes = await response.Body.transformToByteArray();
     this.logger.debug(`Downloaded buffer: ${key} (${bytes.length} bytes)`);
 
     return Buffer.from(bytes);

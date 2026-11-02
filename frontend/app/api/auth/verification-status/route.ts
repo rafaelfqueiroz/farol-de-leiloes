@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -25,10 +27,10 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error fetching verification status:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/auth/verification-status GET' });
     return NextResponse.json(
-      { message: error.message || 'Failed to fetch verification status' },
+      { message: errorMessage(error) || 'Failed to fetch verification status' },
       { status: 500 },
     );
   }

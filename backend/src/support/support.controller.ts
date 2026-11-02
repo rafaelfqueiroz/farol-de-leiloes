@@ -2,6 +2,7 @@ import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs
 import { SupportService } from './support.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
 import { CreateSupportRequestDto } from './dto/create-support-request.dto';
 
 @Controller('support')
@@ -11,7 +12,10 @@ export class SupportController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  async submitSupportRequest(@CurrentUser() user: any, @Body() dto: CreateSupportRequestDto) {
+  async submitSupportRequest(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateSupportRequestDto,
+  ) {
     return this.supportService.submitSupportRequest(user.userId, user.email, user.name, dto);
   }
 }

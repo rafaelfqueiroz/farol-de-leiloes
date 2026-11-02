@@ -18,6 +18,11 @@ import { AuctionsService } from '../auctions/auctions.service';
 import { UsersService } from '../users/users.service';
 import { CreateReminderDto } from './dto/create-reminder.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
+import { AuctionRecord } from '../auctions/interfaces/auction.interface';
+import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface';
+
+// The auction fields a reminder is created against.
+type ReminderTarget = Pick<AuctionRecord, 'phases'> & { _id: Types.ObjectId };
 
 @Injectable()
 export class RemindersService {
@@ -32,7 +37,7 @@ export class RemindersService {
     private readonly usersService: UsersService,
   ) {}
 
-  async create(userId: string, dto: CreateReminderDto): Promise<ReminderDocument> {
+  async create(userId: string, dto: CreateReminderDto): Promise<PopulatedReminder> {
     const auction = await this.auctionsService.findDocumentByCode(dto.auctionId);
     if (!auction) {
       const auctionById = await this.findAuctionById(dto.auctionId);
@@ -44,9 +49,9 @@ export class RemindersService {
     return this.createWithAuction(userId, dto, auction);
   }
 
-  private async findAuctionById(auctionId: string): Promise<any> {
+  private async findAuctionById(auctionId: string): Promise<ReminderTarget | null> {
     try {
-      const AuctionModel = this.reminderModel.db.model('AuctionEntity');
+      const AuctionModel = this.reminderModel.db.model<AuctionRecord>('AuctionEntity');
       return await AuctionModel.findById(auctionId).exec();
     } catch {
       return null;
@@ -56,8 +61,8 @@ export class RemindersService {
   private async createWithAuction(
     userId: string,
     dto: CreateReminderDto,
-    auction: any,
-  ): Promise<ReminderDocument> {
+    auction: ReminderTarget,
+  ): Promise<PopulatedReminder> {
     const user = await this.usersService.findByIdFull(userId);
     if (!user) {
       throw new NotFoundException('Usuario nao encontrado');
@@ -87,24 +92,21 @@ export class RemindersService {
     });
 
     const saved = await reminder.save();
-    return this.reminderModel
-      .findById(saved._id)
-      .populate('auction')
-      .exec() as Promise<ReminderDocument>;
+    return this.findPopulatedById(saved._id);
   }
 
-  async findAllByUser(userId: string): Promise<ReminderDocument[]> {
+  async findAllByUser(userId: string): Promise<PopulatedReminder[]> {
     return this.reminderModel
       .find({ userId: new Types.ObjectId(userId) })
-      .populate('auction')
+      .populate<{ auction: ReminderAuction }>('auction')
       .sort({ scheduledAt: 1 })
       .exec();
   }
 
-  async findOne(userId: string, reminderId: string): Promise<ReminderDocument> {
+  async findOne(userId: string, reminderId: string): Promise<PopulatedReminder> {
     const reminder = await this.reminderModel
       .findOne({ _id: reminderId, userId: new Types.ObjectId(userId) })
-      .populate('auction')
+      .populate<{ auction: ReminderAuction }>('auction')
       .exec();
 
     if (!reminder) {
@@ -118,7 +120,7 @@ export class RemindersService {
     userId: string,
     reminderId: string,
     dto: UpdateReminderDto,
-  ): Promise<ReminderDocument> {
+  ): Promise<PopulatedReminder> {
     const reminder = await this.reminderModel.findOne({
       _id: reminderId,
       userId: new Types.ObjectId(userId),
@@ -162,10 +164,19 @@ export class RemindersService {
     }
 
     await reminder.save();
-    return this.reminderModel
-      .findById(reminder._id)
-      .populate('auction')
-      .exec() as Promise<ReminderDocument>;
+    return this.findPopulatedById(reminder._id);
+  }
+
+  // Re-reads a reminder just saved, with its auction. Deleted in between → 404 (DV-03).
+  private async findPopulatedById(id: Types.ObjectId): Promise<PopulatedReminder> {
+    const reminder = await this.reminderModel
+      .findById(id)
+      .populate<{ auction: ReminderAuction }>('auction')
+      .exec();
+    if (!reminder) {
+      throw new NotFoundException('Lembrete nao encontrado');
+    }
+    return reminder;
   }
 
   async delete(userId: string, reminderId: string): Promise<void> {
@@ -185,13 +196,13 @@ export class RemindersService {
     await this.reminderModel.deleteOne({ _id: reminderId });
   }
 
-  async getDueReminders(limit: number = 100): Promise<ReminderDocument[]> {
+  async getDueReminders(limit: number = 100): Promise<PopulatedReminder[]> {
     return this.reminderModel
       .find({
         status: ReminderStatus.PENDING,
         scheduledAt: { $lte: new Date() },
       })
-      .populate('auction')
+      .populate<{ auction: ReminderAuction }>('auction')
       .limit(limit)
       .exec();
   }
@@ -219,7 +230,7 @@ export class RemindersService {
     await log.save();
   }
 
-  private validateChannelPermission(user: any, channel: ReminderChannel): void {
+  private validateChannelPermission(user: { role: string }, channel: ReminderChannel): void {
     const premiumChannels = [ReminderChannel.SMS, ReminderChannel.WHATSAPP];
 
     if (premiumChannels.includes(channel)) {
@@ -232,7 +243,10 @@ export class RemindersService {
     }
   }
 
-  private validateUserContactInfo(user: any, channel: ReminderChannel): void {
+  private validateUserContactInfo(
+    user: { email?: string; emailVerified?: boolean; phone?: string },
+    channel: ReminderChannel,
+  ): void {
     switch (channel) {
       case ReminderChannel.EMAIL:
         if (!user.email || !user.emailVerified) {
@@ -250,15 +264,15 @@ export class RemindersService {
     }
   }
 
-  private getAuctionStartDate(auction: any): Date | null {
+  private getAuctionStartDate(auction: Pick<AuctionRecord, 'phases'>): Date | null {
     const phases = auction.phases ?? [];
     if (phases.length === 0) return null;
 
     const lastPhase = phases[phases.length - 1];
-    const phaseDates = lastPhase?.phaseDates ?? [];
-    if (phaseDates.length === 0) return null;
+    const [firstDate] = lastPhase?.phaseDates ?? [];
+    if (firstDate === undefined) return null;
 
-    return new Date(phaseDates[0]);
+    return new Date(firstDate);
   }
 
   private validateAndNormalizeScheduledAt(scheduledAtStr: string, auctionStartDate: Date): Date {

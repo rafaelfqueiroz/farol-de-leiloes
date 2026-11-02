@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { errorMessage } from '../../common/error-message';
 
 const execAsync = promisify(exec);
 
@@ -19,7 +20,7 @@ export async function downloadCsvAllStates(): Promise<string> {
       { maxBuffer: 20 * 1024 * 1024, encoding: 'utf8' }, // 20MB max
     );
     return stdout;
-  } catch (error: any) {
-    throw new Error(`Failed to download CSV: ${error.message}`);
+  } catch (error) {
+    throw new Error(`Failed to download CSV: ${errorMessage(error)}`);
   }
 }

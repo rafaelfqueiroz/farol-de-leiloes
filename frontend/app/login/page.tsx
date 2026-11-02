@@ -17,6 +17,7 @@ import GoogleIcon from '@mui/icons-material/Google';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import Logo from '@/app/components/patterns/Logo';
+import { errorMessage } from '@/lib/error-message';
 
 const API_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -36,8 +37,8 @@ export default function LoginPage() {
     try {
       await login(email, password);
       router.push('/');
-    } catch (err: any) {
-      setError(err.message || 'Failed to login');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Failed to login');
     } finally {
       setLoading(false);
     }

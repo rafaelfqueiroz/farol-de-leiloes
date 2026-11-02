@@ -17,7 +17,7 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import { useFavorites } from '../contexts/FavoritesContext';
 import AuctionCard from './AuctionCard';
 
-interface Auction {
+export interface Auction {
   code: string;
   title: string;
   address: {

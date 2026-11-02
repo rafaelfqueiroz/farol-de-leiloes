@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { errorMessage } from '../common/error-message';
 
 export interface WhatsAppPayload {
   userName: string;
@@ -45,11 +46,11 @@ export class WhatsAppService {
       // TODO: Implement WhatsApp Business API integration (e.g., Twilio, Meta)
       this.logger.log(`WhatsApp message sent to ${phoneNumber}`);
       return { success: true };
-    } catch (error: any) {
-      this.logger.error(`Failed to send WhatsApp to ${phoneNumber}: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Failed to send WhatsApp to ${phoneNumber}: ${errorMessage(error)}`);
       return {
         success: false,
-        errorMessage: error.message,
+        errorMessage: errorMessage(error),
       };
     }
   }

@@ -11,7 +11,7 @@ export default function PlansSuccessPage() {
   const { refreshUser } = useAuth();
 
   useEffect(() => {
-    refreshUser();
+    void refreshUser();
     const timer = setTimeout(() => {
       router.push('/search');
     }, 5000);

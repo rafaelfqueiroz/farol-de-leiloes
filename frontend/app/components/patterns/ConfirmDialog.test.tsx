@@ -95,8 +95,10 @@ describe('ConfirmDialog', () => {
     const user = userEvent.setup();
     const { onClose } = renderDialog();
 
-    // eslint-disable-next-line testing-library/no-node-access -- the backdrop has no role
-    await user.click(document.querySelector('.MuiBackdrop-root') as Element);
+    // the backdrop has no role, so it can only be found by its MUI class
+    const backdrop = document.querySelector('.MuiBackdrop-root');
+    if (!backdrop) throw new Error('The dialog backdrop is not rendered');
+    await user.click(backdrop);
 
     expect(onClose).not.toHaveBeenCalled();
   });

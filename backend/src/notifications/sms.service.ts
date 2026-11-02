@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { errorMessage } from '../common/error-message';
 
 export interface SmsPayload {
   auctionTitle: string;
@@ -36,11 +37,11 @@ export class SmsService {
       // TODO: Implement actual SMS provider integration (e.g., Twilio)
       this.logger.log(`SMS sent to ${phoneNumber}`);
       return { success: true };
-    } catch (error: any) {
-      this.logger.error(`Failed to send SMS to ${phoneNumber}: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Failed to send SMS to ${phoneNumber}: ${errorMessage(error)}`);
       return {
         success: false,
-        errorMessage: error.message,
+        errorMessage: errorMessage(error),
       };
     }
   }

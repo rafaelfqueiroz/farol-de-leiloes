@@ -37,6 +37,7 @@ import SmsIcon from '@mui/icons-material/Sms';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useReminders, Reminder, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
+import { errorMessage } from '@/lib/error-message';
 
 const CHANNEL_ICONS: Record<ReminderChannel, React.ReactElement> = {
   EMAIL: <EmailIcon fontSize="small" />,
@@ -133,8 +134,8 @@ export default function RemindersPage() {
       } else {
         setError('Erro ao atualizar lembrete. Tente novamente.');
       }
-    } catch (err: any) {
-      setError(err.message || 'Erro ao atualizar lembrete');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao atualizar lembrete');
     } finally {
       setActionLoading(false);
     }
@@ -153,8 +154,8 @@ export default function RemindersPage() {
       } else {
         setError('Erro ao remover lembrete. Tente novamente.');
       }
-    } catch (err: any) {
-      setError(err.message || 'Erro ao remover lembrete');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao remover lembrete');
     } finally {
       setActionLoading(false);
     }

@@ -21,7 +21,11 @@ import { AuthResponseDto, UserProfileResponseDto } from './dto/auth-response.dto
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { Response } from 'express';
+import { AuthenticatedUser } from './interfaces/auth.interface';
+import { Request, Response } from 'express';
+
+// GoogleStrategy.validate hands the signed-in user to passport, which sets it on the request.
+type GoogleCallbackRequest = Request & { user: Parameters<AuthService['googleLogin']>[0] };
 
 @Controller('auth')
 export class AuthController {
@@ -48,7 +52,7 @@ export class AuthController {
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
-  async googleAuthRedirect(@Req() req: any, @Res() res: Response) {
+  async googleAuthRedirect(@Req() req: GoogleCallbackRequest, @Res() res: Response) {
     const result = await this.authService.googleLogin(req.user);
 
     // Redirect to frontend with token
@@ -72,7 +76,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  async getProfile(@CurrentUser() user: any) {
+  async getProfile(@CurrentUser() user: AuthenticatedUser) {
     return user;
   }
 
@@ -87,7 +91,7 @@ export class AuthController {
   @Patch('profile')
   @UseGuards(JwtAuthGuard)
   async updateProfile(
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthenticatedUser,
     @Body() updateData: { name?: string; email?: string },
   ): Promise<UserProfileResponseDto> {
     const profile = await this.authService.updateProfile(user.userId, updateData);
@@ -98,7 +102,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async changePassword(
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthenticatedUser,
     @Body() passwordData: { currentPassword: string; newPassword: string },
   ) {
     await this.authService.changePassword(
@@ -112,7 +116,7 @@ export class AuthController {
   @Post('set-password')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async setPassword(@CurrentUser() user: any, @Body() dto: SetPasswordDto) {
+  async setPassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: SetPasswordDto) {
     await this.authService.setPassword(user.userId, dto.newPassword);
     return { message: 'Password set successfully' };
   }
@@ -127,21 +131,21 @@ export class AuthController {
   @Post('resend-verification')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async resendVerification(@CurrentUser() user: any) {
+  async resendVerification(@CurrentUser() user: AuthenticatedUser) {
     await this.authService.resendVerification(user.userId);
     return { message: 'Verification email sent' };
   }
 
   @Get('verification-status')
   @UseGuards(JwtAuthGuard)
-  async getVerificationStatus(@CurrentUser() user: any) {
+  async getVerificationStatus(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.getVerificationStatus(user.userId);
   }
 
   @Patch('profile/complete')
   @UseGuards(JwtAuthGuard)
   async completeProfile(
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CompleteProfileDto,
   ): Promise<UserProfileResponseDto> {
     const profile = await this.authService.completeProfile(user.userId, dto);
@@ -150,7 +154,7 @@ export class AuthController {
 
   @Get('profile/full')
   @UseGuards(JwtAuthGuard)
-  async getFullProfile(@CurrentUser() user: any): Promise<UserProfileResponseDto> {
+  async getFullProfile(@CurrentUser() user: AuthenticatedUser): Promise<UserProfileResponseDto> {
     const profile = await this.authService.getFullProfile(user.userId);
     return new UserProfileResponseDto(profile);
   }

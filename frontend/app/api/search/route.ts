@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
+
+const FORWARDED_PARAMS = [
+  'state',
+  'city',
+  'neighborhood',
+  'modality',
+  'minMargin',
+  'maxMargin',
+  'limit',
+  'offset',
+] as const;
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,15 +22,10 @@ export async function GET(request: NextRequest) {
     // Build query parameters
     const params = new URLSearchParams();
 
-    if (searchParams.get('state')) params.set('state', searchParams.get('state')!);
-    if (searchParams.get('city')) params.set('city', searchParams.get('city')!);
-    if (searchParams.get('neighborhood'))
-      params.set('neighborhood', searchParams.get('neighborhood')!);
-    if (searchParams.get('modality')) params.set('modality', searchParams.get('modality')!);
-    if (searchParams.get('minMargin')) params.set('minMargin', searchParams.get('minMargin')!);
-    if (searchParams.get('maxMargin')) params.set('maxMargin', searchParams.get('maxMargin')!);
-    if (searchParams.get('limit')) params.set('limit', searchParams.get('limit')!);
-    if (searchParams.get('offset')) params.set('offset', searchParams.get('offset')!);
+    for (const name of FORWARDED_PARAMS) {
+      const value = searchParams.get(name);
+      if (value) params.set(name, value);
+    }
 
     const url = `${BACKEND_URL}/api/auctions?${params.toString()}`;
 
@@ -35,10 +43,10 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
 
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error fetching auctions:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/search GET' });
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch auctions' },
+      { error: errorMessage(error) || 'Failed to fetch auctions' },
       { status: 500 },
     );
   }

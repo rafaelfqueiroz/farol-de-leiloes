@@ -1,7 +1,8 @@
 import * as cheerio from 'cheerio';
 import puppeteer from 'puppeteer-extra';
-
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+// The package is `export =` and the build has no esModuleInterop, so import-equals is its typed
+// form. Stealth itself is removed by SPEC-004 (#4); only the import style changed here.
+import StealthPlugin = require('puppeteer-extra-plugin-stealth');
 import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema';
 
 puppeteer.use(StealthPlugin());
@@ -55,11 +56,11 @@ export function scrapeAuctionDetails(html: string): ScrapedDetails {
 
     // Extract description
     // Format: <p style="margin-bottom: 0.5em;"><strong>Descrição:</strong><br>...</p>
-    const descriptionMatch = relatedBoxHtml.match(
+    const description = relatedBoxHtml.match(
       /<strong>Descrição:<\/strong><br\s*\/?>([\s\S]*?)<\/p>/i,
-    );
-    if (descriptionMatch) {
-      details.description = descriptionMatch[1]
+    )?.[1];
+    if (description !== undefined) {
+      details.description = description
         .replace(/&nbsp;/g, ' ')
         .replace(/<[^>]*>/g, '')
         .trim();
@@ -70,15 +71,15 @@ export function scrapeAuctionDetails(html: string): ScrapedDetails {
   }
 
   // Extract matrícula URL: ExibeDoc('/editais/matricula/{STATE}/{CODE}.pdf')
-  const matriculaMatch = html.match(/ExibeDoc\(['"](\/editais\/matricula\/[^'"]+)['"]\)/i);
-  if (matriculaMatch) {
-    details.matriculaUrl = `https://venda-imoveis.caixa.gov.br${matriculaMatch[1]}`;
+  const matriculaPath = html.match(/ExibeDoc\(['"](\/editais\/matricula\/[^'"]+)['"]\)/i)?.[1];
+  if (matriculaPath) {
+    details.matriculaUrl = `https://venda-imoveis.caixa.gov.br${matriculaPath}`;
   }
 
   // Extract edital URL: ExibeDoc('/editais/{CODE}.PDF')
-  const editalMatch = html.match(/ExibeDoc\(['"](\/editais\/[A-Z0-9]+\.PDF)['"]\)/i);
-  if (editalMatch) {
-    details.editalUrl = `https://venda-imoveis.caixa.gov.br${editalMatch[1]}`;
+  const editalPath = html.match(/ExibeDoc\(['"](\/editais\/[A-Z0-9]+\.PDF)['"]\)/i)?.[1];
+  if (editalPath) {
+    details.editalUrl = `https://venda-imoveis.caixa.gov.br${editalPath}`;
   }
 
   return details;
@@ -92,18 +93,17 @@ function extractPaymentMethods(html: string): PaymentMethod[] {
   const paymentMethods: PaymentMethod[] = [];
 
   // Find the section starting with "FORMAS DE PAGAMENTO ACEITAS:"
-  const paymentSectionMatch = html.match(
+  const paymentSection = html.match(
     /FORMAS DE PAGAMENTO ACEITAS:<br\s*\/?>([\s\S]*?)(?:REGRAS PARA PAGAMENTO|<\/p>)/i,
-  );
-  if (!paymentSectionMatch) return paymentMethods;
-
-  const paymentSection = paymentSectionMatch[1];
+  )?.[1];
+  if (paymentSection === undefined) return paymentMethods;
 
   // Extract each payment method from <i> tags followed by text
   // Format: <i class="fa fa-info-circle"></i>&nbsp;Recursos próprios.<br>
   const methodMatches = paymentSection.matchAll(/<i[^>]*><\/i>&nbsp;([^<]+)/gi);
-  for (const match of methodMatches) {
-    const methodText = match[1].toLowerCase().trim();
+  for (const [, rawMethodText] of methodMatches) {
+    if (rawMethodText === undefined) continue;
+    const methodText = rawMethodText.toLowerCase().trim();
 
     if (methodText.includes('recursos próprios') || methodText.includes('recursos proprios')) {
       paymentMethods.push(PaymentMethod.OWN_RESOURCES);
@@ -125,18 +125,17 @@ function extractExpenseRules(html: string): ExpenseRule[] {
   const expenseRules: ExpenseRule[] = [];
 
   // Find the section starting with "REGRAS PARA PAGAMENTO DAS DESPESAS"
-  const expenseSectionMatch = html.match(
+  const expenseSection = html.match(
     /REGRAS PARA PAGAMENTO DAS DESPESAS[^:]*:<br\s*\/?>([\s\S]*?)(?:<span|<\/p>|$)/i,
-  );
-  if (!expenseSectionMatch) return expenseRules;
-
-  const expenseSection = expenseSectionMatch[1];
+  )?.[1];
+  if (expenseSection === undefined) return expenseRules;
 
   // Extract each expense rule from <i> tags followed by text
   // Format: <i class="fa fa-info-circle"></i>&nbsp;Condomínio: Sob responsabilidade do comprador...<br>
   const ruleMatches = expenseSection.matchAll(/<i[^>]*><\/i>&nbsp;([^<]+)/gi);
-  for (const match of ruleMatches) {
-    const ruleText = match[1].trim();
+  for (const [, rawRuleText] of ruleMatches) {
+    if (rawRuleText === undefined) continue;
+    const ruleText = rawRuleText.trim();
 
     // Parse rule type and description
     // Format: "Condomínio: Sob responsabilidade do comprador..."
@@ -164,6 +163,8 @@ function parseBrazilianDate(dateStr: string): Date | null {
   if (!match) return null;
 
   const [, day, month, year, hours, minutes] = match;
+  // Every group is mandatory, so this only narrows the types (DV-03).
+  if (!day || !month || !year || !hours || !minutes) return null;
   // Create date in Brazil timezone (UTC-3)
   const date = new Date(
     parseInt(year),
@@ -187,19 +188,19 @@ function extractPhaseDates(html: string): Date[] {
   const phaseDates: Date[] = [];
 
   // Try SFI Auction pattern - "Data do 1º Leilão" and "Data do 2º Leilão"
-  const firstAuctionMatch = html.match(
+  const firstAuctionDate = html.match(
     /Data do 1º Leilão\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i,
-  );
-  const secondAuctionMatch = html.match(
+  )?.[1];
+  const secondAuctionDate = html.match(
     /Data do 2º Leilão\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i,
-  );
+  )?.[1];
 
-  if (firstAuctionMatch) {
-    const date = parseBrazilianDate(firstAuctionMatch[1]);
+  if (firstAuctionDate) {
+    const date = parseBrazilianDate(firstAuctionDate);
     if (date) phaseDates.push(date);
   }
-  if (secondAuctionMatch) {
-    const date = parseBrazilianDate(secondAuctionMatch[1]);
+  if (secondAuctionDate) {
+    const date = parseBrazilianDate(secondAuctionDate);
     if (date) phaseDates.push(date);
   }
 
@@ -208,11 +209,11 @@ function extractPhaseDates(html: string): Date[] {
   }
 
   // Try Open Bidding pattern - "Data da Licitação Aberta"
-  const openBiddingMatch = html.match(
+  const openBiddingDate = html.match(
     /Data da Licitação Aberta\s*-\s*(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}h\d{2})/i,
-  );
-  if (openBiddingMatch) {
-    const date = parseBrazilianDate(openBiddingMatch[1]);
+  )?.[1];
+  if (openBiddingDate) {
+    const date = parseBrazilianDate(openBiddingDate);
     if (date) phaseDates.push(date);
     return phaseDates;
   }
@@ -221,12 +222,12 @@ function extractPhaseDates(html: string): Date[] {
   // Format: strLista: "1@@" + "DD/MM/YYYY HH:MM:SS" + "@@" + "0,00" + "||"
   // Direct Online Sales has an empty date string, so no date is extracted
   const strListaMatch = html.match(
-    /strLista:\s*"1@@"\s*\+\s*"(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})"/,
+    /strLista:\s*"1@@"\s*\+\s*"(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})"/,
   );
   if (strListaMatch) {
-    const [, day, month, year, hours, minutes, seconds] = strListaMatch[1].match(
-      /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/,
-    )!;
+    const [, day, month, year, hours, minutes, seconds] = strListaMatch;
+    // Every group is mandatory, so this only narrows the types (DV-03).
+    if (!day || !month || !year || !hours || !minutes || !seconds) return phaseDates;
     const date = new Date(
       parseInt(year),
       parseInt(month) - 1,

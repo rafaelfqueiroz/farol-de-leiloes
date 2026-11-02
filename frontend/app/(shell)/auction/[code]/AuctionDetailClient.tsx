@@ -335,9 +335,9 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                       <Typography variant="subtitle2" color="text.secondary">
                         {lastPhase.phaseDates.length > 1 ? 'Datas do Leilão' : 'Data do Leilão'}
                       </Typography>
-                      {lastPhase.phaseDates.map((date, idx) => (
+                      {lastPhase.phaseDates.map((date, idx, dates) => (
                         <Typography key={idx} variant="body1" fontWeight={600}>
-                          {lastPhase.phaseDates!.length > 1 ? `${idx + 1}º Leilão: ` : ''}
+                          {dates.length > 1 ? `${idx + 1}º Leilão: ` : ''}
                           {formatDate(date)}
                         </Typography>
                       ))}

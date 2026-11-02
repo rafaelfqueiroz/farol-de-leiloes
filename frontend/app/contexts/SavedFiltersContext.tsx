@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { reportClientError } from '@/lib/report-client-error';
 
 export interface FilterData {
   state?: string;
@@ -36,7 +37,7 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    loadSavedFilters();
+    void loadSavedFilters();
   }, []);
 
   const getAuthHeaders = (): Record<string, string> => {
@@ -71,7 +72,7 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error('Error loading saved filters:', error);
+      reportClientError(error, { where: 'SavedFiltersContext.load' });
     } finally {
       setLoading(false);
     }
@@ -98,11 +99,13 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
         return newFilter;
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Error saving filter:', response.status, errorData);
+        reportClientError(new Error(`Saving a filter failed with HTTP ${response.status}`), {
+          where: 'SavedFiltersContext.saveFilter',
+        });
         throw new Error(errorData.error || 'Failed to save filter');
       }
     } catch (error) {
-      console.error('Error saving filter:', error);
+      reportClientError(error, { where: 'SavedFiltersContext.saveFilter' });
       throw error;
     }
   };
@@ -122,12 +125,13 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
         setSavedFilters((prev) => prev.filter((f) => f._id !== id));
         return true;
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error deleting filter:', response.status, errorData);
+        reportClientError(new Error(`Deleting a filter failed with HTTP ${response.status}`), {
+          where: 'SavedFiltersContext.deleteFilter',
+        });
         return false;
       }
     } catch (error) {
-      console.error('Error deleting filter:', error);
+      reportClientError(error, { where: 'SavedFiltersContext.deleteFilter' });
       return false;
     }
   };

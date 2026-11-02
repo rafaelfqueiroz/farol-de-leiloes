@@ -13,6 +13,7 @@ import {
   CircularProgress,
   Link,
 } from '@mui/material';
+import { errorMessage } from '@/lib/error-message';
 
 export default function ResetPasswordRequestPage() {
   const router = useRouter();
@@ -43,8 +44,8 @@ export default function ResetPasswordRequestPage() {
 
       setSuccess(true);
       setEmail('');
-    } catch (err: any) {
-      setError(err.message || 'Erro ao solicitar redefinição de senha');
+    } catch (err: unknown) {
+      setError(errorMessage(err) || 'Erro ao solicitar redefinição de senha');
     } finally {
       setLoading(false);
     }

@@ -8,6 +8,7 @@ import { JobExecutionService } from '../../common/services/job-execution.service
 import { RunMode } from '../../common/schemas/job-execution.schema';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
 import { StorageService } from '../../storage/storage.service';
+import { errorMessage } from '../../common/error-message';
 
 @Injectable()
 export class AuctionDetailsScraper implements OnModuleInit {
@@ -88,8 +89,8 @@ export class AuctionDetailsScraper implements OnModuleInit {
       // Record execution in database
       await this.jobExecutionService.recordExecution(this.jobName, runMode);
       this.logger.log('Execution recorded in database');
-    } catch (e: any) {
-      this.logger.error(`Failed scraping: ${e?.message || e}`);
+    } catch (e) {
+      this.logger.error(`Failed scraping: ${errorMessage(e)}`);
       throw e;
     }
   }
@@ -133,15 +134,13 @@ export class AuctionDetailsScraper implements OnModuleInit {
             group.map((auction) => this.processAuction(auction)),
           );
 
-          for (let k = 0; k < results.length; k++) {
-            const result = results[k];
+          for (const [k, result] of results.entries()) {
             if (result.status === 'fulfilled') {
               scrapedCount += result.value ? 1 : 0;
             } else {
               errorCount++;
-              const failedAuction = group[k];
               this.logger.error(
-                `Error scraping auction ${failedAuction.code}: ${result.reason?.message || result.reason}`,
+                `Error scraping auction ${group[k]?.code}: ${errorMessage(result.reason)}`,
               );
             }
           }
@@ -151,8 +150,8 @@ export class AuctionDetailsScraper implements OnModuleInit {
       }
 
       this.logger.log(`Scraping completed: ${scrapedCount} images scraped, ${errorCount} errors`);
-    } catch (error: any) {
-      this.logger.error(`Failed to scrape auction details: ${error?.message || error}`);
+    } catch (error) {
+      this.logger.error(`Failed to scrape auction details: ${errorMessage(error)}`);
       throw error;
     }
   }
@@ -227,18 +226,19 @@ export class AuctionDetailsScraper implements OnModuleInit {
       }
     }
 
-    if (details.phaseDetails && auction.phases && auction.phases.length > 0) {
-      const lastPhaseIndex = auction.phases.length - 1;
-      const lastPhase = auction.phases[lastPhaseIndex];
+    const phases = auction.phases ?? [];
+    const lastPhaseIndex = phases.length - 1;
+    const lastPhase = phases[lastPhaseIndex];
+    if (details.phaseDetails && lastPhase) {
       const hasPhaseDetails =
         (lastPhase.paymentMethods?.length ?? 0) > 0 ||
         (lastPhase.expenseRules?.length ?? 0) > 0 ||
         (lastPhase.phaseDates?.length ?? 0) > 0;
 
       if (!hasPhaseDetails) {
-        const updatedPhases: Phase[] = [...auction.phases];
+        const updatedPhases: Phase[] = [...phases];
         const updatedLastPhase: Phase = {
-          ...updatedPhases[lastPhaseIndex],
+          ...lastPhase,
           paymentMethods: details.phaseDetails.paymentMethods,
           expenseRules: details.phaseDetails.expenseRules,
           phaseDates: details.phaseDetails.phaseDates,

@@ -3,8 +3,9 @@
 import { createContext, useCallback, useContext, useRef, useState, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
+import { reportClientError } from '@/lib/report-client-error';
 
-interface Auction {
+export interface Auction {
   code: string;
   title: string;
   address: {
@@ -74,7 +75,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         setFavorites([]);
       }
     } catch (error) {
-      if (isLatest()) console.error('Error loading favorites:', error);
+      if (isLatest()) reportClientError(error, { where: 'FavoritesContext.load' });
     } finally {
       if (isLatest()) setLoading(false);
     }
@@ -98,7 +99,6 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const toggleFavorite = async (auction: Auction) => {
     // Check if user is authenticated
     const token = localStorage.getItem('token');
-    console.log('[FavoritesContext] toggleFavorite - Token exists:', !!token);
     if (!token) {
       // Redirect to login if not authenticated
       router.push('/login');
@@ -113,7 +113,6 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       // Remove from favorites
       try {
         const headers = getAuthHeaders();
-        console.log('[FavoritesContext] DELETE - Headers:', headers);
         const response = await fetch(`/api/favorites/${auction.code}`, {
           method: 'DELETE',
           headers,
@@ -127,7 +126,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
           router.push('/login');
         }
       } catch (error) {
-        console.error('Error removing favorite:', error);
+        reportClientError(error, { where: 'FavoritesContext.toggleFavorite' });
       }
     } else {
       // Add to favorites
@@ -137,8 +136,6 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
           'Content-Type': 'application/json',
           ...authHeaders,
         };
-        console.log('[FavoritesContext] POST - Headers:', headers);
-        console.log('[FavoritesContext] POST - Auction:', auction);
 
         const response = await fetch('/api/favorites', {
           method: 'POST',
@@ -146,7 +143,6 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify(auction),
         });
 
-        console.log('[FavoritesContext] POST - Response status:', response.status);
         if (!sameAccount()) return; // #42: started by an account that has since signed out
 
         if (response.ok) {
@@ -158,12 +154,12 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('token');
           router.push('/login');
         } else {
-          // Log error details for debugging
-          const errorData = await response.json().catch(() => ({}));
-          console.error('Error adding favorite:', response.status, errorData);
+          reportClientError(new Error(`Adding a favorite failed with HTTP ${response.status}`), {
+            where: 'FavoritesContext.toggleFavorite',
+          });
         }
       } catch (error) {
-        console.error('Error adding favorite:', error);
+        reportClientError(error, { where: 'FavoritesContext.toggleFavorite' });
       }
     }
   };
@@ -181,7 +177,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         setFavorites((prev) => prev.filter((fav) => fav.code !== code));
       }
     } catch (error) {
-      console.error('Error removing favorite:', error);
+      reportClientError(error, { where: 'FavoritesContext.removeFavorite' });
     }
   };
 

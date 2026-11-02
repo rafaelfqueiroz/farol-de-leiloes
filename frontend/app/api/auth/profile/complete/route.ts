@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -24,10 +26,10 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(data, { status: response.status });
     }
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error completing profile:', error);
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/auth/profile/complete PATCH' });
     return NextResponse.json(
-      { message: error.message || 'Failed to complete profile' },
+      { message: errorMessage(error) || 'Failed to complete profile' },
       { status: 500 },
     );
   }

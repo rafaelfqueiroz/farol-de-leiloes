@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorMessage } from '@/lib/error-message';
+import { reportClientError } from '@/lib/report-client-error';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
 
@@ -24,8 +26,11 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Error fetching user:', error);
-    return NextResponse.json({ message: error.message || 'Failed to fetch user' }, { status: 500 });
+  } catch (error: unknown) {
+    reportClientError(error, { where: 'api/auth/me GET' });
+    return NextResponse.json(
+      { message: errorMessage(error) || 'Failed to fetch user' },
+      { status: 500 },
+    );
   }
 }

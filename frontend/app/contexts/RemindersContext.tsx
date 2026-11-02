@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useRef, ReactNode, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
+import { reportClientError } from '@/lib/report-client-error';
 
 export type ReminderChannel = 'EMAIL' | 'SMS' | 'WHATSAPP';
 export type ReminderStatus = 'PENDING' | 'SENT';
@@ -91,7 +92,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         setReminders([]);
       }
     } catch (error) {
-      if (isLatest()) console.error('Error loading reminders:', error);
+      if (isLatest()) reportClientError(error, { where: 'RemindersContext.load' });
     } finally {
       if (isLatest()) setLoading(false);
     }
@@ -147,11 +148,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('token');
         router.push('/login');
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error creating reminder:', response.status, errorData);
+        reportClientError(new Error(`Creating a reminder failed with HTTP ${response.status}`), {
+          where: 'RemindersContext.createReminder',
+        });
       }
     } catch (error) {
-      console.error('Error creating reminder:', error);
+      reportClientError(error, { where: 'RemindersContext.createReminder' });
     }
 
     return null;
@@ -188,11 +190,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('token');
         router.push('/login');
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error updating reminder:', response.status, errorData);
+        reportClientError(new Error(`Updating a reminder failed with HTTP ${response.status}`), {
+          where: 'RemindersContext.updateReminder',
+        });
       }
     } catch (error) {
-      console.error('Error updating reminder:', error);
+      reportClientError(error, { where: 'RemindersContext.updateReminder' });
     }
 
     return false;
@@ -224,7 +227,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         router.push('/login');
       }
     } catch (error) {
-      console.error('Error deleting reminder:', error);
+      reportClientError(error, { where: 'RemindersContext.deleteReminder' });
     }
 
     return false;

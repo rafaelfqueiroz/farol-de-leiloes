@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { AuctionEntity, AuctionDocument } from '../schemas/auction.schema';
 import { StorageService } from '../../storage/storage.service';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
+import { errorMessage } from '../../common/error-message';
 
 const CLEANUP_THRESHOLD_DAYS = 14;
 
@@ -73,8 +74,7 @@ export class AuctionCleanupService implements OnModuleInit {
             group.map((auction) => this.processAuction(auction)),
           );
 
-          for (let k = 0; k < results.length; k++) {
-            const result = results[k];
+          for (const [k, result] of results.entries()) {
             if (result.status === 'fulfilled') {
               filesDeleted += result.value.filesDeleted;
               if (result.value.removed) {
@@ -85,7 +85,7 @@ export class AuctionCleanupService implements OnModuleInit {
             } else {
               errorCount++;
               this.logger.error(
-                `Error cleaning auction ${group[k].code}: ${result.reason?.message || result.reason}`,
+                `Error cleaning auction ${group[k]?.code}: ${errorMessage(result.reason)}`,
               );
             }
           }
@@ -97,8 +97,8 @@ export class AuctionCleanupService implements OnModuleInit {
       this.logger.log(
         `Cleanup completed: ${deletedCount} auctions removed, ${filesDeleted} files deleted, ${retainedCount} retained for retry, ${errorCount} errors`,
       );
-    } catch (error: any) {
-      this.logger.error(`Cleanup failed: ${error?.message || error}`);
+    } catch (error) {
+      this.logger.error(`Cleanup failed: ${errorMessage(error)}`);
     }
   }
 

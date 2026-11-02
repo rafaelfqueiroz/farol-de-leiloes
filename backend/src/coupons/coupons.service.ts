@@ -16,7 +16,8 @@ export class CouponsService {
     @InjectModel(CouponEntity.name) private readonly couponModel: Model<CouponDocument>,
     private configService: ConfigService,
   ) {
-    this.stripe = new Stripe(this.configService.get<string>('STRIPE_SECRET_KEY')!);
+    // Stripe refuses to construct without a key, so a missing one already failed the boot.
+    this.stripe = new Stripe(this.configService.getOrThrow<string>('STRIPE_SECRET_KEY'));
   }
 
   async create(dto: CreateCouponDto): Promise<Coupon> {
@@ -98,7 +99,7 @@ export class CouponsService {
       stripeCouponId: doc.stripeCouponId ?? null,
       stripePromotionCodeId: doc.stripePromotionCodeId ?? null,
       description: doc.description ?? null,
-      createdAt: (doc as any).createdAt,
+      createdAt: doc.createdAt,
     };
   }
 }
