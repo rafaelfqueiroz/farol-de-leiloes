@@ -9,6 +9,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import r2Config from './r2.config';
 import { errorMessage } from '../common/error-message';
+import { CAIXA_USER_AGENT } from '../common/caixa-user-agent';
 
 export interface UploadResult {
   key: string;
@@ -73,9 +74,8 @@ export class StorageService {
 
     try {
       const response = await fetch(sourceUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
+        // SC-24: honest user agent, never a browser's
+        headers: { 'User-Agent': CAIXA_USER_AGENT },
       });
 
       if (!response.ok) {
@@ -130,9 +130,8 @@ export class StorageService {
 
     try {
       const response = await fetch(sourceUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
+        // SC-24: honest user agent, never a browser's
+        headers: { 'User-Agent': CAIXA_USER_AGENT },
       });
 
       if (!response.ok) {
