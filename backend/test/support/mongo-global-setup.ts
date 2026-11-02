@@ -12,6 +12,9 @@ function dockerRequired(cause: unknown): Error {
     '',
     'Docker is required (DV-17): test:integration and test:isolation start MongoDB (mongo:7)',
     'with Testcontainers. Start Docker (Docker Desktop, Colima, OrbStack...) and run again.',
+    'Rancher Desktop without admin access: DOCKER_HOST=unix://$HOME/.rd/docker.sock and',
+    'TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock (or docker.host in',
+    '~/.testcontainers.properties).',
     `Testcontainers said: ${reason}`,
     '',
   ].join('\n');
