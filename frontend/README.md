@@ -62,6 +62,8 @@ npm run build
 npm start
 ```
 
+The build uses `output: 'standalone'` (`next.config.ts`), which the deploy image runs: `Dockerfile` copies `.next/standalone` and serves `node server.js` on port 3001 as a non-root user. `NEXT_PUBLIC_*` values are build arguments there, passed by `deploy.yml` from repository variables (DEVELOPMENT §12). Vercel ignores the setting.
+
 ## Scripts
 
 | Script                 | What it does                                                                                               |

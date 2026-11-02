@@ -15,6 +15,7 @@
     "test": "vitest run --project unit --project structural",
     "test:integration": "vitest run --project integration",
     "test:isolation": "vitest run --project isolation --passWithNoTests",
+    "test:structural": "vitest run --project structural",
     "test:cov": "vitest run --project unit --project structural --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

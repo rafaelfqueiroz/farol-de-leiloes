@@ -1,0 +1,9 @@
+# SC-16: no secrets in the build context, so none can reach an image layer.
+.env*
+node_modules
+.next
+coverage
+*.tsbuildinfo
+.DS_Store
+Dockerfile
+.dockerignore

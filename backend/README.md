@@ -18,7 +18,7 @@ Setup
 1. Copy `.env.example` to `.env` and set `MONGODB_URI` if needed.
 2. Install deps: `npm install`, and once at the repository root run `npm install` too to install the git hooks (husky + lint-staged)
 3. Dev run: `npm run start:dev`
-4. Build: `npm run build`, then `npm start`
+4. Build: `npm run build`, then `npm start`. The deploy image is `Dockerfile` (Debian Chromium for the scraper, non-root), built and pushed to GHCR by `deploy.yml` (DEVELOPMENT §12)
 5. Before pushing: `npm run check` (typecheck + lint + format check + tests); the pre-push hook runs it when `backend/` changes (DV-37)
 
 Tests (TESTING §2, §7)
@@ -27,6 +27,7 @@ Tests (TESTING §2, §7)
 - `npm run test:cov` — the same with the V8 coverage gate (`backend/vitest.config.mts`); lcov report in `coverage/`
 - `npm run test:integration` — `test/integration/` against MongoDB from Testcontainers; needs Docker
 - `npm run test:isolation` — `test/isolation/`, the owner-isolation gate; needs Docker (empty until #2)
+- `npm run test:structural` — `test/structural/` alone: checks on the repository itself (Node pins, workflows, Dockerfiles, pre-push selection); the CI `structural` job
 - Helpers: `test/support/` (database harness, fixture paths), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`
 
 API
