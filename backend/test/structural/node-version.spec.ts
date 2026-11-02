@@ -1,5 +1,6 @@
-// DV-05: Node 24 LTS, one exact version, pinned everywhere. A future CI workflow reads
-// `node-version-file: .node-version`, so the root file is the source of truth guarded here.
+// DV-05: Node 24 LTS, one exact version, pinned everywhere. CI reads
+// `node-version-file: .node-version` (workflows.spec.ts checks every setup-node step), so the
+// root file is the source of truth guarded here.
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'fs';
 import { join, relative } from 'path';
