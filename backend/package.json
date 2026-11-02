@@ -13,6 +13,8 @@
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "start:debug": "node --inspect=0.0.0.0:9229 dist/main.js",
     "test": "jest --selectProjects unit structural",
+    "test:integration": "jest --selectProjects integration",
+    "test:isolation": "jest --selectProjects isolation --passWithNoTests",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix --pass-on-unpruned-suppressions",
@@ -53,6 +55,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@nestjs/testing": "^10.4.20",
+    "@testcontainers/mongodb": "^12.2.1",
     "@types/bcrypt": "^6.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^24.19.2",
