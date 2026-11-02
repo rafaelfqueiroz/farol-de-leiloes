@@ -30,6 +30,21 @@ describe('SC-21 / DV-05: the repository workflows', () => {
   });
 });
 
+describe('ci.yml publishes nothing', () => {
+  // The PR image build proves the Dockerfiles only; publishing is deploy.yml's job (DEVELOPMENT §12).
+  const ci = readFileSync(join(workflowsDir, 'ci.yml'), 'utf8').replace(/^\s*#.*$/gm, '');
+
+  it('never logs in to a registry or sets push: true', () => {
+    expect(ci).not.toMatch(/docker\/login-action/);
+    expect(ci).not.toMatch(/push:\s*true/);
+  });
+
+  it('builds both images with push: false', () => {
+    expect(ci).toMatch(/docker\/build-push-action@/);
+    expect(ci).toMatch(/push:\s*false/);
+  });
+});
+
 describe('action pinning', () => {
   it('reads each uses: with its comment', () => {
     const content = [

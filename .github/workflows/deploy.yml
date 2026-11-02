@@ -1,6 +1,7 @@
-# DEVELOPMENT §12. There is no deploy target yet (BL-001, #40): this workflow proves the images
-# build on every push to `main` and publishes them to GHCR tagged with the full commit SHA
-# (DV-33). `preflight` is gated on the DEPLOY_ENABLED repository variable (DV-36).
+# DEVELOPMENT §12. There is no deploy target yet (BL-001, #40): this workflow publishes the
+# images to GHCR on every push to `main`, tagged with the full commit SHA (DV-33); ci.yml builds
+# the same images on every PR without pushing. `preflight` is gated on the DEPLOY_ENABLED
+# repository variable (DV-36).
 #
 # Not here yet, and added with BL-001: the gated migration step before the new code starts
 # (DV-34), the rollout, the `GET /api/health` check (AR-48) and rollback by redeploying a
@@ -30,7 +31,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [backend, frontend]
+        include:
+          - package: backend
+            build-args: ''
+          - package: frontend
+            # Public values only (SC-16): NEXT_PUBLIC_* is inlined into the browser bundle.
+            build-args: |
+              NEXT_PUBLIC_AUCTIONS_API_URL=${{ vars.NEXT_PUBLIC_AUCTIONS_API_URL }}
+              NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,11 +58,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          # Public values only (SC-16): NEXT_PUBLIC_* is inlined into the browser bundle. The
-          # backend Dockerfile declares no build args, so these only reach the frontend.
-          build-args: |
-            NEXT_PUBLIC_AUCTIONS_API_URL=${{ vars.NEXT_PUBLIC_AUCTIONS_API_URL }}
-            NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
+          build-args: ${{ matrix.build-args }}
 
   # DV-36: DEPLOY_ENABLED unset → this job is skipped and the run stays green. Set → every deploy
   # secret must be present, or the job fails loudly. Deploy secrets live in the `deploy-production`
