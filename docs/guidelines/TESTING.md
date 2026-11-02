@@ -23,13 +23,24 @@ Effort goes where a bug does real damage. In this product that is three places:
 
 | Type | Runs against | Tool | Location | Speed |
 |---|---|---|---|---|
-| **Domain unit** | Nothing — pure functions in `domain/` | Jest | next to source, `*.spec.ts` | ms |
-| **Service unit** | Fakes of ports and repositories | Jest | next to source, `*.spec.ts` | ms |
-| **Integration** | Real MongoDB (Testcontainers `mongo:7`), Nest testing module, `supertest` | Jest | `backend/test/integration/` | seconds |
-| **Isolation** | Real MongoDB, two or more owners, through the HTTP API | Jest | `backend/test/isolation/` | seconds |
+| **Domain unit** | Nothing — pure functions in `domain/` | Jest (project `unit`) | next to source, `*.spec.ts` | ms |
+| **Service unit** | Fakes of ports and repositories | Jest (project `unit`) | next to source, `*.spec.ts` | ms |
+| **Integration** | Real MongoDB (Testcontainers `mongo:7`), Nest testing module, `supertest` | Jest (project `integration`) | `backend/test/integration/` | seconds |
+| **Isolation** | Real MongoDB, two or more owners, through the HTTP API | Jest (project `isolation`) | `backend/test/isolation/` | seconds |
 | **Component** | jsdom, real theme, real pt-BR catalogue | Vitest + Testing Library + `vitest-axe` | next to source, `*.test.tsx` | ms |
 | **E2E** | Full stack in Compose, providers stubbed | Playwright + `@axe-core/playwright` | `frontend/e2e/` | minutes |
-| **Structural** | The repository itself (configs, tokens, versions) | Jest / Vitest | `backend/test/structural/`, `frontend/test/structural/` | ms |
+| **Structural** | The repository itself (configs, tokens, versions) | Jest (project `structural`) / Vitest | `backend/test/structural/`, `frontend/test/structural/` | ms |
+
+`backend/jest.config.ts` declares one Jest project per backend row above, and each script selects its projects (DEVELOPMENT §6). Shared test code lives beside the suites, never in `src/`:
+
+| Folder | Holds |
+|---|---|
+| `backend/test/support/` | Harness code: `fixtures.ts` (paths of the captured Caixa fixtures), the MongoDB global setup and teardown, `test-database.ts` (`useTestDatabase()`) |
+| `backend/test/fakes/` | Hand-written fakes of ports (TS-03), e.g. `FakeClock` (TS-06) |
+| `backend/test/builders/` | Test-data builders (TS-29), e.g. `aJobExecution()` |
+| `backend/test/fixtures/caixa/` | Captured Caixa pages and lists (TS-28) |
+
+**The test database.** `test:integration` and `test:isolation` start **one** `mongo:7` container per run in Jest's global setup (Testcontainers maps a random port, DV-17) and expose it as `TEST_MONGODB_URI` — deliberately not `MONGODB_URI`, so a test can never pick up the application's database (DV-19). Each spec file calls `useTestDatabase()` once at its top level: it returns the file's own database (a name derived from the spec path plus a random suffix) and drops it in `afterAll` (TS-05). It throws when `TEST_MONGODB_URI` is unset and never falls back to `localhost`. Both scripts need Docker running; without it they stop at once with a "Docker is required (DV-17)" message. On Rancher Desktop without admin access, where the socket is only `~/.rd/docker.sock`, set `DOCKER_HOST=unix://$HOME/.rd/docker.sock` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` (or `docker.host` in `~/.testcontainers.properties`). `test/isolation/` is empty until the first isolation spec lands with #2, so `test:isolation` runs with `--passWithNoTests` until then.
 
 | | |
 |---|---|
@@ -97,13 +108,15 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | Scope | Threshold | Blocking |
 |---|---|---|
 | Critical `domain/` modules (AR-06) | **100% branch** | ✅ |
-| Backend overall | **80% lines and branches** | ✅ |
-| Frontend overall | **80% lines and branches** | ✅ |
-| Isolation — every owned collection | **100%** (TS-14) | ✅ |
+| Backend overall | **80% lines and branches** (temporary floor: 23% lines, 14% branches — #57) | ✅ |
+| Frontend overall | **80% lines and branches** (temporary floor: 24% lines, 22% branches — #57) | ✅ |
+| Isolation — every owned collection | **100%** (TS-14, from #2) | ✅ |
+
+80% is the target. The legacy code was far below it when the gate was introduced, so each package commits a **floor** at the coverage measured then (rounded down): `coverageThreshold.global` in `backend/jest.config.ts` and `coverage.thresholds` in `frontend/vitest.config.ts`. The floor only goes up — a PR that raises coverage raises it — until it reaches 80%; #57 tracks the ratchet. `npm run test:cov` enforces it (backend: the `unit` and `structural` projects; frontend: Vitest with V8 coverage) and writes an lcov report to `coverage/`.
 
 | | |
 |---|---|
-| **TS-24** | 100% on critical modules is **branch** coverage, not line. The edge cases — a zero, a missing rate, a closed journey — are branches; lines alone would pass while missing them. Thresholds are configured per path in `jest.config.ts`. |
+| **TS-24** | 100% on critical modules is **branch** coverage, not line. The edge cases — a zero, a missing rate, a closed journey — are branches; lines alone would pass while missing them. `jest.config.ts` computes a `{ branches: 100 }` threshold for every `src/<module>/domain/` folder that exists (Jest fails on a threshold path that matches no file), so a module gains the gate the moment its `domain/` folder lands. |
 | **TS-25** | Coverage is a floor, not a goal. A covered line proves execution, not correctness; TS-04's hand-computed expectations are what prove correctness. |
 | **TS-26** | Do not chase coverage on adapters by testing framework behaviour. Adapters are covered by integration tests that exercise real behaviour. |
 
@@ -112,8 +125,8 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | | |
 |---|---|
 | **TS-27** | **No real personal data in the repository** — not in fixtures, seeds, snapshots, screenshots or bug reports. Names, emails, phones and CPFs in tests are generated and obviously fake (SC-32). |
-| **TS-28** | Caixa public pages and lists may be captured as fixtures, trimmed to what the test needs, under `backend/test/fixtures/caixa/`. They contain no personal data; if one ever does (an occupant's name in a description), it is redacted before commit. |
-| **TS-29** | Test data is built with builders with sensible defaults (`aJourney().forOffice(a).inPhase('REGULARIZAR')`), so a test states only what it cares about. |
+| **TS-28** | Caixa public pages and lists may be captured as fixtures, trimmed to what the test needs, under `backend/test/fixtures/caixa/` (specs reach them through `test/support/fixtures.ts`). They contain no personal data; if one ever does (an occupant's name in a description), it is redacted before commit. |
+| **TS-29** | Test data is built with builders with sensible defaults (`aJourney().forOffice(a).inPhase('REGULARIZAR')`), so a test states only what it cares about. Builders live in `backend/test/builders/` and `build()` returns a plain object. |
 
 ## 9. Static checks — what runs, when, where
 
@@ -123,7 +136,8 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | ESLint | `--fix` on staged files | `lint` | `lint` | `lint` ✅ |
 | Typecheck | — (too slow per commit) | `typecheck` | `typecheck` | ✅ |
 | Unit + component tests | — | `test` | `test` | with coverage ✅ |
-| Integration + isolation | — | — (needs Docker; CI) | `test:integration`, `test:isolation` on demand | ✅ |
+| Integration + isolation | — | — (needs Docker; CI) | `test:integration`, `test:isolation` on demand, Docker running | ✅ |
+| Coverage gate | — | — | `test:cov` on demand | ✅ |
 | E2E | — | — | `test:e2e` on demand | ✅ |
 | `npm audit` (high+) | — | — | — | ✅ |
 | CodeQL | — | — | — | ✅ |
@@ -170,7 +184,7 @@ SPEC-003 sets the budgets (BR-003-06 to BR-003-10): measured against the referen
 | Unit, service and component tests | ✅ |
 | Integration tests on real MongoDB | ✅ |
 | **Isolation tests, every owned collection** | ✅ |
-| Coverage: 100% branch on critical modules, 80% overall | ✅ |
+| Coverage: 100% branch on critical modules, 80% overall (temporary floors until then, #57) | ✅ |
 | E2E journeys, desktop + 360 px, with axe | ✅ |
 | Structural checks (Node pin, tokens, env example) | ✅ |
 | `npm audit` high+, CodeQL high+ | ✅ |

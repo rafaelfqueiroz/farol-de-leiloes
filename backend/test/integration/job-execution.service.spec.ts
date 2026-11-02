@@ -1,0 +1,109 @@
+// Integration: JobExecutionService against a real MongoDB (Testcontainers, TESTING §2), with the
+// clock under test control (AR-24, TS-06). Proves the integration harness end to end: per-file
+// database (TS-05), Nest testing module, FakeClock override and builders (TS-29).
+import { getModelToken, MongooseModule } from '@nestjs/mongoose';
+import { Test, type TestingModule } from '@nestjs/testing';
+import type { Model } from 'mongoose';
+import { Clock } from '../../src/common/clock/clock';
+import { CommonModule } from '../../src/common/common.module';
+import {
+  JobExecution,
+  type JobExecutionDocument,
+  RunMode,
+} from '../../src/common/schemas/job-execution.schema';
+import { JobExecutionService } from '../../src/common/services/job-execution.service';
+import { aJobExecution } from '../builders/job-execution.builder';
+import { FakeClock, HOUR, MINUTE } from '../fakes/fake-clock';
+import { useTestDatabase } from '../support/test-database';
+
+const NOW = new Date('2026-01-15T12:00:00.000Z');
+const JOB = 'import-csv';
+
+describe('JobExecutionService (integration)', () => {
+  const db = useTestDatabase();
+  const clock = new FakeClock(NOW);
+  let moduleRef: TestingModule;
+  let service: JobExecutionService;
+  let executions: Model<JobExecutionDocument>;
+
+  beforeAll(async () => {
+    moduleRef = await Test.createTestingModule({
+      imports: [MongooseModule.forRoot(db.uri), CommonModule],
+    })
+      .overrideProvider(Clock)
+      .useValue(clock)
+      .compile();
+    service = moduleRef.get(JobExecutionService);
+    executions = moduleRef.get(getModelToken(JobExecution.name));
+  });
+
+  afterAll(async () => {
+    await moduleRef.close();
+  });
+
+  beforeEach(async () => {
+    await executions.deleteMany({});
+    clock.set(NOW);
+  });
+
+  describe('hasRunRecently', () => {
+    it('is false when the job never ran', async () => {
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 24)).resolves.toBe(false);
+    });
+
+    it('is true just inside the window and false exactly at its edge', async () => {
+      // Finished 10:00Z; now 12:00Z -> 2 h since the last run.
+      await executions.create(
+        aJobExecution().named(JOB).finishedAt(new Date('2026-01-15T10:00:00.000Z')).build(),
+      );
+
+      // 2 h < 3 h -> recent.
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 3)).resolves.toBe(true);
+      // 2 h < 2 h is false: the window is exclusive at its edge.
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 2)).resolves.toBe(false);
+
+      // Move now back 1 min to 11:59Z -> 1 h 59 min < 2 h -> recent.
+      clock.set(new Date('2026-01-15T11:59:00.000Z'));
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 2)).resolves.toBe(true);
+    });
+
+    it('measures from the latest execution, not an older one', async () => {
+      // Older: 2026-01-14T06:00Z, 30 h before now. Latest: 11:00Z, 1 h before now.
+      await executions.create([
+        aJobExecution().named(JOB).finishedAt(new Date('2026-01-14T06:00:00.000Z')).build(),
+        aJobExecution().named(JOB).finishedAt(new Date('2026-01-15T11:00:00.000Z')).build(),
+      ]);
+
+      // 1 h < 24 h; had the older run been used, 30 h < 24 h would be false.
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 24)).resolves.toBe(true);
+    });
+
+    it('ignores executions of another job or another run mode', async () => {
+      // Both finished 1 h ago, but neither is (import-csv, AUTO).
+      const anHourAgo = new Date('2026-01-15T11:00:00.000Z');
+      await executions.create([
+        aJobExecution().named('scrape-details').finishedAt(anHourAgo).build(),
+        aJobExecution().named(JOB).manual().finishedAt(anHourAgo).build(),
+      ]);
+
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 24)).resolves.toBe(false);
+    });
+  });
+
+  describe('recordExecution', () => {
+    it('stamps the injected clock time, and the window runs from it', async () => {
+      await service.recordExecution(JOB, RunMode.MANUAL);
+
+      const last = await service.getLastExecution(JOB, RunMode.MANUAL);
+      expect(last?.finishedAt.toISOString()).toBe('2026-01-15T12:00:00.000Z');
+
+      // 23 h 59 min later (2026-01-16T11:59Z): still within 24 h.
+      clock.advance(23 * HOUR + 59 * MINUTE);
+      await expect(service.hasRunRecently(JOB, RunMode.MANUAL, 24)).resolves.toBe(true);
+
+      // 1 more minute: exactly 24 h, no longer < 24 h.
+      clock.advance(MINUTE);
+      await expect(service.hasRunRecently(JOB, RunMode.MANUAL, 24)).resolves.toBe(false);
+    });
+  });
+});

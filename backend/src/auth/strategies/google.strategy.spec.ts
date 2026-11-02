@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { Profile } from 'passport-google-oauth20';
-import { GoogleStrategy } from '../src/auth/strategies/google.strategy';
+import { GoogleStrategy } from './google.strategy';
 
 describe('GoogleStrategy.validate', () => {
   function build() {

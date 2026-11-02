@@ -9,7 +9,8 @@ Overview
 Requirements
 
 - Node.js 24.22.2 (pinned in `.node-version`; DV-05)
-- MongoDB running locally or a connection string
+- MongoDB running locally or a connection string (to run the app)
+- Docker running, for `test:integration` and `test:isolation` (Testcontainers starts MongoDB; DV-17)
 
 Setup
 
@@ -18,6 +19,14 @@ Setup
 3. Dev run: `npm run start:dev`
 4. Build: `npm run build`, then `npm start`
 5. Before pushing: `npm run check` (typecheck + lint + format check + tests); the pre-push hook runs it when `backend/` changes (DV-37)
+
+Tests (TESTING §2, §7)
+
+- `npm test` — Jest projects `unit` (`src/**/*.spec.ts`, next to the source) and `structural` (`test/structural/`); no Docker
+- `npm run test:cov` — the same with the coverage gate; lcov report in `coverage/`
+- `npm run test:integration` — `test/integration/` against MongoDB from Testcontainers; needs Docker
+- `npm run test:isolation` — `test/isolation/`, the owner-isolation gate; needs Docker (empty until #2)
+- Helpers: `test/support/` (database harness, fixture paths), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`
 
 API
 

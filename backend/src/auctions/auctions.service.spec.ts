@@ -1,4 +1,4 @@
-import { AuctionsService } from '../src/auctions/auctions.service';
+import { AuctionsService } from './auctions.service';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionsService>;
 

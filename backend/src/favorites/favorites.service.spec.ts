@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { FavoritesService } from '../src/favorites/favorites.service';
+import { FavoritesService } from './favorites.service';
 
 type ServiceDeps = ConstructorParameters<typeof FavoritesService>;
 

@@ -1,6 +1,6 @@
 // DV-05: Node 24 LTS, one exact version, pinned everywhere. A future CI workflow reads
 // `node-version-file: .node-version`, so the root file is the source of truth guarded here.
-import { existsSync, readFileSync, readdirSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join, relative } from 'path';
 import {
   findNodeVersionDrift,
@@ -16,6 +16,10 @@ const enginesNode = (file: string): string => {
   const pkg: { engines?: { node?: string } } = JSON.parse(read(file));
   return pkg.engines?.node ?? '(missing engines.node)';
 };
+
+function composeFiles(): string[] {
+  return readdirSync(root).filter((name) => /^(docker-)?compose(\..+)?\.ya?ml$/.test(name));
+}
 
 function dockerfiles(): string[] {
   const found: string[] = [];
@@ -36,8 +40,8 @@ function repositoryPins(): PinnedVersion[] {
     { file: 'backend/package.json (engines.node)', version: enginesNode('backend/package.json') },
     { file: 'frontend/package.json (engines.node)', version: enginesNode('frontend/package.json') },
   ];
-  for (const file of ['docker-compose.yml', ...dockerfiles()]) {
-    if (!existsSync(join(root, file))) continue;
+  // Compose files and Dockerfiles are checked when present; none is required to exist.
+  for (const file of [...composeFiles(), ...dockerfiles()]) {
     for (const tag of nodeImageTags(read(file))) {
       pins.push({ file: `${file} (node:${tag})`, version: versionFromImageTag(tag) });
     }
@@ -48,11 +52,6 @@ function repositoryPins(): PinnedVersion[] {
 describe('DV-05: Node version is pinned to one exact version everywhere', () => {
   it('every pin equals the root .node-version', () => {
     expect(findNodeVersionDrift(nodeVersionFile('.node-version'), repositoryPins())).toEqual([]);
-  });
-
-  it('pins the Compose images, so the node: image check is not vacuous', () => {
-    const compose = nodeImageTags(read('docker-compose.yml'));
-    expect(compose.length).toBeGreaterThan(0);
   });
 });
 

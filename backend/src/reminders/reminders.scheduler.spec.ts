@@ -1,6 +1,6 @@
-import { RemindersScheduler } from '../src/reminders/reminders.scheduler';
-import { ReminderChannel } from '../src/reminders/schemas/reminder.schema';
-import { PopulatedReminder } from '../src/reminders/interfaces/reminder.interface';
+import { RemindersScheduler } from './reminders.scheduler';
+import { ReminderChannel } from './schemas/reminder.schema';
+import { PopulatedReminder } from './interfaces/reminder.interface';
 
 type SchedulerDeps = ConstructorParameters<typeof RemindersScheduler>;
 

@@ -30,7 +30,7 @@ Technical decisions: [`docs/adr/`](docs/adr/README.md). Incidents: [`docs/runboo
 
 ## Agent rules (DEVELOPMENT §6)
 
-- Run package scripts on the host: `npm run check`, `test`, `test:integration`, `test:isolation`, `test:cov`. Databases come from Testcontainers only (DV-17).
+- Run package scripts on the host: `npm run check`, `test`, `test:integration`, `test:isolation`, `test:cov`. Databases come from Testcontainers only (DV-17); `test:integration` and `test:isolation` need Docker running, and without it stop with "Docker is required" — report it, never point tests at a local database.
 - **Never start the apps on the host** (`start:dev`, `dev`, `start`) — the developer runs them; E2E uses `npm run test:e2e` (DV-18).
 - Never read, print or edit `.env` files; never touch the developer's local database (DV-19).
 - Logging: NestJS `Logger` only, never `console.*` (AR-45).

@@ -1,4 +1,4 @@
-import { AuctionCleanupService } from '../src/auctions/cleanup/auction-cleanup.service';
+import { AuctionCleanupService } from './auction-cleanup.service';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionCleanupService>;
 type CleanupTarget = Parameters<AuctionCleanupService['processAuction']>[0];

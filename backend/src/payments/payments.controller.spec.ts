@@ -1,7 +1,7 @@
 import { BadRequestException, RawBodyRequest } from '@nestjs/common';
 import { Request } from 'express';
-import { PaymentsController } from '../src/payments/payments.controller';
-import { PaymentsService } from '../src/payments/payments.service';
+import { PaymentsController } from './payments.controller';
+import { PaymentsService } from './payments.service';
 
 type ServiceDeps = ConstructorParameters<typeof PaymentsService>;
 
