@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from 'vitest';
 import { BadRequestException, RawBodyRequest } from '@nestjs/common';
 import { Request } from 'express';
 import { PaymentsController } from './payments.controller';
@@ -7,7 +8,7 @@ type ServiceDeps = ConstructorParameters<typeof PaymentsService>;
 
 describe('Stripe webhook', () => {
   it('rejects a request without a raw body as an invalid signature (DV-03)', async () => {
-    const paymentsService = { handleWebhook: jest.fn() };
+    const paymentsService = { handleWebhook: vi.fn() };
     const controller = new PaymentsController(paymentsService as unknown as PaymentsService);
     const req = { rawBody: undefined } as RawBodyRequest<Request>;
 
@@ -19,8 +20,8 @@ describe('Stripe webhook', () => {
 
   it('rejects every event as an invalid signature when no webhook secret is configured (DV-03)', async () => {
     const configService = {
-      getOrThrow: jest.fn().mockReturnValue('sk_test_fake'),
-      get: jest.fn().mockReturnValue(undefined),
+      getOrThrow: vi.fn().mockReturnValue('sk_test_fake'),
+      get: vi.fn().mockReturnValue(undefined),
     };
     const service = new PaymentsService(
       configService as unknown as ServiceDeps[0],

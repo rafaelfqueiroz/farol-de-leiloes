@@ -1,3 +1,4 @@
+import { describe, expect, it, type Mock, vi } from 'vitest';
 import { AuctionCleanupService } from './auction-cleanup.service';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionCleanupService>;
@@ -11,9 +12,9 @@ describe('AuctionCleanupService.processAuction', () => {
     matricula: { storageKey: 'mat' },
   } as unknown as CleanupTarget;
 
-  function build(deleteFile: jest.Mock, configured = true) {
-    const auctionModel = { deleteOne: jest.fn().mockResolvedValue({}) };
-    const storage = { isConfigured: jest.fn().mockReturnValue(configured), deleteFile };
+  function build(deleteFile: Mock, configured = true) {
+    const auctionModel = { deleteOne: vi.fn().mockResolvedValue({}) };
+    const storage = { isConfigured: vi.fn().mockReturnValue(configured), deleteFile };
     const cleanup = new AuctionCleanupService(
       auctionModel as unknown as ServiceDeps[0],
       storage as unknown as ServiceDeps[1],
@@ -25,7 +26,7 @@ describe('AuctionCleanupService.processAuction', () => {
   }
 
   it('deletes the auction when every file deletion succeeds', async () => {
-    const { service, auctionModel } = build(jest.fn().mockResolvedValue(true));
+    const { service, auctionModel } = build(vi.fn().mockResolvedValue(true));
 
     await expect(service.processAuction(auction)).resolves.toEqual({
       removed: true,
@@ -36,7 +37,7 @@ describe('AuctionCleanupService.processAuction', () => {
 
   it('keeps the auction when any file deletion fails', async () => {
     const { service, auctionModel } = build(
-      jest.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false),
+      vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false),
     );
 
     await expect(service.processAuction(auction)).resolves.toEqual({
@@ -47,7 +48,7 @@ describe('AuctionCleanupService.processAuction', () => {
   });
 
   it('keeps the auction when it has files but storage is not configured', async () => {
-    const deleteFile = jest.fn();
+    const deleteFile = vi.fn();
     const { service, auctionModel } = build(deleteFile, false);
 
     await expect(service.processAuction(auction)).resolves.toEqual({
@@ -59,7 +60,7 @@ describe('AuctionCleanupService.processAuction', () => {
   });
 
   it('deletes an auction without files', async () => {
-    const { service, auctionModel } = build(jest.fn());
+    const { service, auctionModel } = build(vi.fn());
 
     await expect(
       service.processAuction({ _id: 'id-2', code: 'A2' } as unknown as CleanupTarget),

@@ -1,6 +1,7 @@
 // Integration: JobExecutionService against a real MongoDB (Testcontainers, TESTING §2), with the
 // clock under test control (AR-24, TS-06). Proves the integration harness end to end: per-file
 // database (TS-05), Nest testing module, FakeClock override and builders (TS-29).
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Model } from 'mongoose';

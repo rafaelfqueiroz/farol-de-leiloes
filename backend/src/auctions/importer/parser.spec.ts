@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { parseCsv, normalizeRows } from './parser';
 import { readCaixaFixture } from '../../../test/support/fixtures';
 

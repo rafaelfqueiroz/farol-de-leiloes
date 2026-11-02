@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { scrapeAuctionDetails } from './details-scraper';
 import { readCaixaFixture } from '../../../test/support/fixtures';
 import { PaymentMethod } from '../schemas/auction.schema';

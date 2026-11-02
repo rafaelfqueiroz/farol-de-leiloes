@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from 'vitest';
 import { UnauthorizedException } from '@nestjs/common';
 import { Profile } from 'passport-google-oauth20';
 import { GoogleStrategy } from './google.strategy';
@@ -5,10 +6,10 @@ import { GoogleStrategy } from './google.strategy';
 describe('GoogleStrategy.validate', () => {
   function build() {
     const usersService = {
-      findByGoogleId: jest.fn(),
-      findByEmail: jest.fn(),
-      linkGoogleAccount: jest.fn(),
-      create: jest.fn(),
+      findByGoogleId: vi.fn(),
+      findByEmail: vi.fn(),
+      linkGoogleAccount: vi.fn(),
+      create: vi.fn(),
     };
     // Built without the passport constructor, which needs real OAuth client options.
     const strategy: GoogleStrategy = Object.assign(Object.create(GoogleStrategy.prototype), {
@@ -23,7 +24,7 @@ describe('GoogleStrategy.validate', () => {
   ])('refuses a Google profile with %s (DV-03)', async (_label, emails) => {
     const { strategy, usersService } = build();
     const profile = { id: 'google-1', displayName: 'Test User', emails } as unknown as Profile;
-    const done = jest.fn();
+    const done = vi.fn();
 
     await expect(strategy.validate('access', 'refresh', profile, done)).rejects.toBeInstanceOf(
       UnauthorizedException,

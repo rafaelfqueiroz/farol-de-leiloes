@@ -4,6 +4,7 @@
 import { randomBytes } from 'crypto';
 import { join, relative } from 'path';
 import { createConnection } from 'mongoose';
+import { afterAll, expect } from 'vitest';
 import { TEST_MONGODB_URI } from './mongo-container';
 
 export interface TestDatabase {
@@ -53,7 +54,7 @@ function testMongoUri(): string {
 export function useTestDatabase(): TestDatabase {
   const testPath = expect.getState().testPath;
   if (!testPath) {
-    throw new Error('useTestDatabase() must be called from a Jest spec file.');
+    throw new Error('useTestDatabase() must be called from a spec file.');
   }
 
   const name = testDatabaseName(testPath, randomBytes(SUFFIX_BYTES).toString('hex'));
