@@ -224,7 +224,7 @@ Every workflow pins each action to a full commit SHA with its version in a comme
 
 ### Hosting today
 
-The production deploy target is undecided (BL-001, [#40](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40)). Meanwhile two platform integrations run outside these workflows: **Vercel** builds a preview for each PR and deploys the frontend to its Production environment on every push to `main`, and a **Railway** integration is connected to the repository. Neither is gated by the checks above, and neither is the deploy described below; reconciling them with `deploy.yml` is part of BL-001. GitHub environment names are case-insensitive, so DV-35's `production` is the `Production` environment Vercel already reports its deployments to (Railway reports to its own, `acceptable-courtesy / production`): the deploy secrets and any protection rule set there are shared with Vercel's deployment records.
+The production deploy target is undecided (BL-001, [#40](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40)). Meanwhile two platform integrations run outside these workflows: **Vercel** builds a preview for each PR and deploys the frontend to its Production environment on every push to `main`, and a **Railway** integration is connected to the repository. Neither is gated by the checks above, and neither is the deploy described below; reconciling them with `deploy.yml` is part of BL-001. The deploy environment is named `deploy-production` so it stays separate from the `Production` environment Vercel reports to (GitHub environment names are case-insensitive); Railway reports to its own, `acceptable-courtesy / production`.
 
 ### `deploy.yml` — gated until a target exists
 
@@ -249,7 +249,7 @@ The images:
 |---|---|
 | **DV-33** | Images are tagged with the commit SHA. Rollback is redeploying a previous SHA, which only works because migrations are forward-only and expand/contract (AR-28). |
 | **DV-34** | Migrations (AR-29) run as a separate, gated step **before** the new code starts. A failed migration aborts the deploy and leaves the running version untouched. |
-| **DV-35** | Deploy secrets live in the GitHub `production` environment, not repository secrets. Runtime secrets live in the host's secret store, never in CI logs or images. |
+| **DV-35** | Deploy secrets live in the GitHub `deploy-production` environment, not repository secrets. Runtime secrets live in the host's secret store, never in CI logs or images. |
 | **DV-36** | `DEPLOY_ENABLED` is a repository variable separate from the secrets: unset, a missing secret is expected and the deploy skips; set, a missing secret is a fault and `preflight` fails. |
 
 ### `nightly.yml`

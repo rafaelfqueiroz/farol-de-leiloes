@@ -57,14 +57,14 @@ jobs:
             NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
 
   # DV-36: DEPLOY_ENABLED unset → this job is skipped and the run stays green. Set → every deploy
-  # secret must be present, or the job fails loudly. Deploy secrets live in the `production`
+  # secret must be present, or the job fails loudly. Deploy secrets live in the `deploy-production`
   # environment (DV-35).
   preflight:
     needs: images
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: production
+    environment: deploy-production
     permissions: {}
     steps:
       - name: Deploy secrets are present
