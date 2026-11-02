@@ -31,6 +31,8 @@ Effort goes where a bug does real damage. In this product that is three places:
 | **E2E** | Full stack in Compose, providers stubbed | Playwright + `@axe-core/playwright` | `frontend/e2e/` | minutes |
 | **Structural** | The repository itself (configs, tokens, versions) | Vitest (project `structural`) | `backend/test/structural/`, `frontend/test/structural/` | ms |
 
+A controller's HTTP contract that needs no database — query-string parsing, the raw body of the Stripe webhook — is a unit spec next to the controller: a Nest testing module with its services stubbed, driven with `supertest` (e.g. `auctions.controller.spec.ts`). supertest binds an ephemeral loopback port in the test process, so nothing leaves the machine (TS-01, TS-07). Anything that needs MongoDB is an integration spec.
+
 `backend/vitest.config.mts` declares one Vitest project per backend row above, and each script selects its projects (DEVELOPMENT §6). Specs import `describe`, `it`, `expect` and `vi` from `'vitest'`; there are no globals. Shared test code lives beside the suites, never in `src/`:
 
 | Folder | Holds |
@@ -108,13 +110,13 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | Scope | Threshold | Blocking |
 |---|---|---|
 | Critical `domain/` modules (AR-06) | **100% branch** | ✅ |
-| Backend overall | **80% lines and branches** (temporary floor: 21% lines, 16% branches — #57) | ✅ |
+| Backend overall | **80% lines and branches** (temporary floor: 23% lines, 19% branches — #57) | ✅ |
 | Frontend overall | **80% lines and branches** (temporary floor: 24% lines, 22% branches — #57) | ✅ |
 | Isolation — every owned collection | **100%** (TS-14, from #2) | ✅ |
 
 80% is the target. The legacy code was far below it when the gate was introduced, so each package commits a **floor** at the coverage measured then (rounded down): `coverage.thresholds` in `backend/vitest.config.mts` and in `frontend/vitest.config.ts`. The floor only goes up — a PR that raises coverage raises it — until it reaches 80%; #57 tracks the ratchet. `npm run test:cov` enforces it (backend: Vitest with V8 coverage over the `unit` and `structural` projects; frontend: Vitest with V8 coverage) and writes an lcov report to `coverage/`.
 
-**The backend floor was re-baselined in #62.** The backend moved from Jest with ts-jest to Vitest with V8 coverage; the new instrument measures the source, where ts-jest also counted the helpers `tsc` emits for decorators. The floor went from 23% lines / 14% branches to 21% / 16% because the instrument changed, not because any code lost a test. It ratchets up from here as before.
+**The backend floor was re-baselined in #62.** The backend moved from Jest with ts-jest to Vitest with V8 coverage; the new instrument measures the source, where ts-jest also counted the helpers `tsc` emits for decorators. The floor went from 23% lines / 14% branches to 21% / 16% because the instrument changed, not because any code lost a test. It ratchets up from here as before: #61 raised it to 23% / 19% with the HTTP specs of the auctions and payments controllers.
 
 | | |
 |---|---|
