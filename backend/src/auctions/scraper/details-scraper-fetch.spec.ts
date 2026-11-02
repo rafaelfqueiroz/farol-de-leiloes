@@ -1,5 +1,5 @@
 import puppeteer from 'puppeteer-extra';
-import { fetchAndCheckAvailability } from '../src/auctions/scraper/details-scraper';
+import { fetchAndCheckAvailability } from './details-scraper';
 
 jest.mock('puppeteer-extra', () => ({
   __esModule: true,

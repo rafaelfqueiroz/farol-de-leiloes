@@ -12,7 +12,7 @@
     "start": "node dist/main.js",
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "start:debug": "node --inspect=0.0.0.0:9229 dist/main.js",
-    "test": "jest",
+    "test": "jest --selectProjects unit structural",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix --pass-on-unpruned-suppressions",

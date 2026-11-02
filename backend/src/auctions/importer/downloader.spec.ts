@@ -1,9 +1,9 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { downloadCsvAllStates } from '../src/auctions/importer/downloader';
-import { parseCsv } from '../src/auctions/importer/parser';
+import { downloadCsvAllStates } from './downloader';
+import { parseCsv } from './parser';
+import { caixaFixturePath } from '../../../test/support/fixtures';
 
 // TS-07 / TS-28: the downloader never reaches the live Caixa site in tests.
 // `child_process.exec` is the only I/O boundary of the downloader (it shells out to
@@ -27,9 +27,8 @@ jest.mock('child_process', () => {
   return { exec: fake };
 });
 
-const FIXTURES = path.join(__dirname, 'fixtures');
-const CAIXA_CSV_LATIN1 = path.join(FIXTURES, 'caixa', 'Lista_imoveis_geral.latin1.csv');
-const BOT_PROTECTION_HTML = path.join(FIXTURES, 'caixa', 'bot-protection.html');
+const CAIXA_CSV_LATIN1 = caixaFixturePath('Lista_imoveis_geral.latin1.csv');
+const BOT_PROTECTION_HTML = caixaFixturePath('bot-protection.html');
 
 const execMock = exec as unknown as jest.Mock;
 const realExecAsync = promisify(

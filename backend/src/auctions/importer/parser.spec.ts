@@ -1,19 +1,16 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { parseCsv, normalizeRows } from '../src/auctions/importer/parser';
+import { parseCsv, normalizeRows } from './parser';
+import { readCaixaFixture } from '../../../test/support/fixtures';
 
 describe('CSV parser', () => {
   it('parses Lista_imoveis_geral.csv and returns 4 rows', () => {
-    const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'Lista_imoveis_geral.csv');
-    const csv = fs.readFileSync(fixturePath, 'utf8');
+    const csv = readCaixaFixture('Lista_imoveis_geral.csv');
     const rows = parseCsv(csv);
     expect(Array.isArray(rows)).toBe(true);
     expect(rows.length).toBe(4);
   });
 
   it('normalizes rows and extracts all required fields', () => {
-    const fixturePath = path.join(__dirname, 'fixtures', 'caixa', 'Lista_imoveis_geral.csv');
-    const csv = fs.readFileSync(fixturePath, 'utf8');
+    const csv = readCaixaFixture('Lista_imoveis_geral.csv');
     const parsed = parseCsv(csv);
     const normalized = normalizeRows(parsed);
 
