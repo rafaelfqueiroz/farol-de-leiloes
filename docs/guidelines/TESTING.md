@@ -142,11 +142,11 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | Unit + component tests | — | `test` | `test` | with coverage ✅ |
 | Integration + isolation | — | — (needs Docker; CI) | `test:integration`, `test:isolation` on demand, Docker running | ✅ |
 | Coverage gate | — | — | `test:cov` on demand | ✅ |
-| E2E | — | — | `test:e2e` on demand | ✅ |
+| E2E | — | — | `test:e2e` on demand | ✅ (with #3) |
 | `npm audit` (high+) | — | — | — | ✅ |
 | CodeQL | — | — | — | ✅ |
 
-The pre-push hook runs `npm run check` in each package the push changes and blocks the push if it fails (DEVELOPMENT DV-37). CI always runs everything, whichever packages changed. **Not set up yet:** the CI column arrives with #33. Until then the pre-commit and pre-push hooks are the only checks that run automatically.
+The pre-push hook runs `npm run check` in each package the push changes and blocks the push if it fails (DEVELOPMENT DV-37). CI always runs everything, whichever packages changed (DEVELOPMENT §12, `.github/workflows/ci.yml` and `codeql.yml`); its jobs are the required status checks on `main` (DV-27). The E2E row joins CI with #3.
 
 ESLint rules that carry weight (beyond the recommended sets):
 

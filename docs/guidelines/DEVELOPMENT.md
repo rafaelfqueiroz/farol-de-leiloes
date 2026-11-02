@@ -93,6 +93,7 @@ Both packages expose the same script names:
 | `test` | Fast tests, no Docker. Backend: Vitest projects `unit` (specs next to their source, `domain/` included) and `structural` (`test/structural/`); frontend: Vitest |
 | `test:integration` | Backend only — `test/integration/` on a Testcontainers MongoDB (TESTING §2). **Needs Docker running**; without it, stops with "Docker is required (DV-17)" |
 | `test:isolation` | Backend only — the isolation gate, `test/isolation/` (TESTING §4), on a Testcontainers MongoDB; needs Docker running. Passes with no tests until the first isolation spec lands (#2) |
+| `test:structural` | Backend only — the `structural` project alone: checks on the repository itself (Node pinned everywhere, workflows pinned and least privilege, Dockerfiles, the pre-push selection); the CI `structural` job runs it |
 | `test:e2e` | Frontend only — Playwright against the Compose stack |
 | `test:cov` | `test` with the coverage gate (TESTING §7): backend `unit` + `structural` with V8 coverage, frontend Vitest with V8 coverage; lcov in `coverage/` |
 | `check` | `typecheck` + `lint` + `format:check` + `test`. **The pre-push hook runs it** in every package the push changes (DV-37). |
@@ -157,8 +158,10 @@ An issue that adds a page or changes a page's layout also needs a **page frame a
 | **DV-24** | Branch names: `feat/spec-011-office-invites`, `fix/spec-004-bom-header`, `chore/…`, `docs/…`, `refactor/…`. Include the spec id when one applies. |
 | **DV-25** | [Conventional Commits](https://www.conventionalcommits.org/): `feat(journeys): block writes on read-only offices`. The squash-merge title follows the same format. |
 | **DV-26** | The commit/PR body names the rules implemented: `Implements SPEC-002 BR-002-30.` Breaking API, schema or config changes carry `BREAKING CHANGE:` in the footer. |
-| **DV-27** | Every change goes through a PR — self-reviewed when solo. `main` is protected: PR required, required status checks green, branch up to date, linear history, no force-push, no direct push. **Not in place yet** (#33): until then `main` is unprotected and the pre-push hook (DV-37) is the only automated gate. |
+| **DV-27** | Every change goes through a PR — self-reviewed when solo. `main` is protected by a repository ruleset: PR required (0 approvals, since a solo author cannot approve their own PR), every required status check green (§12), branch up to date with `main` before merging, linear history, squash merge only, no force-push, no deletion, and no merge while CodeQL reports a new high or critical alert. The repository admin is the ruleset's only bypass actor, kept for emergencies (a broken check blocking a fix); a bypass is the exception, said in the PR, and never used by an agent. |
 | **DV-28** | Never commit `.env` files, real personal data, production exports, or anything copied from a user's account (SC-32). |
+
+**Agent merge flow.** An agent never pushes to `main` and never merges with `--admin`. It opens the PR, waits with `gh pr checks <n> --required --watch`, and when the branch is behind `main` runs `gh pr update-branch <n>` and waits for the checks again (the branch must be up to date). It merges with `gh pr merge <n> --squash` only once every required check is green and the user has approved the merge; auto-merge stays off.
 
 The PR template lives at [`.github/pull_request_template.md`](../../.github/pull_request_template.md). A PR:
 
@@ -190,27 +193,38 @@ Spec Decision Logs record **product** decisions. ADRs record **technical** decis
 
 ## 12. CI/CD
 
-GitHub Actions. The repository is public, so minutes are not the constraint — the full suite runs on every PR and on `main`. CI does not filter by path; only the pre-push hook (DV-37) skips unchanged packages.
+GitHub Actions, in [`.github/workflows/`](../../.github/workflows/). The repository is public, so minutes are not the constraint — the full suite runs on every PR and on `main`. CI does not filter by path; only the pre-push hook (DV-37) skips unchanged packages.
 
-**Not set up yet:** the workflows below, CodeQL and branch protection arrive with #33.
+Every workflow pins each action to a full commit SHA with its version in a comment (`uses: actions/checkout@<sha> # v7.0.1`), declares least-privilege `permissions:` at the top level (a job widens only what it needs), never uses `pull_request_target` or `workflow_run`, checks out without persisting credentials, and takes Node from `.node-version` through `node-version-file` (SC-21, DV-05). The `structural` job enforces all of it, and the repository's Actions settings require SHA-pinned actions as well. Upgrading an action means changing the SHA and the comment together.
 
 ### `ci.yml` — every PR and every push to `main`
 
 | Job | Steps | Blocking |
 |---|---|---|
 | `backend-static` | `npm ci` · typecheck · lint · format check | ✅ |
-| `backend-test` | `npm run test:cov`: unit (`domain/` included) + structural, coverage gate | ✅ |
-| `backend-integration` | `test:integration` + `test:isolation` on Testcontainers MongoDB | ✅ |
+| `backend-test` | `npm run test:cov`: unit (`domain/` included) + structural, coverage gate; lcov uploaded as the `backend-coverage` artifact | ✅ |
+| `backend-integration` | `test:integration` + `test:isolation` on Testcontainers MongoDB (the runner's Docker) | ✅ |
 | `backend-build` | `npm run build` (`tsc`) | ✅ |
 | `frontend-static` | `npm ci` · typecheck · lint · format check | ✅ |
-| `frontend-test` | `npm run test:cov`: Vitest components + axe, coverage gate | ✅ |
+| `frontend-test` | `npm run test:cov`: Vitest components + axe, design tokens in both schemes and their contrast (DS-05, `frontend/test/structural/`), coverage gate; `frontend-coverage` artifact | ✅ |
 | `frontend-build` | `next build` | ✅ |
-| `e2e` | Compose stack (API + web + MongoDB, stubbed providers) · Playwright desktop + mobile · axe | ✅ |
-| `audit` | `npm audit --audit-level=high` in both packages | ✅ |
-| `structural` | Node version pinned everywhere (DV-05) · design tokens in both schemes (DS-05) · `.env.example` covers the config schema (AR-44) | ✅ |
-| `codeql` | GitHub CodeQL for JavaScript/TypeScript | ✅ on high/critical |
+| `e2e` | Compose stack (API + web + MongoDB, stubbed providers) · Playwright desktop + mobile · axe. **Arrives with #3**; until then it is neither a job nor a required check | ✅ |
+| `audit` | `npm audit --audit-level=high` in both packages (SC-19); reads the lockfiles, no install | ✅ |
+| `structural` | `npm run test:structural`: Node version pinned everywhere (DV-05) · workflows SHA-pinned, least privilege, no `pull_request_target`, `node-version-file` (SC-21) · every Dockerfile has a `.dockerignore` excluding `.env*` and a non-root final stage (SC-16) · the pre-push package selection (DV-37). Pending: `.env.example` covers the config schema (AR-44), once the schema exists | ✅ |
 
-`concurrency: cancel-in-progress` on PRs, so a superseded push stops. Every job above is a **required status check** on `main` (DV-27).
+### `codeql.yml` — every PR, every push to `main`, weekly
+
+| Job | Steps | Blocking |
+|---|---|---|
+| `codeql` | CodeQL advanced setup for JavaScript/TypeScript, `security-extended` queries, no build needed. The repository's CodeQL default setup stays off (the two conflict) | ✅ on high/critical — the ruleset's code-scanning rule blocks a merge on a new high or critical alert |
+
+`concurrency` cancels a superseded run on a PR; runs on `main` always finish. `PUPPETEER_SKIP_DOWNLOAD` is set in CI: no job drives a browser, and npm 11 skips puppeteer's install script anyway.
+
+**Required status checks on `main`** (DV-27), by job id: `backend-static`, `backend-test`, `backend-integration`, `backend-build`, `frontend-static`, `frontend-test`, `frontend-build`, `audit`, `structural`, `codeql`; `e2e` joins when #3 lands. Renaming a job means updating the ruleset in the same change. Vercel's check is not required.
+
+### Hosting today
+
+The production deploy target is undecided (BL-001, [#40](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40)). Meanwhile two platform integrations run outside these workflows: **Vercel** builds a preview for each PR and deploys the frontend to its Production environment on every push to `main`, and a **Railway** integration is connected to the repository. Neither is gated by the checks above, and neither is the deploy described below; reconciling them with `deploy.yml` is part of BL-001. GitHub environment names are case-insensitive, so DV-35's `production` is the `Production` environment Vercel already reports its deployments to (Railway reports to its own, `acceptable-courtesy / production`): the deploy secrets and any protection rule set there are shared with Vercel's deployment records.
 
 ### `deploy.yml` — gated until a target exists
 
@@ -223,6 +237,14 @@ build images (backend, frontend) ─► tag with commit SHA ─► push to GHCR
   ─► run migrations (gated) ─► roll out ─► GET /api/health ─► roll back image on failure
 ```
 
+Built today: the `images` job (both images, pushed to `ghcr.io/rafaelfqueiroz/farol-de-leiloes-{backend,frontend}:<full SHA>`, never `latest`; the packages stay private until BL-001) and `preflight`, which while there is no target fails with "no deploy target exists yet" whenever `DEPLOY_ENABLED` is set. Migrations, rollout, the health check (AR-48) and rollback arrive with BL-001. A publishing workflow uses no npm or build cache.
+
+The images:
+
+- `backend/Dockerfile` — multi-stage on `node:<.node-version>-slim`; the runtime stage holds the compiled `dist/` and production dependencies, runs as `node`, and installs Debian's `chromium` for the scraper (`PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`; puppeteer's own download is skipped). bcrypt loads the prebuilt binding in its package, so no compiler is installed.
+- `frontend/Dockerfile` — Next.js `output: 'standalone'`, runs `node server.js` as `node` on `PORT=3001`. The `NEXT_PUBLIC_*` values are inlined at build time, so `deploy.yml` passes them as build arguments from the repository variables `NEXT_PUBLIC_AUCTIONS_API_URL` and `NEXT_PUBLIC_SITE_URL` — public values only (SC-16).
+- Each package's `.dockerignore` keeps `.env*` out of the build context; runtime configuration and secrets come from the host's environment, never the image (SC-16, DV-35).
+
 | | |
 |---|---|
 | **DV-33** | Images are tagged with the commit SHA. Rollback is redeploying a previous SHA, which only works because migrations are forward-only and expand/contract (AR-28). |
@@ -232,7 +254,11 @@ build images (backend, frontend) ─► tag with commit SHA ─► push to GHCR
 
 ### `nightly.yml`
 
-Dependency audit with the full advisory list, and — once BL-002 lands — the performance budgets of SPEC-003 against the reference workload.
+Daily at 03:17 Brasília (and on demand): `npm audit` with the full advisory list, every severity and dev dependencies included, written to the run summary; the job fails only on a high or critical advisory, so the failed-run email is the alert for an advisory published against code nobody has pushed. Once BL-002 lands, the performance budgets of SPEC-003 run here against the reference workload. GitHub disables scheduled workflows after 60 days without repository activity.
+
+### Repository security settings
+
+Alongside the ruleset (DV-27): private vulnerability reporting is on (SC-34, root [`SECURITY.md`](../../SECURITY.md)), secret scanning with push protection is on, and the Actions settings require every action to be pinned to a full commit SHA (SC-21).
 
 ## 13. Definition of done
 

@@ -53,7 +53,7 @@ The specs say **what** must hold; this document says **how the code makes it hol
 | | |
 |---|---|
 | **SC-15** | **No personal or client data in logs, error messages, Sentry, analytics or job records** — no names, emails, phones, CPFs, journey content, figures, profiles or support messages (SPEC-002 BR-002-28). Ids, codes and counts only; a user appears as a hashed id (AR-46, AR-47). |
-| **SC-16** | Secrets come from the environment only, are validated at boot (AR-41), never logged, never committed, never sent to the browser. A `NEXT_PUBLIC_` variable is public by definition and never holds a secret. |
+| **SC-16** | Secrets come from the environment only, are validated at boot (AR-41), never logged, never committed, never baked into an image (each package's `.dockerignore` excludes `.env*`), never sent to the browser. A `NEXT_PUBLIC_` variable is public by definition and never holds a secret. |
 | **SC-17** | Transport and headers: HTTPS only with HSTS; `helmet` on the API; on the web, an explicit Content-Security-Policy (no `unsafe-eval`; `unsafe-inline` only where MUI's style injection needs it, with a nonce when available), `frame-ancestors 'none'`, `Referrer-Policy: strict-origin-when-cross-origin`. CORS is an explicit allowlist, never `*` with credentials. No `dangerouslySetInnerHTML` with anything not sanitised. |
 | **SC-18** | R2 buckets are private. Download links are issued per request after an authorization check and expire in 60 seconds (BR-002-09); they are never stored, emailed or logged. Object keys are random and carry no personal data. |
 
@@ -63,7 +63,7 @@ The specs say **what** must hold; this document says **how the code makes it hol
 |---|---|
 | **SC-19** | `npm audit --audit-level=high` blocks CI in both packages; CodeQL runs on every PR. A high or critical advisory with no fix is waived only by an issue that names the exposure and the date to recheck. |
 | **SC-20** | A new dependency must be maintained (a release in the last 12 months), have a permissive licence, and not duplicate a canonical one (DEVELOPMENT §1). Install scripts from a new dependency are read before it is merged. |
-| **SC-21** | GitHub Actions are pinned to a commit SHA, workflows declare least-privilege `permissions:`, and `pull_request_target` is not used. |
+| **SC-21** | GitHub Actions are pinned to a commit SHA, workflows declare least-privilege `permissions:`, and `pull_request_target` is not used. The CI `structural` job checks every workflow, and the repository's Actions settings refuse an action that is not SHA-pinned (DEVELOPMENT §12). |
 
 ## 7. AI features
 
@@ -138,7 +138,7 @@ The inventory is the source the privacy policy is written from (SPEC-010 BR-010-
 | | |
 |---|---|
 | **SC-33** | A PR that touches authentication, authorization, scoped repositories, payments, uploads, AI prompts or the scraper ticks the security items of the PR template, and gets a security review pass (`/security-review` in Claude Code, or a manual read against this document) before merge. |
-| **SC-34** | A suspected vulnerability is reported privately (GitHub private vulnerability reporting), never in a public issue. `SECURITY.md` at the repository root says so. |
+| **SC-34** | A suspected vulnerability is reported privately (GitHub private vulnerability reporting, enabled on the repository), never in a public issue. `SECURITY.md` at the repository root says so. Secret scanning with push protection is enabled too (DEVELOPMENT §12). |
 
 ## 11. Known violations
 
