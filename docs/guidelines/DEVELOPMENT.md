@@ -90,11 +90,11 @@ Both packages expose the same script names:
 | `typecheck` | `tsc --noEmit` |
 | `lint` / `lint:fix` | ESLint. The remaining legacy violations are bulk suppressions in `eslint-suppressions.json`, each owned by an issue: backend AR-09 imports (#51); frontend JSX literals (#39), `px` in `sx` (#43), and the React hooks, a11y and Next rules (#52). `lint` fails on a new violation and on a suppression that no longer occurs, which `npm run lint:prune` removes |
 | `format` / `format:check` | Prettier |
-| `test` | Unit tests (backend: unit + `domain/`; frontend: Vitest) |
-| `test:integration` | Backend only — Testcontainers MongoDB (TESTING §2) |
-| `test:isolation` | Backend only — the isolation gate (TESTING §4) |
+| `test` | Fast tests, no Docker. Backend: Jest projects `unit` (specs next to their source, `domain/` included) and `structural` (`test/structural/`); frontend: Vitest |
+| `test:integration` | Backend only — `test/integration/` on a Testcontainers MongoDB (TESTING §2). **Needs Docker running**; without it, stops with "Docker is required (DV-17)" |
+| `test:isolation` | Backend only — the isolation gate, `test/isolation/` (TESTING §4), on a Testcontainers MongoDB; needs Docker running. Passes with no tests until the first isolation spec lands (#2) |
 | `test:e2e` | Frontend only — Playwright against the Compose stack |
-| `test:cov` | Tests with the coverage gate (TESTING §7) |
+| `test:cov` | `test` with the coverage gate (TESTING §7): backend `unit` + `structural` with Jest coverage, frontend Vitest with V8 coverage; lcov in `coverage/` |
 | `check` | `typecheck` + `lint` + `format:check` + `test`. **The pre-push hook runs it** in every package the push changes (DV-37). |
 
 ### Git hooks
@@ -114,7 +114,7 @@ The one-off formatting commit is listed in [`.git-blame-ignore-revs`](../../.git
 
 | | |
 |---|---|
-| **DV-17** | Agents may run the package scripts above on the host: `check`, `test`, `test:integration`, `test:isolation`, `test:cov`. Databases always come from containers (Testcontainers picks random ports, so they never collide with the developer's own). |
+| **DV-17** | Agents may run the package scripts above on the host: `check`, `test`, `test:integration`, `test:isolation`, `test:cov`. Databases always come from containers (Testcontainers picks random ports, so they never collide with the developer's own). `test:integration` and `test:isolation` need Docker running; when it is not, they stop with a "Docker is required (DV-17)" message — report that, never work around it by pointing a test at a local MongoDB (DV-19). |
 | **DV-18** | Agents never start the applications on the host (`start:dev`, `dev`, `start`) — the developer runs them on the fixed ports. E2E runs through `test:e2e`, which brings up its own Compose stack. |
 | **DV-19** | Agents never read, print or edit `.env` / `.env.local`, and never point a test at the developer's local database. |
 | **DV-20** | An agent's work is not done until `npm run check` passes in every package it touched (the pre-push hook enforces this, DV-37), and the docs it affects are updated in the same PR (§9). |
@@ -199,11 +199,11 @@ GitHub Actions. The repository is public, so minutes are not the constraint — 
 | Job | Steps | Blocking |
 |---|---|---|
 | `backend-static` | `npm ci` · typecheck · lint · format check | ✅ |
-| `backend-test` | unit + `domain/` tests with coverage gate | ✅ |
-| `backend-integration` | Testcontainers MongoDB: integration + **isolation** | ✅ |
+| `backend-test` | `npm run test:cov`: unit (`domain/` included) + structural, coverage gate | ✅ |
+| `backend-integration` | `test:integration` + `test:isolation` on Testcontainers MongoDB | ✅ |
 | `backend-build` | `nest build` | ✅ |
 | `frontend-static` | `npm ci` · typecheck · lint · format check | ✅ |
-| `frontend-test` | Vitest components + axe, coverage gate | ✅ |
+| `frontend-test` | `npm run test:cov`: Vitest components + axe, coverage gate | ✅ |
 | `frontend-build` | `next build` | ✅ |
 | `e2e` | Compose stack (API + web + MongoDB, stubbed providers) · Playwright desktop + mobile · axe | ✅ |
 | `audit` | `npm audit --audit-level=high` in both packages | ✅ |

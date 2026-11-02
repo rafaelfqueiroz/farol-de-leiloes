@@ -105,7 +105,7 @@ SPEC-003 BR-003-23 to BR-003-28 put every date the product shows, accepts or sch
 |---|---|
 | **AR-22** | Instants are stored as UTC `Date`. Calendar dates with no time (journey closing date, auction date from the Caixa list) are stored as `YYYY-MM-DD` strings, never as midnight UTC. |
 | **AR-23** | All zone conversion uses `@date-fns/tz` with the IANA zone `America/Sao_Paulo`, never a fixed offset (BR-003-28). One shared module per side owns the zone constant and the formatters. |
-| **AR-24** | "Now" is injected. Services take a `Clock` provider; `domain/` takes the time as an argument. No `new Date()` in business logic. This is what makes deadlines, grace periods and retention testable. |
+| **AR-24** | "Now" is injected. Services take a `Clock` provider (`common/clock/clock.ts`, bound to `SystemClock` by `CommonModule`; tests use `FakeClock`, TS-06); `domain/` takes the time as an argument. No `new Date()` in business logic. This is what makes deadlines, grace periods and retention testable. |
 | **AR-25** | Cron expressions set `timeZone: 'America/Sao_Paulo'` explicitly (BR-003-27). |
 
 ## 7. Database conventions

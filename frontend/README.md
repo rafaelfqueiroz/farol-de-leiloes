@@ -68,6 +68,7 @@ npm start
 | ---------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `npm run typecheck`    | `tsc --noEmit`                                                                                             |
 | `npm test`             | Vitest (unit, component and structural tests)                                                              |
+| `npm run test:cov`     | `npm test` with the V8 coverage gate (TESTING §7); lcov report in `coverage/`                              |
 | `npm run lint`         | ESLint (legacy violations are suppressed in `eslint-suppressions.json` until #30)                          |
 | `npm run lint:fix`     | ESLint with `--fix`                                                                                        |
 | `npm run lint:prune`   | Drops suppressions that no longer occur, after fixing a legacy violation                                   |
