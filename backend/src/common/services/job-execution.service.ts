@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { Clock } from '../clock/clock';
 import { JobExecution, JobExecutionDocument, RunMode } from '../schemas/job-execution.schema';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class JobExecutionService {
   constructor(
     @InjectModel(JobExecution.name)
     private readonly jobExecutionRepository: Model<JobExecutionDocument>,
+    private readonly clock: Clock,
   ) {}
 
   /**
@@ -17,7 +19,7 @@ export class JobExecutionService {
     const execution = new this.jobExecutionRepository({
       jobName,
       runMode,
-      finishedAt: new Date(),
+      finishedAt: this.clock.now(), // AR-24
     });
     return execution.save();
   }
@@ -42,7 +44,9 @@ export class JobExecutionService {
       return false;
     }
 
-    const hoursSinceLastRun = (Date.now() - lastExecution.finishedAt.getTime()) / (1000 * 60 * 60);
+    // AR-24: measured against the injected clock, so the window is testable (TS-06).
+    const hoursSinceLastRun =
+      (this.clock.now().getTime() - lastExecution.finishedAt.getTime()) / (1000 * 60 * 60);
     return hoursSinceLastRun < withinHours;
   }
 }
