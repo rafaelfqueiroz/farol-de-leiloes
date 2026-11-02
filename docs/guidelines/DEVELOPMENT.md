@@ -208,6 +208,7 @@ Every workflow pins each action to a full commit SHA with its version in a comme
 | `frontend-static` | `npm ci` · typecheck · lint · format check | ✅ |
 | `frontend-test` | `npm run test:cov`: Vitest components + axe, design tokens in both schemes and their contrast (DS-05, `frontend/test/structural/`), coverage gate; `frontend-coverage` artifact | ✅ |
 | `frontend-build` | `next build` | ✅ |
+| `backend-image` · `frontend-image` | One matrix job (`images`): `docker build` of each package's Dockerfile with `push: false`, no registry login, `contents: read` only, no cache. Proves the Dockerfile, `.dockerignore` and, for the frontend, Next's standalone output build before merge; `deploy.yml` is what publishes. The frontend leg takes the `NEXT_PUBLIC_*` build arguments from the repository variables, the backend leg none | ✅ |
 | `e2e` | Compose stack (API + web + MongoDB, stubbed providers) · Playwright desktop + mobile · axe. **Arrives with #3**; until then it is neither a job nor a required check | ✅ |
 | `audit` | `npm audit --audit-level=high` in both packages (SC-19); reads the lockfiles, no install | ✅ |
 | `structural` | `npm run test:structural`: Node version pinned everywhere (DV-05) · workflows SHA-pinned, least privilege, no `pull_request_target`, `node-version-file` (SC-21) · every Dockerfile has a `.dockerignore` excluding `.env*` and a non-root final stage (SC-16) · the pre-push package selection (DV-37). Pending: `.env.example` covers the config schema (AR-44), once the schema exists | ✅ |
@@ -220,7 +221,7 @@ Every workflow pins each action to a full commit SHA with its version in a comme
 
 `concurrency` cancels a superseded run on a PR; runs on `main` always finish. `PUPPETEER_SKIP_DOWNLOAD` is set in CI: no job drives a browser, and npm 11 skips puppeteer's install script anyway.
 
-**Required status checks on `main`** (DV-27), by job id: `backend-static`, `backend-test`, `backend-integration`, `backend-build`, `frontend-static`, `frontend-test`, `frontend-build`, `audit`, `structural`, `codeql`; `e2e` joins when #3 lands. Renaming a job means updating the ruleset in the same change. Vercel's check is not required.
+**Required status checks on `main`** (DV-27), by check name (the job id, or the matrix job's `name`): `backend-static`, `backend-test`, `backend-integration`, `backend-build`, `frontend-static`, `frontend-test`, `frontend-build`, `backend-image`, `frontend-image`, `audit`, `structural`, `codeql`; `e2e` joins when #3 lands. Renaming a job means updating the ruleset in the same change. Vercel's check is not required.
 
 ### Hosting today
 
@@ -228,7 +229,7 @@ The production deploy target is undecided (BL-001, [#40](https://github.com/rafa
 
 ### `deploy.yml` — gated until a target exists
 
-**There is no deploy target yet** (BL-001). The workflow exists so the image build is proven on every push to `main`, long before there is anywhere to send it:
+**There is no deploy target yet** (BL-001). The workflow exists so the images are published on every push to `main`, long before there is anywhere to send them; the build itself is proven on every PR by `backend-image` and `frontend-image` in `ci.yml`:
 
 ```
 build images (backend, frontend) ─► tag with commit SHA ─► push to GHCR
@@ -237,12 +238,12 @@ build images (backend, frontend) ─► tag with commit SHA ─► push to GHCR
   ─► run migrations (gated) ─► roll out ─► GET /api/health ─► roll back image on failure
 ```
 
-Built today: the `images` job (both images, pushed to `ghcr.io/rafaelfqueiroz/farol-de-leiloes-{backend,frontend}:<full SHA>`, never `latest`; the packages stay private until BL-001) and `preflight`, which while there is no target fails with "no deploy target exists yet" whenever `DEPLOY_ENABLED` is set. Migrations, rollout, the health check (AR-48) and rollback arrive with BL-001. A publishing workflow uses no npm or build cache.
+Built today: the `images` job (both images, built from the same Dockerfiles as the PR check and pushed to `ghcr.io/rafaelfqueiroz/farol-de-leiloes-{backend,frontend}:<full SHA>`, never `latest`; the packages stay private until BL-001) and `preflight`, which while there is no target fails with "no deploy target exists yet" whenever `DEPLOY_ENABLED` is set. Migrations, rollout, the health check (AR-48) and rollback arrive with BL-001. A publishing workflow uses no npm or build cache.
 
 The images:
 
 - `backend/Dockerfile` — multi-stage on `node:<.node-version>-slim`; the runtime stage holds the compiled `dist/` and production dependencies, runs as `node`, and installs Debian's `chromium` for the scraper (`PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`; puppeteer's own download is skipped). bcrypt loads the prebuilt binding in its package, so no compiler is installed.
-- `frontend/Dockerfile` — Next.js `output: 'standalone'`, runs `node server.js` as `node` on `PORT=3001`. The `NEXT_PUBLIC_*` values are inlined at build time, so `deploy.yml` passes them as build arguments from the repository variables `NEXT_PUBLIC_AUCTIONS_API_URL` and `NEXT_PUBLIC_SITE_URL` — public values only (SC-16).
+- `frontend/Dockerfile` — Next.js `output: 'standalone'`, runs `node server.js` as `node` on `PORT=3001`. The `NEXT_PUBLIC_*` values are inlined at build time, so `ci.yml` and `deploy.yml` pass them, to the frontend leg only, as build arguments from the repository variables `NEXT_PUBLIC_AUCTIONS_API_URL` and `NEXT_PUBLIC_SITE_URL` — public values only (SC-16). The backend Dockerfile declares no build arguments.
 - Each package's `.dockerignore` keeps `.env*` out of the build context; runtime configuration and secrets come from the host's environment, never the image (SC-16, DV-35).
 
 | | |
