@@ -25,7 +25,7 @@ Where a rule describes code that does not exist yet, the follow-up issue that bu
 | Email / messaging | SMTP (Nodemailer) · SMS / WhatsApp providers |
 | AI | OpenAI, behind a port (§4) |
 | Logs / errors | `nestjs-pino` · Sentry (§11) |
-| Tests | Jest (backend) · Vitest + Testing Library (frontend) · Testcontainers · Playwright |
+| Tests | Vitest (backend and frontend) · Testing Library (frontend) · Testcontainers · Playwright |
 | Runtime | Node 24 LTS, pinned everywhere (DV-05) |
 | Hosting | Undecided. Deploy is gated off (DEVELOPMENT §8, BL-001) |
 

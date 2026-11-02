@@ -23,15 +23,15 @@ Effort goes where a bug does real damage. In this product that is three places:
 
 | Type | Runs against | Tool | Location | Speed |
 |---|---|---|---|---|
-| **Domain unit** | Nothing — pure functions in `domain/` | Jest (project `unit`) | next to source, `*.spec.ts` | ms |
-| **Service unit** | Fakes of ports and repositories | Jest (project `unit`) | next to source, `*.spec.ts` | ms |
-| **Integration** | Real MongoDB (Testcontainers `mongo:7`), Nest testing module, `supertest` | Jest (project `integration`) | `backend/test/integration/` | seconds |
-| **Isolation** | Real MongoDB, two or more owners, through the HTTP API | Jest (project `isolation`) | `backend/test/isolation/` | seconds |
+| **Domain unit** | Nothing — pure functions in `domain/` | Vitest (project `unit`) | next to source, `*.spec.ts` | ms |
+| **Service unit** | Fakes of ports and repositories | Vitest (project `unit`) | next to source, `*.spec.ts` | ms |
+| **Integration** | Real MongoDB (Testcontainers `mongo:7`), Nest testing module, `supertest` | Vitest (project `integration`) | `backend/test/integration/` | seconds |
+| **Isolation** | Real MongoDB, two or more owners, through the HTTP API | Vitest (project `isolation`) | `backend/test/isolation/` | seconds |
 | **Component** | jsdom, real theme, real pt-BR catalogue | Vitest + Testing Library + `vitest-axe` | next to source, `*.test.tsx` | ms |
 | **E2E** | Full stack in Compose, providers stubbed | Playwright + `@axe-core/playwright` | `frontend/e2e/` | minutes |
-| **Structural** | The repository itself (configs, tokens, versions) | Jest (project `structural`) / Vitest | `backend/test/structural/`, `frontend/test/structural/` | ms |
+| **Structural** | The repository itself (configs, tokens, versions) | Vitest (project `structural`) | `backend/test/structural/`, `frontend/test/structural/` | ms |
 
-`backend/jest.config.ts` declares one Jest project per backend row above, and each script selects its projects (DEVELOPMENT §6). Shared test code lives beside the suites, never in `src/`:
+`backend/vitest.config.mts` declares one Vitest project per backend row above, and each script selects its projects (DEVELOPMENT §6). Specs import `describe`, `it`, `expect` and `vi` from `'vitest'`; there are no globals. Shared test code lives beside the suites, never in `src/`:
 
 | Folder | Holds |
 |---|---|
@@ -40,13 +40,13 @@ Effort goes where a bug does real damage. In this product that is three places:
 | `backend/test/builders/` | Test-data builders (TS-29), e.g. `aJobExecution()` |
 | `backend/test/fixtures/caixa/` | Captured Caixa pages and lists (TS-28) |
 
-**The test database.** `test:integration` and `test:isolation` start **one** `mongo:7` container per run in Jest's global setup (Testcontainers maps a random port, DV-17) and expose it as `TEST_MONGODB_URI` — deliberately not `MONGODB_URI`, so a test can never pick up the application's database (DV-19). Each spec file calls `useTestDatabase()` once at its top level: it returns the file's own database (a name derived from the spec path plus a random suffix) and drops it in `afterAll` (TS-05). It throws when `TEST_MONGODB_URI` is unset and never falls back to `localhost`. Both scripts need Docker running; without it they stop at once with a "Docker is required (DV-17)" message. On Rancher Desktop without admin access, where the socket is only `~/.rd/docker.sock`, set `DOCKER_HOST=unix://$HOME/.rd/docker.sock` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` (or `docker.host` in `~/.testcontainers.properties`). `test/isolation/` is empty until the first isolation spec lands with #2, so `test:isolation` runs with `--passWithNoTests` until then.
+**The test database.** `test:integration` and `test:isolation` start **one** `mongo:7` container per run in Vitest's global setup (Testcontainers maps a random port, DV-17) and expose it as `TEST_MONGODB_URI` — deliberately not `MONGODB_URI`, so a test can never pick up the application's database (DV-19). Each spec file calls `useTestDatabase()` once at its top level: it returns the file's own database (a name derived from the spec path plus a random suffix) and drops it in `afterAll` (TS-05). It throws when `TEST_MONGODB_URI` is unset and never falls back to `localhost`. Both scripts need Docker running; without it they stop at once with a "Docker is required (DV-17)" message. On Rancher Desktop without admin access, where the socket is only `~/.rd/docker.sock`, set `DOCKER_HOST=unix://$HOME/.rd/docker.sock` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` (or `docker.host` in `~/.testcontainers.properties`). `test/isolation/` is empty until the first isolation spec lands with #2, so `test:isolation` runs with `--passWithNoTests` until then.
 
 | | |
 |---|---|
 | **TS-01** | Domain and service unit tests never touch a database or the network. If a domain rule needs a database to be tested, the layering is wrong (AR-05). |
 | **TS-02** | Repository and isolation tests run against real MongoDB. Never mock Mongoose — mocking the database mocks away the owner filter being verified. |
-| **TS-03** | Ports (AR-10) and repositories are faked with **hand-written fakes that implement the real interface**, not `jest.mock`. A fake breaks at compile time when the interface changes; a mock keeps passing. `jest.mock` is reserved for modules with no port (rare, and commented). |
+| **TS-03** | Ports (AR-10) and repositories are faked with **hand-written fakes that implement the real interface**, not `vi.mock`. A fake breaks at compile time when the interface changes; a mock keeps passing. `vi.mock` is reserved for modules with no port (rare, and commented). |
 | **TS-04** | No test uses the implementation's own output as its expectation. Expected values are computed by hand — the arithmetic written in a comment — or taken from an external authority. |
 | **TS-05** | Every test is independent and order-agnostic. Each integration file uses its own database name on the shared container and drops it in `afterAll`; no test depends on another's data. |
 | **TS-06** | Time is controlled: services get a fake `Clock`; `domain/` gets the time as an argument. No test sleeps, and no test passes or fails depending on the day it runs. |
@@ -108,15 +108,17 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | Scope | Threshold | Blocking |
 |---|---|---|
 | Critical `domain/` modules (AR-06) | **100% branch** | ✅ |
-| Backend overall | **80% lines and branches** (temporary floor: 23% lines, 14% branches — #57) | ✅ |
+| Backend overall | **80% lines and branches** (temporary floor: 21% lines, 16% branches — #57) | ✅ |
 | Frontend overall | **80% lines and branches** (temporary floor: 24% lines, 22% branches — #57) | ✅ |
 | Isolation — every owned collection | **100%** (TS-14, from #2) | ✅ |
 
-80% is the target. The legacy code was far below it when the gate was introduced, so each package commits a **floor** at the coverage measured then (rounded down): `coverageThreshold.global` in `backend/jest.config.ts` and `coverage.thresholds` in `frontend/vitest.config.ts`. The floor only goes up — a PR that raises coverage raises it — until it reaches 80%; #57 tracks the ratchet. `npm run test:cov` enforces it (backend: the `unit` and `structural` projects; frontend: Vitest with V8 coverage) and writes an lcov report to `coverage/`.
+80% is the target. The legacy code was far below it when the gate was introduced, so each package commits a **floor** at the coverage measured then (rounded down): `coverage.thresholds` in `backend/vitest.config.mts` and in `frontend/vitest.config.ts`. The floor only goes up — a PR that raises coverage raises it — until it reaches 80%; #57 tracks the ratchet. `npm run test:cov` enforces it (backend: Vitest with V8 coverage over the `unit` and `structural` projects; frontend: Vitest with V8 coverage) and writes an lcov report to `coverage/`.
+
+**The backend floor was re-baselined in #62.** The backend moved from Jest with ts-jest to Vitest with V8 coverage; the new instrument measures the source, where ts-jest also counted the helpers `tsc` emits for decorators. The floor went from 23% lines / 14% branches to 21% / 16% because the instrument changed, not because any code lost a test. It ratchets up from here as before.
 
 | | |
 |---|---|
-| **TS-24** | 100% on critical modules is **branch** coverage, not line. The edge cases — a zero, a missing rate, a closed journey — are branches; lines alone would pass while missing them. `jest.config.ts` computes a `{ branches: 100 }` threshold for every `src/<module>/domain/` folder that exists (Jest fails on a threshold path that matches no file), so a module gains the gate the moment its `domain/` folder lands. |
+| **TS-24** | 100% on critical modules is **branch** coverage, not line. The edge cases — a zero, a missing rate, a closed journey — are branches; lines alone would pass while missing them. `backend/vitest.config.mts` sets `'src/*/domain/**/*.ts': { branches: 100 }`, a static glob: Vitest ignores a threshold glob that matches no file, so the gate is inert until the first `domain/` file lands and then applies to every module's `domain/`, with no config change. The files a glob matches are aggregated, so 100% for the glob means every domain file is at 100%. |
 | **TS-25** | Coverage is a floor, not a goal. A covered line proves execution, not correctness; TS-04's hand-computed expectations are what prove correctness. |
 | **TS-26** | Do not chase coverage on adapters by testing framework behaviour. Adapters are covered by integration tests that exercise real behaviour. |
 
