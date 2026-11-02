@@ -47,7 +47,7 @@ Scheduled jobs (@nestjs/schedule, in the backend process):
 | **AR-01** | The browser talks only to Next.js. The backend URL and every secret stay server-side; the frontend reaches the API through server components, route handlers and `/api/*` proxy routes. |
 | **AR-02** | The backend is the only process that touches MongoDB, R2 and third-party APIs. Next.js never opens a database connection. |
 | **AR-03** | Every scheduled job is idempotent and safe to re-run after a crash halfway through. Each run is recorded (start, end, outcome, counts) — the Import Run of SPEC-004 BR-004-27 is the model. |
-| **AR-04** | Every job has an `*_ENABLED` flag, off in tests and in the Compose test services. A job that cannot be switched off cannot be tested in isolation. |
+| **AR-04** | Every job has an `*_ENABLED` flag, off in tests: a spec that boots a Nest module containing a job sets its flag to `false` (or leaves the job's module out of the testing module). A job that cannot be switched off cannot be tested in isolation. |
 
 ## 3. Layering — a pure domain inside each module
 
