@@ -14,7 +14,7 @@ Where a rule describes code that does not exist yet, the follow-up issue that bu
 | Concern | Choice |
 |---|---|
 | Language | TypeScript, `strict` on both sides (DV-01) |
-| Backend | NestJS · Mongoose · Passport (local + Google) |
+| Backend | NestJS 12 on Express 5 · Mongoose · Passport (local + Google). Nest 12 is ESM-only; the CommonJS build loads it through Node's `require(esm)` |
 | Database | MongoDB 7 |
 | Frontend | Next.js App Router · React · MUI (DESIGN.md) · next-intl (pt-BR) |
 | Money | `Decimal128` in MongoDB, `decimal.js` in code, strings over JSON (§5) |
@@ -22,6 +22,7 @@ Where a rule describes code that does not exist yet, the follow-up issue that bu
 | Validation | `class-validator` DTOs at the API edge (backend) · Zod (frontend, config) |
 | Payments | Stripe |
 | Files | Cloudflare R2, presigned URLs |
+| Scraping | Plain `puppeteer` driving headless Chrome · `cheerio` (SC-24) |
 | Email / messaging | SMTP (Nodemailer) · SMS / WhatsApp providers |
 | AI | OpenAI, behind a port (§4) |
 | Logs / errors | `nestjs-pino` · Sentry (§11) |
@@ -172,7 +173,7 @@ SPEC-003 BR-003-23 to BR-003-28 put every date the product shows, accepts or sch
 
 ## 13. Data flows worth knowing
 
-**Caixa import (SPEC-004).** Daily list download → parse (`domain/`) → validate → upsert with change detection → Import Run record. Detail-page enrichment runs separately, under a daily budget (pages per day, concurrency, pause), refreshes pages on a rolling basis, and **stops the run on any block or challenge** without trying to get around it (BR-004-18, BR-004-20, SC-24).
+**Caixa import (SPEC-004).** Daily list download → parse (`domain/`) → validate → upsert with change detection → Import Run record. Detail-page enrichment runs separately, under a daily budget (pages per day, concurrency, pause), refreshes pages on a rolling basis, and **stops the run on any block or challenge** without trying to get around it (BR-004-18, BR-004-20, SC-24). Detail pages are fetched with plain `puppeteer` (no stealth plugin, no spoofed identity). npm 11 blocks dependency install scripts, so puppeteer's postinstall Chrome download is not relied on: a production image installs Chrome or Chromium explicitly and points puppeteer at it (`PUPPETEER_EXECUTABLE_PATH`); locally, `npx puppeteer browsers install chrome` installs the browser once.
 
 **Files (SPEC-017).** Upload and download through R2 presigned URLs, issued per request after an authorization check and valid for 60 seconds (BR-002-08, BR-002-09). Keys are random; nothing about the owner or the file's content appears in a key.
 

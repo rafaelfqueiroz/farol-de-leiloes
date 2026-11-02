@@ -1,11 +1,8 @@
 import * as cheerio from 'cheerio';
-import puppeteer from 'puppeteer-extra';
-// The package is `export =` and the build has no esModuleInterop, so import-equals is its typed
-// form. Stealth itself is removed by SPEC-004 (#4); only the import style changed here.
-import StealthPlugin = require('puppeteer-extra-plugin-stealth');
+// SC-24: plain puppeteer, undisguised — no stealth plugin, no user-agent spoofing, no evasion
+// flags. Puppeteer 25 is ESM-only; this CommonJS build loads it through Node's require(esm).
+import puppeteer from 'puppeteer';
 import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema';
-
-puppeteer.use(StealthPlugin());
 
 export interface ScrapedPhaseDetails {
   paymentMethods?: PaymentMethod[];
@@ -257,6 +254,7 @@ function extractPhaseDetails(relatedBoxHtml: string, fullHtml: string): ScrapedP
  * Fetches the HTML content of an auction details page from Caixa website
  */
 async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
+  // The sandbox flags are needed to run Chrome as root in a container; they disguise nothing.
   const browser = await puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],

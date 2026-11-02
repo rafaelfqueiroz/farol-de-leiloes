@@ -1,4 +1,4 @@
-Auctions API (NestJS + MongoDB)
+Auctions API (NestJS 12 + MongoDB)
 
 Overview
 
@@ -11,6 +11,7 @@ Requirements
 - Node.js 24.22.2 (pinned in `.node-version`; DV-05)
 - MongoDB running locally or a connection string (to run the app)
 - Docker running, for `test:integration` and `test:isolation` (Testcontainers starts MongoDB; DV-17)
+- Chrome for the detail-page scraper: npm 11 does not run puppeteer's install script, so run `npx puppeteer browsers install chrome` once (production images install Chrome/Chromium explicitly; ARCHITECTURE §13)
 
 Setup
 
@@ -32,7 +33,8 @@ API
 
 - GET `/api/auctions?state=SP&city=Sao Paulo&modality=Compra Direta`
   - Query params: `state` (UF), `city` (prefix match), `modality` (case/accents-insensitive)
-  - Pagination: `limit` (default 50, max 200), `offset`
+  - Pagination: `limit` (default 10, max 200), `offset`
+  - List filters (`city`, `neighborhood`, `modality`) take several values as a repeated key (`?city=A&city=B`) or comma-separated (`?city=A,B`). Express 5 parses the query string with its `simple` parser, so bracket keys (`city[]=A`) are not lists
 
 Scheduling
 

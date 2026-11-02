@@ -151,7 +151,7 @@ Code that predates these guidelines and breaks them. Each has a follow-up issue;
 | SC-04 | `backend/src/auth/` | No throttling |
 | SC-07 | `backend/src/main.ts`, controllers | Guards per route, not deny-by-default |
 | SC-17 | `backend/src/main.ts`, `frontend/next.config.ts` | No `helmet`, no CSP |
-| SC-24 | `backend/src/auctions/scraper/details-scraper.ts` | `puppeteer-extra-plugin-stealth` |
+| SC-24 | `backend/src/auctions/importer/downloader.ts` (#4), `backend/src/storage/storage.service.ts` (#65) | Spoofed browser User-Agent (the list download through curl, and the image and matrícula copies to R2). The stealth plugin is gone (#61) |
 | AR-11–AR-16 | all user-data modules | No `ownerType`/`ownerId`, no scoped repositories, no isolation tests |
 | AR-45 / DV-11 | 75 call sites | `console.*` |
 | DV-01 / DV-02 | `backend/tsconfig.json`, 54 sites | `noImplicitAny: false`, explicit `any` |
