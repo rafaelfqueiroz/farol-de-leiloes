@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Typography,
@@ -65,7 +66,9 @@ function formatAddress(auction: Reminder['auction']): string {
 
 export default function RemindersPage() {
   const router = useRouter();
-  const { reminders, loading, deleteReminder, updateReminder } = useReminders();
+  const { reminders, loading, loadFailed, deleteReminder, updateReminder, refreshReminders } =
+    useReminders();
+  const t = useTranslations();
   const { role } = useAuth();
   const apiErrorMessage = useApiErrorMessage();
 
@@ -193,21 +196,37 @@ export default function RemindersPage() {
         Gerencie seus lembretes de leilões
       </Typography>
 
-      {upcomingReminders.length === 0 ? (
-        <Card sx={{ textAlign: 'center', py: 6 }}>
-          <CardContent>
-            <NotificationsIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
-              Nenhum lembrete agendado
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Adicione lembretes aos leilões para receber notificações antes do início
-            </Typography>
-            <Button variant="contained" onClick={() => router.push('/search')}>
-              Buscar leilões
+      {loadFailed && (
+        <Alert
+          severity="error"
+          sx={{ mb: 3 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => void refreshReminders()}>
+              {t('patterns.errorState.retry')}
             </Button>
-          </CardContent>
-        </Card>
+          }
+        >
+          {t('loadFailed.reminders')}
+        </Alert>
+      )}
+
+      {upcomingReminders.length === 0 ? (
+        loadFailed ? null : (
+          <Card sx={{ textAlign: 'center', py: 6 }}>
+            <CardContent>
+              <NotificationsIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                Nenhum lembrete agendado
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Adicione lembretes aos leilões para receber notificações antes do início
+              </Typography>
+              <Button variant="contained" onClick={() => router.push('/search')}>
+                Buscar leilões
+              </Button>
+            </CardContent>
+          </Card>
+        )
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {upcomingReminders.map((reminder) => (

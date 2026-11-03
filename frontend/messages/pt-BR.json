@@ -1,4 +1,8 @@
 {
+  "loadFailed": {
+    "reminders": "Não foi possível carregar seus lembretes. Os que aparecem aqui podem estar incompletos. Tente novamente.",
+    "savedFilters": "Não foi possível carregar seus filtros salvos. Tente novamente."
+  },
   "patterns": {
     "money": {
       "missing": "Não informado"

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, type SyntheticEvent } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Drawer,
@@ -437,6 +438,7 @@ export default function SearchFilters({
   // Auth state for feature gating
   const { role } = useAuth();
   const apiErrorMessage = useApiErrorMessage();
+  const t = useTranslations();
   const canUseAISearch = role === 'admin' || role === 'premium';
   const canUseSavedFilters = role === 'admin' || role === 'premium' || role === 'standard';
 
@@ -447,6 +449,8 @@ export default function SearchFilters({
     saveFilter,
     deleteFilter,
     loading: savedFiltersLoading,
+    loadFailed: savedFiltersLoadFailed,
+    refreshFilters,
   } = useSavedFilters();
   const [selectedSavedFilterId, setSelectedSavedFilterId] = useState<string>('');
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -818,6 +822,20 @@ export default function SearchFilters({
                   <BookmarkIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
                   Filtros Salvos
                 </Typography>
+
+                {savedFiltersLoadFailed && (
+                  <Alert
+                    severity="error"
+                    sx={{ mb: 1.5 }}
+                    action={
+                      <Button color="inherit" size="small" onClick={() => void refreshFilters()}>
+                        {t('patterns.errorState.retry')}
+                      </Button>
+                    }
+                  >
+                    {t('loadFailed.savedFilters')}
+                  </Alert>
+                )}
 
                 <TextField
                   select
