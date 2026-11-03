@@ -15,6 +15,7 @@ import { SupportModule } from './support/support.module';
 import schedulerConfig from './config/scheduler.config';
 import r2Config from './config/r2.config';
 import { validateEnv, type AppConfigService } from './config/env';
+import { applyMongooseDefaults } from './common/mongo/query-safety';
 
 @Module({
   imports: [
@@ -28,10 +29,14 @@ import { validateEnv, type AppConfigService } from './config/env';
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: AppConfigService) => ({
-        uri: config.get('MONGODB_URI', { infer: true }),
-        retryAttempts: 3,
-      }),
+      useFactory: (config: AppConfigService) => {
+        // SC-10: before the first query, so no filter is ever read with operators from a request.
+        applyMongooseDefaults();
+        return {
+          uri: config.get('MONGODB_URI', { infer: true }),
+          retryAttempts: 3,
+        };
+      },
     }),
     ScheduleModule.forRoot(),
     UsersModule,

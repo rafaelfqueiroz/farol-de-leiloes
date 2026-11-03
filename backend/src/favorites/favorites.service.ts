@@ -54,7 +54,11 @@ export class FavoritesService {
   }
 
   async findOne(userId: string, auctionCode: string): Promise<FavoriteDocument | null> {
-    return this.favoriteRepository.findOne({ userId, auctionCode }).exec();
+    // SC-10: both values are compared by equality, whatever they hold; neither can be an operator.
+    if (typeof userId !== 'string' || typeof auctionCode !== 'string') return null;
+    return this.favoriteRepository
+      .findOne({ userId: { $eq: userId }, auctionCode: { $eq: auctionCode } })
+      .exec();
   }
 
   async create(userId: string, auctionCode: string): Promise<Auction> {

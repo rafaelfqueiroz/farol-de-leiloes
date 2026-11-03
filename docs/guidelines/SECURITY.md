@@ -42,7 +42,7 @@ The specs say **what** must hold; this document says **how the code makes it hol
 
 | | |
 |---|---|
-| **SC-10** | Every input is a validated DTO (AR-34). Request values never become MongoDB operators: no spreading `req.query`/`req.body` into a filter, `sanitizeFilter: true` and `strictQuery: true` on the connection, and any free-form sort/filter field is checked against an allowlist. |
+| **SC-10** | Every input is a validated DTO (AR-34). Request values never become MongoDB operators: no spreading `req.query`/`req.body` into a filter, `sanitizeFilter: true` and `strictQuery: true` on the connection, and any free-form sort/filter field is checked against an allowlist. `sanitizeFilter` is switched on by `applyMongooseDefaults()` (`backend/src/common/mongo/query-safety.ts`) before the first query; a scalar taken from a request is compared as `{ field: { $eq: value } }` after a `typeof` check, and operators the server writes itself (`$in`, `$gte`, `$exists` ...) are wrapped in `serverOperators(...)`, never a value that came from a request. An update is built from whitelisted fields under `$set`, never from the DTO object. |
 | **SC-11** | The Stripe webhook verifies the signature against the **raw** body, is idempotent by event id, and is the only path that changes plan state. The checkout redirect never upgrades anything. |
 | **SC-12** | CSV/XLSX exports neutralise cells starting with `=`, `+`, `-`, `@`, tab or carriage return (formula injection). |
 | **SC-13** | Uploads (SPEC-017) go straight to R2 through a presigned URL scoped to one key, with an allowlist of content types, a size cap, and the type re-checked from the stored object's bytes before it is marked usable. Files are never served from the application origin. |
@@ -151,6 +151,7 @@ Code that predates these guidelines and breaks them. Each has a follow-up issue;
 | SC-04 | `backend/src/auth/` | No throttling |
 | SC-07 | `backend/src/main.ts`, controllers | Guards per route, not deny-by-default |
 | SC-17 | `backend/src/main.ts`, `frontend/next.config.ts` | No `helmet`, no CSP |
+| SC-10 | `backend/src/app.module.ts` | `sanitizeFilter` is on; `strictQuery` is not yet (Mongoose default `false`) |
 | SC-24 | `backend/src/auctions/importer/downloader.ts` (#4) | Spoofed browser User-Agent on the list download through curl. The stealth plugin is gone (#61); the image and matrícula copies to R2 now send the honest `CAIXA_USER_AGENT` (#65) |
 | AR-11–AR-16 | all user-data modules | No `ownerType`/`ownerId`, no scoped repositories, no isolation tests |
 | AR-45 / DV-11 | 75 call sites | `console.*` |

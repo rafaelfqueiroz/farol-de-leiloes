@@ -7,6 +7,23 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { DomainError } from '../common/errors/domain-error';
+import { serverOperators } from '../common/mongo/query-safety';
+
+// SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34).
+const TEXT_FIELDS = [
+  'email',
+  'name',
+  'password',
+  'googleId',
+  'role',
+  'stripeCustomerId',
+  'stripeSubscriptionId',
+  'phone',
+  'cpf',
+  'dateOfBirth',
+  'sex',
+] as const;
+const ADDRESS_FIELDS = ['street', 'city', 'state', 'zipCode'] as const;
 
 @Injectable()
 export class UsersService {
@@ -43,15 +60,18 @@ export class UsersService {
   }
 
   async findByEmail(email: string): Promise<UserDocument | null> {
-    return this.userRepository.findOne({ email: email.toLowerCase() }).exec();
+    return this.userRepository.findOne({ email: { $eq: email.toLowerCase() } }).exec();
   }
 
   async findByGoogleId(googleId: string): Promise<UserDocument | null> {
-    return this.userRepository.findOne({ googleId }).exec();
+    // SC-10: an id is text; an operator object is nobody's.
+    if (typeof googleId !== 'string') return null;
+    return this.userRepository.findOne({ googleId: { $eq: googleId } }).exec();
   }
 
   async findByStripeCustomerId(stripeCustomerId: string): Promise<UserDocument | null> {
-    return this.userRepository.findOne({ stripeCustomerId }).exec();
+    if (typeof stripeCustomerId !== 'string') return null;
+    return this.userRepository.findOne({ stripeCustomerId: { $eq: stripeCustomerId } }).exec();
   }
 
   async findByIdFull(id: string): Promise<UserDocument | null> {
@@ -114,13 +134,16 @@ export class UsersService {
       }
     }
 
-    // Hash password if being updated
-    if (updateUserDto.password) {
-      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+    // SC-10: the update is built field by field from a whitelist, never the DTO object itself, so
+    // a body can neither carry an operator ({ $set, $unset, $inc ... }) nor reach a field the
+    // DTO does not name. Each value is checked for its type before it is copied.
+    const fields = this.updatableFields(updateUserDto);
+    if (typeof fields.password === 'string') {
+      fields.password = await bcrypt.hash(fields.password, 10);
     }
 
     const user = await this.userRepository
-      .findByIdAndUpdate(id, updateUserDto, { new: true })
+      .findOneAndUpdate({ _id: { $eq: id } }, { $set: fields }, { new: true })
       .select('-password')
       .exec();
 
@@ -129,6 +152,38 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  /** SC-10: the fields of `dto` an update may write, each copied only if it has the right type. */
+  private updatableFields(dto: UpdateUserDto): Record<string, unknown> {
+    const fields: Record<string, unknown> = {};
+
+    for (const key of TEXT_FIELDS) {
+      const value: unknown = dto[key];
+      // An empty string is "not provided", as before (the old `if (dto.password)` check).
+      if (typeof value === 'string' && (value || key !== 'password')) fields[key] = value;
+    }
+
+    // Stripe's status is cleared with an explicit null, which is a value here, not "absent".
+    const status: unknown = dto.subscriptionStatus;
+    if (typeof status === 'string' || status === null) fields.subscriptionStatus = status;
+
+    const providers: unknown = dto.providers;
+    if (Array.isArray(providers) && providers.every((p) => typeof p === 'string')) {
+      fields.providers = providers;
+    }
+
+    const address: unknown = dto.address;
+    if (typeof address === 'object' && address !== null) {
+      const copy: Record<string, string> = {};
+      for (const key of ADDRESS_FIELDS) {
+        const value: unknown = (address as Record<string, unknown>)[key];
+        if (typeof value === 'string') copy[key] = value;
+      }
+      fields.address = copy;
+    }
+
+    return fields;
   }
 
   async remove(id: string): Promise<void> {
@@ -174,7 +229,7 @@ export class UsersService {
   async resetPassword(token: string, newPassword: string): Promise<void> {
     const users = await this.userRepository
       .find({
-        resetPasswordExpires: { $gt: new Date() },
+        resetPasswordExpires: serverOperators({ $gt: new Date() }),
       })
       .exec();
 
@@ -229,7 +284,7 @@ export class UsersService {
   async verifyEmail(token: string): Promise<UserDocument> {
     const users = await this.userRepository
       .find({
-        emailVerificationExpires: { $gt: new Date() },
+        emailVerificationExpires: serverOperators({ $gt: new Date() }),
         emailVerified: false,
       })
       .exec();

@@ -15,6 +15,7 @@ import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { AuctionRecord } from '../auctions/interfaces/auction.interface';
 import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface';
 import { DomainError } from '../common/errors/domain-error';
+import { serverOperators } from '../common/mongo/query-safety';
 import {
   type PageRequest,
   type Paginated,
@@ -51,9 +52,11 @@ export class RemindersService {
   }
 
   private async findAuctionById(auctionId: string): Promise<ReminderTarget | null> {
+    // SC-10: an id is text; anything else (an operator object) is no auction.
+    if (typeof auctionId !== 'string') return null;
     try {
       const AuctionModel = this.reminderModel.db.model<AuctionRecord>('AuctionEntity');
-      return await AuctionModel.findById(auctionId).exec();
+      return await AuctionModel.findOne({ _id: { $eq: auctionId } }).exec();
     } catch {
       return null;
     }
@@ -114,7 +117,7 @@ export class RemindersService {
 
   async findOne(userId: string, reminderId: string): Promise<PopulatedReminder> {
     const reminder = await this.reminderModel
-      .findOne({ _id: reminderId, userId: new Types.ObjectId(userId) })
+      .findOne({ _id: { $eq: reminderId }, userId: new Types.ObjectId(userId) })
       .populate<{ auction: ReminderAuction }>('auction')
       .exec();
 
@@ -131,7 +134,7 @@ export class RemindersService {
     dto: UpdateReminderDto,
   ): Promise<PopulatedReminder> {
     const reminder = await this.reminderModel.findOne({
-      _id: reminderId,
+      _id: { $eq: reminderId },
       userId: new Types.ObjectId(userId),
     });
 
@@ -190,7 +193,7 @@ export class RemindersService {
 
   async delete(userId: string, reminderId: string): Promise<void> {
     const reminder = await this.reminderModel.findOne({
-      _id: reminderId,
+      _id: { $eq: reminderId },
       userId: new Types.ObjectId(userId),
     });
 
@@ -202,14 +205,14 @@ export class RemindersService {
       throw new DomainError('REMINDER_ALREADY_SENT');
     }
 
-    await this.reminderModel.deleteOne({ _id: reminderId });
+    await this.reminderModel.deleteOne({ _id: { $eq: reminderId } });
   }
 
   async getDueReminders(limit: number = 100): Promise<PopulatedReminder[]> {
     return this.reminderModel
       .find({
         status: ReminderStatus.PENDING,
-        scheduledAt: { $lte: new Date() },
+        scheduledAt: serverOperators({ $lte: new Date() }),
       })
       .populate<{ auction: ReminderAuction }>('auction')
       .limit(limit)
@@ -217,7 +220,10 @@ export class RemindersService {
   }
 
   async markAsSent(reminderId: string): Promise<void> {
-    await this.reminderModel.updateOne({ _id: reminderId }, { status: ReminderStatus.SENT });
+    await this.reminderModel.updateOne(
+      { _id: { $eq: reminderId } },
+      { status: ReminderStatus.SENT },
+    );
   }
 
   async logNotification(

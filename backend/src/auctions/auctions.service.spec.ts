@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { serverOperators } from '../common/mongo/query-safety';
 import { AuctionsService } from './auctions.service';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionsService>;
@@ -20,7 +21,10 @@ describe('AuctionsService.markAvailable', () => {
 
     await expect(service.markAvailable(['A1', 'A2'])).resolves.toBe(3);
     expect(repo.updateMany).toHaveBeenCalledWith(
-      { code: { $in: ['A1', 'A2'] }, available: { $ne: true } },
+      {
+        code: serverOperators({ $in: ['A1', 'A2'] }),
+        available: serverOperators({ $ne: true }),
+      },
       { $set: { available: true, updatedAt: expect.any(Date) } },
     );
   });

@@ -9,6 +9,7 @@ import { RunMode } from '../../common/schemas/job-execution.schema';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
 import { StorageService } from '../../storage/storage.service';
 import { errorMessage } from '../../common/error-message';
+import { serverOperators } from '../../common/mongo/query-safety';
 
 @Injectable()
 export class AuctionDetailsScraper implements OnModuleInit {
@@ -104,8 +105,8 @@ export class AuctionDetailsScraper implements OnModuleInit {
       // Find auctions where fulfilled = false or doesn't exist, and have a detailsUrl
       const auctionsToScrape = await this.auctionModel
         .find({
-          detailsUrl: { $exists: true, $ne: null },
-          $or: [{ fulfilled: { $exists: false } }, { fulfilled: false }],
+          detailsUrl: serverOperators({ $exists: true, $ne: null }),
+          $or: serverOperators([{ fulfilled: { $exists: false } }, { fulfilled: false }]),
         })
         .lean();
 

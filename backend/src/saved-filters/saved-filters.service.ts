@@ -23,9 +23,9 @@ export class SavedFiltersService {
   /** AR-35: one page of the user's saved filters, newest first (`_id` breaks createdAt ties). */
   async findPage(userId: string, page: PageRequest): Promise<Paginated<SavedFilter>> {
     const [total, docs] = await Promise.all([
-      this.savedFilterRepository.countDocuments({ userId }).exec(),
+      this.savedFilterRepository.countDocuments({ userId: { $eq: userId } }).exec(),
       this.savedFilterRepository
-        .find({ userId })
+        .find({ userId: { $eq: userId } })
         .sort({ createdAt: -1, _id: -1 })
         .skip(skipOf(page))
         .limit(page.pageSize)
@@ -40,13 +40,17 @@ export class SavedFiltersService {
 
   async create(userId: string, name: string, filters: FilterData): Promise<SavedFilter> {
     // Check if user has reached the limit
-    const count = await this.savedFilterRepository.countDocuments({ userId });
+    const count = await this.savedFilterRepository.countDocuments({ userId: { $eq: userId } });
     if (count >= MAX_SAVED_FILTERS) {
       throw new DomainError('SAVED_FILTER_LIMIT_REACHED', { limit: MAX_SAVED_FILTERS });
     }
 
     // Check for duplicate name. AR-40: the name is the user's text, so it stays out of the error.
-    const existing = await this.savedFilterRepository.findOne({ userId, name });
+    // SC-10: equality only; the name is the user's text and never an operator.
+    const existing = await this.savedFilterRepository.findOne({
+      userId: { $eq: userId },
+      name: { $eq: name },
+    });
     if (existing) {
       throw new DomainError('SAVED_FILTER_NAME_TAKEN');
     }
@@ -62,7 +66,9 @@ export class SavedFiltersService {
   }
 
   async delete(userId: string, id: string): Promise<boolean> {
-    const result = await this.savedFilterRepository.deleteOne({ _id: id, userId }).exec();
+    const result = await this.savedFilterRepository
+      .deleteOne({ _id: { $eq: id }, userId: { $eq: userId } })
+      .exec();
 
     if (result.deletedCount === 0) {
       throw new DomainError('SAVED_FILTER_NOT_FOUND');

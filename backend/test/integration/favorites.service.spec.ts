@@ -14,6 +14,7 @@ import {
   AuctionSchema,
   PhaseModality,
 } from '../../src/auctions/schemas/auction.schema';
+import { applyMongooseDefaults } from '../../src/common/mongo/query-safety';
 import { FavoritesService } from '../../src/favorites/favorites.service';
 import { FavoriteEntity, FavoriteSchema } from '../../src/favorites/schemas/favorite.schema';
 import { useTestDatabase } from '../support/test-database';
@@ -44,6 +45,8 @@ describe('FavoritesService (integration)', () => {
   let service: FavoritesService;
 
   beforeAll(async () => {
+    // As in production (SC-10): the $in lookups must work with sanitizeFilter on.
+    applyMongooseDefaults();
     moduleRef = await Test.createTestingModule({
       imports: [
         MongooseModule.forRoot(db.uri),
