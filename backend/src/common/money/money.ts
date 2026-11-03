@@ -7,8 +7,9 @@ import DecimalJs from 'decimal.js';
  * amount survives the round trip to the database unchanged; ROUND_HALF_EVEN, the AR-19 default;
  * and no exponent notation in `toString()` for any amount a person could hold.
  *
- * Clones of decimal.js share one prototype, so `Decimal.isDecimal` and `instanceof` hold for any
- * decimal.js instance.
+ * Clones of decimal.js share one prototype, so `instanceof Decimal` holds for any decimal.js
+ * instance. Test untrusted input with `instanceof`, not `Decimal.isDecimal`: isDecimal also
+ * accepts a plain object with `toStringTag: "[object Decimal]"`, which a JSON body can forge.
  */
 export const Decimal = DecimalJs.clone({
   precision: 34,

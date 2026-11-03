@@ -78,6 +78,17 @@ describe('SavedFiltersController over HTTP', () => {
       expect(savedFilters.create).not.toHaveBeenCalled();
     });
 
+    it('SC-10 / AR-34: refuses a forged Decimal object as VALIDATION_FAILED, not a 500', async () => {
+      savedFilters.create.mockClear();
+
+      await request(app.getHttpServer())
+        .post('/api/saved-filters')
+        .send({ name: 'x', filters: { minMargin: { toStringTag: '[object Decimal]' } } })
+        .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['filters.minMargin'] } });
+
+      expect(savedFilters.create).not.toHaveBeenCalled();
+    });
+
     it('AR-34: validates the nested filters, naming each offending path', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/saved-filters')
