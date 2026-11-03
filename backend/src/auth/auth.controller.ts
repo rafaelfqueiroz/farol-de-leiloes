@@ -10,6 +10,14 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import {
+  ApiCreatedResponse,
+  ApiFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -17,21 +25,39 @@ import { RequestResetPasswordDto, ResetPasswordDto } from './dto/reset-password.
 import { SetPasswordDto } from './dto/set-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { CompleteProfileDto } from './dto/complete-profile.dto';
-import { AuthResponseDto, UserProfileResponseDto } from './dto/auth-response.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import {
+  AuthResponseDto,
+  CurrentUserResponseDto,
+  UserProfileResponseDto,
+  VerificationStatusResponseDto,
+} from './dto/auth-response.dto';
+import { ApiJwtAuth } from './decorators/api-jwt-auth.decorator';
+import { MessageResponseDto } from '../common/dto/message-response.dto';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthenticatedUser } from './interfaces/auth.interface';
 import { Request, Response } from 'express';
+import type { Env } from '../config/env';
 
 // GoogleStrategy.validate hands the signed-in user to passport, which sets it on the request.
 type GoogleCallbackRequest = Request & { user: Parameters<AuthService['googleLogin']>[0] };
 
+@ApiTags('auth')
+@ApiErrorResponses()
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private readonly config: ConfigService<Env, true>,
+  ) {}
 
   @Post('register')
+  @ApiOperation({ summary: 'Create a local account and send the verification email' })
+  @ApiCreatedResponse({ type: AuthResponseDto })
   async register(@Body() registerDto: RegisterDto): Promise<AuthResponseDto> {
     const result = await this.authService.register(registerDto);
     return new AuthResponseDto(result);
@@ -39,6 +65,8 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Sign in with email and password' })
+  @ApiOkResponse({ type: AuthResponseDto })
   async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
     const result = await this.authService.login(loginDto);
     return new AuthResponseDto(result);
@@ -46,53 +74,70 @@ export class AuthController {
 
   @Get('google')
   @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Start Google sign-in (browser redirect to Google)' })
+  @ApiFoundResponse({ description: 'Redirect to Google consent' })
   async googleAuth() {
     // Initiates Google OAuth flow
   }
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google sign-in callback (browser redirect to the frontend)' })
+  @ApiFoundResponse({ description: 'Redirect to {FRONTEND_URL}/auth/callback with the token' })
   async googleAuthRedirect(@Req() req: GoogleCallbackRequest, @Res() res: Response) {
     const result = await this.authService.googleLogin(req.user);
 
     // Redirect to frontend with token
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    const frontendUrl = this.config.get('FRONTEND_URL', { infer: true }); // AR-42
     res.redirect(`${frontendUrl}/auth/callback?token=${result.accessToken}`);
   }
 
   @Post('reset-password-request')
   @HttpCode(HttpStatus.OK)
-  async requestPasswordReset(@Body() dto: RequestResetPasswordDto) {
+  @ApiOperation({ summary: 'Email a password reset link (same answer whether or not it exists)' })
+  @ApiOkResponse({ type: MessageResponseDto })
+  async requestPasswordReset(@Body() dto: RequestResetPasswordDto): Promise<MessageResponseDto> {
     await this.authService.requestPasswordReset(dto.email);
-    return { message: 'Password reset email sent' };
+    return new MessageResponseDto('Password reset email sent');
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  async resetPassword(@Body() dto: ResetPasswordDto) {
+  @ApiOperation({ summary: 'Set a new password with a reset token' })
+  @ApiOkResponse({ type: MessageResponseDto })
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<MessageResponseDto> {
     await this.authService.resetPassword(dto.token, dto.newPassword);
-    return { message: 'Password reset successful' };
+    return new MessageResponseDto('Password reset successful');
   }
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  async getProfile(@CurrentUser() user: AuthenticatedUser) {
-    return user;
+  @ApiJwtAuth()
+  @ApiOperation({ summary: 'The signed-in user' })
+  @ApiOkResponse({ type: CurrentUserResponseDto })
+  async getProfile(@CurrentUser() user: AuthenticatedUser): Promise<CurrentUserResponseDto> {
+    return new CurrentUserResponseDto(user);
   }
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async logout() {
+  @ApiJwtAuth()
+  @ApiOperation({ summary: 'Sign out (the client discards its token)' })
+  @ApiOkResponse({ type: MessageResponseDto })
+  async logout(): Promise<MessageResponseDto> {
     // With JWT, logout is handled client-side by removing the token
-    return { message: 'Logged out successfully' };
+    return new MessageResponseDto('Logged out successfully');
   }
 
   @Patch('profile')
   @UseGuards(JwtAuthGuard)
+  @ApiJwtAuth()
+  @ApiOperation({ summary: 'Change the signed-in user name or email' })
+  @ApiOkResponse({ type: UserProfileResponseDto })
   async updateProfile(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() updateData: { name?: string; email?: string },
+    @Body() updateData: UpdateProfileDto,
   ): Promise<UserProfileResponseDto> {
     const profile = await this.authService.updateProfile(user.userId, updateData);
     return new UserProfileResponseDto(profile);
@@ -101,49 +146,72 @@ export class AuthController {
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiJwtAuth()
+  @ApiOperation({ summary: 'Change the password of a local account' })
+  @ApiOkResponse({ type: MessageResponseDto })
   async changePassword(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() passwordData: { currentPassword: string; newPassword: string },
-  ) {
+    @Body() passwordData: ChangePasswordDto,
+  ): Promise<MessageResponseDto> {
     await this.authService.changePassword(
       user.userId,
       passwordData.currentPassword,
       passwordData.newPassword,
     );
-    return { message: 'Password changed successfully' };
+    return new MessageResponseDto('Password changed successfully');
   }
 
   @Post('set-password')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async setPassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: SetPasswordDto) {
+  @ApiJwtAuth()
+  @ApiOperation({ summary: 'Add a password to a Google-only account' })
+  @ApiOkResponse({ type: MessageResponseDto })
+  async setPassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SetPasswordDto,
+  ): Promise<MessageResponseDto> {
     await this.authService.setPassword(user.userId, dto.newPassword);
-    return { message: 'Password set successfully' };
+    return new MessageResponseDto('Password set successfully');
   }
 
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
-  async verifyEmail(@Body() dto: VerifyEmailDto) {
+  @ApiOperation({ summary: 'Confirm an email address with its verification token' })
+  @ApiOkResponse({ type: MessageResponseDto })
+  async verifyEmail(@Body() dto: VerifyEmailDto): Promise<MessageResponseDto> {
     await this.authService.verifyEmail(dto.token);
-    return { message: 'Email verified successfully' };
+    return new MessageResponseDto('Email verified successfully');
   }
 
   @Post('resend-verification')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async resendVerification(@CurrentUser() user: AuthenticatedUser) {
+  @ApiJwtAuth()
+  @ApiOperation({ summary: 'Send the verification email again' })
+  @ApiOkResponse({ type: MessageResponseDto })
+  async resendVerification(@CurrentUser() user: AuthenticatedUser): Promise<MessageResponseDto> {
     await this.authService.resendVerification(user.userId);
-    return { message: 'Verification email sent' };
+    return new MessageResponseDto('Verification email sent');
   }
 
   @Get('verification-status')
   @UseGuards(JwtAuthGuard)
-  async getVerificationStatus(@CurrentUser() user: AuthenticatedUser) {
-    return this.authService.getVerificationStatus(user.userId);
+  @ApiJwtAuth()
+  @ApiOperation({ summary: 'Whether the signed-in user email is verified' })
+  @ApiOkResponse({ type: VerificationStatusResponseDto })
+  async getVerificationStatus(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<VerificationStatusResponseDto> {
+    const status = await this.authService.getVerificationStatus(user.userId);
+    return new VerificationStatusResponseDto(status);
   }
 
   @Patch('profile/complete')
   @UseGuards(JwtAuthGuard)
+  @ApiJwtAuth()
+  @ApiOperation({ summary: 'Fill in the profile details (phone, CPF, address...)' })
+  @ApiOkResponse({ type: UserProfileResponseDto })
   async completeProfile(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CompleteProfileDto,
@@ -154,6 +222,9 @@ export class AuthController {
 
   @Get('profile/full')
   @UseGuards(JwtAuthGuard)
+  @ApiJwtAuth()
+  @ApiOperation({ summary: 'The signed-in user full profile' })
+  @ApiOkResponse({ type: UserProfileResponseDto })
   async getFullProfile(@CurrentUser() user: AuthenticatedUser): Promise<UserProfileResponseDto> {
     const profile = await this.authService.getFullProfile(user.userId);
     return new UserProfileResponseDto(profile);

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Box, Container, Typography, CircularProgress } from '@mui/material';
+import { Alert, Box, Container, Typography, CircularProgress } from '@mui/material';
 import { hasMinimumRole } from '@/app/components/RequireRole';
 import { useAuth } from '@/app/contexts/AuthContext';
 import SearchFilters, { AuctionFilters } from '@/app/components/SearchFilters';
@@ -10,11 +10,14 @@ import AuctionList, { type Auction } from '@/app/components/AuctionList';
 import FavoritesView from '@/app/components/FavoritesView';
 import { SavedFiltersProvider } from '@/app/contexts/SavedFiltersContext';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
+import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import type { Paginated } from '@/lib/pagination';
+import { reportClientError } from '@/lib/report-client-error';
 
-interface SearchResult {
-  total: number;
-  items: Auction[];
-}
+type SearchResult = Paginated<Auction>;
+
+// AR-35: how many auctions a page shows until the user picks another size (1..100).
+const DEFAULT_PAGE_SIZE = 10;
 
 interface QueryReader {
   get(name: string): string | null;
@@ -68,6 +71,7 @@ function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { role } = useAuth();
+  const apiErrorMessage = useApiErrorMessage();
   const canAccessFavorites = hasMinimumRole(role, 'standard');
   // #42: the view follows the URL, so the AppShell's Favoritos link (/search?view=favorites) and
   // Buscar imóveis link (/search) switch it without a callback into the page
@@ -76,9 +80,10 @@ function SearchPageContent() {
   const queryKey = searchParams.toString();
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [currentFilters, setCurrentFilters] = useState<AuctionFilters>({});
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   // only the latest search may write results: an older, slower response is dropped
   const searchSequence = useRef(0);
   // the query of a navigation the page started itself (a search, a page change). It searches even
@@ -86,9 +91,10 @@ function SearchPageContent() {
   // /search reached any other way (the AppShell link, Back) resets.
   const ownNavigation = useRef<string | null>(null);
 
-  const performSearch = async (filters: AuctionFilters, page: number) => {
+  const performSearch = async (filters: AuctionFilters, page: number, size = pageSize) => {
     const sequence = ++searchSequence.current;
     setSearchLoading(true);
+    setSearchError(null);
 
     try {
       const params = new URLSearchParams();
@@ -103,16 +109,21 @@ function SearchPageContent() {
         params.set('modality', filters.modality.join(','));
       if (filters.minMargin) params.set('minMargin', filters.minMargin.toString());
       if (filters.maxMargin) params.set('maxMargin', filters.maxMargin.toString());
-      params.set('limit', pageSize.toString());
-      params.set('offset', ((page - 1) * pageSize).toString());
+      // AR-35: the API pages by number and size
+      params.set('page', page.toString());
+      params.set('pageSize', size.toString());
 
       const response = await fetch(`/api/search?${params.toString()}`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to fetch auctions');
+      if (!response.ok) throw await readApiError(response);
+      const data: SearchResult = await response.json();
 
       if (sequence === searchSequence.current) setSearchResults(data);
-    } catch {
-      if (sequence === searchSequence.current) setSearchResults({ total: 0, items: [] });
+    } catch (error: unknown) {
+      if (sequence === searchSequence.current) {
+        reportClientError(error, { where: 'search page' });
+        setSearchError(apiErrorMessage(error));
+        setSearchResults(null);
+      }
     } finally {
       if (sequence === searchSequence.current) setSearchLoading(false);
     }
@@ -135,6 +146,7 @@ function SearchPageContent() {
     } else {
       searchSequence.current++;
       setSearchResults(null);
+      setSearchError(null);
       setSearchLoading(false);
     }
   }, [queryKey, activeView]);
@@ -167,7 +179,7 @@ function SearchPageContent() {
   const handlePageSizeChange = async (newPageSize: number) => {
     setPageSize(newPageSize);
     setCurrentPage(1); // Reset to first page when changing page size
-    await performSearch(currentFilters, 1);
+    await performSearch(currentFilters, 1, newPageSize);
   };
 
   return (
@@ -199,7 +211,13 @@ function SearchPageContent() {
               <Box sx={{ flex: 1 }}>
                 <SearchFilters
                   onSearch={handleManualSearch}
-                  onAISearchResults={(results) => setSearchResults(results)}
+                  onAISearchResults={(results) => {
+                    // the API says which page and size it answered with
+                    setSearchError(null);
+                    setCurrentPage(results.page);
+                    setPageSize(results.pageSize);
+                    setSearchResults(results);
+                  }}
                   isLoading={searchLoading}
                   initialFilters={currentFilters}
                 />
@@ -209,6 +227,12 @@ function SearchPageContent() {
         )}
 
         {activeView === 'favorites' && canAccessFavorites && <FavoritesView />}
+
+        {searchError && activeView === 'search' && (
+          <Alert severity="error" sx={{ mt: 4 }}>
+            {searchError}
+          </Alert>
+        )}
 
         {/* Search Results */}
         {searchResults && activeView === 'search' && (

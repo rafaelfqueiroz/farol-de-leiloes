@@ -1,27 +1,29 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Env } from '../config/env';
 import Stripe from 'stripe';
 import { UsersService } from '../users/users.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { DomainError } from '../common/errors/domain-error';
 
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
   private stripe: Stripe;
-  private webhookSecret: string | undefined;
-  private standardPriceId: string | undefined;
+  private webhookSecret: string;
+  private standardPriceId: string;
   private frontendUrl: string;
 
   constructor(
-    private configService: ConfigService,
+    configService: ConfigService<Env, true>,
     private usersService: UsersService,
     private couponsService: CouponsService,
   ) {
-    // Stripe refuses to construct without a key, so a missing one already failed the boot.
-    this.stripe = new Stripe(this.configService.getOrThrow<string>('STRIPE_SECRET_KEY'));
-    this.webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
-    this.standardPriceId = this.configService.get<string>('STRIPE_STANDARD_PRICE_ID');
-    this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
+    // AR-41: every Stripe value is required at boot, so none of them can be missing here.
+    this.stripe = new Stripe(configService.get('STRIPE_SECRET_KEY', { infer: true }));
+    this.webhookSecret = configService.get('STRIPE_WEBHOOK_SECRET', { infer: true });
+    this.standardPriceId = configService.get('STRIPE_STANDARD_PRICE_ID', { infer: true });
+    this.frontendUrl = configService.get('FRONTEND_URL', { infer: true });
   }
 
   async createCheckoutSession(
@@ -31,13 +33,13 @@ export class PaymentsService {
     couponCode?: string,
   ): Promise<{ url: string }> {
     if (planId !== 'standard') {
-      throw new BadRequestException('Plano inválido');
+      throw new DomainError('INVALID_PLAN');
     }
 
     // Look up or create Stripe customer
     const user = await this.usersService.findByIdFull(userId);
     if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     let stripeCustomerId = user.stripeCustomerId;
@@ -72,7 +74,7 @@ export class PaymentsService {
     const session = await this.stripe.checkout.sessions.create(sessionParams);
 
     if (!session.url) {
-      throw new BadRequestException('Falha ao criar sessão de pagamento');
+      throw new DomainError('CHECKOUT_SESSION_FAILED');
     }
 
     return { url: session.url };
@@ -82,14 +84,10 @@ export class PaymentsService {
     let event: Stripe.Event;
 
     try {
-      // Without a secret no signature can be verified: same rejection as a bad one (DV-03).
-      if (!this.webhookSecret) {
-        throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
-      }
       event = this.stripe.webhooks.constructEvent(rawBody, signature, this.webhookSecret);
     } catch (err) {
       this.logger.error(`Webhook signature verification failed: ${err}`);
-      throw new BadRequestException('Assinatura do webhook inválida');
+      throw new DomainError('INVALID_WEBHOOK_SIGNATURE');
     }
 
     switch (event.type) {
@@ -152,7 +150,7 @@ export class PaymentsService {
   }> {
     const user = await this.usersService.findByIdFull(userId);
     if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
+      throw new DomainError('USER_NOT_FOUND');
     }
     return {
       role: user.role ?? 'free',
@@ -164,11 +162,11 @@ export class PaymentsService {
   async cancelSubscription(userId: string): Promise<void> {
     const user = await this.usersService.findByIdFull(userId);
     if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     if (!user.stripeSubscriptionId) {
-      throw new BadRequestException('Nenhuma assinatura ativa encontrada');
+      throw new DomainError('SUBSCRIPTION_NOT_FOUND');
     }
 
     await this.stripe.subscriptions.cancel(user.stripeSubscriptionId);

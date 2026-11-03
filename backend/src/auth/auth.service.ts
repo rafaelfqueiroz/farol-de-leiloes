@@ -1,17 +1,14 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { CompleteProfileDto } from './dto/complete-profile.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserDocument } from '../users/schemas/user.schema';
 import { UserProfile, AuthResult } from './interfaces/auth.interface';
+import { DomainError } from '../common/errors/domain-error';
 
 @Injectable()
 export class AuthService {
@@ -44,7 +41,7 @@ export class AuthService {
     const user = await this.usersService.validatePassword(loginDto.email, loginDto.password);
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new DomainError('INVALID_CREDENTIALS');
     }
 
     const accessToken = this.generateToken(user);
@@ -77,10 +74,7 @@ export class AuthService {
     await this.usersService.resetPassword(token, newPassword);
   }
 
-  async updateProfile(
-    userId: string,
-    updateData: { name?: string; email?: string },
-  ): Promise<UserProfile> {
+  async updateProfile(userId: string, updateData: UpdateProfileDto): Promise<UserProfile> {
     const user = await this.usersService.update(userId, updateData);
     return this.toUserProfile(user);
   }
@@ -93,7 +87,7 @@ export class AuthService {
   async getFullProfile(userId: string): Promise<UserProfile> {
     const user = await this.usersService.findByIdFull(userId);
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new DomainError('USER_NOT_FOUND');
     }
     return this.toUserProfile(user);
   }
@@ -105,18 +99,16 @@ export class AuthService {
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     if (!user.providers?.includes('local')) {
-      throw new UnauthorizedException(
-        'Cannot change password for OAuth-only accounts. Use "Set Password" instead.',
-      );
+      throw new DomainError('OAUTH_ACCOUNT_HAS_NO_PASSWORD');
     }
 
     const validPassword = await this.usersService.validatePassword(user.email, currentPassword);
     if (!validPassword) {
-      throw new UnauthorizedException('Current password is incorrect');
+      throw new DomainError('CURRENT_PASSWORD_INCORRECT');
     }
 
     await this.usersService.update(userId, { password: newPassword });
@@ -125,13 +117,11 @@ export class AuthService {
   async setPassword(userId: string, newPassword: string): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     if (user.providers?.includes('local')) {
-      throw new BadRequestException(
-        'You already have a password set. Use "Change Password" instead.',
-      );
+      throw new DomainError('PASSWORD_ALREADY_SET');
     }
 
     await this.usersService.setPassword(userId, newPassword);
@@ -153,15 +143,15 @@ export class AuthService {
   async resendVerification(userId: string): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     if (!user.providers?.includes('local')) {
-      throw new BadRequestException('OAuth users do not require email verification');
+      throw new DomainError('OAUTH_ACCOUNT_NEEDS_NO_VERIFICATION');
     }
 
     if (user.emailVerified) {
-      throw new BadRequestException('Email already verified');
+      throw new DomainError('EMAIL_ALREADY_VERIFIED');
     }
 
     const token = await this.usersService.setEmailVerificationToken(userId);
@@ -173,7 +163,7 @@ export class AuthService {
   ): Promise<{ emailVerified: boolean; providers: string[] }> {
     const user = await this.usersService.findById(userId);
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new DomainError('USER_NOT_FOUND');
     }
     return {
       emailVerified: user.emailVerified ?? false,

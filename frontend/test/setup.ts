@@ -10,7 +10,8 @@ afterEach(() => {
 });
 
 // jsdom has no matchMedia; MUI reads it for the system colour scheme and useMediaQuery.
-if (!window.matchMedia) {
+// Node-environment tests (`// @vitest-environment node`, e.g. the BFF and env helpers) have no window.
+if (typeof window !== 'undefined' && !window.matchMedia) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: (query: string): MediaQueryList => ({

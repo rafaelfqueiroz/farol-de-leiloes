@@ -13,19 +13,27 @@ import { RemindersModule } from './reminders/reminders.module';
 import { AiModule } from './ai/ai.module';
 import { SupportModule } from './support/support.module';
 import schedulerConfig from './config/scheduler.config';
+import r2Config from './config/r2.config';
+import { validateEnv, type AppConfigService } from './config/env';
+import { applyMongooseDefaults } from './common/mongo/query-safety';
 
 @Module({
   imports: [
+    // AR-41: the environment is validated once, at boot; an invalid one stops the app.
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [schedulerConfig],
+      cache: true,
+      validate: validateEnv,
+      load: [schedulerConfig, r2Config],
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (config: AppConfigService) => {
+        // SC-10: before the first query, so no filter is ever read with operators from a request.
+        applyMongooseDefaults();
         return {
-          uri: configService.get('MONGODB_URI'),
+          uri: config.get('MONGODB_URI', { infer: true }),
           retryAttempts: 3,
         };
       },

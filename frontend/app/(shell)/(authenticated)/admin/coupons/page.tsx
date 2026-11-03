@@ -23,10 +23,16 @@ import {
   Alert,
   Snackbar,
   CircularProgress,
+  Pagination,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import { pageCount, type Paginated } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
+
+// AR-35: the coupons list is paginated; this is how many rows one page shows.
+const PAGE_SIZE = 20;
 
 interface Coupon {
   _id: string;
@@ -41,7 +47,10 @@ interface Coupon {
 export default function AdminCouponsPage() {
   const router = useRouter();
   const { role, loading: authLoading } = useAuth();
+  const apiErrorMessage = useApiErrorMessage();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -64,19 +73,27 @@ export default function AdminCouponsPage() {
   const loadCoupons = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/coupons', {
+      const response = await fetch(`/api/coupons?page=${page}&pageSize=${PAGE_SIZE}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
-        const data = await response.json();
-        setCoupons(data);
+        const data: Paginated<Coupon> = await response.json();
+        // the last coupon of the last page was removed or the list shrank: step back
+        if (data.items.length === 0 && page > 1) {
+          setPage(pageCount(data.total, PAGE_SIZE));
+          return;
+        }
+        setCoupons(data.items);
+        setTotal(data.total);
+      } else {
+        throw await readApiError(response);
       }
     } catch (err) {
       reportClientError(err, { where: 'admin/coupons page' });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     if (!authLoading && role !== 'admin') {
@@ -117,15 +134,10 @@ export default function AdminCouponsPage() {
         setNewDescription('');
         void loadCoupons();
       } else {
-        const error = await response.json();
-        setSnackbar({
-          open: true,
-          message: error.message || 'Erro ao criar cupom',
-          severity: 'error',
-        });
+        throw await readApiError(response);
       }
-    } catch {
-      setSnackbar({ open: true, message: 'Erro ao criar cupom', severity: 'error' });
+    } catch (error: unknown) {
+      setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
     } finally {
       setSaving(false);
     }
@@ -143,15 +155,10 @@ export default function AdminCouponsPage() {
         setSnackbar({ open: true, message: 'Cupom invalidado', severity: 'success' });
         void loadCoupons();
       } else {
-        const error = await response.json();
-        setSnackbar({
-          open: true,
-          message: error.message || 'Erro ao invalidar cupom',
-          severity: 'error',
-        });
+        throw await readApiError(response);
       }
-    } catch {
-      setSnackbar({ open: true, message: 'Erro ao invalidar cupom', severity: 'error' });
+    } catch (error: unknown) {
+      setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
     }
   };
 
@@ -270,6 +277,17 @@ export default function AdminCouponsPage() {
                 </TableBody>
               </Table>
             </TableContainer>
+
+            {total > PAGE_SIZE && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                <Pagination
+                  count={pageCount(total, PAGE_SIZE)}
+                  page={page}
+                  onChange={(_, newPage) => setPage(newPage)}
+                  color="primary"
+                />
+              </Box>
+            )}
           </>
         )}
       </Container>

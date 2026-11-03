@@ -1,9 +1,11 @@
-import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import type { Env } from '../../config/env';
 import { UsersService } from '../../users/users.service';
 import { AuthenticatedUser, JwtPayload } from '../interfaces/auth.interface';
+import { DomainError } from '../../common/errors/domain-error';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -11,14 +13,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   constructor(
     private usersService: UsersService,
-    configService: ConfigService,
+    configService: ConfigService<Env, true>,
   ) {
-    const jwtSecret = configService.get<string>('JWT_SECRET') || 'your-secret-key';
-
+    // AR-41: required at boot, no fallback secret.
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: jwtSecret,
+      secretOrKey: configService.get('JWT_SECRET', { infer: true }),
     });
   }
 
@@ -26,7 +27,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
       this.logger.warn(`JWT validation - User not found for ID: ${payload.sub}`);
-      throw new UnauthorizedException('User not found');
+      // A token for an account that no longer exists authenticates nobody.
+      throw new DomainError('UNAUTHENTICATED');
     }
     return {
       userId: payload.sub,

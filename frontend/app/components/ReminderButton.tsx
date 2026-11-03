@@ -29,7 +29,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { useReminders, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { errorMessage } from '@/lib/error-message';
+import { useApiErrorMessage } from '@/lib/api-error';
 
 interface ReminderButtonProps {
   auctionCode: string;
@@ -46,6 +46,7 @@ export default function ReminderButton({
   const { hasReminderForAuction, getReminderForAuction, createReminder, deleteReminder } =
     useReminders();
   const router = useRouter();
+  const apiErrorMessage = useApiErrorMessage();
 
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -98,10 +99,10 @@ export default function ReminderButton({
       if (result) {
         handleClose();
       } else {
-        setError('Erro ao criar lembrete. Tente novamente.');
+        setError(apiErrorMessage(null));
       }
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao criar lembrete');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -118,10 +119,10 @@ export default function ReminderButton({
       if (success) {
         handleClose();
       } else {
-        setError('Erro ao remover lembrete. Tente novamente.');
+        setError(apiErrorMessage(null));
       }
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao remover lembrete');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }

@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import ErrorState from '@/app/components/patterns/ErrorState';
 import {
   Box,
   Typography,
@@ -37,7 +39,7 @@ import SmsIcon from '@mui/icons-material/Sms';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useReminders, Reminder, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
-import { errorMessage } from '@/lib/error-message';
+import { useApiErrorMessage } from '@/lib/api-error';
 
 const CHANNEL_ICONS: Record<ReminderChannel, React.ReactElement> = {
   EMAIL: <EmailIcon fontSize="small" />,
@@ -65,8 +67,11 @@ function formatAddress(auction: Reminder['auction']): string {
 
 export default function RemindersPage() {
   const router = useRouter();
-  const { reminders, loading, deleteReminder, updateReminder } = useReminders();
+  const { reminders, loading, loadFailed, deleteReminder, updateReminder, refreshReminders } =
+    useReminders();
+  const t = useTranslations();
   const { role } = useAuth();
+  const apiErrorMessage = useApiErrorMessage();
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -132,10 +137,10 @@ export default function RemindersPage() {
       if (success) {
         handleCloseEditDialog();
       } else {
-        setError('Erro ao atualizar lembrete. Tente novamente.');
+        setError(apiErrorMessage(null));
       }
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao atualizar lembrete');
+      setError(apiErrorMessage(err));
     } finally {
       setActionLoading(false);
     }
@@ -152,10 +157,10 @@ export default function RemindersPage() {
       if (success) {
         handleCloseDeleteDialog();
       } else {
-        setError('Erro ao remover lembrete. Tente novamente.');
+        setError(apiErrorMessage(null));
       }
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao remover lembrete');
+      setError(apiErrorMessage(err));
     } finally {
       setActionLoading(false);
     }
@@ -192,21 +197,31 @@ export default function RemindersPage() {
         Gerencie seus lembretes de leilões
       </Typography>
 
+      {loadFailed && (
+        <ErrorState
+          title={t('loadFailed.reminders.title')}
+          message={t('loadFailed.reminders.message')}
+          onRetry={() => void refreshReminders()}
+        />
+      )}
+
       {upcomingReminders.length === 0 ? (
-        <Card sx={{ textAlign: 'center', py: 6 }}>
-          <CardContent>
-            <NotificationsIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
-              Nenhum lembrete agendado
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Adicione lembretes aos leilões para receber notificações antes do início
-            </Typography>
-            <Button variant="contained" onClick={() => router.push('/search')}>
-              Buscar leilões
-            </Button>
-          </CardContent>
-        </Card>
+        loadFailed ? null : (
+          <Card sx={{ textAlign: 'center', py: 6 }}>
+            <CardContent>
+              <NotificationsIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                Nenhum lembrete agendado
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Adicione lembretes aos leilões para receber notificações antes do início
+              </Typography>
+              <Button variant="contained" onClick={() => router.push('/search')}>
+                Buscar leilões
+              </Button>
+            </CardContent>
+          </Card>
+        )
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {upcomingReminders.map((reminder) => (

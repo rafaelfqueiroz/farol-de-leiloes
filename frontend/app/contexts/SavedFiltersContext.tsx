@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ApiError, readApiError } from '@/lib/api-error';
+import { fetchAllPages } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
 
 export interface FilterData {
@@ -23,6 +25,8 @@ export interface SavedFilter {
 interface SavedFiltersContextType {
   savedFilters: SavedFilter[];
   loading: boolean;
+  /** The last load failed: `savedFilters` may be missing items (or stale), never a complete list. */
+  loadFailed: boolean;
   isAuthenticated: boolean;
   saveFilter: (name: string, filters: FilterData) => Promise<SavedFilter | null>;
   deleteFilter: (id: string) => Promise<boolean>;
@@ -34,6 +38,7 @@ const SavedFiltersContext = createContext<SavedFiltersContextType | undefined>(u
 export function SavedFiltersProvider({ children }: { children: ReactNode }) {
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -60,19 +65,20 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const response = await fetch('/api/saved-filters', {
-        headers: getAuthHeaders(),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSavedFilters(data);
-      } else if (response.status === 401) {
+      setLoadFailed(false);
+      // AR-35: the endpoint is paginated and the filter picker needs every filter, so they are
+      // read page by page
+      setSavedFilters(
+        await fetchAllPages<SavedFilter>('/api/saved-filters', { headers: getAuthHeaders() }),
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
         setSavedFilters([]);
         setIsAuthenticated(false);
+      } else {
+        setLoadFailed(true);
+        reportClientError(error, { where: 'SavedFiltersContext.load' });
       }
-    } catch (error) {
-      reportClientError(error, { where: 'SavedFiltersContext.load' });
     } finally {
       setLoading(false);
     }
@@ -98,11 +104,9 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
         setSavedFilters((prev) => [newFilter, ...prev]);
         return newFilter;
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        reportClientError(new Error(`Saving a filter failed with HTTP ${response.status}`), {
-          where: 'SavedFiltersContext.saveFilter',
-        });
-        throw new Error(errorData.error || 'Failed to save filter');
+        // AR-39: the caller turns the code (SAVED_FILTER_LIMIT_REACHED, SAVED_FILTER_NAME_TAKEN...)
+        // into text
+        throw await readApiError(response);
       }
     } catch (error) {
       reportClientError(error, { where: 'SavedFiltersContext.saveFilter' });
@@ -146,6 +150,7 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
       value={{
         savedFilters,
         loading,
+        loadFailed,
         isAuthenticated,
         saveFilter,
         deleteFilter,

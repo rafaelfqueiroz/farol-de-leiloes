@@ -7,7 +7,7 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import r2Config from './r2.config';
+import r2Config from '../config/r2.config';
 import { errorMessage } from '../common/error-message';
 import { CAIXA_USER_AGENT } from '../common/caixa-user-agent';
 

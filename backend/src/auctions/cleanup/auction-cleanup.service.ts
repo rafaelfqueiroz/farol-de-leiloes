@@ -5,6 +5,7 @@ import { AuctionEntity, AuctionDocument } from '../schemas/auction.schema';
 import { StorageService } from '../../storage/storage.service';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
 import { errorMessage } from '../../common/error-message';
+import { serverOperators } from '../../common/mongo/query-safety';
 
 const CLEANUP_THRESHOLD_DAYS = 14;
 
@@ -43,8 +44,8 @@ export class AuctionCleanupService implements OnModuleInit {
       const auctions = await this.auctionModel
         .find({
           available: false,
-          updatedAt: { $lte: thresholdDate },
-          $or: [{ image: { $exists: true } }, { matricula: { $exists: true } }],
+          updatedAt: serverOperators({ $lte: thresholdDate }),
+          $or: serverOperators([{ image: { $exists: true } }, { matricula: { $exists: true } }]),
         })
         .lean();
 

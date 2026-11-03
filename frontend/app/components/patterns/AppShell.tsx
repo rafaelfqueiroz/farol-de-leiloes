@@ -82,10 +82,10 @@ type Counts = Partial<Record<CountSource, number>>;
 // Counts come only from what the contexts already hold; while they load there is no pill
 // (formatCount also hides zero, which is what a failed load leaves).
 function useCounts(): Counts {
-  const { favorites, loading: favoritesLoading } = useFavorites();
+  const { favoriteCodes, loading: favoritesLoading } = useFavorites();
   const { reminders, loading: remindersLoading } = useReminders();
   return {
-    favorites: favoritesLoading ? undefined : favorites.length,
+    favorites: favoritesLoading ? undefined : favoriteCodes.length,
     upcomingReminders: remindersLoading
       ? undefined
       : reminders.filter((reminder) => reminder.status === 'PENDING').length,

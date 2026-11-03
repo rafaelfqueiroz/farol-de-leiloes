@@ -12,10 +12,11 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { errorMessage } from '@/lib/error-message';
+import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const apiErrorMessage = useApiErrorMessage();
   const params = useParams();
   const token = params.token as string;
   const [password, setPassword] = useState('');
@@ -47,12 +48,11 @@ export default function ResetPasswordPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ token, newPassword: password }), // AR-34: the DTO's field name
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to reset password');
+        throw await readApiError(response);
       }
 
       setSuccess(true);
@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
         router.push('/login');
       }, 2000);
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao redefinir senha');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }

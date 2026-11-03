@@ -115,6 +115,22 @@ export default defineConfig(
       'no-restricted-imports': ['error', { patterns: [crossModulePatterns(self)] }],
     },
   })),
+  // AR-42: process.env is read only by the config module; everything else injects typed config.
+  // (The domain blocks below replace this rule's options and keep process.env in their list.)
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/config/**'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message: 'AR-42: read configuration through ConfigService<Env, true>, not process.env.',
+        },
+      ],
+    },
+  },
   // AR-05 (later blocks win, so the domain blocks repeat the AR-09 patterns of their module).
   ...modules.map((self) => ({
     files: [`src/${self}/**/domain/**/*.ts`],

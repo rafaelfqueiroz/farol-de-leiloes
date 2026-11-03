@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-
-export type LlmProvider = 'ollama' | 'groq' | 'gemini' | 'openai' | 'anthropic';
+import type { Env, LlmProvider } from '../../config/env';
 
 export interface LlmConfig {
   provider: LlmProvider;
@@ -29,50 +28,46 @@ interface AnthropicResponse {
 export class LlmAdapter {
   private readonly logger = new Logger(LlmAdapter.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService<Env, true>) {}
 
+  // AR-41: provider, models and the selected provider's key are validated at boot; the defaults
+  // live in the schema (src/config/env.schema.ts).
   getConfig(): LlmConfig {
-    const provider = (this.configService.get<string>('LLM_PROVIDER') || 'ollama') as LlmProvider;
-    const configs = this.getProviderConfigs();
-
-    if (!configs[provider]) {
-      this.logger.warn(`Unknown LLM provider: ${provider}, falling back to ollama`);
-      return configs.ollama;
-    }
-
-    return configs[provider];
+    return this.getProviderConfigs()[this.configService.get('LLM_PROVIDER', { infer: true })];
   }
 
   private getProviderConfigs(): Record<LlmProvider, LlmConfig> {
+    const get = <K extends keyof Env>(key: K): Env[K] =>
+      this.configService.get(key, { infer: true });
     return {
       ollama: {
         provider: 'ollama',
-        model: this.configService.get<string>('OLLAMA_MODEL') || 'qwen2.5:3b',
-        baseUrl: this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434/v1',
+        model: get('OLLAMA_MODEL'),
+        baseUrl: get('OLLAMA_BASE_URL'),
       },
       groq: {
         provider: 'groq',
-        model: this.configService.get<string>('GROQ_MODEL') || 'llama-3.1-8b-instant',
+        model: get('GROQ_MODEL'),
         baseUrl: 'https://api.groq.com/openai/v1',
-        apiKey: this.configService.get<string>('GROQ_API_KEY'),
+        apiKey: get('GROQ_API_KEY'),
       },
       gemini: {
         provider: 'gemini',
-        model: this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.0-flash',
+        model: get('GEMINI_MODEL'),
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-        apiKey: this.configService.get<string>('GOOGLE_API_KEY'),
+        apiKey: get('GOOGLE_API_KEY'),
       },
       openai: {
         provider: 'openai',
-        model: this.configService.get<string>('OPENAI_MODEL') || 'gpt-4o-mini',
+        model: get('OPENAI_MODEL'),
         baseUrl: 'https://api.openai.com/v1',
-        apiKey: this.configService.get<string>('OPENAI_API_KEY'),
+        apiKey: get('OPENAI_API_KEY'),
       },
       anthropic: {
         provider: 'anthropic',
-        model: this.configService.get<string>('ANTHROPIC_MODEL') || 'claude-sonnet-4-20250514',
+        model: get('ANTHROPIC_MODEL'),
         baseUrl: 'https://api.anthropic.com/v1',
-        apiKey: this.configService.get<string>('ANTHROPIC_API_KEY'),
+        apiKey: get('ANTHROPIC_API_KEY'),
       },
     };
   }

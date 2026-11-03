@@ -1,6 +1,7 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import messages from '@/messages/pt-BR.json';
 import { renderWithProviders as render } from '@/test/render';
 import SearchPage from './page';
 
@@ -13,6 +14,7 @@ const env = vi.hoisted(() => ({
   role: 'standard',
 }));
 
+vi.mock('@/lib/report-client-error', () => ({ reportClientError: vi.fn() }));
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(env.search),
   useRouter: () => ({ push: env.push }),
@@ -65,6 +67,7 @@ vi.mock('@/app/components/FavoritesView', () => ({
 interface Pending {
   url: string;
   resolve: (total: number) => void;
+  reject: (response: { status: number; body: unknown }) => void;
 }
 let pending: Pending[] = [];
 
@@ -80,9 +83,14 @@ beforeEach(() => {
       (url: string) =>
         new Promise((resolve) => {
           pending.push({
+            reject: ({ status, body }) => resolve({ ok: false, status, json: async () => body }),
             url,
             resolve: (total) =>
-              resolve({ ok: true, status: 200, json: async () => ({ total, items: [] }) }),
+              resolve({
+                ok: true,
+                status: 200,
+                json: async () => ({ total, items: [], page: 1, pageSize: 10 }),
+              }),
           });
         }),
     ),
@@ -118,9 +126,11 @@ describe('search page — URL-driven state', () => {
     expect(screen.queryByText('Lista de favoritos')).not.toBeInTheDocument();
     expect(form()).toBe(JSON.stringify({ state: 'SP' }));
     expect(pending).toHaveLength(1);
-    // page 2 of 10: offset 10
+    // AR-35: page 2 of 10 per page
     expect(pending[0]?.url).toContain('state=SP');
-    expect(pending[0]?.url).toContain('offset=10');
+    expect(pending[0]?.url).toContain('page=2');
+    expect(pending[0]?.url).toContain('pageSize=10');
+    expect(pending[0]?.url).not.toMatch(/limit|offset/);
     await answer(0, 7);
     expect(screen.getByTestId('results')).toHaveTextContent('total 7 página 2');
   });
@@ -184,16 +194,16 @@ describe('search page — URL-driven state', () => {
     await user.click(screen.getByRole('button', { name: 'Buscar tudo' }));
     expect(pending).toHaveLength(1);
     expect(pending[0]?.url).not.toContain('state=');
-    expect(pending[0]?.url).toContain('offset=0');
+    expect(pending[0]?.url).toContain('page=1');
     await answer(0, 30);
 
     await user.click(screen.getByRole('button', { name: 'Próxima página' }));
     expect(env.push).toHaveBeenLastCalledWith('/search?page=2');
     navigate(rerender, 'page=2');
-    // page 2 of the unfiltered search: offset 10, still no filters
+    // page 2 of the unfiltered search, still no filters
     expect(pending).toHaveLength(2);
     expect(pending[1]?.url).not.toContain('state=');
-    expect(pending[1]?.url).toContain('offset=10');
+    expect(pending[1]?.url).toContain('page=2');
     await answer(1, 30);
     expect(screen.getByTestId('results')).toHaveTextContent('total 30 página 2');
 
@@ -207,7 +217,9 @@ describe('search page — URL-driven state', () => {
     const user = userEvent.setup();
     env.search = 'page=2';
     const { rerender } = render(<SearchPage />);
-    expect(pending[0]?.url).toContain('offset=10');
+    expect(pending[0]?.url).toContain('page=2');
+    expect(pending[0]?.url).toContain('pageSize=10');
+    expect(pending[0]?.url).not.toMatch(/limit|offset/);
     await answer(0, 30);
 
     await user.click(screen.getByRole('button', { name: 'Buscar tudo' }));
@@ -215,12 +227,38 @@ describe('search page — URL-driven state', () => {
     navigate(rerender, '');
     // the page's own navigation to the bare /search searches page 1
     expect(pending).toHaveLength(2);
-    expect(pending[1]?.url).toContain('offset=0');
+    expect(pending[1]?.url).toContain('page=1');
     await answer(1, 30);
     expect(screen.getByTestId('results')).toHaveTextContent('total 30 página 1');
 
     // and re-submitting on the same URL searches once more
     await user.click(screen.getByRole('button', { name: 'Buscar tudo' }));
     expect(pending).toHaveLength(3);
+  });
+
+  it('shows the message of the error code when the search fails (AR-39)', async () => {
+    env.search = 'state=SP';
+    render(<SearchPage />);
+
+    await act(async () => {
+      pending[0]?.reject({
+        status: 400,
+        body: { code: 'VALIDATION_FAILED', context: { fields: ['pageSize'] } },
+      });
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(messages.errors.VALIDATION_FAILED);
+    expect(screen.queryByTestId('results')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the generic message when the answer is not an API error', async () => {
+    env.search = 'state=SP';
+    render(<SearchPage />);
+
+    await act(async () => {
+      pending[0]?.reject({ status: 500, body: '<html>' });
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(messages.errors.UNKNOWN);
   });
 });

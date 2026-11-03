@@ -17,13 +17,15 @@ import GoogleIcon from '@mui/icons-material/Google';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import Logo from '@/app/components/patterns/Logo';
-import { errorMessage } from '@/lib/error-message';
+import { publicEnv } from '@/lib/env';
+import { useApiErrorMessage } from '@/lib/api-error';
 
-const API_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
+const API_URL = publicEnv.apiUrl;
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
+  const apiErrorMessage = useApiErrorMessage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -38,7 +40,7 @@ export default function LoginPage() {
       await login(email, password);
       router.push('/');
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Failed to login');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }

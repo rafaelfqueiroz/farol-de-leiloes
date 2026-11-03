@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Env } from '../config/env';
 import { errorMessage } from '../common/error-message';
 
 export interface SmsPayload {
@@ -19,7 +20,7 @@ export interface SmsResult {
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
 
-  constructor(private configService: ConfigService) {}
+  constructor(private configService: ConfigService<Env, true>) {}
 
   async sendReminderSms(phoneNumber: string, payload: SmsPayload): Promise<SmsResult> {
     const message = this.formatMessage(payload);
@@ -61,6 +62,6 @@ export class SmsService {
   }
 
   private isConfigured(): boolean {
-    return !!this.configService.get('SMS_PROVIDER_API_KEY');
+    return !!this.configService.get('SMS_PROVIDER_API_KEY', { infer: true });
   }
 }

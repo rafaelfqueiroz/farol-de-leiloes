@@ -20,7 +20,7 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import LockIcon from '@mui/icons-material/Lock';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 import { reportClientError } from '@/lib/report-client-error';
-import { errorMessage } from '@/lib/error-message';
+import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();
@@ -29,6 +29,7 @@ export default function ProfilePage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const apiErrorMessage = useApiErrorMessage();
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -107,13 +108,12 @@ export default function ProfilePage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to save personal data');
+        throw await readApiError(response);
       }
 
       setSuccess('Dados pessoais salvos com sucesso!');
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao salvar dados pessoais');
+      setError(apiErrorMessage(err));
     } finally {
       setProfileLoading(false);
     }
@@ -137,13 +137,12 @@ export default function ProfilePage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to update profile');
+        throw await readApiError(response);
       }
 
       setSuccess('Perfil atualizado com sucesso!');
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao atualizar perfil');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -178,8 +177,7 @@ export default function ProfilePage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to change password');
+        throw await readApiError(response);
       }
 
       setSuccess('Senha alterada com sucesso!');
@@ -187,7 +185,7 @@ export default function ProfilePage() {
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao alterar senha');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -222,8 +220,7 @@ export default function ProfilePage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to set password');
+        throw await readApiError(response);
       }
 
       setSuccess('Senha definida com sucesso! Agora você pode entrar com email e senha.');
@@ -231,7 +228,7 @@ export default function ProfilePage() {
       setConfirmPassword('');
       await loadUser();
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao definir senha');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }

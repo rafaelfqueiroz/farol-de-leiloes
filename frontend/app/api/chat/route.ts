@@ -1,41 +1,24 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { backendFetch, backendUnavailable, forwardBackendResponse } from '@/lib/backend';
+import type { AuctionQueryParams } from '@/lib/constants';
 import { reportClientError } from '@/lib/report-client-error';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://localhost:3000';
+export async function POST(request: NextRequest) {
+  const body = await request.text();
 
-interface AuctionQueryParams {
-  state?: string;
-  city?: string;
-  neighborhood?: string;
-  modality?: string;
-  minMargin?: number;
-  maxMargin?: number;
-  limit?: number;
-  offset?: number;
-}
-
-export async function POST(req: NextRequest) {
   try {
-    const { message } = await req.json();
-
-    if (!message) {
-      return NextResponse.json({ error: 'Message is required' }, { status: 400 });
-    }
-
-    // Step 1: Extract query parameters using backend AI/NLP service
-    const extractResponse = await fetch(`${BACKEND_API_URL}/ai/extract-params`, {
+    // Step 1: extract query parameters with the backend's AI service. The raw body goes through,
+    // so the backend alone validates `message` and answers with its own code (AR-38).
+    const extractResponse = await backendFetch('/ai/extract-params', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
+      body,
     });
-
-    if (!extractResponse.ok) {
-      throw new Error(`Failed to extract params: ${extractResponse.statusText}`);
-    }
+    if (!extractResponse.ok) return forwardBackendResponse(extractResponse);
 
     const params: AuctionQueryParams = await extractResponse.json();
 
-    // Step 2: Query auctions directly with extracted parameters
+    // Step 2: query auctions with the extracted parameters.
     const queryParams = new URLSearchParams();
     if (params.state) queryParams.set('state', params.state);
     if (params.city) queryParams.set('city', params.city);
@@ -43,21 +26,13 @@ export async function POST(req: NextRequest) {
     if (params.modality) queryParams.set('modality', params.modality);
     if (params.minMargin) queryParams.set('minMargin', params.minMargin.toString());
     if (params.maxMargin) queryParams.set('maxMargin', params.maxMargin.toString());
-    if (params.limit) queryParams.set('limit', params.limit.toString());
-    if (params.offset) queryParams.set('offset', params.offset.toString());
+    // AR-35: the AI service answers with the same page/pageSize the list endpoint takes
+    if (params.page) queryParams.set('page', params.page.toString());
+    if (params.pageSize) queryParams.set('pageSize', params.pageSize.toString());
 
-    const auctionsResponse = await fetch(`${BACKEND_API_URL}/auctions?${queryParams}`);
-
-    if (!auctionsResponse.ok) {
-      throw new Error(`Failed to query auctions: ${auctionsResponse.statusText}`);
-    }
-
-    const results = await auctionsResponse.json();
-
-    return NextResponse.json(results);
+    return forwardBackendResponse(await backendFetch(`/auctions?${queryParams}`));
   } catch (error: unknown) {
     reportClientError(error, { where: 'api/chat POST' });
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return backendUnavailable();
   }
 }

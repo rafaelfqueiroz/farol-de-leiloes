@@ -127,7 +127,7 @@ SPEC-003 BR-003-23 to BR-003-28 put every date the product shows, accepts or sch
 | **AR-32** | REST under `/api`, resources plural and kebab-case (`/api/saved-filters`). JSON bodies `camelCase`. |
 | **AR-33** | Every endpoint is described with `@nestjs/swagger` decorators on the controller and DTOs. The OpenAPI document served at `/api/docs` (non-production only) **is** the API reference — there is no hand-written route table. |
 | **AR-34** | Every request body and query is a DTO validated by the global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`). No `@Body() body: any`. |
-| **AR-35** | List endpoints are paginated (`page`, `pageSize`, max 100) and return `{ items, total, page, pageSize }`. An unbounded list is a performance and a privacy bug. |
+| **AR-35** | List endpoints are paginated (`page` ≥ 1, default 1; `pageSize` 1–100, default 20) and return `{ items, total, page, pageSize }`; a `pageSize` outside 1–100 is refused as `VALIDATION_FAILED`, never clamped. An unbounded list is a performance and a privacy bug. **Exemption — lookups, not browsable lists:** an endpoint whose caller needs one complete set at once answers it unpaginated, still through a response DTO (AR-36) whose envelope is an object, never a bare array: `GET /api/auctions/neighborhoods` (a filter's options), `GET /api/auctions/sitemap/codes` (the sitemap) and `GET /api/favorites/codes` (the caller's own favorited codes, owner-scoped, for the heart state). A new exemption is added to this list in the same PR. |
 | **AR-36** | Responses are mapped from the document to a response DTO explicitly. Returning a Mongoose document leaks every field, including the ones added later. |
 
 ## 9. Errors

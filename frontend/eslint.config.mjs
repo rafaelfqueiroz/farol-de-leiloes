@@ -80,8 +80,22 @@ export default defineConfig([
       '@typescript-eslint/no-non-null-assertion': 'error', // DV-03
       '@typescript-eslint/no-floating-promises': 'error', // an un-awaited write is silent data loss
       'no-console': 'error', // DV-11: client logging goes to Sentry
+      // AR-42: configuration is read in lib/env.ts only (overridden for that file below).
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message: 'AR-42: read configuration through lib/env.ts (publicEnv / serverEnv()).',
+        },
+      ],
       'no-restricted-syntax': ['error', ...noHardcodedStyleInSx], // DS-01
     },
+  },
+  {
+    // AR-42: the one file allowed to read process.env.
+    files: ['lib/env.ts'],
+    rules: { 'no-restricted-properties': 'off' },
   },
   {
     // DS-20: user-facing strings come from the next-intl pt-BR catalogue, not JSX literals.

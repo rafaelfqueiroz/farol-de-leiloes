@@ -5,10 +5,19 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Model, mongo } from 'mongoose';
 import { AuctionEntity, AuctionDocument, Address, Phase } from './schemas/auction.schema';
-import { Auction, AuctionListResult, AuctionRecord } from './interfaces/auction.interface';
+import { Auction, AuctionRecord } from './interfaces/auction.interface';
+import { isAuctionActive } from './utils/auction-filters';
 import { fetchAndCheckAvailability } from './scraper/details-scraper';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
 import { errorMessage } from '../common/error-message';
+import { DomainError } from '../common/errors/domain-error';
+import { serverOperators } from '../common/mongo/query-safety';
+import {
+  type PageRequest,
+  type Paginated,
+  paginated,
+  skipOf,
+} from '../common/pagination/paginated';
 
 export interface AuctionUpsert {
   code?: string;
@@ -26,8 +35,6 @@ export interface QueryFilters {
   modality?: string | string[];
   minMargin?: number;
   maxMargin?: number;
-  take?: number;
-  skip?: number;
 }
 
 const NEIGHBORHOODS_CACHE_PREFIX = 'neighborhoods';
@@ -59,7 +66,7 @@ export class AuctionsService {
     this.logger.log(`[upsertMany] Valid codes: ${codes.length}`);
 
     const existing = await this.auctionRepository
-      .find({ code: { $in: codes } })
+      .find({ code: serverOperators({ $in: codes }) })
       .select('code phases')
       .lean();
     this.logger.log(`[upsertMany] Found ${existing.length} existing auctions in DB`);
@@ -170,68 +177,53 @@ export class AuctionsService {
   async markAvailable(codes: string[]): Promise<number> {
     if (!codes.length) return 0;
     const result = await this.auctionRepository.updateMany(
-      { code: { $in: codes }, available: { $ne: true } },
+      { code: serverOperators({ $in: codes }), available: serverOperators({ $ne: true }) },
       { $set: { available: true, updatedAt: new Date() } },
     );
     return result.modifiedCount;
   }
 
-  async query(filters: QueryFilters): Promise<AuctionListResult> {
-    const take = Math.min(filters.take ?? 50, 200);
-    const skip = filters.skip ?? 0;
-
+  /** AR-35: one page of the matching active auctions, newest update first. */
+  async query(filters: QueryFilters, page: PageRequest): Promise<Paginated<Auction>> {
     // Build query using currentPhase denormalized field
     // Filter active auctions: available AND (ONLINE_SALES OR has future date)
     const query: Record<string, unknown> = this.buildActiveAuctionFilter();
 
-    if (filters.state) query['address.state'] = filters.state.toUpperCase();
+    // SC-10: the DTO validates the filters (AR-34), and this builder does not rely on it. Every
+    // value is coerced to a string or a finite number before it reaches the query, so a request
+    // can never put an operator ({ $ne: null }, { $regex: '.*' }) where a scalar belongs. The
+    // `$in` and range operators below are written here, so they are marked server-built.
+    if (filters.state) {
+      query['address.state'] = { $eq: stringFilter(filters.state, 'state').toUpperCase() };
+    }
 
     // Handle city filter (single value or array)
     if (filters.city) {
-      const cities = Array.isArray(filters.city) ? filters.city : [filters.city];
-      if (cities.length === 1) {
-        query['address.city'] = new RegExp(`^${escapeRegExp(cities[0] ?? '')}`, 'i');
-      } else {
-        query['address.city'] = {
-          $in: cities.map((c) => new RegExp(`^${escapeRegExp(c)}`, 'i')),
-        };
-      }
+      query['address.city'] = prefixFilter(filters.city, 'city');
     }
 
     // Handle neighborhood filter (single value or array)
     if (filters.neighborhood) {
-      const neighborhoods = Array.isArray(filters.neighborhood)
-        ? filters.neighborhood
-        : [filters.neighborhood];
-      if (neighborhoods.length === 1) {
-        query['address.neighborhood'] = new RegExp(`^${escapeRegExp(neighborhoods[0] ?? '')}`, 'i');
-      } else {
-        query['address.neighborhood'] = {
-          $in: neighborhoods.map((n) => new RegExp(`^${escapeRegExp(n)}`, 'i')),
-        };
-      }
+      query['address.neighborhood'] = prefixFilter(filters.neighborhood, 'neighborhood');
     }
 
     // Filter by modality on currentPhase (single value or array)
     if (filters.modality) {
-      const modalities = Array.isArray(filters.modality) ? filters.modality : [filters.modality];
-      if (modalities.length === 1) {
-        query['currentPhase.modality'] = modalities[0];
-      } else {
-        query['currentPhase.modality'] = { $in: modalities };
-      }
+      const modalities = stringFilters(filters.modality, 'modality');
+      query['currentPhase.modality'] =
+        modalities.length === 1 ? { $eq: modalities[0] } : serverOperators({ $in: modalities });
     }
 
     // Filter by price range on currentPhase.minimumPrice
     if (filters.minMargin !== undefined || filters.maxMargin !== undefined) {
-      const priceMatch: Record<string, unknown> = {};
+      const priceMatch: Record<string, number> = {};
       if (filters.minMargin !== undefined) {
-        priceMatch.$gte = filters.minMargin;
+        priceMatch.$gte = numberFilter(filters.minMargin, 'minMargin');
       }
       if (filters.maxMargin !== undefined) {
-        priceMatch.$lte = filters.maxMargin;
+        priceMatch.$lte = numberFilter(filters.maxMargin, 'maxMargin');
       }
-      query['currentPhase.minimumPrice'] = priceMatch;
+      query['currentPhase.minimumPrice'] = serverOperators(priceMatch);
     }
 
     this.logger.debug(`Query filters: ${JSON.stringify(filters)}, Query: ${JSON.stringify(query)}`);
@@ -239,26 +231,66 @@ export class AuctionsService {
     // Get total count
     const total = await this.auctionRepository.countDocuments(query).exec();
 
-    // Get documents with sort, skip, limit
+    // AR-35: `_id` breaks updatedAt ties (a CSV import stamps many auctions with the same
+    // instant), so a page boundary never repeats or skips an auction.
     const docs = await this.auctionRepository
       .find(query)
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(take)
+      .sort({ updatedAt: -1, _id: -1 })
+      .skip(skipOf(page))
+      .limit(page.pageSize)
       .lean()
       .exec();
 
     this.logger.log(`[query] Found ${docs.length} docs, total: ${total}`);
-    return { total, items: docs.map((doc) => this.toAuction(doc)) };
+    return paginated(
+      docs.map((doc) => this.toAuction(doc)),
+      total,
+      page,
+    );
   }
 
   async findByCode(code: string): Promise<Auction | null> {
-    const doc = await this.auctionRepository.findOne({ code, available: true }).exec();
+    // SC-10: a code is a string; an object (`{ $ne: null }`) is not an auction, it is not found.
+    if (typeof code !== 'string') return null;
+    const doc = await this.auctionRepository
+      .findOne({ code: { $eq: code }, available: true })
+      .exec();
     return doc ? this.toAuction(doc) : null;
   }
 
+  /** The available auctions among `codes`, in no particular order. */
+  async findAvailableByCodes(codes: string[]): Promise<Auction[]> {
+    if (!codes.length) return [];
+    const docs = await this.auctionRepository
+      .find({ code: serverOperators({ $in: codes }), available: true })
+      .lean()
+      .exec();
+    return docs.map((doc) => this.toAuction(doc));
+  }
+
+  /**
+   * The codes among `codes` whose auction is active (isAuctionActive). Reads only the fields the
+   * check needs, so a caller can count and page a large set before loading whole auctions.
+   */
+  async findActiveCodes(codes: string[]): Promise<Set<string>> {
+    if (!codes.length) return new Set();
+    const docs = await this.auctionRepository
+      .find({ code: serverOperators({ $in: codes }), available: true })
+      .select('code phases currentPhase available updatedAt')
+      .lean()
+      .exec();
+    return new Set(
+      docs
+        .map((doc) => this.toAuction(doc))
+        .filter(isAuctionActive)
+        .map((auction) => auction.code),
+    );
+  }
+
   async findDocumentByCode(code: string): Promise<AuctionDocument | null> {
-    return this.auctionRepository.findOne({ code }).exec();
+    // SC-10: as findByCode, a non-string code finds nothing.
+    if (typeof code !== 'string') return null;
+    return this.auctionRepository.findOne({ code: { $eq: code } }).exec();
   }
 
   /**
@@ -389,12 +421,12 @@ export class AuctionsService {
       .find({
         fulfilled: true,
         available: true,
-        detailsUrl: { $exists: true, $ne: null },
-        code: { $nin: csvCodes },
-        $or: [
+        detailsUrl: serverOperators({ $exists: true, $ne: null }),
+        code: serverOperators({ $nin: csvCodes }),
+        $or: serverOperators([
           { availabilityCheckedAt: { $exists: false } },
           { availabilityCheckedAt: { $lt: cutoff } },
-        ],
+        ]),
       })
       .select('code detailsUrl')
       .sort({ availabilityCheckedAt: 1 })
@@ -508,4 +540,37 @@ function hasReset(store: unknown): store is { reset: () => unknown } {
 
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** SC-10: a filter value that must be text. Anything else is a refused request, never a query. */
+function stringFilter(value: unknown, field: string): string {
+  if (typeof value !== 'string') {
+    throw new DomainError('VALIDATION_FAILED', { fields: [field] });
+  }
+  return value;
+}
+
+/** SC-10: one or several texts; every element is checked, so no object slips in through a list. */
+function stringFilters(value: unknown, field: string): string[] {
+  const values: unknown[] = Array.isArray(value) ? value : [value];
+  return values.map((item) => stringFilter(item, field));
+}
+
+/** SC-10: a finite number; `NaN`, strings and objects are refused. */
+function numberFilter(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new DomainError('VALIDATION_FAILED', { fields: [field] });
+  }
+  return value;
+}
+
+/**
+ * Case-insensitive prefix match on one or several texts. The pattern is escaped, so the text is
+ * literal, and a regex is a value, not an operator, to `sanitizeFilter`.
+ */
+function prefixFilter(value: unknown, field: string): RegExp | Record<string, unknown> {
+  const patterns = stringFilters(value, field).map(
+    (text) => new RegExp(`^${escapeRegExp(text)}`, 'i'),
+  );
+  return patterns.length === 1 ? (patterns[0] as RegExp) : serverOperators({ $in: patterns });
 }
