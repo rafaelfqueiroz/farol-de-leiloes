@@ -39,14 +39,15 @@ beforeEach(() => {
 });
 
 describe('SearchFilters saved filters load failure', () => {
-  it('shows an error alert when the saved filters failed to load', () => {
+  it('shows the ErrorState when the saved filters failed to load', () => {
     env.saved.loadFailed = true;
     render(<SearchFilters onSearch={vi.fn()} />);
 
-    expect(screen.getByRole('alert')).toHaveTextContent(messages.loadFailed.savedFilters);
+    expect(screen.getByRole('alert')).toHaveTextContent(messages.loadFailed.savedFilters.title);
+    expect(screen.getByRole('alert')).toHaveTextContent(messages.loadFailed.savedFilters.message);
   });
 
-  it('retries the load from the alert', async () => {
+  it('retries the load from the ErrorState', async () => {
     env.saved.loadFailed = true;
     render(<SearchFilters onSearch={vi.fn()} />);
 
@@ -55,9 +56,9 @@ describe('SearchFilters saved filters load failure', () => {
     expect(env.saved.refreshFilters).toHaveBeenCalledTimes(1);
   });
 
-  it('shows no alert when the saved filters loaded', () => {
+  it('shows no ErrorState when the saved filters loaded', () => {
     render(<SearchFilters onSearch={vi.fn()} />);
 
-    expect(screen.queryByText(messages.loadFailed.savedFilters)).not.toBeInTheDocument();
+    expect(screen.queryByText(messages.loadFailed.savedFilters.title)).not.toBeInTheDocument();
   });
 });

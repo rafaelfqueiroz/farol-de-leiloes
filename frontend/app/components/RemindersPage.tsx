@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import ErrorState from '@/app/components/patterns/ErrorState';
 import {
   Box,
   Typography,
@@ -197,17 +198,11 @@ export default function RemindersPage() {
       </Typography>
 
       {loadFailed && (
-        <Alert
-          severity="error"
-          sx={{ mb: 3 }}
-          action={
-            <Button color="inherit" size="small" onClick={() => void refreshReminders()}>
-              {t('patterns.errorState.retry')}
-            </Button>
-          }
-        >
-          {t('loadFailed.reminders')}
-        </Alert>
+        <ErrorState
+          title={t('loadFailed.reminders.title')}
+          message={t('loadFailed.reminders.message')}
+          onRetry={() => void refreshReminders()}
+        />
       )}
 
       {upcomingReminders.length === 0 ? (

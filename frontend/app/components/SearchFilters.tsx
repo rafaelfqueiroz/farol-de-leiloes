@@ -2,6 +2,7 @@
 
 import { useState, useEffect, type SyntheticEvent } from 'react';
 import { useTranslations } from 'next-intl';
+import ErrorState from '@/app/components/patterns/ErrorState';
 import {
   Box,
   Drawer,
@@ -824,17 +825,12 @@ export default function SearchFilters({
                 </Typography>
 
                 {savedFiltersLoadFailed && (
-                  <Alert
-                    severity="error"
-                    sx={{ mb: 1.5 }}
-                    action={
-                      <Button color="inherit" size="small" onClick={() => void refreshFilters()}>
-                        {t('patterns.errorState.retry')}
-                      </Button>
-                    }
-                  >
-                    {t('loadFailed.savedFilters')}
-                  </Alert>
+                  <ErrorState
+                    title={t('loadFailed.savedFilters.title')}
+                    message={t('loadFailed.savedFilters.message')}
+                    onRetry={() => void refreshFilters()}
+                    titleComponent="h3"
+                  />
                 )}
 
                 <TextField

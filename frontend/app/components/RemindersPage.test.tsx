@@ -33,15 +33,16 @@ beforeEach(() => {
 });
 
 describe('RemindersPage load failure', () => {
-  it('shows an error alert, without the empty state, when the load failed', () => {
+  it('shows the ErrorState, without the empty state, when the load failed', () => {
     env.reminders.loadFailed = true;
     render(<RemindersPage />);
 
-    expect(screen.getByRole('alert')).toHaveTextContent(messages.loadFailed.reminders);
+    expect(screen.getByRole('alert')).toHaveTextContent(messages.loadFailed.reminders.title);
+    expect(screen.getByRole('alert')).toHaveTextContent(messages.loadFailed.reminders.message);
     expect(screen.queryByText('Nenhum lembrete agendado')).not.toBeInTheDocument();
   });
 
-  it('retries the load from the alert', async () => {
+  it('retries the load from the ErrorState', async () => {
     env.reminders.loadFailed = true;
     render(<RemindersPage />);
 
@@ -50,7 +51,7 @@ describe('RemindersPage load failure', () => {
     expect(env.reminders.refreshReminders).toHaveBeenCalledTimes(1);
   });
 
-  it('shows no alert when the load worked', () => {
+  it('shows no ErrorState when the load worked', () => {
     render(<RemindersPage />);
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
