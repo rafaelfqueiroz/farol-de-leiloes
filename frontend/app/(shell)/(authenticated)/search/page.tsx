@@ -6,11 +6,13 @@ import { Alert, Box, Container, Typography, CircularProgress } from '@mui/materi
 import { hasMinimumRole } from '@/app/components/RequireRole';
 import { useAuth } from '@/app/contexts/AuthContext';
 import SearchFilters, { AuctionFilters } from '@/app/components/SearchFilters';
-import AuctionList, { type Auction } from '@/app/components/AuctionList';
+import AuctionList from '@/app/components/AuctionList';
 import FavoritesView from '@/app/components/FavoritesView';
 import { SavedFiltersProvider } from '@/app/contexts/SavedFiltersContext';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import type { Auction } from '@/lib/auction';
+import { isMoneyString } from '@/lib/money';
 import type { Paginated } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
 
@@ -37,8 +39,9 @@ function filtersFromQuery(query: QueryReader): AuctionFilters {
     city: city ? city.split(',') : undefined,
     neighborhood: neighborhood ? neighborhood.split(',') : undefined,
     modality: modality ? modality.split(',') : undefined,
-    minMargin: minMargin ? Number(minMargin) : undefined,
-    maxMargin: maxMargin ? Number(maxMargin) : undefined,
+    // AR-17: price bounds stay money strings; a hand-edited URL with anything else is ignored
+    minMargin: minMargin && isMoneyString(minMargin) ? minMargin : undefined,
+    maxMargin: maxMargin && isMoneyString(maxMargin) ? maxMargin : undefined,
   };
 }
 
@@ -61,8 +64,8 @@ function searchQuery(filters: AuctionFilters, page: number): string {
     params.set('neighborhood', filters.neighborhood.join(','));
   if (filters.modality && filters.modality.length > 0)
     params.set('modality', filters.modality.join(','));
-  if (filters.minMargin) params.set('minMargin', filters.minMargin.toString());
-  if (filters.maxMargin) params.set('maxMargin', filters.maxMargin.toString());
+  if (filters.minMargin) params.set('minMargin', filters.minMargin);
+  if (filters.maxMargin) params.set('maxMargin', filters.maxMargin);
   if (page > 1) params.set('page', page.toString());
   return params.toString();
 }
@@ -107,8 +110,8 @@ function SearchPageContent() {
       // Handle modality as array - join with comma for API
       if (filters.modality && filters.modality.length > 0)
         params.set('modality', filters.modality.join(','));
-      if (filters.minMargin) params.set('minMargin', filters.minMargin.toString());
-      if (filters.maxMargin) params.set('maxMargin', filters.maxMargin.toString());
+      if (filters.minMargin) params.set('minMargin', filters.minMargin);
+      if (filters.maxMargin) params.set('maxMargin', filters.maxMargin);
       // AR-35: the API pages by number and size
       params.set('page', page.toString());
       params.set('pageSize', size.toString());

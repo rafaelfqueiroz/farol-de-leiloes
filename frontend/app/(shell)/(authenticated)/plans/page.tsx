@@ -26,6 +26,7 @@ import {
 import CheckIcon from '@mui/icons-material/Check';
 import StarIcon from '@mui/icons-material/Star';
 import LockIcon from '@mui/icons-material/Lock';
+import Money from '@/app/components/patterns/Money';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
@@ -83,7 +84,7 @@ export default function PlansPage() {
   const apiErrorMessage = useApiErrorMessage();
   const [couponCode, setCouponCode] = useState('');
   const [couponValid, setCouponValid] = useState<boolean | null>(null);
-  const [couponDiscount, setCouponDiscount] = useState<number | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [snackbar, setSnackbar] = useState<{
@@ -296,8 +297,7 @@ export default function PlansPage() {
                     </Box>
                     {couponValid === true && couponDiscount && (
                       <Alert severity="success" sx={{ mt: 1 }}>
-                        Cupom aplicado! Desconto de R${' '}
-                        {(couponDiscount / 100).toFixed(2).replace('.', ',')}
+                        Cupom aplicado! Desconto de <Money value={couponDiscount} />
                       </Alert>
                     )}
                   </Box>

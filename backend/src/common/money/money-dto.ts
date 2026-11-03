@@ -20,7 +20,11 @@ export interface IsMoneyStringOptions {
   positive?: boolean;
 }
 
-/** A valid money string becomes a Decimal; anything else is left for the validator to refuse. */
+/**
+ * SC-10 / AR-34: only a `string` is ever turned into a Decimal, and only a valid money string at
+ * that. An object (including one forged to look like a Decimal), an array, a boolean or a number
+ * is left untouched, so the validator refuses it.
+ */
 function toDecimalWhenMoney({ value }: TransformFnParams): unknown {
   return isMoneyString(value) ? new Decimal(value) : value;
 }
@@ -49,8 +53,11 @@ export function IsMoneyString(
       propertyName: String(propertyKey),
       options: validationOptions,
       validator: {
+        // `instanceof`, never `Decimal.isDecimal`: isDecimal also accepts any object carrying a
+        // `toStringTag` of "[object Decimal]", which a JSON body can forge (SC-10). Only the
+        // transform above makes a Decimal, so a real instance proves the string passed the pattern.
         validate: (value: unknown) =>
-          Decimal.isDecimal(value) && (!options.positive || value.greaterThan(0)),
+          value instanceof Decimal && (!options.positive || value.greaterThan(0)),
         defaultMessage: () =>
           `$property must be ${options.positive ? 'a positive' : 'an'} amount of reais as a decimal string, e.g. "1234.56"`,
       },

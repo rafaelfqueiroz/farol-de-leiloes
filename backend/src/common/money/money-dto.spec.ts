@@ -42,8 +42,29 @@ describe('IsMoneyString', () => {
     ['an empty string', ''],
     ['a repeated query key', ['1', '2']],
     ['an operator object', { $gt: '' }],
+    ['a boolean', true],
+    ['an object forged to look like a Decimal (SC-10)', { toStringTag: '[object Decimal]' }],
   ])('refuses %s', (_label, value) => {
     expect(parse({ price: value }).failed).toEqual(['price']);
+  });
+
+  it('SC-10: the transform leaves every non-string untouched for the validator to refuse', () => {
+    const forged = { toStringTag: '[object Decimal]' };
+    const list = ['1', '2'];
+
+    const dto = plainToInstance(PriceQuery, { price: forged, discount: list });
+
+    expect(dto.price).toEqual(forged);
+    expect(dto.price).not.toBeInstanceOf(Decimal);
+    expect(dto.discount).toEqual(list);
+    expect(validateSync(dto).map((error) => error.property)).toEqual(['price', 'discount']);
+  });
+
+  it('SC-10: the validator requires a genuine Decimal, so a forged one never reaches greaterThan', () => {
+    const dto = new PriceQuery();
+    dto.discount = { toStringTag: '[object Decimal]' } as unknown as Decimal;
+
+    expect(validateSync(dto).map((error) => error.property)).toEqual(['discount']);
   });
 
   it('leaves null to @IsOptional, as class-validator does: the caller must drop it', () => {

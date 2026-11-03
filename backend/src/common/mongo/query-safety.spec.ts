@@ -51,6 +51,7 @@ describe('decimalFilter', () => {
     ['a number', 10],
     ['a string', '10'],
     ['an operator object', { $gt: 0 }],
+    ['an object forged to look like a Decimal', { toStringTag: '[object Decimal]' }],
     ['NaN', new Decimal(Number.NaN)],
     ['Infinity', new Decimal(Number.POSITIVE_INFINITY)],
     ['undefined', undefined],

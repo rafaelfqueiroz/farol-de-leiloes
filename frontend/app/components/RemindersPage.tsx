@@ -25,11 +25,6 @@ import {
   CircularProgress,
   Skeleton,
 } from '@mui/material';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import dayjs, { Dayjs } from 'dayjs';
-import 'dayjs/locale/pt-br';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -40,6 +35,8 @@ import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useReminders, Reminder, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useApiErrorMessage } from '@/lib/api-error';
+import DateField from './DateField';
+import DateText from './patterns/DateText';
 
 const CHANNEL_ICONS: Record<ReminderChannel, React.ReactElement> = {
   EMAIL: <EmailIcon fontSize="small" />,
@@ -52,13 +49,6 @@ const CHANNEL_LABELS: Record<ReminderChannel, string> = {
   SMS: 'SMS',
   WHATSAPP: 'WhatsApp',
 };
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
-}
 
 function formatAddress(auction: Reminder['auction']): string {
   const parts = [auction.city, auction.state].filter(Boolean);
@@ -81,7 +71,7 @@ export default function RemindersPage() {
 
   // Edit form state
   const [editChannel, setEditChannel] = useState<ReminderChannel>('EMAIL');
-  const [editScheduledAt, setEditScheduledAt] = useState<Dayjs | null>(null);
+  const [editScheduledAt, setEditScheduledAt] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState('');
 
   const isPremium = role === 'standard' || role === 'premium' || role === 'admin';
@@ -94,7 +84,7 @@ export default function RemindersPage() {
   const handleOpenEditDialog = (reminder: Reminder) => {
     setSelectedReminder(reminder);
     setEditChannel(reminder.channel);
-    setEditScheduledAt(dayjs(reminder.scheduledAt));
+    setEditScheduledAt(reminder.scheduledAt);
     setEditDescription(reminder.description || '');
     setError(null);
     setEditDialogOpen(true);
@@ -130,7 +120,7 @@ export default function RemindersPage() {
     try {
       const success = await updateReminder(selectedReminder._id, {
         channel: editChannel,
-        scheduledAt: editScheduledAt.toISOString(),
+        scheduledAt: editScheduledAt,
         description: editDescription || undefined,
       });
 
@@ -246,7 +236,8 @@ export default function RemindersPage() {
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                     <Typography variant="body2">
-                      <strong>Agendado para:</strong> {formatDate(reminder.scheduledAt)}
+                      <strong>Agendado para:</strong>{' '}
+                      <DateText value={reminder.scheduledAt} withTime />
                     </Typography>
                     {reminder.description && (
                       <Typography variant="body2" color="text.secondary">
@@ -324,20 +315,14 @@ export default function RemindersPage() {
                 </Select>
               </FormControl>
 
-              <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="pt-br">
-                <DateTimePicker
-                  label="Data e hora do lembrete"
-                  value={editScheduledAt}
-                  onChange={(newValue) => setEditScheduledAt(newValue)}
-                  timeSteps={{ minutes: 10 }}
-                  slotProps={{
-                    textField: {
-                      fullWidth: true,
-                      helperText: 'O lembrete deve ser antes do início do leilão',
-                    },
-                  }}
-                />
-              </LocalizationProvider>
+              <DateField
+                type="datetime"
+                label="Data e hora do lembrete"
+                value={editScheduledAt}
+                onChange={setEditScheduledAt}
+                minuteStep={10}
+                helperText="O lembrete deve ser antes do início do leilão"
+              />
 
               <TextField
                 label="Nota (opcional)"

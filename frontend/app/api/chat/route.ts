@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
     if (params.city) queryParams.set('city', params.city);
     if (params.neighborhood) queryParams.set('neighborhood', params.neighborhood);
     if (params.modality) queryParams.set('modality', params.modality);
-    if (params.minMargin) queryParams.set('minMargin', params.minMargin.toString());
-    if (params.maxMargin) queryParams.set('maxMargin', params.maxMargin.toString());
+    if (params.minMargin) queryParams.set('minMargin', params.minMargin);
+    if (params.maxMargin) queryParams.set('maxMargin', params.maxMargin);
     // AR-35: the AI service answers with the same page/pageSize the list endpoint takes
     if (params.page) queryParams.set('page', params.page.toString());
     if (params.pageSize) queryParams.set('pageSize', params.pageSize.toString());

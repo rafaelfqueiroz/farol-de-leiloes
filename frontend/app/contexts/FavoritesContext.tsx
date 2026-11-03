@@ -13,26 +13,7 @@ import { useRouter } from 'next/navigation';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
 import { readApiError } from '@/lib/api-error';
 import { reportClientError } from '@/lib/report-client-error';
-
-export interface Auction {
-  code: string;
-  title: string;
-  address: {
-    street?: string;
-    neighborhood?: string;
-    city?: string;
-    state?: string;
-    zipcode?: string;
-  };
-  appraisalPrice?: number;
-  phases: Array<{
-    modality: string;
-    minimumPrice?: number;
-    date?: string;
-  }>;
-  detailsUrl?: string;
-  updatedAt?: string;
-}
+import type { Auction } from '@/lib/auction';
 
 interface FavoritesContextType {
   /**
