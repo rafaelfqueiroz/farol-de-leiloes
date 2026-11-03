@@ -73,7 +73,7 @@ One approved choice per concern. Adding a dependency that overlaps one of these 
 ## 6. Local setup and scripts
 
 ```bash
-cp backend/.env.example backend/.env           # fill in what you need
+cp backend/.env.example backend/.env           # every value is required (AR-41): the API refuses to boot otherwise; optional ones are marked
 cp frontend/.env.example frontend/.env.local
 # MongoDB 7 on localhost:27017 — a local install or `docker run -d -p 27017:27017 mongo:7`
 npm install                                    # once, at the repository root: installs the git hooks
@@ -211,7 +211,7 @@ Every workflow pins each action to a full commit SHA with its version in a comme
 | `backend-image` · `frontend-image` | One matrix job (`images`): `docker build` of each package's Dockerfile with `push: false`, no registry login, `contents: read` only, no cache. Proves the Dockerfile, `.dockerignore` and, for the frontend, Next's standalone output build before merge; `deploy.yml` is what publishes. The frontend leg takes the `NEXT_PUBLIC_*` build arguments from the repository variables, the backend leg none | ✅ |
 | `e2e` | Compose stack (API + web + MongoDB, stubbed providers) · Playwright desktop + mobile · axe. **Arrives with #3**; until then it is neither a job nor a required check | ✅ |
 | `audit` | `npm audit --audit-level=high` in both packages (SC-19); reads the lockfiles, no install | ✅ |
-| `structural` | `npm run test:structural`: Node version pinned everywhere (DV-05) · workflows SHA-pinned, least privilege, no `pull_request_target`, `node-version-file` (SC-21) · every Dockerfile has a `.dockerignore` excluding `.env*` and a non-root final stage (SC-16) · the pre-push package selection (DV-37). Pending: `.env.example` covers the config schema (AR-44), once the schema exists | ✅ |
+| `structural` | `npm run test:structural`: Node version pinned everywhere (DV-05) · workflows SHA-pinned, least privilege, no `pull_request_target`, `node-version-file` (SC-21) · every Dockerfile has a `.dockerignore` excluding `.env*` and a non-root final stage (SC-16) · the pre-push package selection (DV-37) · `backend/.env.example` lists exactly the config schema's variables (`src/config/env.schema.ts`), each with a comment (AR-44) | ✅ |
 
 ### `codeql.yml` — every PR, every push to `main`, weekly
 
