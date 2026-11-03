@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { ApiError, readApiError } from '@/lib/api-error';
 import { reportClientError } from '@/lib/report-client-error';
 
 interface User {
@@ -60,8 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
+        // GET /auth/me answers with `userId` (CurrentUserResponseDto), the sign-in answers with
+        // `_id` (UserProfileResponseDto): the app keys its per-account state on `_id`.
+        const { userId, ...rest }: { userId: string } & Omit<User, '_id'> = await response.json();
+        setUser({ ...rest, _id: userId });
       } else {
         // Token is invalid, clear it
         localStorage.removeItem('token');
@@ -89,8 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Login failed');
+      throw await readApiError(response);
     }
 
     const data = await response.json();
@@ -108,8 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Registration failed');
+      throw await readApiError(response);
     }
 
     const data = await response.json();
@@ -139,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resendVerificationEmail = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
-      throw new Error('Not authenticated');
+      throw new ApiError('UNAUTHENTICATED', {}, 401);
     }
 
     const response = await fetch('/api/auth/resend-verification', {
@@ -150,8 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to resend verification email');
+      throw await readApiError(response);
     }
   };
 

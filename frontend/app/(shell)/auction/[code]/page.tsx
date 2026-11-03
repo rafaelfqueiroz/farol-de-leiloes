@@ -1,17 +1,18 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import AuctionDetailClient, { Auction } from './AuctionDetailClient';
+import { backendFetch } from '@/lib/backend';
+import { publicEnv } from '@/lib/env';
 import { reportClientError } from '@/lib/report-client-error';
 
 // ISR: Revalidate every hour
 export const revalidate = 3600;
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://faroldosleiloes.com.br';
+const SITE_URL = publicEnv.siteUrl;
 
 async function fetchAuction(code: string): Promise<Auction | null> {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/auctions/${code}`, {
+    const response = await backendFetch(`/auctions/${encodeURIComponent(code)}`, {
       next: { revalidate: 3600 },
     });
 

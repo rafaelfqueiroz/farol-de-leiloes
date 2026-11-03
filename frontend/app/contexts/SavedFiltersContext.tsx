@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ApiError, readApiError } from '@/lib/api-error';
+import { fetchAllPages } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
 
 export interface FilterData {
@@ -60,19 +62,18 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const response = await fetch('/api/saved-filters', {
-        headers: getAuthHeaders(),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSavedFilters(data);
-      } else if (response.status === 401) {
+      // AR-35: the endpoint is paginated and the filter picker needs every filter, so they are
+      // read page by page
+      setSavedFilters(
+        await fetchAllPages<SavedFilter>('/api/saved-filters', { headers: getAuthHeaders() }),
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
         setSavedFilters([]);
         setIsAuthenticated(false);
+      } else {
+        reportClientError(error, { where: 'SavedFiltersContext.load' });
       }
-    } catch (error) {
-      reportClientError(error, { where: 'SavedFiltersContext.load' });
     } finally {
       setLoading(false);
     }
@@ -98,11 +99,9 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
         setSavedFilters((prev) => [newFilter, ...prev]);
         return newFilter;
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        reportClientError(new Error(`Saving a filter failed with HTTP ${response.status}`), {
-          where: 'SavedFiltersContext.saveFilter',
-        });
-        throw new Error(errorData.error || 'Failed to save filter');
+        // AR-39: the caller turns the code (SAVED_FILTER_LIMIT_REACHED, SAVED_FILTER_NAME_TAKEN...)
+        // into text
+        throw await readApiError(response);
       }
     } catch (error) {
       reportClientError(error, { where: 'SavedFiltersContext.saveFilter' });

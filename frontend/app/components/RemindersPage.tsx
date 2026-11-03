@@ -37,7 +37,7 @@ import SmsIcon from '@mui/icons-material/Sms';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useReminders, Reminder, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
-import { errorMessage } from '@/lib/error-message';
+import { useApiErrorMessage } from '@/lib/api-error';
 
 const CHANNEL_ICONS: Record<ReminderChannel, React.ReactElement> = {
   EMAIL: <EmailIcon fontSize="small" />,
@@ -67,6 +67,7 @@ export default function RemindersPage() {
   const router = useRouter();
   const { reminders, loading, deleteReminder, updateReminder } = useReminders();
   const { role } = useAuth();
+  const apiErrorMessage = useApiErrorMessage();
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -132,10 +133,10 @@ export default function RemindersPage() {
       if (success) {
         handleCloseEditDialog();
       } else {
-        setError('Erro ao atualizar lembrete. Tente novamente.');
+        setError(apiErrorMessage(null));
       }
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao atualizar lembrete');
+      setError(apiErrorMessage(err));
     } finally {
       setActionLoading(false);
     }
@@ -152,10 +153,10 @@ export default function RemindersPage() {
       if (success) {
         handleCloseDeleteDialog();
       } else {
-        setError('Erro ao remover lembrete. Tente novamente.');
+        setError(apiErrorMessage(null));
       }
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao remover lembrete');
+      setError(apiErrorMessage(err));
     } finally {
       setActionLoading(false);
     }

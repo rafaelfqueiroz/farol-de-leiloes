@@ -21,7 +21,6 @@ AI-powered interface to search and query auctions from Caixa Econômica Federal 
 ## Prerequisites
 
 - Node.js 24.22.2 (pinned in `.node-version`; DV-05)
-- OpenAI API key
 - Auctions API running on port 3000
 
 ## Installation
@@ -32,17 +31,20 @@ AI-powered interface to search and query auctions from Caixa Econômica Federal 
 npm install
 ```
 
-2. Create `.env` file:
+2. Create `.env.local`:
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-3. Add your OpenAI API key to `.env`:
+3. Review the variables in `.env.local` (every variable is documented in `.env.example`; the
+   defaults work against a backend on `localhost:3000`). They are read only through
+   `lib/env.ts` (AR-42):
 
 ```
-OPENAI_API_KEY=sk-...
-NEXT_PUBLIC_AUCTIONS_API_URL=http://localhost:3000
+NEXT_PUBLIC_AUCTIONS_API_URL=http://localhost:3000   # backend, as seen by the browser
+NEXT_PUBLIC_SITE_URL=https://faroldosleiloes.com.br  # canonical site origin
+BACKEND_API_URL=http://localhost:3000                # backend, as seen by the Next.js server
 ```
 
 ## Running the Application
@@ -109,7 +111,8 @@ frontend/
 │   ├── layout.tsx             # Root layout
 │   └── page.tsx               # Main chat interface
 ├── lib/
-│   ├── agent.ts               # LangChain agent logic
+│   ├── env.ts                 # The only reader of process.env (AR-42)
+│   ├── backend.ts             # BFF helper: backendFetch / proxyToBackend (server-only)
 │   ├── money.ts, dates.ts     # Money (decimal.js) and date (date-fns) helpers
 │   └── mcp-server.ts          # MCP server (optional standalone)
 ├── messages/pt-BR.json        # next-intl catalogue (pt-BR)
@@ -143,8 +146,23 @@ This allows the auctions API to be used as an MCP tool by other AI applications.
 
 ## Environment Variables
 
-- `OPENAI_API_KEY`: Your OpenAI API key (required)
-- `NEXT_PUBLIC_AUCTIONS_API_URL`: Auctions API URL (default: http://localhost:3000)
+Read only in `lib/env.ts` (AR-42) and listed, with comments, in `.env.example` (AR-44). None is a secret.
+
+| Variable                       | Where  | Default                          | Purpose                                                                    |
+| ------------------------------ | ------ | -------------------------------- | -------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_AUCTIONS_API_URL` | public | `http://localhost:3000`          | Backend origin as the browser reaches it (no trailing slash, no `/api`)    |
+| `NEXT_PUBLIC_SITE_URL`         | public | `https://faroldosleiloes.com.br` | Canonical site origin (metadata, sitemap, robots)                          |
+| `BACKEND_API_URL`              | server | `NEXT_PUBLIC_AUCTIONS_API_URL`   | Backend origin as the Next.js server reaches it (API routes, SSR, sitemap) |
+
+`BACKEND_API_URL` replaces the former `AUCTIONS_API_URL` (and the two spellings the API routes used).
+`OPENAI_API_KEY` is no longer read by the frontend.
+
+## Calling the backend (BFF)
+
+API routes under `app/api` are thin proxies built on `lib/backend.ts`: `proxyToBackend` forwards the
+method, the raw body and the `Authorization` header, and returns the backend's status and JSON body
+verbatim, so the `{ code, context }` error body (AR-37/AR-38) reaches the browser untouched. The BFF
+itself answers only `UNAUTHENTICATED` (401, no token) and `BACKEND_UNAVAILABLE` (502).
 
 ## Technologies
 

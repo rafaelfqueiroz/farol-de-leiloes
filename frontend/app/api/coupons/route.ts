@@ -1,61 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { errorMessage } from '@/lib/error-message';
-import { reportClientError } from '@/lib/report-client-error';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
+import { NextRequest } from 'next/server';
+import { pageQuery, proxyToBackend } from '@/lib/backend';
 
 export async function GET(request: NextRequest) {
-  try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const response = await fetch(`${BACKEND_URL}/api/coupons`, {
-      headers: { Authorization: authHeader },
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      return NextResponse.json(data, { status: response.status });
-    }
-    return NextResponse.json(data);
-  } catch (error: unknown) {
-    reportClientError(error, { where: 'api/coupons GET' });
-    return NextResponse.json(
-      { message: errorMessage(error) || 'Failed to fetch coupons' },
-      { status: 500 },
-    );
-  }
+  // AR-35: the list is paginated
+  return proxyToBackend(request, '/coupons', { auth: true, query: pageQuery(request) });
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const response = await fetch(`${BACKEND_URL}/api/coupons`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: authHeader,
-      },
-      body: JSON.stringify(body),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      return NextResponse.json(data, { status: response.status });
-    }
-    return NextResponse.json(data);
-  } catch (error: unknown) {
-    reportClientError(error, { where: 'api/coupons POST' });
-    return NextResponse.json(
-      { message: errorMessage(error) || 'Failed to create coupon' },
-      { status: 500 },
-    );
-  }
+  return proxyToBackend(request, '/coupons', { auth: true });
 }

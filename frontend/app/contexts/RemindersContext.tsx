@@ -3,6 +3,8 @@
 import { createContext, useContext, useState, useRef, ReactNode, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
+import { ApiError, readApiError } from '@/lib/api-error';
+import { fetchAllPages } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
 
 export type ReminderChannel = 'EMAIL' | 'SMS' | 'WHATSAPP';
@@ -43,6 +45,11 @@ interface RemindersContextType {
   loading: boolean;
   hasReminderForAuction: (auctionCode: string) => boolean;
   getReminderForAuction: (auctionCode: string) => Reminder | undefined;
+  /**
+   * The mutations reject with an `ApiError` when the API answers with an error (AR-38) and
+   * resolve to null / false only when nothing was done (no token, an account change, a 401
+   * that sent the user to /login).
+   */
   createReminder: (data: CreateReminderData) => Promise<Reminder | null>;
   updateReminder: (id: string, data: UpdateReminderData) => Promise<boolean>;
   deleteReminder: (id: string) => Promise<boolean>;
@@ -81,18 +88,21 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       }
 
       setLoading(true);
-      const response = await fetch('/api/reminders', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (isLatest()) setReminders(data);
-      } else if (response.status === 401 && isLatest()) {
-        setReminders([]);
-      }
+      // AR-35: the endpoint is paginated; the sidebar count and the "has a reminder" check need
+      // them all, so they are read page by page
+      const items = await fetchAllPages<Reminder>(
+        '/api/reminders',
+        { headers: { Authorization: `Bearer ${token}` } },
+        isLatest,
+      );
+      if (isLatest()) setReminders(items);
     } catch (error) {
-      if (isLatest()) reportClientError(error, { where: 'RemindersContext.load' });
+      if (!isLatest()) return;
+      if (error instanceof ApiError && error.status === 401) {
+        setReminders([]);
+      } else {
+        reportClientError(error, { where: 'RemindersContext.load' });
+      }
     } finally {
       if (isLatest()) setLoading(false);
     }
@@ -148,12 +158,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('token');
         router.push('/login');
       } else {
-        reportClientError(new Error(`Creating a reminder failed with HTTP ${response.status}`), {
-          where: 'RemindersContext.createReminder',
-        });
+        // AR-39: the caller turns the code into text (PHONE_REQUIRED, REMINDER_DATE_IN_PAST...)
+        throw await readApiError(response);
       }
     } catch (error) {
       reportClientError(error, { where: 'RemindersContext.createReminder' });
+      throw error;
     }
 
     return null;
@@ -190,12 +200,11 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('token');
         router.push('/login');
       } else {
-        reportClientError(new Error(`Updating a reminder failed with HTTP ${response.status}`), {
-          where: 'RemindersContext.updateReminder',
-        });
+        throw await readApiError(response);
       }
     } catch (error) {
       reportClientError(error, { where: 'RemindersContext.updateReminder' });
+      throw error;
     }
 
     return false;
@@ -225,9 +234,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       } else if (response.status === 401) {
         localStorage.removeItem('token');
         router.push('/login');
+      } else {
+        throw await readApiError(response);
       }
     } catch (error) {
       reportClientError(error, { where: 'RemindersContext.deleteReminder' });
+      throw error;
     }
 
     return false;

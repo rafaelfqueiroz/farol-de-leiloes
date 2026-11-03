@@ -13,10 +13,11 @@ import {
   CircularProgress,
   Link,
 } from '@mui/material';
-import { errorMessage } from '@/lib/error-message';
+import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function ResetPasswordRequestPage() {
   const router = useRouter();
+  const apiErrorMessage = useApiErrorMessage();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -38,14 +39,13 @@ export default function ResetPasswordRequestPage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to request password reset');
+        throw await readApiError(response);
       }
 
       setSuccess(true);
       setEmail('');
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Erro ao solicitar redefinição de senha');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }

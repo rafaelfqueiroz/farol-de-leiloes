@@ -1,6 +1,7 @@
 import { MetadataRoute } from 'next';
+import { publicEnv } from '@/lib/env';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://faroldosleiloes.com.br';
+const SITE_URL = publicEnv.siteUrl;
 
 export default function robots(): MetadataRoute.Robots {
   return {

@@ -34,12 +34,14 @@ import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
 import type { Auction } from './AuctionList';
+import { publicEnv } from '@/lib/env';
 import { reportClientError } from '@/lib/report-client-error';
-import { errorMessage } from '@/lib/error-message';
+import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import type { Paginated } from '@/lib/pagination';
 
 interface SearchFiltersProps {
   onSearch: (filters: AuctionFilters) => void;
-  onAISearchResults?: (results: { total: number; items: Auction[] }) => void;
+  onAISearchResults?: (results: Paginated<Auction>) => void;
   isLoading?: boolean;
   initialFilters?: AuctionFilters;
 }
@@ -434,6 +436,7 @@ export default function SearchFilters({
 
   // Auth state for feature gating
   const { role } = useAuth();
+  const apiErrorMessage = useApiErrorMessage();
   const canUseAISearch = role === 'admin' || role === 'premium';
   const canUseSavedFilters = role === 'admin' || role === 'premium' || role === 'standard';
 
@@ -466,7 +469,7 @@ export default function SearchFilters({
       try {
         const cityParams = filters.city.map((c) => `city=${encodeURIComponent(c)}`).join('&');
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_AUCTIONS_API_URL}/api/auctions/neighborhoods?state=${filters.state}&${cityParams}`,
+          `${publicEnv.apiUrl}/api/auctions/neighborhoods?state=${filters.state}&${cityParams}`,
         );
         if (response.ok) {
           const data = await response.json();
@@ -572,7 +575,7 @@ export default function SearchFilters({
       });
 
       if (!response.ok) {
-        throw new Error('Falha na busca por IA');
+        throw await readApiError(response);
       }
 
       const results = await response.json();
@@ -638,7 +641,7 @@ export default function SearchFilters({
       setSnackbarMessage('Filtro salvo com sucesso!');
       setSnackbarOpen(true);
     } catch (error: unknown) {
-      setSaveError(errorMessage(error) || 'Erro ao salvar filtro');
+      setSaveError(apiErrorMessage(error));
     } finally {
       setSavingFilter(false);
     }

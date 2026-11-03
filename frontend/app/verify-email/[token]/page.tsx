@@ -6,10 +6,11 @@ import { Box, Card, CardContent, Typography, Alert, CircularProgress, Button } f
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import Link from 'next/link';
-import { errorMessage } from '@/lib/error-message';
+import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function VerifyEmailTokenPage() {
   const router = useRouter();
+  const apiErrorMessage = useApiErrorMessage();
   const params = useParams();
   const token = params.token as string;
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -25,22 +26,21 @@ export default function VerifyEmailTokenPage() {
         });
 
         if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.message || 'Falha na verificacao');
+          throw await readApiError(response);
         }
 
         setStatus('success');
         setTimeout(() => router.push('/login'), 3000);
       } catch (err: unknown) {
         setStatus('error');
-        setError(errorMessage(err) || 'Erro ao verificar email');
+        setError(apiErrorMessage(err));
       }
     };
 
     if (token) {
       void verifyEmail();
     }
-  }, [token, router]);
+  }, [token, router, apiErrorMessage]);
 
   return (
     <Box

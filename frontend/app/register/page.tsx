@@ -15,11 +15,12 @@ import {
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import Logo from '@/app/components/patterns/Logo';
-import { errorMessage } from '@/lib/error-message';
+import { useApiErrorMessage } from '@/lib/api-error';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
+  const apiErrorMessage = useApiErrorMessage();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,7 +48,7 @@ export default function RegisterPage() {
       await register(email, password, name);
       router.push('/verify-email');
     } catch (err: unknown) {
-      setError(errorMessage(err) || 'Failed to register');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }

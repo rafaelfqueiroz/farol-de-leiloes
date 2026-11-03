@@ -1,34 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { errorMessage } from '@/lib/error-message';
-import { reportClientError } from '@/lib/report-client-error';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
+import { NextRequest } from 'next/server';
+import { proxyToBackend } from '@/lib/backend';
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const url = `${BACKEND_URL}/api/auth/register`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return NextResponse.json(data, { status: response.status });
-    }
-
-    return NextResponse.json(data);
-  } catch (error: unknown) {
-    reportClientError(error, { where: 'api/auth/register POST' });
-    return NextResponse.json(
-      { message: errorMessage(error) || 'Failed to register' },
-      { status: 500 },
-    );
-  }
+  return proxyToBackend(request, '/auth/register');
 }

@@ -40,8 +40,8 @@ interface Pending {
 let pending: Pending[] = [];
 
 function FavoritesProbe() {
-  const { favorites, loading } = useFavorites();
-  return <p>{loading ? 'carregando' : `itens ${favorites.length}`}</p>;
+  const { favoriteCodes, loading } = useFavorites();
+  return <p>{loading ? 'carregando' : `itens ${favoriteCodes.length}`}</p>;
 }
 
 function RemindersProbe() {
@@ -49,14 +49,28 @@ function RemindersProbe() {
   return <p>{loading ? 'carregando' : `itens ${reminders.length}`}</p>;
 }
 
+// AR-35: favourites load their codes (GET /favorites/codes); reminders load every page of the
+// paginated list. `body` builds each provider's answer for a given number of items.
+type Body = (count: number) => unknown;
+const codesBody: Body = (count) => ({ codes: Array.from({ length: count }, (_, i) => String(i)) });
+const pageBody: Body = (count) => ({
+  items: Array.from({ length: count }, (_, i) => ({ _id: `r${i}` })),
+  total: count,
+  page: 1,
+  pageSize: 100,
+});
+
+const paged = (items: unknown[]) => ({ items, total: items.length, page: 1, pageSize: 100 });
+
 const providers: [
   string,
   string,
+  Body,
   (props: { children: ReactNode }) => ReactNode,
   () => ReactNode,
 ][] = [
-  ['FavoritesProvider', '/api/favorites', FavoritesProvider, FavoritesProbe],
-  ['RemindersProvider', '/api/reminders', RemindersProvider, RemindersProbe],
+  ['FavoritesProvider', '/api/favorites/codes', codesBody, FavoritesProvider, FavoritesProbe],
+  ['RemindersProvider', '/api/reminders', pageBody, RemindersProvider, RemindersProbe],
 ];
 
 beforeEach(() => {
@@ -89,24 +103,28 @@ async function answerWith(index: number, body: unknown) {
   });
 }
 
+// the answer to the load of the provider under test (see `providers`)
+let bodyFor: Body = pageBody;
+
 async function answer(index: number, count: number) {
-  await answerWith(
-    index,
-    Array.from({ length: count }, (_, i) => ({ _id: `r${i}`, code: String(i) })),
-  );
+  await answerWith(index, bodyFor(count));
 }
 
-// A signs in with a request in flight, signs out, B signs in and loads `bItems`.
-async function switchAccountTo(bItems: unknown[], bLoadIndex: number) {
+// A signs in with a request in flight, signs out, B signs in and loads `bBody`.
+async function switchAccountTo(bBody: unknown, bLoadIndex: number) {
   window.localStorage.removeItem('token');
   setAuth(resolvedAs(null));
   window.localStorage.setItem('token', 'token-b');
   setAuth(resolvedAs('user-b'));
   expect(pending[bLoadIndex]?.method).toBe('GET');
-  await answerWith(bLoadIndex, bItems);
+  await answerWith(bLoadIndex, bBody);
 }
 
-describe.each(providers)('%s', (_name, url, Provider, Probe) => {
+describe.each(providers)('%s', (_name, url, body, Provider, Probe) => {
+  beforeEach(() => {
+    bodyFor = body;
+  });
+
   const renderProvider = () =>
     render(
       <Provider>
@@ -120,7 +138,7 @@ describe.each(providers)('%s', (_name, url, Provider, Probe) => {
 
     // auth has not resolved yet, and the request is already out
     expect(pending).toHaveLength(1);
-    expect(pending[0]?.url).toBe(url);
+    expect(pending[0]?.url).toContain(url);
     await answer(0, 1);
     expect(screen.getByText('itens 1')).toBeInTheDocument();
 
@@ -196,10 +214,10 @@ describe('mutations across an account change', () => {
   });
 
   function FavoritesActions() {
-    const { favorites, toggleFavorite, removeFavorite } = useFavorites();
+    const { favoriteCodes, toggleFavorite, removeFavorite } = useFavorites();
     return (
       <>
-        <p>{`itens ${favorites.length}`}</p>
+        <p>{`itens ${favoriteCodes.length}`}</p>
         <button type="button" onClick={() => toggleFavorite({ code: 'X' } as never)}>
           Favoritar
         </button>
@@ -244,12 +262,14 @@ describe('mutations across an account change', () => {
         <FavoritesActions />
       </FavoritesProvider>,
     );
-    await answer(0, 0);
+    await answerWith(0, { codes: [] });
     setAuth(resolvedAs('user-a'));
 
     await user.click(screen.getByRole('button', { name: 'Favoritar' }));
     expect(pending[1]?.method).toBe('POST');
-    await switchAccountTo([], 2);
+    // AR-34: the API refuses any field but `code`
+    expect(vi.mocked(fetch).mock.calls[1]?.[1]?.body).toBe(JSON.stringify({ code: 'X' }));
+    await switchAccountTo({ codes: [] }, 2);
 
     await answerWith(1, { code: 'X' });
     expect(screen.getByText('itens 0')).toBeInTheDocument();
@@ -262,13 +282,13 @@ describe('mutations across an account change', () => {
         <FavoritesActions />
       </FavoritesProvider>,
     );
-    await answer(0, 1);
+    await answerWith(0, { codes: ['0'] });
     setAuth(resolvedAs('user-a'));
 
     await user.click(screen.getByRole('button', { name: 'Remover' }));
     expect(pending[1]?.method).toBe('DELETE');
     // B happens to have the same property saved
-    await switchAccountTo([{ code: '0' }], 2);
+    await switchAccountTo({ codes: ['0'] }, 2);
 
     await answerWith(1, {});
     expect(screen.getByText('itens 1')).toBeInTheDocument();
@@ -285,13 +305,13 @@ describe('mutations across an account change', () => {
         <RemindersActions />
       </RemindersProvider>,
     );
-    await answerWith(0, [{ _id: 'r0', description: 'de A' }]);
+    await answerWith(0, paged([{ _id: 'r0', description: 'de A' }]));
     setAuth(resolvedAs('user-a'));
 
     await user.click(screen.getByRole('button', { name: button }));
     expect(pending[1]?.method).toBe(method);
     // B's own reminder happens to share the id
-    await switchAccountTo([{ _id: 'r0', description: 'de B' }], 2);
+    await switchAccountTo(paged([{ _id: 'r0', description: 'de B' }]), 2);
 
     await answerWith(1, response);
     expect(screen.getByText('itens 1 de B')).toBeInTheDocument();
@@ -304,7 +324,7 @@ describe('mutations across an account change', () => {
         <FavoritesActions />
       </FavoritesProvider>,
     );
-    await answer(0, 0);
+    await answerWith(0, { codes: [] });
     setAuth(resolvedAs('user-a'));
 
     await user.click(screen.getByRole('button', { name: 'Favoritar' }));

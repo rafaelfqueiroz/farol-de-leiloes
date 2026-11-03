@@ -27,6 +27,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import StarIcon from '@mui/icons-material/Star';
 import LockIcon from '@mui/icons-material/Lock';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 interface Plan {
   id: string;
@@ -79,6 +80,7 @@ const plans: Plan[] = [
 
 export default function PlansPage() {
   const { role, hasSubscription } = useAuth();
+  const apiErrorMessage = useApiErrorMessage();
   const [couponCode, setCouponCode] = useState('');
   const [couponValid, setCouponValid] = useState<boolean | null>(null);
   const [couponDiscount, setCouponDiscount] = useState<number | null>(null);
@@ -117,13 +119,11 @@ export default function PlansPage() {
         setCouponValid(true);
         setCouponDiscount(data.discountValue);
       } else {
-        const error = await response.json();
-        setCouponValid(false);
-        setSnackbar({ open: true, message: error.message || 'Cupom invalido', severity: 'error' });
+        throw await readApiError(response);
       }
-    } catch {
+    } catch (error: unknown) {
       setCouponValid(false);
-      setSnackbar({ open: true, message: 'Erro ao validar cupom', severity: 'error' });
+      setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
     } finally {
       setValidatingCoupon(false);
     }
@@ -153,15 +153,10 @@ export default function PlansPage() {
         const data = await response.json();
         window.location.href = data.url;
       } else {
-        const error = await response.json();
-        setSnackbar({
-          open: true,
-          message: error.message || 'Erro ao criar sessao de pagamento',
-          severity: 'error',
-        });
+        throw await readApiError(response);
       }
-    } catch {
-      setSnackbar({ open: true, message: 'Erro ao processar pagamento', severity: 'error' });
+    } catch (error: unknown) {
+      setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
     } finally {
       setLoading(false);
     }
@@ -186,15 +181,10 @@ export default function PlansPage() {
         // Reload user data
         window.location.reload();
       } else {
-        const error = await response.json();
-        setSnackbar({
-          open: true,
-          message: error.message || 'Erro ao cancelar assinatura',
-          severity: 'error',
-        });
+        throw await readApiError(response);
       }
-    } catch {
-      setSnackbar({ open: true, message: 'Erro ao cancelar assinatura', severity: 'error' });
+    } catch (error: unknown) {
+      setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
     } finally {
       setCanceling(false);
     }

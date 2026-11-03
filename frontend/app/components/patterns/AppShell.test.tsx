@@ -18,7 +18,7 @@ const env = vi.hoisted(() => ({
     this.auth = next;
     this.listeners.forEach((listener) => listener());
   },
-  favorites: { favorites: [] as unknown[], loading: false },
+  favorites: { favoriteCodes: [] as string[], loading: false },
   reminders: { reminders: [] as { status: string }[], loading: false },
 }));
 
@@ -95,7 +95,7 @@ function setCounts({
   reminders?: number;
   loading?: boolean;
 }) {
-  env.favorites = { favorites: Array.from({ length: favorites }, () => ({})), loading };
+  env.favorites = { favoriteCodes: Array.from({ length: favorites }, (_, i) => `F${i}`), loading };
   env.reminders = {
     // only PENDING ones are upcoming
     reminders: [

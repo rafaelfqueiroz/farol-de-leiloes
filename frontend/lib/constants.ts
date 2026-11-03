@@ -1,3 +1,5 @@
+import type { Paginated } from '@/lib/pagination';
+
 // Auction query parameters interface
 export interface AuctionQueryParams {
   state?: string;
@@ -6,8 +8,9 @@ export interface AuctionQueryParams {
   modality?: string;
   minMargin?: number;
   maxMargin?: number;
-  limit?: number;
-  offset?: number;
+  // AR-35: pages start at 1; pageSize is at most 100
+  page?: number;
+  pageSize?: number;
 }
 
 // Auction result interface
@@ -27,13 +30,4 @@ export interface Auction {
   imageUrl?: string;
 }
 
-export interface AuctionResult {
-  total: number;
-  items: Auction[];
-}
-
-// API URL
-export const AUCTIONS_API_URL =
-  process.env.AUCTIONS_API_URL ||
-  process.env.NEXT_PUBLIC_AUCTIONS_API_URL ||
-  'http://localhost:3000';
+export type AuctionResult = Paginated<Auction>;

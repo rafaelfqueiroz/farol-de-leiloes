@@ -1,8 +1,9 @@
 import { MetadataRoute } from 'next';
+import { backendFetch } from '@/lib/backend';
+import { publicEnv } from '@/lib/env';
 import { reportClientError } from '@/lib/report-client-error';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_AUCTIONS_API_URL || 'http://localhost:3000';
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://faroldosleiloes.com.br';
+const SITE_URL = publicEnv.siteUrl;
 
 interface AuctionCode {
   code: string;
@@ -11,7 +12,7 @@ interface AuctionCode {
 
 async function fetchAuctionCodes(): Promise<AuctionCode[]> {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/auctions/sitemap/codes`, {
+    const response = await backendFetch('/auctions/sitemap/codes', {
       next: { revalidate: 3600 },
     });
 

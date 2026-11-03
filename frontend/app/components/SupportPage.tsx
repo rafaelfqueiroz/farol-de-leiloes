@@ -17,7 +17,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SendIcon from '@mui/icons-material/Send';
-import { errorMessage } from '@/lib/error-message';
+import { ApiError, readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 const faqItems = [
   {
@@ -53,6 +53,7 @@ const faqItems = [
 ];
 
 export default function SupportPage() {
+  const apiErrorMessage = useApiErrorMessage();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -69,7 +70,7 @@ export default function SupportPage() {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        throw new Error('Faça login para enviar uma solicitação');
+        throw new ApiError('UNAUTHENTICATED', {}, 401);
       }
 
       const response = await fetch('/api/support', {
@@ -82,8 +83,7 @@ export default function SupportPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Erro ao enviar solicitação');
+        throw await readApiError(response);
       }
 
       setSnackbar({
@@ -96,7 +96,7 @@ export default function SupportPage() {
     } catch (error: unknown) {
       setSnackbar({
         open: true,
-        message: errorMessage(error) || 'Erro ao enviar solicitação de suporte.',
+        message: apiErrorMessage(error),
         severity: 'error',
       });
     } finally {

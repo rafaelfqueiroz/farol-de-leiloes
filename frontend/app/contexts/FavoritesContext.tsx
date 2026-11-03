@@ -1,8 +1,17 @@
 'use client';
 
-import { createContext, useCallback, useContext, useRef, useState, ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  ReactNode,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
+import { readApiError } from '@/lib/api-error';
 import { reportClientError } from '@/lib/report-client-error';
 
 export interface Auction {
@@ -26,7 +35,12 @@ export interface Auction {
 }
 
 interface FavoritesContextType {
-  favorites: Auction[];
+  /**
+   * The code of every favourite, from `GET /favorites/codes` (AR-35): enough for a heart's state
+   * and the sidebar count, so the full favourites are never loaded at once. The list page reads
+   * the paginated `GET /favorites` itself and reloads when this changes.
+   */
+  favoriteCodes: string[];
   isFavorite: (code: string) => boolean;
   toggleFavorite: (auction: Auction) => void;
   removeFavorite: (code: string) => void;
@@ -36,7 +50,8 @@ interface FavoritesContextType {
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined);
 
 export function FavoritesProvider({ children }: { children: ReactNode }) {
-  const [favorites, setFavorites] = useState<Auction[]>([]);
+  const [favoriteCodes, setFavoriteCodes] = useState<string[]>([]);
+  const codeSet = useMemo(() => new Set(favoriteCodes), [favoriteCodes]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const getAuthHeaders = (): Record<string, string> => {
@@ -58,21 +73,23 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        setFavorites([]);
+        setFavoriteCodes([]);
         setLoading(false);
         return;
       }
 
       setLoading(true);
-      const response = await fetch('/api/favorites', {
+      const response = await fetch('/api/favorites/codes', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
-        const data = await response.json();
-        if (isLatest()) setFavorites(data);
+        const data: { codes: string[] } = await response.json();
+        if (isLatest()) setFavoriteCodes(data.codes);
       } else if (response.status === 401 && isLatest()) {
         // Unauthorized - clear favorites
-        setFavorites([]);
+        setFavoriteCodes([]);
+      } else {
+        throw await readApiError(response);
       }
     } catch (error) {
       if (isLatest()) reportClientError(error, { where: 'FavoritesContext.load' });
@@ -84,7 +101,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const clearFavorites = useCallback(() => {
     latestRequest.current++;
     accountGeneration.current++;
-    setFavorites([]);
+    setFavoriteCodes([]);
     setLoading(false);
   }, []);
 
@@ -93,7 +110,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   useReloadOnUserChange(loadFavorites, clearFavorites);
 
   const isFavorite = (code: string): boolean => {
-    return favorites.some((fav) => fav.code === code);
+    return codeSet.has(code);
   };
 
   const toggleFavorite = async (auction: Auction) => {
@@ -119,7 +136,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         });
         if (!sameAccount()) return; // #42: started by an account that has since signed out
         if (response.ok || response.status === 204) {
-          setFavorites((prev) => prev.filter((fav) => fav.code !== auction.code));
+          setFavoriteCodes((prev) => prev.filter((code) => code !== auction.code));
         } else if (response.status === 401) {
           // Token expired or invalid, redirect to login
           localStorage.removeItem('token');
@@ -140,21 +157,24 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         const response = await fetch('/api/favorites', {
           method: 'POST',
           headers,
-          body: JSON.stringify(auction),
+          // AR-34: the API takes the code alone and refuses any other field with a 400
+          body: JSON.stringify({ code: auction.code }),
         });
 
         if (!sameAccount()) return; // #42: started by an account that has since signed out
 
         if (response.ok) {
-          const savedAuction = await response.json();
+          await response.json();
           if (!sameAccount()) return;
-          setFavorites((prev) => [...prev, savedAuction]);
+          setFavoriteCodes((prev) =>
+            prev.includes(auction.code) ? prev : [...prev, auction.code],
+          );
         } else if (response.status === 401) {
           // Token expired or invalid, redirect to login
           localStorage.removeItem('token');
           router.push('/login');
         } else {
-          reportClientError(new Error(`Adding a favorite failed with HTTP ${response.status}`), {
+          reportClientError(await readApiError(response), {
             where: 'FavoritesContext.toggleFavorite',
           });
         }
@@ -174,7 +194,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       // #42: started by an account that has since signed out
       if (generation !== accountGeneration.current) return;
       if (response.ok || response.status === 204) {
-        setFavorites((prev) => prev.filter((fav) => fav.code !== code));
+        setFavoriteCodes((prev) => prev.filter((favorite) => favorite !== code));
       }
     } catch (error) {
       reportClientError(error, { where: 'FavoritesContext.removeFavorite' });
@@ -183,7 +203,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
 
   return (
     <FavoritesContext.Provider
-      value={{ favorites, isFavorite, toggleFavorite, removeFavorite, loading }}
+      value={{ favoriteCodes, isFavorite, toggleFavorite, removeFavorite, loading }}
     >
       {children}
     </FavoritesContext.Provider>
