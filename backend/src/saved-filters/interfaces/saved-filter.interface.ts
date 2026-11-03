@@ -1,4 +1,14 @@
-import { FilterData } from '../schemas/saved-filter.schema';
+import type { Decimal } from '../../common/money/money';
+
+/** A saved filter's criteria in code: the price bounds are reais as Decimal (AR-17). */
+export interface FilterData {
+  state?: string;
+  city?: string[];
+  neighborhood?: string[];
+  modality?: string[];
+  minMargin?: Decimal;
+  maxMargin?: Decimal;
+}
 
 export interface SavedFilter {
   _id: string;

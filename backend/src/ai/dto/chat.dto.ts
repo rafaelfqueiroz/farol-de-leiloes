@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsString } from 'class-validator';
 import type { AuctionQueryParams } from '../services/nlp.service';
 import { MAX_PAGE_SIZE } from '../../common/pagination/pagination-query.dto';
+import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto';
 
 export class ChatRequestDto {
   @ApiProperty({ type: String, description: 'The search, in the user own words (pt-BR)' })
@@ -27,11 +28,12 @@ export class ChatResponseDto {
   @ApiPropertyOptional({ type: String, description: 'Phase modality, e.g. SFI_AUCTION' })
   modality?: string;
 
-  @ApiPropertyOptional({ type: Number, minimum: 0, description: 'BRL' })
-  minMargin?: number;
+  // AR-17: price bounds in reais, as strings; pass them to GET /api/auctions unchanged.
+  @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Lowest minimum price, BRL' })
+  minMargin?: string;
 
-  @ApiPropertyOptional({ type: Number, minimum: 0, description: 'BRL' })
-  maxMargin?: number;
+  @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Highest minimum price, BRL' })
+  maxMargin?: string;
 
   @ApiPropertyOptional({ type: 'integer', minimum: 1 })
   page?: number;
@@ -44,8 +46,8 @@ export class ChatResponseDto {
     this.city = params.city;
     this.neighborhood = params.neighborhood;
     this.modality = params.modality;
-    this.minMargin = params.minMargin;
-    this.maxMargin = params.maxMargin;
+    this.minMargin = moneyToJson(params.minMargin);
+    this.maxMargin = moneyToJson(params.maxMargin);
     this.page = params.page;
     this.pageSize = params.pageSize;
   }

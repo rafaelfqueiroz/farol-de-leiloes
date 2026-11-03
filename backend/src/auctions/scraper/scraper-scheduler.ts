@@ -2,7 +2,13 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { AuctionEntity, AuctionDocument, Phase, AuctionFile } from '../schemas/auction.schema';
+import {
+  AuctionEntity,
+  AuctionDocument,
+  AuctionFile,
+  StoredPhase,
+} from '../schemas/auction.schema';
+import { restorePhase } from '../auction.mapper';
 import { fetchAndScrapeDetails } from './details-scraper';
 import { JobExecutionService } from '../../common/services/job-execution.service';
 import { RunMode } from '../../common/schemas/job-execution.schema';
@@ -10,6 +16,8 @@ import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config'
 import { StorageService } from '../../storage/storage.service';
 import { errorMessage } from '../../common/error-message';
 import { serverOperators } from '../../common/mongo/query-safety';
+import { Clock } from '../../common/clock/clock';
+import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time';
 
 @Injectable()
 export class AuctionDetailsScraper implements OnModuleInit {
@@ -25,6 +33,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
     private readonly storageService: StorageService,
     @Inject(schedulerConfig.KEY)
     private readonly config: SchedulerConfig,
+    private readonly clock: Clock, // AR-24
   ) {}
 
   /**
@@ -40,7 +49,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
     }
 
     this.logger.log(
-      'Auction details scraper initialized. Scheduled to run daily at 6 AM BRT (9 AM UTC)',
+      'Auction details scraper initialized. Scheduled to run daily at 06:00 Brasília',
     );
 
     if (onStartup) {
@@ -54,10 +63,10 @@ export class AuctionDetailsScraper implements OnModuleInit {
   }
 
   /**
-   * Runs daily at 6 AM BRT (which is UTC-3)
-   * Cron runs in UTC, so 6 AM BRT = 9 AM UTC
+   * Runs daily at 06:00 in Brasília. AR-25 / BR-003-27: the zone is explicit on the cron, so the
+   * time no longer depends on the server running in UTC (it was '0 9 * * *' in server time).
    */
-  @Cron('0 9 * * *')
+  @Cron('0 6 * * *', { timeZone: BRASILIA_TIME_ZONE })
   async dailyScraperJob() {
     const { enabled } = this.config.scraper;
 
@@ -169,7 +178,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
     if (details.unavailable) {
       await this.auctionModel.updateOne(
         { code: auction.code },
-        { $set: { available: false, fulfilled: true, updatedAt: new Date() } },
+        { $set: { available: false, fulfilled: true, updatedAt: this.clock.now() } },
       );
       this.logger.log(`Auction ${auction.code} marked as unavailable`);
       return true;
@@ -177,7 +186,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
 
     const updateData: Record<string, unknown> = {
       fulfilled: true,
-      updatedAt: new Date(),
+      updatedAt: this.clock.now(),
     };
 
     if (details.description && !auction.description) {
@@ -200,7 +209,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
           imageFile.storageKey = imageResult.key;
           imageFile.publicUrl = imageResult.url;
           imageFile.size = imageResult.size;
-          imageFile.uploadedAt = new Date();
+          imageFile.uploadedAt = this.clock.now();
           this.logger.debug(`Uploaded image to R2 for auction ${auction.code}: ${imageResult.key}`);
         }
 
@@ -220,7 +229,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
             publicUrl: result.url,
             mimeType: 'application/pdf',
             size: result.size,
-            uploadedAt: new Date(),
+            uploadedAt: this.clock.now(),
           };
           this.logger.debug(`Uploaded matricula to R2 for auction ${auction.code}`);
         }
@@ -237,9 +246,10 @@ export class AuctionDetailsScraper implements OnModuleInit {
         (lastPhase.phaseDates?.length ?? 0) > 0;
 
       if (!hasPhaseDetails) {
-        const updatedPhases: Phase[] = [...phases];
-        const updatedLastPhase: Phase = {
-          ...lastPhase,
+        // Every phase is written back, so each leaves in the new money shape (AR-17, AR-28).
+        const updatedPhases: StoredPhase[] = phases.map(restorePhase);
+        const updatedLastPhase: StoredPhase = {
+          ...restorePhase(lastPhase),
           paymentMethods: details.phaseDetails.paymentMethods,
           expenseRules: details.phaseDetails.expenseRules,
           phaseDates: details.phaseDetails.phaseDates,

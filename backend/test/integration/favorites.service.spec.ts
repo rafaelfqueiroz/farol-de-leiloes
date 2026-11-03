@@ -15,6 +15,8 @@ import {
   PhaseModality,
 } from '../../src/auctions/schemas/auction.schema';
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety';
+import { Clock } from '../../src/common/clock/clock';
+import { FakeClock } from '../fakes/fake-clock';
 import { FavoritesService } from '../../src/favorites/favorites.service';
 import { FavoriteEntity, FavoriteSchema } from '../../src/favorites/schemas/favorite.schema';
 import { useTestDatabase } from '../support/test-database';
@@ -58,6 +60,7 @@ describe('FavoritesService (integration)', () => {
       providers: [
         FavoritesService,
         AuctionsService,
+        { provide: Clock, useValue: new FakeClock() },
         { provide: CACHE_MANAGER, useValue: {} },
         { provide: ConfigService, useValue: testConfigService() },
       ],

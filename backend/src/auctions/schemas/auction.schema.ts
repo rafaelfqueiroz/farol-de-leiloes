@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
+import type { StoredMoney } from '../../common/money/stored-money';
 
 export enum PhaseModality {
   SFI_AUCTION = 'SFI_AUCTION',
@@ -36,9 +37,16 @@ export enum PaymentMethod {
   FINANCING = 'FINANCING', // Financiamento
 }
 
-export interface Phase {
+/**
+ * A phase as stored. `phases` and `currentPhase` are Mixed paths, so Mongoose casts nothing in
+ * them: every writer converts through toStoredPhase (auction.mapper.ts) and every reader through
+ * fromStoredPhase. In code a phase is the `Phase` of interfaces/auction.interface.ts.
+ */
+export interface StoredPhase {
   modality: PhaseModality;
-  minimumPrice?: number | null;
+  // AR-17: reais as Decimal128. EXPAND (AR-28): remove in contract step, #34 PR 2 — documents
+  // written before #34 hold a number.
+  minimumPrice?: StoredMoney | null;
   phaseDates?: Date[];
   paymentMethods?: PaymentMethod[];
   expenseRules?: ExpenseRule[];
@@ -55,14 +63,17 @@ export class AuctionEntity {
   @Prop({ type: Object })
   address?: Address;
 
-  @Prop({ type: Number })
-  appraisalPrice?: number | null;
+  // AR-17: reais as Decimal128. EXPAND (AR-28): remove in contract step, #34 PR 2 — legacy
+  // documents hold a number (reais too, so a hydrated read casting it to Decimal128 keeps its
+  // value); lean reads see either shape and go through fromStoredMoney.
+  @Prop({ type: MongooseSchema.Types.Decimal128 })
+  appraisalPrice?: StoredMoney | null;
 
   @Prop({ type: Array })
-  phases?: Phase[];
+  phases?: StoredPhase[];
 
   @Prop({ type: Object })
-  currentPhase?: Phase;
+  currentPhase?: StoredPhase;
 
   @Prop({ type: String })
   detailsUrl?: string | null;
@@ -99,4 +110,6 @@ export const AuctionSchema = SchemaFactory.createForClass(AuctionEntity);
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1 });
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1, 'address.neighborhood': 1 });
 AuctionSchema.index({ 'currentPhase.modality': 1 });
+// MongoDB orders numbers across BSON types by value, so this index and the price range filter
+// serve Decimal128 and legacy number prices alike during the expand step (AR-28).
 AuctionSchema.index({ 'currentPhase.minimumPrice': 1 });

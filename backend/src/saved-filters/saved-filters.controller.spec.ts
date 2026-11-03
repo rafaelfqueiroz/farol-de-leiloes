@@ -8,11 +8,12 @@ import { SavedFiltersService } from './saved-filters.service';
 import { createHttpApp, TEST_USER } from '../../test/support/http-app';
 import { itAnswersPages } from '../../test/support/pagination-contract';
 import type { SavedFilter } from './interfaces/saved-filter.interface';
+import { Decimal } from '../common/money/money';
 
 const FILTER: SavedFilter = {
   _id: '64b7f00000000000000000aa',
   name: 'Natal até 300 mil',
-  filters: { state: 'RN', city: ['Natal'], maxMargin: 300000 },
+  filters: { state: 'RN', city: ['Natal'], maxMargin: new Decimal('300000') },
   createdAt: new Date('2026-01-15T12:00:00.000Z'),
 };
 
@@ -38,7 +39,12 @@ describe('SavedFiltersController over HTTP', () => {
       method: savedFilters.findPage,
       pageArg: 1,
       item: FILTER,
-      expectedItem: { ...FILTER, createdAt: '2026-01-15T12:00:00.000Z' },
+      expectedItem: {
+        ...FILTER,
+        // AR-17: the price bound leaves as a string of reais.
+        filters: { state: 'RN', city: ['Natal'], maxMargin: '300000.00' },
+        createdAt: '2026-01-15T12:00:00.000Z',
+      },
     });
   });
 
@@ -48,14 +54,28 @@ describe('SavedFiltersController over HTTP', () => {
 
       await request(app.getHttpServer())
         .post('/api/saved-filters')
-        .send({ name: FILTER.name, filters: { state: 'RN', city: ['Natal'], maxMargin: 300000 } })
+        .send({ name: FILTER.name, filters: { state: 'RN', city: ['Natal'], maxMargin: '300000' } })
         .expect(201);
 
+      // AR-17: the money string reaches the service as a Decimal, never a float.
       expect(savedFilters.create).toHaveBeenCalledWith(TEST_USER.userId, FILTER.name, {
         state: 'RN',
         city: ['Natal'],
-        maxMargin: 300000,
+        maxMargin: new Decimal('300000'),
       });
+    });
+
+    it('AR-17: refuses a price sent as a JSON number or a pt-BR string', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/saved-filters')
+        .send({ name: 'x', filters: { minMargin: 300000, maxMargin: '300.000,00' } })
+        .expect(400);
+
+      expect([...response.body.context.fields].sort()).toEqual([
+        'filters.maxMargin',
+        'filters.minMargin',
+      ]);
+      expect(savedFilters.create).not.toHaveBeenCalled();
     });
 
     it('AR-34: validates the nested filters, naming each offending path', async () => {

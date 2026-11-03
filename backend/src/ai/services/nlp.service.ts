@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LlmAdapter } from '../adapters/llm.adapter';
 import { MAX_PAGE_SIZE } from '../../common/pagination/pagination-query.dto';
+import { Decimal, isMoneyString } from '../../common/money/money';
 
 // State abbreviations mapping (full names → 2-letter codes)
 const STATE_ABBREVIATIONS: Record<string, string> = {
@@ -93,8 +94,9 @@ export interface AuctionQueryParams {
   city?: string;
   neighborhood?: string;
   modality?: string;
-  minMargin?: number;
-  maxMargin?: number;
+  /** Price bounds in reais (AR-17), as GET /api/auctions takes them. */
+  minMargin?: Decimal;
+  maxMargin?: Decimal;
   /** AR-35 paging, as GET /api/auctions takes it: page ≥ 1, pageSize 1..100. */
   page?: number;
   pageSize?: number;
@@ -193,10 +195,10 @@ export class NlpService {
     const modality = nonEmptyString(values.modality);
     if (modality) params.modality = MODALITY_MAPPINGS[modality.toLowerCase()] ?? modality;
 
-    const minMargin = nonNegativeNumber(values.minMargin);
+    const minMargin = moneyFromModel(values.minMargin);
     if (minMargin !== undefined) params.minMargin = minMargin;
 
-    const maxMargin = nonNegativeNumber(values.maxMargin);
+    const maxMargin = moneyFromModel(values.maxMargin);
     if (maxMargin !== undefined) params.maxMargin = maxMargin;
 
     const page = positiveInteger(values.page);
@@ -214,8 +216,15 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 }
 
-function nonNegativeNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+/**
+ * AR-17: an amount of reais from the model's JSON, where the prompt asks for a plain number
+ * (300000). It becomes a Decimal through its text at once, and only when that text is an amount
+ * GET /api/auctions accepts (MONEY_PATTERN): a negative, an exponent (1e21) or a third decimal is
+ * dropped like any other mistyped value.
+ */
+function moneyFromModel(value: unknown): Decimal | undefined {
+  const text = typeof value === 'number' && Number.isFinite(value) ? String(value) : value;
+  return isMoneyString(text) ? new Decimal(text) : undefined;
 }
 
 function positiveInteger(value: unknown): number | undefined {

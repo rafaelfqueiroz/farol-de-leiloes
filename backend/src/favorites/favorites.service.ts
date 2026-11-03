@@ -69,7 +69,8 @@ export class FavoritesService {
         .populate<PopulatedAuction>('auction')
         .exec();
       if (populated?.auction) {
-        return this.toAuction(populated.auction);
+        // AuctionsService maps the stored record, money included (AR-17, AR-09).
+        return this.auctionsService.toAuction(populated.auction);
       }
     }
 
@@ -98,32 +99,5 @@ export class FavoritesService {
   async remove(userId: string, auctionCode: string): Promise<boolean> {
     const result = await this.favoriteRepository.deleteOne({ userId, auctionCode }).exec();
     return result.deletedCount > 0;
-  }
-
-  private toAuction(doc: AuctionRecord): Auction {
-    const phases = doc.phases ?? [];
-
-    // Compute URLs from file objects (prefer publicUrl, fallback to originalUrl)
-    const imageUrl = doc.image?.publicUrl ?? doc.image?.originalUrl ?? null;
-    const matriculaUrl = doc.matricula?.publicUrl ?? doc.matricula?.originalUrl ?? null;
-    // TODO: editalUrl disabled - edital is tied to auction phase, not the auction itself
-    // const editalUrl = doc.edital?.publicUrl ?? doc.edital?.originalUrl ?? null;
-
-    return {
-      code: doc.code,
-      title: doc.title ?? null,
-      address: doc.address ?? null,
-      appraisalPrice: doc.appraisalPrice ?? null,
-      phases,
-      currentPhase: doc.currentPhase ?? phases[phases.length - 1] ?? null,
-      detailsUrl: doc.detailsUrl ?? null,
-      imageUrl,
-      matriculaUrl,
-      editalUrl: null, // Disabled - edital is tied to auction phase
-      description: doc.description ?? null,
-      fulfilled: doc.fulfilled ?? false,
-      available: doc.available ?? true,
-      updatedAt: doc.updatedAt,
-    };
   }
 }
