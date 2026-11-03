@@ -23,7 +23,7 @@ Setup
 
 Migrations (AR-29, ADR-001)
 
-- `npm run migrate` — after `npm run build`: applies the pending migrations in `src/migrations/registry.ts` to the database `MONGODB_URI` names (same validated environment as the API), records each in the `migrations` collection and stops at the first failure (exit 1). Safe to re-run. It runs **before** deploying code that depends on it (DV-34); until the deploy pipeline does it (BL-001, #40), run it by hand against your local database first. How to write one: DEVELOPMENT §6, "Migrations"
+- `npm run migrate` — after `npm run build`: applies the pending migrations in `src/migrations/registry.ts` to the database `MONGODB_URI` names (same validated environment as the API), records each in the `migrations` collection and stops at the first failure (exit 1). Safe to re-run. It runs **before** deploying code that depends on it (DV-34); until the deploy pipeline does it (BL-001, #40), run it by hand from your machine against the production database (MongoDB Atlas) first, with `node --env-file=.env.production dist/migrations/run.js` (see DEVELOPMENT §6). How to write one: DEVELOPMENT §6, "Migrations"
 
 Tests (TESTING §2, §7)
 

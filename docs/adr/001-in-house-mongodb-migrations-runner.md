@@ -33,7 +33,7 @@ The in-house runner, in `backend/src/migrations/`:
 - `migration-log.ts`: the record, one document per applied migration in the `migrations` collection, `{ _id: '<id>', appliedAt }`. The unique `_id` makes a second record of the same id fail.
 - `run.ts`, run by `npm run migrate` (`node dist/migrations/run.js`): a Nest application context (`MigrationsModule`) with the same `ConfigModule` validation and the same MongoDB connection setup as the API (`common/mongo/mongoose-root.ts`), no HTTP server and no schedulers. It exits 0 when every migration is applied and 1 otherwise, logging through the Nest `Logger` (AR-45).
 
-The deploy pipeline runs `npm run migrate` as a gated step before rolling out the new image (DV-34). Until that pipeline exists (BL-001, #40), the owner runs it by hand against their local database, before merging code that depends on it.
+The deploy pipeline runs `npm run migrate` as a gated step before rolling out the new image (DV-34). Until that pipeline exists (BL-001, #40), the owner runs it by hand from their machine against the production database (MongoDB Atlas), before merging code that depends on it.
 
 ## Consequences
 
