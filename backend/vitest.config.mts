@@ -46,8 +46,9 @@ export default defineConfig({
         // and tracked in #57; it never goes down. Re-baselined in #62: V8 coverage measures the
         // source, where Jest/ts-jest also counted the helpers tsc emits for decorators, so the
         // numbers moved without any code losing a test.
-        lines: 23,
-        branches: 19,
+        // Raised in #35 by the HTTP and OpenAPI contract specs (measured 40.0% / 30.2%).
+        lines: 40,
+        branches: 30,
         // TS-24 / AR-06: `domain/` holds the critical modules, gated at 100% branch coverage.
         // The glob is static: Vitest ignores a threshold glob that matches no file, so the gate
         // is inert until the first src/<module>/domain/ file lands and applies the moment it

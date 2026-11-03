@@ -1,16 +1,22 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Profile, Strategy, VerifyCallback } from 'passport-google-oauth20';
 import { UsersService } from '../../users/users.service';
+import type { Env } from '../../config/env';
+import { DomainError } from '../../common/errors/domain-error';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
-  constructor(private usersService: UsersService) {
+  constructor(
+    private usersService: UsersService,
+    configService: ConfigService<Env, true>,
+  ) {
+    // AR-42: typed config, validated at boot (AR-41).
     super({
-      clientID: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      callbackURL:
-        process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/api/auth/google/callback',
+      clientID: configService.get('GOOGLE_CLIENT_ID', { infer: true }),
+      clientSecret: configService.get('GOOGLE_CLIENT_SECRET', { infer: true }),
+      callbackURL: configService.get('GOOGLE_CALLBACK_URL', { infer: true }),
       scope: ['email', 'profile'],
     });
   }
@@ -25,7 +31,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     const email = emails?.[0]?.value;
     // The 'email' scope is requested, so Google always sends one; refuse the sign-in if not.
     if (!email) {
-      throw new UnauthorizedException('Google account has no email address');
+      throw new DomainError('GOOGLE_ACCOUNT_WITHOUT_EMAIL');
     }
 
     // Try to find user by Google ID (already linked)

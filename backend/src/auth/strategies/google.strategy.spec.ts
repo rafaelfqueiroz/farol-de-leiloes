@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { UnauthorizedException } from '@nestjs/common';
 import { Profile } from 'passport-google-oauth20';
 import { GoogleStrategy } from './google.strategy';
+import { DomainError } from '../../common/errors/domain-error';
 
 describe('GoogleStrategy.validate', () => {
   function build() {
@@ -26,8 +26,8 @@ describe('GoogleStrategy.validate', () => {
     const profile = { id: 'google-1', displayName: 'Test User', emails } as unknown as Profile;
     const done = vi.fn();
 
-    await expect(strategy.validate('access', 'refresh', profile, done)).rejects.toBeInstanceOf(
-      UnauthorizedException,
+    await expect(strategy.validate('access', 'refresh', profile, done)).rejects.toEqual(
+      new DomainError('GOOGLE_ACCOUNT_WITHOUT_EMAIL'),
     );
     expect(usersService.findByGoogleId).not.toHaveBeenCalled();
     expect(done).not.toHaveBeenCalled();

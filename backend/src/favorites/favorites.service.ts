@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { FavoriteEntity, FavoriteDocument } from './schemas/favorite.schema';
 import { AuctionsService } from '../auctions/auctions.service';
 import { Auction, AuctionRecord } from '../auctions/interfaces/auction.interface';
-import { isAuctionActive } from '../auctions/utils/auction-filters';
+import { DomainError } from '../common/errors/domain-error';
+import {
+  type PageRequest,
+  type Paginated,
+  pageOfList,
+  paginated,
+} from '../common/pagination/paginated';
 
 // `auction` once populated: the auction record, or null when the reference is stale.
 type PopulatedAuction = { auction: AuctionRecord | null };
@@ -16,45 +22,35 @@ export class FavoritesService {
     private readonly auctionsService: AuctionsService,
   ) {}
 
-  async findAll(userId: string): Promise<Auction[]> {
-    const favorites = await this.favoriteRepository
-      .find({ userId })
-      .populate<PopulatedAuction>('auction')
-      .sort({ createdAt: -1 })
-      .exec();
-
-    const results: Auction[] = [];
-
-    for (const fav of favorites) {
-      if (fav.auction != null) {
-        const auction = this.toAuction(fav.auction);
-        // Skip inactive auctions (unavailable, past date, etc.)
-        if (!isAuctionActive(auction)) {
-          continue;
-        }
-        results.push(auction);
-        continue;
-      }
-
-      // Auction ObjectId reference is stale — look up by auctionCode
-      const auction = await this.auctionsService.findByCode(fav.auctionCode);
-      if (auction && isAuctionActive(auction)) {
-        const doc = await this.auctionsService.findDocumentByCode(fav.auctionCode);
-        if (doc) {
-          await this.updateAuctionId(fav._id, doc._id);
-        }
-        results.push(auction);
-      }
-    }
-
-    return results;
+  /**
+   * AR-35: one page of the user's favorited auctions that are still active, most recently
+   * favorited first (`_id` breaks createdAt ties). Favorites point at auctions by code, so a
+   * re-imported auction (new `_id`) is still found. The active check needs each auction's phases,
+   * so the user's codes are filtered first (light projection) and only the page is loaded whole.
+   */
+  async findPage(userId: string, page: PageRequest): Promise<Paginated<Auction>> {
+    const codes = await this.findCodes(userId);
+    const active = await this.auctionsService.findActiveCodes(codes);
+    const { items: pageCodes, total } = pageOfList(
+      codes.filter((code) => active.has(code)),
+      page,
+    );
+    const auctions = new Map(
+      (await this.auctionsService.findAvailableByCodes(pageCodes)).map((a) => [a.code, a]),
+    );
+    const items = pageCodes.flatMap((code) => auctions.get(code) ?? []);
+    return paginated(items, total, page);
   }
 
-  private async updateAuctionId(
-    favoriteId: Types.ObjectId,
-    auctionId: Types.ObjectId,
-  ): Promise<void> {
-    await this.favoriteRepository.updateOne({ _id: favoriteId }, { $set: { auction: auctionId } });
+  /** AR-12: every code the user favorited, active or not, most recent first; never another's. */
+  async findCodes(userId: string): Promise<string[]> {
+    const favorites = await this.favoriteRepository
+      .find({ userId })
+      .select('auctionCode')
+      .sort({ createdAt: -1, _id: -1 })
+      .lean()
+      .exec();
+    return favorites.map((favorite) => favorite.auctionCode);
   }
 
   async findOne(userId: string, auctionCode: string): Promise<FavoriteDocument | null> {
@@ -76,7 +72,7 @@ export class FavoritesService {
     // Find the auction document by code (need _id for the Favorite record)
     const auctionDoc = await this.auctionsService.findDocumentByCode(auctionCode);
     if (!auctionDoc) {
-      throw new NotFoundException(`Auction with code ${auctionCode} not found`);
+      throw new DomainError('AUCTION_NOT_FOUND');
     }
 
     const favorite = new this.favoriteRepository({
@@ -90,7 +86,7 @@ export class FavoritesService {
     // (DV-03) instead of returning null to the controller.
     const auction = await this.auctionsService.findByCode(auctionCode);
     if (!auction) {
-      throw new NotFoundException(`Auction with code ${auctionCode} not found`);
+      throw new DomainError('AUCTION_NOT_FOUND');
     }
     return auction;
   }

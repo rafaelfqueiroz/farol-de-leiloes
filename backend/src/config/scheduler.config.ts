@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config';
+import { validateEnv, type Env } from './env';
 
 export interface SchedulerCleanupConfig {
   onStartup: boolean;
@@ -33,27 +34,19 @@ export interface CacheConfig {
 
 export const KEY = 'SchedulerConfig';
 
-export default registerAs(
-  KEY,
-  () =>
-    ({
-      import: {
-        enabled: process.env.IMPORT_ENABLED !== 'false',
-        onStartup: process.env.IMPORT_ON_START_UP === 'true',
-      },
-      scraper: {
-        enabled: process.env.SCRAPER_ENABLED !== 'false',
-        onStartup: process.env.SCRAPER_ON_START_UP === 'true',
-      },
-      cache: {
-        neighborhoodsTtl: parseInt(process.env.NEIGHBORHOODS_CACHE_TTL || '600000', 10), // Default 5 minutes
-        neighborhoodsEnabled: process.env.NEIGHBORHOODS_CACHE_ENABLED === 'true',
-      },
-      reminders: {
-        enabled: process.env.REMINDERS_ENABLED !== 'false',
-      },
-      cleanup: {
-        onStartup: process.env.CLEANUP_ON_STARTUP === 'true',
-      },
-    }) satisfies SchedulerConfig,
-);
+/** The job and cache settings out of the validated environment (AR-41). */
+export function schedulerConfigFrom(env: Env): SchedulerConfig {
+  return {
+    import: { enabled: env.IMPORT_ENABLED, onStartup: env.IMPORT_ON_START_UP },
+    scraper: { enabled: env.SCRAPER_ENABLED, onStartup: env.SCRAPER_ON_START_UP },
+    cache: {
+      neighborhoodsTtl: env.NEIGHBORHOODS_CACHE_TTL,
+      neighborhoodsEnabled: env.NEIGHBORHOODS_CACHE_ENABLED,
+    },
+    reminders: { enabled: env.REMINDERS_ENABLED },
+    cleanup: { onStartup: env.CLEANUP_ON_STARTUP },
+  };
+}
+
+// AR-42: the config module is the only reader of process.env.
+export default registerAs(KEY, () => schedulerConfigFrom(validateEnv(process.env)));

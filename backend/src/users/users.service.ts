@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UserEntity, UserDocument } from './schemas/user.schema';
@@ -6,6 +6,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { DomainError } from '../common/errors/domain-error';
 
 @Injectable()
 export class UsersService {
@@ -15,7 +16,7 @@ export class UsersService {
     // Check if user already exists
     const existingUser = await this.findByEmail(createUserDto.email);
     if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+      throw new DomainError('EMAIL_ALREADY_REGISTERED');
     }
 
     // Hash password if provided
@@ -76,7 +77,7 @@ export class UsersService {
       .exec();
 
     if (!updatedUser) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     return updatedUser;
@@ -98,7 +99,7 @@ export class UsersService {
       .exec();
 
     if (!updatedUser) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     return updatedUser;
@@ -109,7 +110,7 @@ export class UsersService {
     if (updateUserDto.email) {
       const existingUser = await this.findByEmail(updateUserDto.email);
       if (existingUser && existingUser._id.toString() !== id) {
-        throw new ConflictException('User with this email already exists');
+        throw new DomainError('EMAIL_ALREADY_REGISTERED');
       }
     }
 
@@ -124,7 +125,7 @@ export class UsersService {
       .exec();
 
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     return user;
@@ -133,7 +134,7 @@ export class UsersService {
   async remove(id: string): Promise<void> {
     const result = await this.userRepository.deleteOne({ _id: id }).exec();
     if (result.deletedCount === 0) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw new DomainError('USER_NOT_FOUND');
     }
   }
 
@@ -150,7 +151,7 @@ export class UsersService {
   async setResetPasswordToken(email: string): Promise<string> {
     const user = await this.findByEmail(email);
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     // Generate random token
@@ -190,7 +191,7 @@ export class UsersService {
     }
 
     if (!matchedUser) {
-      throw new NotFoundException('Invalid or expired reset token');
+      throw new DomainError('INVALID_RESET_TOKEN');
     }
 
     // Update password, clear reset token, and ensure 'local' provider is present
@@ -206,7 +207,7 @@ export class UsersService {
   async setEmailVerificationToken(userId: string): Promise<string> {
     const user = await this.userRepository.findById(userId).exec();
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new DomainError('USER_NOT_FOUND');
     }
 
     // Generate cryptographically secure random token
@@ -245,7 +246,7 @@ export class UsersService {
     }
 
     if (!matchedUser) {
-      throw new NotFoundException('Invalid or expired verification token');
+      throw new DomainError('INVALID_VERIFICATION_TOKEN');
     }
 
     await this.userRepository.findByIdAndUpdate(matchedUser._id, {

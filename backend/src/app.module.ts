@@ -13,22 +13,25 @@ import { RemindersModule } from './reminders/reminders.module';
 import { AiModule } from './ai/ai.module';
 import { SupportModule } from './support/support.module';
 import schedulerConfig from './config/scheduler.config';
+import r2Config from './config/r2.config';
+import { validateEnv, type AppConfigService } from './config/env';
 
 @Module({
   imports: [
+    // AR-41: the environment is validated once, at boot; an invalid one stops the app.
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [schedulerConfig],
+      cache: true,
+      validate: validateEnv,
+      load: [schedulerConfig, r2Config],
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
-        return {
-          uri: configService.get('MONGODB_URI'),
-          retryAttempts: 3,
-        };
-      },
+      useFactory: (config: AppConfigService) => ({
+        uri: config.get('MONGODB_URI', { infer: true }),
+        retryAttempts: 3,
+      }),
     }),
     ScheduleModule.forRoot(),
     UsersModule,

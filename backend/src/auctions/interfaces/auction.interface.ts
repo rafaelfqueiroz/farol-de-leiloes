@@ -17,11 +17,6 @@ export interface Auction {
   updatedAt: Date;
 }
 
-export interface AuctionListResult {
-  total: number;
-  items: Auction[];
-}
-
 /**
  * The stored fields an `Auction` is built from: a lean or hydrated auction record, or one
  * populated into another module's document. Lets those modules type it without importing the

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LlmAdapter } from '../adapters/llm.adapter';
+import { MAX_PAGE_SIZE } from '../../common/pagination/pagination-query.dto';
 
 // State abbreviations mapping (full names → 2-letter codes)
 const STATE_ABBREVIATIONS: Record<string, string> = {
@@ -94,8 +95,9 @@ export interface AuctionQueryParams {
   modality?: string;
   minMargin?: number;
   maxMargin?: number;
-  limit?: number;
-  offset?: number;
+  /** AR-35 paging, as GET /api/auctions takes it: page ≥ 1, pageSize 1..100. */
+  page?: number;
+  pageSize?: number;
 }
 
 const SYSTEM_PROMPT = `Você é um assistente especializado em extrair informações de buscas de leilões de imóveis.
@@ -107,7 +109,8 @@ Sua tarefa é analisar a mensagem do usuário e extrair os seguintes parâmetros
 - modality: Modalidade do leilão (SFI_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, ONLINE_SALES)
 - minMargin: Valor mínimo em reais (número inteiro, sem formatação)
 - maxMargin: Valor máximo em reais (número inteiro, sem formatação)
-- limit: Número máximo de resultados
+- pageSize: Quantidade de resultados por página (número inteiro de 1 a 100)
+- page: Número da página (número inteiro, a partir de 1)
 
 Regras de conversão:
 1. Estados: Converta nomes completos para siglas (Rio Grande do Norte → RN, São Paulo → SP)
@@ -117,6 +120,7 @@ Regras de conversão:
    - "licitação aberta" → OPEN_BIDDING
    - "venda direta" ou "venda direta online" → DIRECT_ONLINE_SALES
    - "venda online" → ONLINE_SALES
+4. Quantidade e página: "mostre 50 imóveis" → pageSize 50; "página 2" → page 2
 
 Responda APENAS com um objeto JSON válido contendo os parâmetros encontrados. Se um parâmetro não for mencionado, não o inclua no JSON.
 
@@ -124,7 +128,8 @@ Exemplos:
 - "Leilões em Natal/RN até 300 mil" → {"state": "RN", "city": "Natal", "maxMargin": 300000}
 - "Apartamentos em São Paulo acima de 500 mil" → {"state": "SP", "city": "São Paulo", "minMargin": 500000}
 - "Imóveis em leilão em Belo Horizonte" → {"state": "MG", "city": "Belo Horizonte", "modality": "SFI_AUCTION"}
-- "Casas no bairro Boa Viagem em Recife entre 200 e 400 mil" → {"state": "PE", "city": "Recife", "neighborhood": "Boa Viagem", "minMargin": 200000, "maxMargin": 400000}`;
+- "Casas no bairro Boa Viagem em Recife entre 200 e 400 mil" → {"state": "PE", "city": "Recife", "neighborhood": "Boa Viagem", "minMargin": 200000, "maxMargin": 400000}
+- "Mostre 50 imóveis em Natal/RN, página 2" → {"state": "RN", "city": "Natal", "pageSize": 50, "page": 2}`;
 
 @Injectable()
 export class NlpService {
@@ -156,7 +161,7 @@ export class NlpService {
     }
   }
 
-  private parseJsonResponse(jsonText: string): AuctionQueryParams {
+  private parseJsonResponse(jsonText: string): unknown {
     // Handle potential markdown code blocks
     const cleanJson = jsonText
       .replace(/```json\n?/g, '')
@@ -166,19 +171,53 @@ export class NlpService {
     return JSON.parse(cleanJson);
   }
 
-  private normalizeParams(params: AuctionQueryParams): AuctionQueryParams {
-    // Validate and normalize state abbreviation
-    if (params.state) {
-      const normalizedState = params.state.toLowerCase();
-      params.state = STATE_ABBREVIATIONS[normalizedState] || params.state.toUpperCase();
-    }
+  /**
+   * The model's JSON is untrusted: only the known parameters, with the right types, come out.
+   * Anything else (an unknown key, a retired `limit`/`offset`, a string where a number belongs)
+   * is dropped rather than handed to the search, which would refuse it (AR-34).
+   */
+  private normalizeParams(raw: unknown): AuctionQueryParams {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+    const values = raw as Record<string, unknown>;
+    const params: AuctionQueryParams = {};
 
-    // Validate modality
-    if (params.modality) {
-      const normalizedModality = params.modality.toLowerCase();
-      params.modality = MODALITY_MAPPINGS[normalizedModality] || params.modality;
-    }
+    const state = nonEmptyString(values.state);
+    if (state) params.state = STATE_ABBREVIATIONS[state.toLowerCase()] ?? state.toUpperCase();
+
+    const city = nonEmptyString(values.city);
+    if (city) params.city = city;
+
+    const neighborhood = nonEmptyString(values.neighborhood);
+    if (neighborhood) params.neighborhood = neighborhood;
+
+    const modality = nonEmptyString(values.modality);
+    if (modality) params.modality = MODALITY_MAPPINGS[modality.toLowerCase()] ?? modality;
+
+    const minMargin = nonNegativeNumber(values.minMargin);
+    if (minMargin !== undefined) params.minMargin = minMargin;
+
+    const maxMargin = nonNegativeNumber(values.maxMargin);
+    if (maxMargin !== undefined) params.maxMargin = maxMargin;
+
+    const page = positiveInteger(values.page);
+    if (page !== undefined) params.page = page;
+
+    // "mostre 200 imóveis" asks for more than a page holds: the most a page can (AR-35).
+    const pageSize = positiveInteger(values.pageSize);
+    if (pageSize !== undefined) params.pageSize = Math.min(pageSize, MAX_PAGE_SIZE);
 
     return params;
   }
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+}
+
+function nonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : undefined;
 }

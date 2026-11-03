@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Env } from '../config/env';
 import * as nodemailer from 'nodemailer';
 import {
   getVerificationEmailTemplate,
@@ -17,21 +18,21 @@ export class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private readonly logger = new Logger(EmailService.name);
 
-  constructor(private configService: ConfigService) {
+  constructor(private configService: ConfigService<Env, true>) {
     this.initializeTransporter();
   }
 
   private initializeTransporter(): void {
-    const host = this.configService.get<string>('SMTP_HOST');
-    const port = this.configService.get<number>('SMTP_PORT');
-    const user = this.configService.get<string>('SMTP_USER');
-    const pass = this.configService.get<string>('SMTP_PASS');
+    const host = this.configService.get('SMTP_HOST', { infer: true });
+    const port = this.configService.get('SMTP_PORT', { infer: true });
+    const user = this.configService.get('SMTP_USER', { infer: true });
+    const pass = this.configService.get('SMTP_PASS', { infer: true });
 
     if (host && port && user && pass) {
       this.transporter = nodemailer.createTransport({
         host,
         port,
-        secure: this.configService.get<string>('SMTP_SECURE') === 'true',
+        secure: this.configService.get('SMTP_SECURE', { infer: true }),
         auth: {
           user,
           pass,
@@ -44,7 +45,7 @@ export class EmailService {
   }
 
   async sendVerificationEmail(email: string, token: string, name: string): Promise<void> {
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const frontendUrl = this.configService.get('FRONTEND_URL', { infer: true });
     const verificationUrl = `${frontendUrl}/verify-email/${token}`;
 
     if (!this.transporter) {
@@ -55,7 +56,7 @@ export class EmailService {
       return;
     }
 
-    const emailFrom = this.configService.get<string>('EMAIL_FROM') || 'noreply@faroldosleiloes.com';
+    const emailFrom = this.configService.get('EMAIL_FROM', { infer: true });
 
     await this.transporter.sendMail({
       from: emailFrom,
@@ -68,7 +69,7 @@ export class EmailService {
   }
 
   async sendPasswordResetEmail(email: string, token: string, name: string): Promise<void> {
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const frontendUrl = this.configService.get('FRONTEND_URL', { infer: true });
     const resetUrl = `${frontendUrl}/reset-password/${token}`;
 
     if (!this.transporter) {
@@ -79,7 +80,7 @@ export class EmailService {
       return;
     }
 
-    const emailFrom = this.configService.get<string>('EMAIL_FROM') || 'noreply@faroldosleiloes.com';
+    const emailFrom = this.configService.get('EMAIL_FROM', { infer: true });
 
     await this.transporter.sendMail({
       from: emailFrom,
@@ -116,7 +117,7 @@ export class EmailService {
       return;
     }
 
-    const emailFrom = this.configService.get<string>('EMAIL_FROM') || 'noreply@faroldosleiloes.com';
+    const emailFrom = this.configService.get('EMAIL_FROM', { infer: true });
 
     await this.transporter.sendMail({
       from: emailFrom,
@@ -139,7 +140,7 @@ export class EmailService {
       return;
     }
 
-    const emailFrom = this.configService.get<string>('EMAIL_FROM') || 'noreply@faroldosleiloes.com';
+    const emailFrom = this.configService.get('EMAIL_FROM', { infer: true });
 
     await this.transporter.sendMail({
       from: emailFrom,

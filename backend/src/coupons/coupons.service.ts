@@ -1,11 +1,19 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
+import type { Env } from '../config/env';
 import { Model } from 'mongoose';
 import Stripe from 'stripe';
 import { CouponEntity, CouponDocument } from './schemas/coupon.schema';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { Coupon } from './interfaces/coupon.interface';
+import { DomainError } from '../common/errors/domain-error';
+import {
+  type PageRequest,
+  type Paginated,
+  paginated,
+  skipOf,
+} from '../common/pagination/paginated';
 
 @Injectable()
 export class CouponsService {
@@ -14,10 +22,10 @@ export class CouponsService {
 
   constructor(
     @InjectModel(CouponEntity.name) private readonly couponModel: Model<CouponDocument>,
-    private configService: ConfigService,
+    configService: ConfigService<Env, true>,
   ) {
-    // Stripe refuses to construct without a key, so a missing one already failed the boot.
-    this.stripe = new Stripe(this.configService.getOrThrow<string>('STRIPE_SECRET_KEY'));
+    // AR-41: the key is required at boot.
+    this.stripe = new Stripe(configService.get('STRIPE_SECRET_KEY', { infer: true }));
   }
 
   async create(dto: CreateCouponDto): Promise<Coupon> {
@@ -51,16 +59,29 @@ export class CouponsService {
     return this.toCoupon(saved);
   }
 
-  async findAll(): Promise<Coupon[]> {
-    const docs = await this.couponModel.find().sort({ createdAt: -1 }).exec();
-    return docs.map((doc) => this.toCoupon(doc));
+  /** AR-35: one page of every coupon, newest first (`_id` breaks createdAt ties). */
+  async findPage(page: PageRequest): Promise<Paginated<Coupon>> {
+    const [total, docs] = await Promise.all([
+      this.couponModel.countDocuments().exec(),
+      this.couponModel
+        .find()
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skipOf(page))
+        .limit(page.pageSize)
+        .exec(),
+    ]);
+    return paginated(
+      docs.map((doc) => this.toCoupon(doc)),
+      total,
+      page,
+    );
   }
 
   async validateCoupon(code: string): Promise<Coupon> {
     const coupon = await this.couponModel.findOne({ code: code.toUpperCase() }).exec();
 
     if (!coupon || !coupon.active || new Date(coupon.validTo) < new Date()) {
-      throw new BadRequestException('Este cupom encontra-se invalido');
+      throw new DomainError('COUPON_INVALID');
     }
 
     return this.toCoupon(coupon);
@@ -70,7 +91,7 @@ export class CouponsService {
     const coupon = await this.couponModel.findById(id).exec();
 
     if (!coupon) {
-      throw new NotFoundException('Cupom não encontrado');
+      throw new DomainError('COUPON_NOT_FOUND');
     }
 
     // Deactivate promotion code in Stripe

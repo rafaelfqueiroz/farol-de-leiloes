@@ -5,10 +5,17 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Model, mongo } from 'mongoose';
 import { AuctionEntity, AuctionDocument, Address, Phase } from './schemas/auction.schema';
-import { Auction, AuctionListResult, AuctionRecord } from './interfaces/auction.interface';
+import { Auction, AuctionRecord } from './interfaces/auction.interface';
+import { isAuctionActive } from './utils/auction-filters';
 import { fetchAndCheckAvailability } from './scraper/details-scraper';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
 import { errorMessage } from '../common/error-message';
+import {
+  type PageRequest,
+  type Paginated,
+  paginated,
+  skipOf,
+} from '../common/pagination/paginated';
 
 export interface AuctionUpsert {
   code?: string;
@@ -26,8 +33,6 @@ export interface QueryFilters {
   modality?: string | string[];
   minMargin?: number;
   maxMargin?: number;
-  take?: number;
-  skip?: number;
 }
 
 const NEIGHBORHOODS_CACHE_PREFIX = 'neighborhoods';
@@ -176,10 +181,8 @@ export class AuctionsService {
     return result.modifiedCount;
   }
 
-  async query(filters: QueryFilters): Promise<AuctionListResult> {
-    const take = Math.min(filters.take ?? 50, 200);
-    const skip = filters.skip ?? 0;
-
+  /** AR-35: one page of the matching active auctions, newest update first. */
+  async query(filters: QueryFilters, page: PageRequest): Promise<Paginated<Auction>> {
     // Build query using currentPhase denormalized field
     // Filter active auctions: available AND (ONLINE_SALES OR has future date)
     const query: Record<string, unknown> = this.buildActiveAuctionFilter();
@@ -239,22 +242,56 @@ export class AuctionsService {
     // Get total count
     const total = await this.auctionRepository.countDocuments(query).exec();
 
-    // Get documents with sort, skip, limit
+    // AR-35: `_id` breaks updatedAt ties (a CSV import stamps many auctions with the same
+    // instant), so a page boundary never repeats or skips an auction.
     const docs = await this.auctionRepository
       .find(query)
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(take)
+      .sort({ updatedAt: -1, _id: -1 })
+      .skip(skipOf(page))
+      .limit(page.pageSize)
       .lean()
       .exec();
 
     this.logger.log(`[query] Found ${docs.length} docs, total: ${total}`);
-    return { total, items: docs.map((doc) => this.toAuction(doc)) };
+    return paginated(
+      docs.map((doc) => this.toAuction(doc)),
+      total,
+      page,
+    );
   }
 
   async findByCode(code: string): Promise<Auction | null> {
     const doc = await this.auctionRepository.findOne({ code, available: true }).exec();
     return doc ? this.toAuction(doc) : null;
+  }
+
+  /** The available auctions among `codes`, in no particular order. */
+  async findAvailableByCodes(codes: string[]): Promise<Auction[]> {
+    if (!codes.length) return [];
+    const docs = await this.auctionRepository
+      .find({ code: { $in: codes }, available: true })
+      .lean()
+      .exec();
+    return docs.map((doc) => this.toAuction(doc));
+  }
+
+  /**
+   * The codes among `codes` whose auction is active (isAuctionActive). Reads only the fields the
+   * check needs, so a caller can count and page a large set before loading whole auctions.
+   */
+  async findActiveCodes(codes: string[]): Promise<Set<string>> {
+    if (!codes.length) return new Set();
+    const docs = await this.auctionRepository
+      .find({ code: { $in: codes }, available: true })
+      .select('code phases currentPhase available updatedAt')
+      .lean()
+      .exec();
+    return new Set(
+      docs
+        .map((doc) => this.toAuction(doc))
+        .filter(isAuctionActive)
+        .map((auction) => auction.code),
+    );
   }
 
   async findDocumentByCode(code: string): Promise<AuctionDocument | null> {

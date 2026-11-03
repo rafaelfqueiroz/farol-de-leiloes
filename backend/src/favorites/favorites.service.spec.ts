@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { FavoritesService } from './favorites.service';
+import { DomainError } from '../common/errors/domain-error';
 
 type ServiceDeps = ConstructorParameters<typeof FavoritesService>;
 
@@ -28,7 +28,9 @@ describe('FavoritesService.create', () => {
       auctionsService as unknown as ServiceDeps[1],
     );
 
-    await expect(service.create('user-1', 'A1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.create('user-1', 'A1')).rejects.toEqual(
+      new DomainError('AUCTION_NOT_FOUND'),
+    );
     expect(saved).toHaveLength(1);
   });
 });

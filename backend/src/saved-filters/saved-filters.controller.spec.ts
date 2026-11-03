@@ -1,0 +1,81 @@
+// HTTP contract of the saved-filter endpoints (TESTING §2): pagination (AR-35) and the nested
+// request DTO (AR-34), with SavedFiltersService stubbed and the signed-in user faked.
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { SavedFiltersController } from './saved-filters.controller';
+import { SavedFiltersService } from './saved-filters.service';
+import { createHttpApp, TEST_USER } from '../../test/support/http-app';
+import { itAnswersPages } from '../../test/support/pagination-contract';
+import type { SavedFilter } from './interfaces/saved-filter.interface';
+
+const FILTER: SavedFilter = {
+  _id: '64b7f00000000000000000aa',
+  name: 'Natal até 300 mil',
+  filters: { state: 'RN', city: ['Natal'], maxMargin: 300000 },
+  createdAt: new Date('2026-01-15T12:00:00.000Z'),
+};
+
+describe('SavedFiltersController over HTTP', () => {
+  const savedFilters = { findPage: vi.fn(), create: vi.fn(), delete: vi.fn() };
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    app = await createHttpApp({
+      controllers: [SavedFiltersController],
+      providers: [{ provide: SavedFiltersService, useValue: savedFilters }],
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  describe('GET /api/saved-filters', () => {
+    itAnswersPages({
+      app: () => app,
+      path: '/api/saved-filters',
+      method: savedFilters.findPage,
+      pageArg: 1,
+      item: FILTER,
+      expectedItem: { ...FILTER, createdAt: '2026-01-15T12:00:00.000Z' },
+    });
+  });
+
+  describe('POST /api/saved-filters', () => {
+    it('stores only the known criteria and answers the saved filter', async () => {
+      savedFilters.create.mockResolvedValue(FILTER);
+
+      await request(app.getHttpServer())
+        .post('/api/saved-filters')
+        .send({ name: FILTER.name, filters: { state: 'RN', city: ['Natal'], maxMargin: 300000 } })
+        .expect(201);
+
+      expect(savedFilters.create).toHaveBeenCalledWith(TEST_USER.userId, FILTER.name, {
+        state: 'RN',
+        city: ['Natal'],
+        maxMargin: 300000,
+      });
+    });
+
+    it('AR-34: validates the nested filters, naming each offending path', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/saved-filters')
+        .send({ name: '', filters: { city: 'Natal', minMargin: 'cheap', $where: '1' } })
+        .expect(400);
+
+      expect(response.body.code).toBe('VALIDATION_FAILED');
+      expect([...response.body.context.fields].sort()).toEqual(
+        ['filters.$where', 'filters.city', 'filters.minMargin', 'name'].sort(),
+      );
+      expect(savedFilters.create).not.toHaveBeenCalled();
+    });
+
+    it('AR-34: refuses a body without filters', async () => {
+      await request(app.getHttpServer())
+        .post('/api/saved-filters')
+        .send({ name: 'x' })
+        .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['filters'] } });
+    });
+  });
+});

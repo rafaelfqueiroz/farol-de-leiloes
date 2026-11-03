@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Env } from '../config/env';
 import { errorMessage } from '../common/error-message';
 
 export interface WhatsAppPayload {
@@ -21,7 +22,7 @@ export interface WhatsAppResult {
 export class WhatsAppService {
   private readonly logger = new Logger(WhatsAppService.name);
 
-  constructor(private configService: ConfigService) {}
+  constructor(private configService: ConfigService<Env, true>) {}
 
   async sendReminderWhatsApp(
     phoneNumber: string,
@@ -56,6 +57,6 @@ export class WhatsAppService {
   }
 
   private isConfigured(): boolean {
-    return !!this.configService.get('WHATSAPP_API_KEY');
+    return !!this.configService.get('WHATSAPP_API_KEY', { infer: true });
   }
 }

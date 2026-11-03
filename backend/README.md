@@ -15,7 +15,7 @@ Requirements
 
 Setup
 
-1. Copy `.env.example` to `.env` and set `MONGODB_URI` if needed.
+1. Copy `.env.example` to `.env` and fill in every value: each secret and integration variable is required, and the API refuses to boot naming any that is missing or invalid (AR-41). Optional ones are marked in the file.
 2. Install deps: `npm install`, and once at the repository root run `npm install` too to install the git hooks (husky + lint-staged)
 3. Dev run: `npm run start:dev`
 4. Build: `npm run build`, then `npm start`. The deploy image is `Dockerfile` (Debian Chromium for the scraper, non-root), built and pushed to GHCR by `deploy.yml` (DEVELOPMENT §12)
@@ -32,10 +32,8 @@ Tests (TESTING §2, §7)
 
 API
 
-- GET `/api/auctions?state=SP&city=Sao Paulo&modality=Compra Direta`
-  - Query params: `state` (UF), `city` (prefix match), `modality` (case/accents-insensitive)
-  - Pagination: `limit` (default 10, max 200), `offset`
-  - List filters (`city`, `neighborhood`, `modality`) take several values as a repeated key (`?city=A&city=B`) or comma-separated (`?city=A,B`). Express 5 parses the query string with its `simple` parser, so bracket keys (`city[]=A`) are not lists
+- The reference is the OpenAPI document (AR-33): Swagger UI at `/api/docs` and the JSON at `/api/docs-json` on a running API, outside production only. There is no hand-written route table; the controller and DTO decorators are the source, and `src/openapi.spec.ts` holds them to the contract.
+- Errors answer `{ code, context }` (AR-38). Lists take `page` and `pageSize` (max 100) and answer `{ items, total, page, pageSize }` (AR-35).
 
 Scheduling
 

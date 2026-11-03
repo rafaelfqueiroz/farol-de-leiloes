@@ -1,0 +1,109 @@
+// AR-41: the one description of the backend's environment, validated at boot. Pure (no Nest, no
+// process.env) so the structural test can compare it with .env.example (AR-44).
+//
+// Every secret and integration value is required in every environment: there is no default and
+// no "only in production" exception, so a missing value stops the boot instead of degrading
+// silently (AR-41, SC-16). Non-secret tunables (port, flags, schedules, model names) have defaults.
+// Flags use z.stringbool(), which reads "false" as false (z.coerce.boolean would read it as true).
+import { z } from 'zod';
+
+const required = z.string().min(1);
+const url = z.url();
+const flag = z.stringbool();
+const positiveInt = z.coerce.number().int().positive();
+
+export const LLM_PROVIDERS = ['ollama', 'groq', 'gemini', 'openai', 'anthropic'] as const;
+export type LlmProvider = (typeof LLM_PROVIDERS)[number];
+
+// The key each cloud provider needs; Ollama runs locally and needs none.
+export const LLM_PROVIDER_KEY = {
+  groq: 'GROQ_API_KEY',
+  gemini: 'GOOGLE_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+} as const satisfies Record<Exclude<LlmProvider, 'ollama'>, string>;
+
+export const envSchema = z
+  .object({
+    // Server
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    PORT: positiveInt.default(3000),
+    FRONTEND_URL: url,
+    MONGODB_URI: required,
+
+    // Auth
+    JWT_SECRET: required,
+    GOOGLE_CLIENT_ID: required,
+    GOOGLE_CLIENT_SECRET: required,
+    GOOGLE_CALLBACK_URL: url,
+
+    // Payments
+    STRIPE_SECRET_KEY: required,
+    STRIPE_WEBHOOK_SECRET: required,
+    STRIPE_STANDARD_PRICE_ID: required,
+
+    // Email
+    EMAIL_FROM: required,
+    SMTP_HOST: required,
+    SMTP_PORT: positiveInt.default(587),
+    SMTP_SECURE: flag.default(false),
+    SMTP_USER: required,
+    SMTP_PASS: required,
+
+    // Notifications
+    SMS_PROVIDER_API_KEY: required,
+    WHATSAPP_API_KEY: required,
+
+    // AI search: only the selected provider's key is required (superRefine below).
+    LLM_PROVIDER: z.enum(LLM_PROVIDERS).default('ollama'),
+    OLLAMA_MODEL: required.default('qwen2.5:3b'),
+    OLLAMA_BASE_URL: url.default('http://localhost:11434/v1'),
+    GROQ_MODEL: required.default('llama-3.1-8b-instant'),
+    GROQ_API_KEY: required.optional(),
+    GEMINI_MODEL: required.default('gemini-2.0-flash'),
+    GOOGLE_API_KEY: required.optional(),
+    OPENAI_MODEL: required.default('gpt-4o-mini'),
+    OPENAI_API_KEY: required.optional(),
+    ANTHROPIC_MODEL: required.default('claude-sonnet-4-20250514'),
+    ANTHROPIC_API_KEY: required.optional(),
+
+    // File storage (Cloudflare R2)
+    CLOUDFLARE_ACCOUNT_ID: required,
+    R2_ACCESS_KEY_ID: required,
+    R2_SECRET_ACCESS_KEY: required,
+    R2_BUCKET: required,
+    R2_PUBLIC_URL: url,
+
+    // Scheduled jobs
+    IMPORT_ENABLED: flag.default(true),
+    IMPORT_ON_START_UP: flag.default(false),
+    SCRAPER_ENABLED: flag.default(true),
+    SCRAPER_ON_START_UP: flag.default(false),
+    REMINDERS_ENABLED: flag.default(true),
+    CLEANUP_ON_STARTUP: flag.default(false),
+    NEIGHBORHOODS_CACHE_ENABLED: flag.default(false),
+    // Milliseconds; 600000 = 10 minutes.
+    NEIGHBORHOODS_CACHE_TTL: positiveInt.default(600_000),
+  })
+  .superRefine(
+    (env, ctx) => {
+      // Runs even when other variables failed (`when` below), so one boot lists every problem;
+      // the provider itself may then be the invalid value, hence the lookup guard.
+      const provider = env.LLM_PROVIDER;
+      if (provider === 'ollama' || !(provider in LLM_PROVIDER_KEY)) return;
+      const key = LLM_PROVIDER_KEY[provider];
+      if (!env[key]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `required when LLM_PROVIDER is ${provider}`,
+        });
+      }
+    },
+    { when: () => true },
+  );
+
+export type Env = z.output<typeof envSchema>;
+
+/** The variable names the schema reads, for the .env.example check (AR-44). */
+export const ENV_KEYS = Object.keys(envSchema.shape) as (keyof Env)[];

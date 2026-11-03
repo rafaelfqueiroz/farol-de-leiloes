@@ -1,7 +1,8 @@
-import { Module, Logger } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import type { AppConfigService } from '../config/env';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UsersModule } from '../users/users.module';
@@ -16,14 +17,10 @@ import { EmailModule } from '../email/email.module';
     EmailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
-        const logger = new Logger('AuthModule');
-        const jwtSecret = configService.get<string>('JWT_SECRET') || 'your-secret-key';
-        logger.log(
-          `JWT_SECRET loaded: ${jwtSecret.substring(0, 10)}... (length: ${jwtSecret.length})`,
-        );
+      // AR-41/SC-16: the secret is required at boot; no fallback, and nothing about it is logged.
+      useFactory: (config: AppConfigService) => {
         return {
-          secret: jwtSecret,
+          secret: config.get('JWT_SECRET', { infer: true }),
           signOptions: {
             expiresIn: '7d',
           },
