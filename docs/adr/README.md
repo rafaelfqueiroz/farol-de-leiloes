@@ -8,7 +8,7 @@ Files are `NNN-short-title.md`, numbered in order, starting from the template be
 
 | ADR | Title | Status |
 |---|---|---|
-| — | *None yet* | |
+| [001](001-in-house-mongodb-migrations-runner.md) | In-house MongoDB migrations runner | Accepted |
 
 ## Template
 

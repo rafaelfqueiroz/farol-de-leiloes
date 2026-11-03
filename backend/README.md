@@ -21,6 +21,10 @@ Setup
 4. Build: `npm run build`, then `npm start`. The deploy image is `Dockerfile` (Debian Chromium for the scraper, non-root), built and pushed to GHCR by `deploy.yml` (DEVELOPMENT §12)
 5. Before pushing: `npm run check` (typecheck + lint + format check + tests); the pre-push hook runs it when `backend/` changes (DV-37)
 
+Migrations (AR-29, ADR-001)
+
+- `npm run migrate` — after `npm run build`: applies the pending migrations in `src/migrations/registry.ts` to the database `MONGODB_URI` names (same validated environment as the API), records each in the `migrations` collection and stops at the first failure (exit 1). Safe to re-run. It runs **before** deploying code that depends on it (DV-34); until the deploy pipeline does it (BL-001, #40), run it by hand against production first. How to write one: DEVELOPMENT §6, "Migrations"
+
 Tests (TESTING §2, §7)
 
 - `npm test` — Vitest projects `unit` (`src/**/*.spec.ts`, next to the source) and `structural` (`test/structural/`); no Docker
@@ -34,7 +38,7 @@ API
 
 - The reference is the OpenAPI document (AR-33): Swagger UI at `/api/docs` and the JSON at `/api/docs-json` on a running API, outside production only. There is no hand-written route table; the controller and DTO decorators are the source, and `src/openapi.spec.ts` holds them to the contract.
 - Errors answer `{ code, context }` (AR-38). Lists take `page` and `pageSize` (max 100) and answer `{ items, total, page, pageSize }` (AR-35).
-- Money is a string of reais over JSON, both ways (AR-17): `"1234.56"` — a dot, at most two decimals, no thousands separator. Responses round once to two places, half-even (AR-19). Coupon discounts are reais too (they were integer centavos before #34). In MongoDB money is `Decimal128`; while #34's expand step is deployed, readers also accept the legacy number shape (`common/money/stored-money.ts`, removed with the migration in #34's second PR).
+- Money is a string of reais over JSON, both ways (AR-17): `"1234.56"` — a dot, at most two decimals, no thousands separator. Responses round once to two places, half-even (AR-19). Coupon discounts are reais too (they were integer centavos before #34). In MongoDB money is `Decimal128` only: migration `0001-money-decimal128` converted the documents written before #34, and a reader refuses any other shape.
 
 Scheduling
 
