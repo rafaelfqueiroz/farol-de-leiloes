@@ -6,13 +6,14 @@ import request from 'supertest';
 import { CouponsController } from './coupons.controller';
 import { CouponsService } from './coupons.service';
 import type { Coupon } from './interfaces/coupon.interface';
+import { Decimal } from '../common/money/money';
 import { createHttpApp, TEST_USER } from '../../test/support/http-app';
 import { itAnswersPages } from '../../test/support/pagination-contract';
 
 const COUPON: Coupon = {
   _id: '64b7f00000000000000000dd',
   code: 'BEMVINDO',
-  discountValue: 1000,
+  discountValue: new Decimal('10'),
   validTo: new Date('2026-12-31T00:00:00.000Z'),
   active: true,
   stripeCouponId: 'coupon_test',
@@ -49,10 +50,60 @@ describe('CouponsController over HTTP', () => {
       item: COUPON,
       expectedItem: {
         ...COUPON,
+        discountValue: '10.00', // AR-17: reais as a string, no longer centavos
         validTo: '2026-12-31T00:00:00.000Z',
         createdAt: '2026-01-15T12:00:00.000Z',
       },
     });
+  });
+
+  describe('POST /api/coupons as an admin', () => {
+    const create = vi.fn();
+    let app: INestApplication;
+
+    beforeAll(async () => {
+      app = await createHttpApp(
+        {
+          controllers: [CouponsController],
+          providers: [{ provide: CouponsService, useValue: { ...coupons, create } }],
+        },
+        { user: { ...TEST_USER, role: 'admin' } },
+      );
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it('AR-17: hands the discount to the service as a Decimal made from the reais string', async () => {
+      create.mockResolvedValue(COUPON);
+
+      await request(app.getHttpServer())
+        .post('/api/coupons')
+        .send({ code: 'TEST', discountValue: '10.00', validTo: '2099-01-01' })
+        .expect(201);
+
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'TEST', discountValue: new Decimal('10') }),
+      );
+    });
+
+    it.each([
+      ['a JSON number (centavos)', 1000],
+      ['a forged Decimal object (SC-10)', { toStringTag: '[object Decimal]' }],
+    ])(
+      'SC-10 / AR-34: refuses %s as VALIDATION_FAILED, not a 500',
+      async (_label, discountValue) => {
+        create.mockClear();
+
+        await request(app.getHttpServer())
+          .post('/api/coupons')
+          .send({ code: 'TEST', discountValue, validTo: '2099-01-01' })
+          .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['discountValue'] } });
+
+        expect(create).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('GET /api/coupons as a subscriber', () => {

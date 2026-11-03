@@ -1,4 +1,5 @@
 import * as Papa from 'papaparse';
+import { Decimal } from '../../common/money/money';
 
 export interface ParsedAuctionRow {
   [key: string]: string;
@@ -12,8 +13,9 @@ export interface NormalizedAuctionRow {
   street?: string;
   neighborhood?: string;
   modality?: string;
-  appraisalPrice?: number | null;
-  minimumPrice?: number | null;
+  /** Reais (AR-17); null when the cell is empty or not a pt-BR amount. */
+  appraisalPrice?: Decimal | null;
+  minimumPrice?: Decimal | null;
   detailsUrl?: string;
 }
 
@@ -76,10 +78,10 @@ export function normalizeRows(rows: ParsedAuctionRow[]): NormalizedAuctionRow[] 
     const street = pick(r, ['Endereço', 'Endereco', 'Logradouro']);
     const neighborhood = pick(r, ['Bairro']);
     const modality = pick(r, ['Modalidade de venda', 'Modalidade', 'TipoVenda']);
-    const appraisalPrice = parseMoney(
+    const appraisalPrice = parseCaixaMoney(
       pick(r, ['Valor de avaliação', 'ValorAvaliacao', 'Valor Avaliacao', 'Valor de avaliacao']),
     );
-    const minimumPrice = parseMoney(
+    const minimumPrice = parseCaixaMoney(
       pick(r, ['Preço', 'Preco', 'ValorMinimo', 'Valor Minimo', 'Valor de Venda', 'Valor Venda']),
     );
     const detailsUrl = pick(r, ['Link de acesso', 'Link', 'URL', 'Url']);
@@ -132,15 +134,25 @@ function findKey(row: Record<string, string>, keys: string[]): string | undefine
   return undefined;
 }
 
-function parseMoney(s: string): number | null {
-  if (!s) return null;
-  const t = s
-    .replace(/\./g, '')
-    .replace(/\s/g, '')
-    .replace(/R\$\s*/i, '')
-    .replace(/,/g, '.');
-  const n = Number(t);
-  return isFinite(n) && !isNaN(n) ? n : null;
+// A pt-BR amount as Caixa writes it: an optional `R$`, digits grouped in threes by dots or not
+// grouped at all, and up to two decimals after a comma — "91.589,89", "250000,00", "R$ 1.234".
+const CAIXA_MONEY = /^(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?$/;
+
+/**
+ * SPEC-004 / AR-17: a Caixa price cell in reais, as a Decimal — the text is parsed digit for digit
+ * and never passes through a float. A cell that is not a pt-BR amount is null, not a guess: the
+ * previous parser dropped every dot, so "91589.89" (a dot-decimal amount) silently became
+ * 9158989; now it is refused, as are a sign, a third decimal and misplaced group separators.
+ *
+ *   parseCaixaMoney('91.589,89')    → 91589.89
+ *   parseCaixaMoney('R$ 1.234,5')   → 1234.5
+ *   parseCaixaMoney('91589.89')     → null (ambiguous: dot as decimal)
+ */
+export function parseCaixaMoney(cell: string): Decimal | null {
+  // NBSP and other whitespace appear between "R$" and the digits in Caixa's exports.
+  const text = cell.replace(/^\s*R\$/i, '').replace(/\s/g, '');
+  if (!CAIXA_MONEY.test(text)) return null;
+  return new Decimal(text.replace(/\./g, '').replace(',', '.'));
 }
 
 function removeDiacritics(s: string) {

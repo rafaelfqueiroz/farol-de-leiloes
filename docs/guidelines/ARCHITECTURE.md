@@ -92,10 +92,10 @@ A float reaching a money field corrupts data silently and permanently.
 
 | | |
 |---|---|
-| **AR-17** | Money is never a JS `number`. In MongoDB it is `Decimal128`; in code it is a `Decimal` (`decimal.js`); over JSON it is a **string** (`"1234.56"`). The DTO layer converts at the edge. |
+| **AR-17** | Money is never a JS `number`. In MongoDB it is `Decimal128`; in code it is a `Decimal` (`decimal.js`); over JSON it is a **string** (`"1234.56"`). The DTO layer converts at the edge. Backend helpers live in `common/money/`: the configured `Decimal` and `toMoneyString` (`money.ts`), `toDecimal128` / `fromDecimal128` (`decimal128.ts`), `IsMoneyString` for request fields and `moneyToJson` for response constructors, with `MONEY_API_PROPERTY` for OpenAPI (`money-dto.ts`). A Mixed path (`phases`, a saved filter's criteria) is not cast by Mongoose, so its writer converts explicitly (`auctions/auction.mapper.ts`). On the frontend the shared `lib/auction.ts` types carry money as `string | null`; `lib/money.ts` does the arithmetic (`discountPercent`) and the formatting, and the only `number` is a `Slider` thumb (`moneyFromSlider` / `moneyToSlider`), which leaves the form as a string. |
 | **AR-18** | Percentages and rates (ITBI, commission, ROI) are `Decimal` too. A ratio computed in `number` and multiplied into money is the same bug one step removed. |
 | **AR-19** | Rounding happens once, at the end of a calculation or at display, to 2 decimal places with `ROUND_HALF_EVEN` unless a spec states otherwise. Intermediate values keep full precision. |
-| **AR-20** | Stripe amounts are integer centavos at the Stripe adapter only (AR-10); the conversion lives there and nowhere else. |
+| **AR-20** | Stripe amounts are integer centavos at the Stripe adapter only (AR-10); the conversion lives there and nowhere else (`reaisToCentavos` in `payments/adapters/stripe-payment-gateway.ts`, which refuses a fraction of a centavo rather than rounding it). Services use the `PaymentGateway` port (`payments/payment-gateway.ts`); a structural test fails if any other source file imports `stripe`. |
 | **AR-21** | Display formatting (`R$ 1.234,56`, SPEC-003 BR-003-19) lives in one shared formatter on the frontend. Never `toFixed`, never inline `toLocaleString`. |
 
 ## 6. Time
@@ -105,9 +105,9 @@ SPEC-003 BR-003-23 to BR-003-28 put every date the product shows, accepts or sch
 | | |
 |---|---|
 | **AR-22** | Instants are stored as UTC `Date`. Calendar dates with no time (journey closing date, auction date from the Caixa list) are stored as `YYYY-MM-DD` strings, never as midnight UTC. |
-| **AR-23** | All zone conversion uses `@date-fns/tz` with the IANA zone `America/Sao_Paulo`, never a fixed offset (BR-003-28). One shared module per side owns the zone constant and the formatters. |
-| **AR-24** | "Now" is injected. Services take a `Clock` provider (`common/clock/clock.ts`, bound to `SystemClock` by `CommonModule`; tests use `FakeClock`, TS-06); `domain/` takes the time as an argument. No `new Date()` in business logic. This is what makes deadlines, grace periods and retention testable. |
-| **AR-25** | Cron expressions set `timeZone: 'America/Sao_Paulo'` explicitly (BR-003-27). |
+| **AR-23** | All zone conversion uses `@date-fns/tz` with the IANA zone `America/Sao_Paulo`, never a fixed offset (BR-003-28). One shared module per side owns the zone constant and the formatters: on the backend, `common/clock/brasilia-time.ts` (`BRASILIA_TIME_ZONE`, `brasiliaWallClockToInstant` for Caixa's wall-clock dates, `startOfBrasiliaDay`, `isSameBrasiliaDay`). A date-time string without an offset is read as Brasília time, never the server's zone. On the frontend, `lib/dates.ts` owns the formatters and, for the date pickers, `instantToWallClock` / `wallClockToInstant` (the pickers' date-fns adapter ignores their `timezone` prop, so `DateField` edits a `Date` that reads as the Brasília wall clock and hands the API an instant). |
+| **AR-24** | "Now" is injected. Services take a `Clock` provider (`common/clock/clock.ts`, bound to `SystemClock` by `CommonModule`; tests use `FakeClock`, TS-06); `domain/` takes the time as an argument. No `new Date()` in business logic — lint-enforced: an argument-less `new Date()` or `Date.now()` anywhere in `src/` outside `common/clock/` fails ESLint (`new Date(value)` to parse or copy is fine). This is what makes deadlines, grace periods and retention testable. |
+| **AR-25** | Cron expressions set `timeZone: 'America/Sao_Paulo'` explicitly (BR-003-27), as `{ timeZone: BRASILIA_TIME_ZONE }`; a structural test fails on any `@Cron` without it. |
 
 ## 7. Database conventions
 
@@ -177,4 +177,4 @@ SPEC-003 BR-003-23 to BR-003-28 put every date the product shows, accepts or sch
 
 **Files (SPEC-017).** Upload and download through R2 presigned URLs, issued per request after an authorization check and valid for 60 seconds (BR-002-08, BR-002-09). Keys are random; nothing about the owner or the file's content appears in a key.
 
-**Payments (SPEC-012).** Checkout session created by the backend; plan state changes only on a verified Stripe webhook, processed idempotently by event id (SC-11).
+**Payments (SPEC-012).** Checkout session created by the backend; plan state changes only on a verified Stripe webhook, processed idempotently by event id (SC-11). `PaymentsService` and `CouponsService` talk to Stripe only through the `PaymentGateway` port (`PaymentGatewayModule` binds it to `StripePaymentGateway`); the adapter verifies the webhook signature and maps the event into the port's own vocabulary, and turns reais into centavos (AR-20).

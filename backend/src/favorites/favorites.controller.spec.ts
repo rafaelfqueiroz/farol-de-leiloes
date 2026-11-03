@@ -10,6 +10,7 @@ import { FavoritesService } from './favorites.service';
 import { createHttpApp, TEST_USER } from '../../test/support/http-app';
 import { itAnswersPages } from '../../test/support/pagination-contract';
 import type { Auction } from '../auctions/interfaces/auction.interface';
+import { Decimal } from '../common/money/money';
 
 // The modality as the JSON carries it; the enum lives in the auctions schema (AR-09).
 const ONLINE_SALES = 'ONLINE_SALES' as Auction['phases'][number]['modality'];
@@ -18,9 +19,9 @@ const AUCTION: Auction = {
   code: '1444400000001',
   title: 'Casa',
   address: { city: 'Natal', state: 'RN' },
-  appraisalPrice: 150000,
-  phases: [{ modality: ONLINE_SALES, minimumPrice: 90000 }],
-  currentPhase: { modality: ONLINE_SALES, minimumPrice: 90000 },
+  appraisalPrice: new Decimal('150000'),
+  phases: [{ modality: ONLINE_SALES, minimumPrice: new Decimal('90000.5') }],
+  currentPhase: { modality: ONLINE_SALES, minimumPrice: new Decimal('90000.5') },
   detailsUrl: null,
   imageUrl: null,
   matriculaUrl: null,
@@ -31,7 +32,15 @@ const AUCTION: Auction = {
   updatedAt: new Date('2026-01-15T12:00:00.000Z'),
 };
 
-const AUCTION_JSON = { ...AUCTION, updatedAt: '2026-01-15T12:00:00.000Z' };
+// AR-17: money leaves as strings of reais with two decimals.
+const PHASE_JSON = { modality: ONLINE_SALES, minimumPrice: '90000.50' };
+const AUCTION_JSON = {
+  ...AUCTION,
+  appraisalPrice: '150000.00',
+  phases: [PHASE_JSON],
+  currentPhase: PHASE_JSON,
+  updatedAt: '2026-01-15T12:00:00.000Z',
+};
 
 describe('FavoritesController over HTTP', () => {
   const favorites = {

@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Types } from 'mongoose';
 import { serverOperators } from '../common/mongo/query-safety';
 import { DomainError } from '../common/errors/domain-error';
+import { Decimal } from '../common/money/money';
 import { AuctionsService } from './auctions.service';
+import { PhaseModality } from './schemas/auction.schema';
+import { FakeClock } from '../../test/fakes/fake-clock';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionsService>;
+
+// TS-06: the service's "now" is a fixed instant from the injected clock.
+const NOW = new Date('2026-01-15T12:00:00.000Z');
+const d128 = (value: string) => Types.Decimal128.fromString(value);
 
 describe('AuctionsService.markAvailable', () => {
   function build(modifiedCount = 0) {
@@ -13,6 +21,7 @@ describe('AuctionsService.markAvailable', () => {
       repo as unknown as ServiceDeps[0],
       {} as ServiceDeps[1],
       configService as unknown as ServiceDeps[2],
+      new FakeClock(NOW),
     );
     return { service, repo };
   }
@@ -26,7 +35,7 @@ describe('AuctionsService.markAvailable', () => {
         code: serverOperators({ $in: ['A1', 'A2'] }),
         available: serverOperators({ $ne: true }),
       },
-      { $set: { available: true, updatedAt: expect.any(Date) } },
+      { $set: { available: true, updatedAt: NOW } },
     );
   });
 
@@ -59,6 +68,7 @@ describe('AuctionsService.query (SC-10)', () => {
       repo as unknown as ServiceDeps[0],
       {} as ServiceDeps[1],
       { get: vi.fn().mockReturnValue(undefined) } as unknown as ServiceDeps[2],
+      new FakeClock(NOW),
     );
     return { service, repo };
   }
@@ -97,12 +107,17 @@ describe('AuctionsService.query (SC-10)', () => {
     );
   });
 
-  it('builds the price range from finite numbers, including zero', async () => {
-    const both = await builtQuery({ minMargin: 0, maxMargin: 500000 });
-    expect(both['currentPhase.minimumPrice']).toEqual(serverOperators({ $gte: 0, $lte: 500000 }));
+  it('AR-17: builds the price range as Decimal128 bounds, including zero', async () => {
+    const both = await builtQuery({
+      minMargin: new Decimal('0'),
+      maxMargin: new Decimal('500000'),
+    });
+    expect(both['currentPhase.minimumPrice']).toEqual(
+      serverOperators({ $gte: d128('0'), $lte: d128('500000') }),
+    );
 
-    const onlyMax = await builtQuery({ maxMargin: 10 });
-    expect(onlyMax['currentPhase.minimumPrice']).toEqual(serverOperators({ $lte: 10 }));
+    const onlyMax = await builtQuery({ maxMargin: new Decimal('10.50') });
+    expect(onlyMax['currentPhase.minimumPrice']).toEqual(serverOperators({ $lte: d128('10.5') }));
   });
 
   it('adds no filter for what the request did not send', async () => {
@@ -119,11 +134,12 @@ describe('AuctionsService.query (SC-10)', () => {
     ['modality', { modality: { $ne: null } }],
     ['modality', { modality: ['AUCTION', 7] }],
     ['minMargin', { minMargin: '10' }],
-    ['minMargin', { minMargin: Number.NaN }],
-    ['maxMargin', { maxMargin: Number.POSITIVE_INFINITY }],
+    ['minMargin', { minMargin: 10 }],
+    ['minMargin', { minMargin: new Decimal(Number.NaN) }],
+    ['maxMargin', { maxMargin: new Decimal(Number.POSITIVE_INFINITY) }],
     ['maxMargin', { maxMargin: { $gt: 0 } }],
   ])(
-    'refuses an operator or non-finite value for %s with VALIDATION_FAILED',
+    'refuses an operator, a non-Decimal or a non-finite value for %s with VALIDATION_FAILED',
     async (field, bad) => {
       const { service, repo } = build();
 
@@ -143,6 +159,7 @@ describe('AuctionsService code lookups (SC-10)', () => {
       repo as unknown as ServiceDeps[0],
       {} as ServiceDeps[1],
       { get: vi.fn().mockReturnValue(undefined) } as unknown as ServiceDeps[2],
+      new FakeClock(NOW),
     );
     return { service, repo };
   }
@@ -176,5 +193,128 @@ describe('AuctionsService code lookups (SC-10)', () => {
 
     await expect(service.findDocumentByCode(operator)).resolves.toBeNull();
     expect(repo.findOne).not.toHaveBeenCalled();
+  });
+});
+
+// AR-17 / AR-28 (expand): every writer writes Decimal128; a legacy number read back is rewritten
+// in the new shape. AR-24: the timestamps come from the injected clock.
+describe('AuctionsService.upsertMany', () => {
+  function build(existing: unknown[]) {
+    const repo = {
+      find: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(existing) }),
+      }),
+      bulkWrite: vi.fn().mockResolvedValue({ matchedCount: 0, upsertedCount: 0, modifiedCount: 1 }),
+    };
+    const service = new AuctionsService(
+      repo as unknown as ServiceDeps[0],
+      {} as ServiceDeps[1],
+      { get: vi.fn().mockReturnValue(undefined) } as unknown as ServiceDeps[2],
+      new FakeClock(NOW),
+    );
+    return { service, repo };
+  }
+
+  const onlineSale = {
+    modality: PhaseModality.ONLINE_SALES,
+    minimumPrice: new Decimal('91589.89'),
+  };
+
+  it('inserts a new auction with its prices as Decimal128', async () => {
+    const { service, repo } = build([]);
+
+    await service.upsertMany([
+      { code: 'A1', appraisalPrice: new Decimal('250000.00'), phases: [onlineSale] },
+    ]);
+
+    const [ops] = repo.bulkWrite.mock.calls[0] as [{ insertOne: { document: unknown } }[]];
+    const stored = { modality: PhaseModality.ONLINE_SALES, minimumPrice: d128('91589.89') };
+    expect(ops[0]?.insertOne.document).toEqual({
+      code: 'A1',
+      title: null,
+      address: {},
+      appraisalPrice: d128('250000'), // decimal.js writes no trailing zeros; same value
+      phases: [stored],
+      currentPhase: stored,
+      detailsUrl: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+  });
+
+  it('appends a new phase and rewrites a legacy number price as Decimal128', async () => {
+    const legacy = { modality: PhaseModality.SFI_AUCTION, minimumPrice: 120000.5, phaseDates: [] };
+    const { service, repo } = build([{ code: 'A1', phases: [legacy] }]);
+
+    await service.upsertMany([{ code: 'A1', phases: [onlineSale] }]);
+
+    const [ops] = repo.bulkWrite.mock.calls[0] as [
+      { updateOne: { update: { $set: Record<string, unknown> } } }[],
+    ];
+    expect(ops[0]?.updateOne.update.$set).toEqual({
+      phases: [
+        { modality: PhaseModality.SFI_AUCTION, minimumPrice: d128('120000.5'), phaseDates: [] },
+        { modality: PhaseModality.ONLINE_SALES, minimumPrice: d128('91589.89') },
+      ],
+      currentPhase: { modality: PhaseModality.ONLINE_SALES, minimumPrice: d128('91589.89') },
+      updatedAt: NOW,
+    });
+  });
+
+  it('writes a missing price as null, never as a number', async () => {
+    const { service, repo } = build([]);
+
+    await service.upsertMany([
+      { code: 'A1', phases: [{ modality: PhaseModality.ONLINE_SALES, minimumPrice: null }] },
+    ]);
+
+    const [ops] = repo.bulkWrite.mock.calls[0] as [
+      { insertOne: { document: Record<string, unknown> } }[],
+    ];
+    expect(ops[0]?.insertOne.document.appraisalPrice).toBeNull();
+    expect(ops[0]?.insertOne.document.currentPhase).toEqual({
+      modality: PhaseModality.ONLINE_SALES,
+      minimumPrice: null,
+    });
+  });
+});
+
+// AR-24 / TS-06: whether an auction is still open is decided against the injected clock.
+describe('AuctionsService.findActiveCodes', () => {
+  function build(docs: unknown[], now: Date) {
+    const repo = {
+      find: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          lean: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(docs) }),
+        }),
+      }),
+    };
+    return new AuctionsService(
+      repo as unknown as ServiceDeps[0],
+      {} as ServiceDeps[1],
+      { get: vi.fn().mockReturnValue(undefined) } as unknown as ServiceDeps[2],
+      new FakeClock(now),
+    );
+  }
+
+  const auctionOn = (code: string, date: string) => {
+    const phase = { modality: PhaseModality.SFI_AUCTION, phaseDates: [new Date(date)] };
+    return { code, available: true, phases: [phase], currentPhase: phase, updatedAt: NOW };
+  };
+
+  it('keeps an auction whose date is at or after now and drops one already past', async () => {
+    const docs = [
+      auctionOn('PAST', '2026-01-15T11:59:59.999Z'),
+      auctionOn('NOW', '2026-01-15T12:00:00.000Z'),
+      auctionOn('LATER', '2026-01-16T00:00:00.000Z'),
+    ];
+
+    await expect(build(docs, NOW).findActiveCodes(['PAST', 'NOW', 'LATER'])).resolves.toEqual(
+      new Set(['NOW', 'LATER']),
+    );
+    // A day later by the clock, every one of them has closed.
+    await expect(
+      build(docs, new Date('2026-01-16T00:00:00.001Z')).findActiveCodes(['PAST', 'NOW', 'LATER']),
+    ).resolves.toEqual(new Set());
   });
 });

@@ -15,6 +15,9 @@ import {
   PhaseModality,
 } from '../../src/auctions/schemas/auction.schema';
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety';
+import { Clock } from '../../src/common/clock/clock';
+import { Decimal } from '../../src/common/money/money';
+import { FakeClock } from '../fakes/fake-clock';
 import { FavoritesService } from '../../src/favorites/favorites.service';
 import { FavoriteEntity, FavoriteSchema } from '../../src/favorites/schemas/favorite.schema';
 import { RemindersService } from '../../src/reminders/reminders.service';
@@ -91,6 +94,7 @@ describe('SC-10: Mongo operator injection (integration)', () => {
         SavedFiltersService,
         UsersService,
         RemindersService,
+        { provide: Clock, useValue: new FakeClock() },
         { provide: CACHE_MANAGER, useValue: {} },
         { provide: ConfigService, useValue: testConfigService() },
       ],
@@ -102,14 +106,16 @@ describe('SC-10: Mongo operator injection (integration)', () => {
     reminders = moduleRef.get(RemindersService);
 
     const auctionModel = moduleRef.get<Model<AuctionEntity>>(getModelToken(AuctionEntity.name));
-    const modality = (value: PhaseModality, minimumPrice: number) => {
+    // AR-28 (expand): A1 and A3 hold legacy number prices, A2 a Decimal128 one, so the range
+    // filter below is proven against both stored shapes.
+    const modality = (value: PhaseModality, minimumPrice: number | Types.Decimal128) => {
       const phase = { modality: value, minimumPrice };
       return { phases: [phase], currentPhase: phase };
     };
     await auctionModel.collection.insertMany([
       auction('A1', modality(PhaseModality.ONLINE_SALES, 100000)),
       auction('A2', {
-        ...modality(PhaseModality.SFI_AUCTION, 250000),
+        ...modality(PhaseModality.SFI_AUCTION, Types.Decimal128.fromString('250000.00')),
         address: { state: 'SP', city: 'Santos', neighborhood: 'Gonzaga' },
       }),
       auction('A3', {
@@ -167,9 +173,11 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       await expect(auctions.query({ neighborhood: GT_EMPTY }, page)).rejects.toMatchObject(refused);
       await expect(auctions.query({ modality: NE_NULL }, page)).rejects.toMatchObject(refused);
       await expect(
-        auctions.query({ minMargin: NE_NULL as unknown as number }, page),
+        auctions.query({ minMargin: NE_NULL as unknown as Decimal }, page),
       ).rejects.toMatchObject(refused);
-      await expect(auctions.query({ maxMargin: Number.NaN }, page)).rejects.toMatchObject(refused);
+      await expect(
+        auctions.query({ maxMargin: new Decimal(Number.NaN) }, page),
+      ).rejects.toMatchObject(refused);
     });
 
     it('query keeps the server-built operators working with sanitizeFilter on', async () => {
@@ -187,9 +195,17 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       await expect(
         codes({ modality: [PhaseModality.SFI_AUCTION, PhaseModality.OPEN_BIDDING] }),
       ).resolves.toEqual(['A2', 'A3']);
-      await expect(codes({ minMargin: 200000, maxMargin: 300000 })).resolves.toEqual(['A2']);
-      await expect(codes({ minMargin: 300000 })).resolves.toEqual(['A3']);
-      await expect(codes({ maxMargin: 100000 })).resolves.toEqual(['A1']);
+      const reais = (value: string) => new Decimal(value);
+      await expect(
+        codes({ minMargin: reais('200000'), maxMargin: reais('300000') }),
+      ).resolves.toEqual(['A2']);
+      await expect(codes({ minMargin: reais('300000') })).resolves.toEqual(['A3']);
+      await expect(codes({ maxMargin: reais('100000') })).resolves.toEqual(['A1']);
+      // Inclusive bounds, compared by value across Decimal128 and legacy numbers.
+      await expect(
+        codes({ minMargin: reais('100000.00'), maxMargin: reais('250000') }),
+      ).resolves.toEqual(['A1', 'A2']);
+      await expect(codes({ minMargin: reais('250000.01') })).resolves.toEqual(['A3']);
     });
 
     it('treats a city with regex metacharacters as literal text', async () => {

@@ -15,34 +15,8 @@ import {
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import { useFavorites } from '../contexts/FavoritesContext';
+import type { Auction } from '@/lib/auction';
 import AuctionCard from './AuctionCard';
-
-export interface Auction {
-  code: string;
-  title: string;
-  address: {
-    street?: string;
-    neighborhood?: string;
-    city?: string;
-    state?: string;
-    zipcode?: string;
-  };
-  appraisalPrice?: number;
-  phases: Array<{
-    modality: string;
-    minimumPrice?: number;
-    date?: string;
-    phaseDates?: string[];
-  }>;
-  currentPhase?: {
-    modality: string;
-    minimumPrice?: number;
-    phaseDates?: string[];
-  };
-  detailsUrl?: string;
-  imageUrl?: string;
-  updatedAt?: string;
-}
 
 interface AuctionListProps {
   auctions: Auction[];

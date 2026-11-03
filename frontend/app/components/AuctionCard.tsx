@@ -5,33 +5,9 @@ import HomeIcon from '@mui/icons-material/Home';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ReminderButton from './ReminderButton';
-
-interface Phase {
-  modality: string;
-  minimumPrice?: number;
-  date?: string;
-  phaseDates?: string[];
-}
-
-interface Address {
-  street?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
-  zipcode?: string;
-}
-
-interface Auction {
-  code: string;
-  title: string;
-  address: Address;
-  appraisalPrice?: number;
-  phases: Phase[];
-  currentPhase?: Phase;
-  detailsUrl?: string;
-  imageUrl?: string;
-  updatedAt?: string;
-}
+import Money from './patterns/Money';
+import DateText from './patterns/DateText';
+import type { Auction, AuctionPhase } from '@/lib/auction';
 
 interface AuctionCardProps {
   auction: Auction;
@@ -48,15 +24,7 @@ const MODALITY_LABELS: Record<string, string> = {
   ONLINE_SALES: 'Venda Online',
 };
 
-function formatCurrency(value?: number): string {
-  if (!value) return 'N/A';
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-}
-
-function getCountdownLabel(currentPhase?: Phase): { text: string; isToday: boolean } | null {
+function getCountdownLabel(currentPhase?: AuctionPhase): { text: string; isToday: boolean } | null {
   if (!currentPhase) return null;
   if (currentPhase.modality === 'DIRECT_ONLINE_SALES') return null;
 
@@ -82,7 +50,7 @@ function getCountdownLabel(currentPhase?: Phase): { text: string; isToday: boole
   return { text: `${diffDays} dias`, isToday: false };
 }
 
-function formatAddress(address: Address): string {
+function formatAddress(address: Auction['address']): string {
   const parts = [address.street, address.neighborhood, address.city, address.state].filter(Boolean);
   return parts.join(', ') || 'Endereço não informado';
 }
@@ -225,24 +193,24 @@ export default function AuctionCard({
             </Typography>
           </Box>
 
-          {auction.appraisalPrice && (
+          {auction.appraisalPrice !== null && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" color="text.secondary">
                 💰 Avaliação:
               </Typography>
               <Typography variant="body2" fontWeight={600} color="text.primary">
-                {formatCurrency(auction.appraisalPrice)}
+                <Money value={auction.appraisalPrice} />
               </Typography>
             </Box>
           )}
 
-          {lastPhase?.minimumPrice && (
+          {lastPhase?.minimumPrice != null && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" color="text.secondary">
                 🏷️ Lance mínimo:
               </Typography>
               <Typography variant="body2" fontWeight={600} color="text.primary">
-                {formatCurrency(lastPhase.minimumPrice)}
+                <Money value={lastPhase.minimumPrice} />
               </Typography>
             </Box>
           )}
@@ -253,7 +221,7 @@ export default function AuctionCard({
                 📅 Data:
               </Typography>
               <Typography variant="body2" fontWeight={600} color="text.primary">
-                {new Date(lastPhase.date).toLocaleDateString('pt-BR')}
+                <DateText value={lastPhase.date} />
               </Typography>
             </Box>
           )}

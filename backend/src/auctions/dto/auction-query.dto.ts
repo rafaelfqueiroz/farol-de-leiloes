@@ -5,16 +5,10 @@
 // several values as a repeated key (`city=A&city=B`) or comma-separated (`city=A,B`); the
 // transforms below normalise both, and auctions.controller.spec.ts pins that contract.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, type TransformFnParams, Type } from 'class-transformer';
-import {
-  ArrayNotEmpty,
-  IsArray,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Min,
-} from 'class-validator';
+import { Transform, type TransformFnParams } from 'class-transformer';
+import { ArrayNotEmpty, IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import type { Decimal } from '../../common/money/money';
+import { IsMoneyString, MONEY_API_PROPERTY } from '../../common/money/money-dto';
 import { PaginationQueryDto } from '../../common/pagination/pagination-query.dto';
 import { PhaseModality } from '../schemas/auction.schema';
 
@@ -69,19 +63,17 @@ export class ListAuctionsQueryDto extends PaginationQueryDto {
   @IsString({ each: true })
   modality?: string | string[];
 
-  @ApiPropertyOptional({ type: Number, minimum: 0, description: 'Lowest minimum price, BRL' })
+  // AR-17: despite the name, these are prices (reais), not margins: the bounds of the current
+  // phase's minimum price. A money string becomes a Decimal at the edge, never a float.
+  @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Lowest minimum price, BRL' })
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  minMargin?: number;
+  @IsMoneyString()
+  minMargin?: Decimal;
 
-  @ApiPropertyOptional({ type: Number, minimum: 0, description: 'Highest minimum price, BRL' })
+  @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Highest minimum price, BRL' })
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  maxMargin?: number;
+  @IsMoneyString()
+  maxMargin?: Decimal;
 }
 
 export class NeighborhoodsQueryDto {

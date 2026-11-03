@@ -82,6 +82,19 @@ const domainOnlySyntax = [
   },
 ];
 
+// AR-24: "now" is injected. Outside common/clock/ (SystemClock), the current time comes from the
+// Clock provider; `new Date(value)` parsing or copying a value is fine. Specs build fixed instants.
+const ambientClockSyntax = [
+  {
+    selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+    message: 'AR-24: ask the injected Clock for the current time (clock.now()), not new Date().',
+  },
+  {
+    selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']",
+    message: 'AR-24: ask the injected Clock for the current time (clock.now()), not Date.now().',
+  },
+];
+
 export default defineConfig(
   {
     ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'data/**'],
@@ -130,6 +143,12 @@ export default defineConfig(
         },
       ],
     },
+  },
+  // AR-24 (the domain blocks below replace this rule's options with their stricter list).
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/common/clock/**', 'src/**/*.spec.ts'],
+    rules: { 'no-restricted-syntax': ['error', ...ambientClockSyntax] },
   },
   // AR-05 (later blocks win, so the domain blocks repeat the AR-09 patterns of their module).
   ...modules.map((self) => ({

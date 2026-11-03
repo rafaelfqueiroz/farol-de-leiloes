@@ -1,9 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { SavedFilterEntity, SavedFilterDocument, FilterData } from './schemas/saved-filter.schema';
-import { SavedFilter } from './interfaces/saved-filter.interface';
+import {
+  SavedFilterEntity,
+  SavedFilterDocument,
+  StoredFilterData,
+} from './schemas/saved-filter.schema';
+import { FilterData, SavedFilter } from './interfaces/saved-filter.interface';
 import { DomainError } from '../common/errors/domain-error';
+import { toDecimal128 } from '../common/money/decimal128';
+import { fromStoredMoney } from '../common/money/stored-money';
 import {
   type PageRequest,
   type Paginated,
@@ -58,7 +64,7 @@ export class SavedFiltersService {
     const savedFilter = new this.savedFilterRepository({
       userId,
       name,
-      filters,
+      filters: toStoredFilterData(filters),
     });
 
     const saved = await savedFilter.save();
@@ -81,8 +87,28 @@ export class SavedFiltersService {
     return {
       _id: doc._id.toString(),
       name: doc.name,
-      filters: doc.filters,
+      filters: fromStoredFilterData(doc.filters),
       createdAt: doc.createdAt,
     };
   }
+}
+
+/** AR-17: the price bounds are written as Decimal128 (AR-28 expand: writers write the new shape). */
+function toStoredFilterData(filters: FilterData): StoredFilterData {
+  const { minMargin, maxMargin, ...criteria } = filters;
+  const stored: StoredFilterData = { ...criteria };
+  if (minMargin !== undefined) stored.minMargin = toDecimal128(minMargin);
+  if (maxMargin !== undefined) stored.maxMargin = toDecimal128(maxMargin);
+  return stored;
+}
+
+function fromStoredFilterData(stored: StoredFilterData): FilterData {
+  const { minMargin, maxMargin, ...criteria } = stored;
+  const filters: FilterData = { ...criteria };
+  // EXPAND (AR-28): remove in contract step, #34 PR 2 — tolerates a legacy number.
+  const min = fromStoredMoney(minMargin);
+  const max = fromStoredMoney(maxMargin);
+  if (min !== null) filters.minMargin = min;
+  if (max !== null) filters.maxMargin = max;
+  return filters;
 }

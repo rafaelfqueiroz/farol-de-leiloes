@@ -2,15 +2,18 @@ import { Auction } from '../interfaces/auction.interface';
 import { PhaseModality } from '../schemas/auction.schema';
 
 /**
- * Checks if an auction is currently active (not closed).
+ * Checks if an auction is currently active (not closed) at `now`.
+ *
+ * AR-24: the current time is an argument, never read here, so the check is a pure function a
+ * spec drives with any instant (TS-06).
  *
  * An auction is considered active if:
  * - It is available (available !== false)
  * - AND one of:
  *   - Its current phase is ONLINE_SALES (always active, no date required)
- *   - Its current phase has a future date in phaseDates
+ *   - Its current phase has a date in phaseDates at or after `now`
  */
-export function isAuctionActive(auction: Auction): boolean {
+export function isAuctionActive(auction: Auction, now: Date): boolean {
   if (auction.available === false) {
     return false;
   }
@@ -28,19 +31,7 @@ export function isAuctionActive(auction: Auction): boolean {
     return true;
   }
 
-  // Check if any phase date is in the future
+  // Check if any phase date is still ahead
   const phaseDates = currentPhase.phaseDates ?? [];
-  if (phaseDates.length === 0) {
-    return false;
-  }
-
-  const now = new Date();
-  return phaseDates.some((date) => new Date(date) >= now);
-}
-
-/**
- * Filters a list of auctions to return only active ones.
- */
-export function filterActiveAuctions(auctions: Auction[]): Auction[] {
-  return auctions.filter(isAuctionActive);
+  return phaseDates.some((date) => new Date(date).getTime() >= now.getTime());
 }

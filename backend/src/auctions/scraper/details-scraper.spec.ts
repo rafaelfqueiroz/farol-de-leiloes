@@ -3,6 +3,11 @@ import { scrapeAuctionDetails } from './details-scraper';
 import { readCaixaFixture } from '../../../test/support/fixtures';
 import { PaymentMethod } from '../schemas/auction.schema';
 
+// AR-23 / TS-11: Caixa's pages show Brasília wall-clock time, so every date is asserted as the UTC
+// instant it means (Brasília is UTC-3 since 2019, no daylight saving), whatever zone the test
+// host runs in. These assertions used to read the host's local fields, and passed only because
+// the parser and the spec shared the same (wrong) host-zone reading.
+
 describe('Details Scraper', () => {
   describe('SFI Auction', () => {
     it('extracts phase dates for 1st and 2nd auction', () => {
@@ -13,21 +18,11 @@ describe('Details Scraper', () => {
       expect(details.phaseDetails?.phaseDates).toBeDefined();
       expect(details.phaseDetails?.phaseDates?.length).toBe(2);
 
-      const firstDate = details.phaseDetails?.phaseDates?.[0];
-      expect(firstDate).toBeInstanceOf(Date);
-      expect(firstDate?.getDate()).toBe(3);
-      expect(firstDate?.getMonth()).toBe(2); // January (0-indexed)
-      expect(firstDate?.getFullYear()).toBe(2026);
-      expect(firstDate?.getHours()).toBe(10);
-      expect(firstDate?.getMinutes()).toBe(0);
-
-      const secondDate = details.phaseDetails?.phaseDates?.[1];
-      expect(secondDate).toBeInstanceOf(Date);
-      expect(secondDate?.getDate()).toBe(9);
-      expect(secondDate?.getMonth()).toBe(2);
-      expect(secondDate?.getFullYear()).toBe(2026);
-      expect(secondDate?.getHours()).toBe(10);
-      expect(secondDate?.getMinutes()).toBe(0);
+      // "03/03/2026 - 10h00" and "09/03/2026 - 10h00" in Brasília = 13:00 UTC.
+      expect(details.phaseDetails?.phaseDates).toEqual([
+        new Date('2026-03-03T13:00:00.000Z'),
+        new Date('2026-03-09T13:00:00.000Z'),
+      ]);
     });
 
     it('extracts payment methods and expense rules', () => {
@@ -52,13 +47,8 @@ describe('Details Scraper', () => {
       expect(details.phaseDetails?.phaseDates).toBeDefined();
       expect(details.phaseDetails?.phaseDates?.length).toBe(1);
 
-      const date = details.phaseDetails?.phaseDates?.[0];
-      expect(date).toBeInstanceOf(Date);
-      expect(date?.getDate()).toBe(29);
-      expect(date?.getMonth()).toBe(0); // January
-      expect(date?.getFullYear()).toBe(2026);
-      expect(date?.getHours()).toBe(10);
-      expect(date?.getMinutes()).toBe(0);
+      // "29/01/2026 - 10h00" in Brasília = 13:00 UTC.
+      expect(details.phaseDetails?.phaseDates).toEqual([new Date('2026-01-29T13:00:00.000Z')]);
     });
   });
 
@@ -72,8 +62,8 @@ describe('Details Scraper', () => {
       expect(details.phaseDetails?.phaseDates).toBeDefined();
       expect(details.phaseDetails?.phaseDates?.length).toBe(1);
 
-      const endDate = details.phaseDetails?.phaseDates?.[0];
-      expect(endDate).toEqual(new Date(2026, 0, 30, 18, 0, 0));
+      // 18:00 in Brasília = 21:00 UTC.
+      expect(details.phaseDetails?.phaseDates).toEqual([new Date('2026-01-30T21:00:00.000Z')]);
     });
   });
 

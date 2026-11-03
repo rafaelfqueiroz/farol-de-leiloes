@@ -272,7 +272,7 @@ A role sees only the groups where it has a destination — a group with none dis
 
 **DS-25 — Icons come from `@mui/icons-material` only, in the Outlined variants** (`SearchOutlined`, `NotificationsOutlined`). The filled variant is used only for a selected state: the current navigation item, a favourited heart. Decorative icons are `aria-hidden`; an icon-only button has an `aria-label` from the catalogue.
 
-**DS-26 — Dates use `@mui/x-date-pickers` with the date-fns adapter, `ptBR` locale and the Brasília zone** (AR-23), accept typed input in `dd/mm/aaaa` (BR-003-20), and are keyboard operable (BR-003-16).
+**DS-26 — Dates use `@mui/x-date-pickers` with the date-fns adapter, `ptBR` locale and the Brasília zone** (AR-23), accept typed input in `dd/mm/aaaa` (BR-003-20), and are keyboard operable (BR-003-16). Pages use the `DateField` primitive (`frontend/app/components/DateField.tsx`), never a picker directly: it takes and returns API strings (`YYYY-MM-DD` or a UTC instant), and keeps the picker on the Brasília wall clock whatever the browser's zone, because the date-fns adapter ignores the pickers' `timezone` prop.
 
 **DS-27 — Destructive actions confirm through `ConfirmDialog`**, which names what will be lost and puts the safe action first. Irreversible ones (delete account, cancel journey) say so in words.
 
@@ -358,8 +358,7 @@ The theme, tokens, shared patterns, formatters and logo from issue #38 are in pl
 | Rule | Today | Owner |
 |---|---|---|
 | DS-20 | Page strings are literals; only the `patterns` namespace is in the pt-BR catalogue | #39 |
-| DS-26 | Date pickers (`ReminderButton`, `RemindersPage`) still use `dayjs` | #34 |
-| DS-29 | Inline currency and date formatters (`Intl`, `toLocaleString`, `toFixed`) remain in about 8 files — `AuctionCard`, `AuctionDetailClient`, `auction/[code]/page`, `plans/page`, `admin/coupons/page`, `RemindersPage`, `ReminderButton`, `SearchFilters`, `AuctionList` — and are not yet replaced by `Money` / `DateText` | #39 / #34 |
+| DS-29 | Money and dates in `Money` / `DateText` everywhere except: `plans/page` hard-codes plan prices as `R$ …` text, `AuctionList` formats its result count with `toLocaleString`, and `AuctionCard`'s "Hoje / Amanhã / n dias" countdown does its day maths in the browser's zone instead of Brasília's (AR-23) | #39 |
 | DS-01, DS-11, DS-14, DS-15 | Numeric `fontSize` / `fontWeight` literals in 25 files; pages do not yet use `PageShell` / `PageHeader` | #43 |
 | DS-27 | Destructive confirmations are hand-rolled `Dialog`s (`RemindersPage` delete reminder, `plans` cancel subscription) instead of `ConfirmDialog`; some destructive actions have no confirmation at all (admin coupons "Invalidar", `ReminderButton` delete, `SearchFilters` delete saved filter) | no issue yet |
 | §6 | Busca com IA, Jornadas, Relatórios, Investidores and Equipe are not in the navigation yet; Escritório is reserved and empty | each destination's spec issue |

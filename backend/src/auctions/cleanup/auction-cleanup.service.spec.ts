@@ -1,5 +1,6 @@
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { AuctionCleanupService } from './auction-cleanup.service';
+import { FakeClock } from '../../../test/fakes/fake-clock';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionCleanupService>;
 type CleanupTarget = Parameters<AuctionCleanupService['processAuction']>[0];
@@ -19,6 +20,7 @@ describe('AuctionCleanupService.processAuction', () => {
       auctionModel as unknown as ServiceDeps[0],
       storage as unknown as ServiceDeps[1],
       {} as ServiceDeps[2],
+      new FakeClock(),
     );
     // processAuction is private; bracket access keeps its signature type-checked.
     const service = { processAuction: (a: CleanupTarget) => cleanup['processAuction'](a) };

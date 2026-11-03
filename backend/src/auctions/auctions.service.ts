@@ -4,14 +4,19 @@ import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Model, mongo } from 'mongoose';
-import { AuctionEntity, AuctionDocument, Address, Phase } from './schemas/auction.schema';
-import { Auction, AuctionRecord } from './interfaces/auction.interface';
+import { subHours } from 'date-fns';
+import { AuctionEntity, AuctionDocument, Address } from './schemas/auction.schema';
+import { Auction, AuctionRecord, Phase } from './interfaces/auction.interface';
+import { restorePhase, toAuction, toStoredPhase } from './auction.mapper';
 import { isAuctionActive } from './utils/auction-filters';
 import { fetchAndCheckAvailability } from './scraper/details-scraper';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
 import { errorMessage } from '../common/error-message';
 import { DomainError } from '../common/errors/domain-error';
-import { serverOperators } from '../common/mongo/query-safety';
+import { decimalFilter, serverOperators } from '../common/mongo/query-safety';
+import { Clock } from '../common/clock/clock';
+import type { Decimal } from '../common/money/money';
+import { toDecimal128OrNull } from '../common/money/decimal128';
 import {
   type PageRequest,
   type Paginated,
@@ -23,7 +28,8 @@ export interface AuctionUpsert {
   code?: string;
   title?: string;
   address?: Address;
-  appraisalPrice?: number;
+  /** Reais (AR-17). */
+  appraisalPrice?: Decimal;
   phases?: Phase[];
   detailsUrl?: string;
 }
@@ -33,8 +39,9 @@ export interface QueryFilters {
   city?: string | string[];
   neighborhood?: string | string[];
   modality?: string | string[];
-  minMargin?: number;
-  maxMargin?: number;
+  /** Bounds of the current phase's minimum price, in reais (AR-17). */
+  minMargin?: Decimal;
+  maxMargin?: Decimal;
 }
 
 const NEIGHBORHOODS_CACHE_PREFIX = 'neighborhoods';
@@ -52,6 +59,7 @@ export class AuctionsService {
     @InjectModel(AuctionEntity.name) private readonly auctionRepository: Model<AuctionDocument>,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly configService: ConfigService,
+    private readonly clock: Clock, // AR-24
   ) {
     const config = this.configService.get<SchedulerConfig>(schedulerConfig.KEY);
     this.cacheEnabled = config?.cache.neighborhoodsEnabled ?? false;
@@ -72,6 +80,8 @@ export class AuctionsService {
     this.logger.log(`[upsertMany] Found ${existing.length} existing auctions in DB`);
 
     const existingMap = new Map(existing.map((doc) => [doc.code, doc]));
+    // AR-24: one instant for the whole import, from the injected clock.
+    const now = this.clock.now();
 
     // Step 2: Build bulk operations
     const ops: mongo.AnyBulkWriteOperation<AuctionWrite>[] = [];
@@ -111,12 +121,13 @@ export class AuctionsService {
               code,
               title: item.title ?? null,
               address: item.address ?? {},
-              appraisalPrice: item.appraisalPrice ?? null,
-              phases: newPhases,
-              currentPhase: newPhase,
+              // AR-17: every price is written as Decimal128 (AR-28 expand: writers new shape).
+              appraisalPrice: toDecimal128OrNull(item.appraisalPrice),
+              phases: newPhases.map(toStoredPhase),
+              currentPhase: toStoredPhase(newPhase),
               detailsUrl: item.detailsUrl ?? null,
-              createdAt: new Date(),
-              updatedAt: new Date(),
+              createdAt: now,
+              updatedAt: now,
             },
           },
         });
@@ -128,15 +139,19 @@ export class AuctionsService {
         // Only add phase if modality is different
         if (lastPhase?.modality !== newPhase.modality) {
           updateOps++;
-          const updatedPhases = [...existingPhases, ...newPhases];
+          // The phases already stored are written back too, so they leave in the new shape.
+          const updatedPhases = [
+            ...existingPhases.map(restorePhase),
+            ...newPhases.map(toStoredPhase),
+          ];
           ops.push({
             updateOne: {
               filter: { code },
               update: {
                 $set: {
                   phases: updatedPhases,
-                  currentPhase: newPhase,
-                  updatedAt: new Date(),
+                  currentPhase: toStoredPhase(newPhase),
+                  updatedAt: now,
                 },
               },
             },
@@ -178,7 +193,7 @@ export class AuctionsService {
     if (!codes.length) return 0;
     const result = await this.auctionRepository.updateMany(
       { code: serverOperators({ $in: codes }), available: serverOperators({ $ne: true }) },
-      { $set: { available: true, updatedAt: new Date() } },
+      { $set: { available: true, updatedAt: this.clock.now() } },
     );
     return result.modifiedCount;
   }
@@ -190,7 +205,7 @@ export class AuctionsService {
     const query: Record<string, unknown> = this.buildActiveAuctionFilter();
 
     // SC-10: the DTO validates the filters (AR-34), and this builder does not rely on it. Every
-    // value is coerced to a string or a finite number before it reaches the query, so a request
+    // value is checked to be a string or a finite Decimal before it reaches the query, so a request
     // can never put an operator ({ $ne: null }, { $regex: '.*' }) where a scalar belongs. The
     // `$in` and range operators below are written here, so they are marked server-built.
     if (filters.state) {
@@ -214,14 +229,14 @@ export class AuctionsService {
         modalities.length === 1 ? { $eq: modalities[0] } : serverOperators({ $in: modalities });
     }
 
-    // Filter by price range on currentPhase.minimumPrice
+    // Filter by price range on currentPhase.minimumPrice, compared as Decimal128 (AR-17).
     if (filters.minMargin !== undefined || filters.maxMargin !== undefined) {
-      const priceMatch: Record<string, number> = {};
+      const priceMatch: Record<string, unknown> = {};
       if (filters.minMargin !== undefined) {
-        priceMatch.$gte = numberFilter(filters.minMargin, 'minMargin');
+        priceMatch.$gte = decimalFilter(filters.minMargin, 'minMargin');
       }
       if (filters.maxMargin !== undefined) {
-        priceMatch.$lte = numberFilter(filters.maxMargin, 'maxMargin');
+        priceMatch.$lte = decimalFilter(filters.maxMargin, 'maxMargin');
       }
       query['currentPhase.minimumPrice'] = serverOperators(priceMatch);
     }
@@ -243,7 +258,7 @@ export class AuctionsService {
 
     this.logger.log(`[query] Found ${docs.length} docs, total: ${total}`);
     return paginated(
-      docs.map((doc) => this.toAuction(doc)),
+      docs.map((doc) => toAuction(doc)),
       total,
       page,
     );
@@ -255,7 +270,7 @@ export class AuctionsService {
     const doc = await this.auctionRepository
       .findOne({ code: { $eq: code }, available: true })
       .exec();
-    return doc ? this.toAuction(doc) : null;
+    return doc ? toAuction(doc) : null;
   }
 
   /** The available auctions among `codes`, in no particular order. */
@@ -265,7 +280,7 @@ export class AuctionsService {
       .find({ code: serverOperators({ $in: codes }), available: true })
       .lean()
       .exec();
-    return docs.map((doc) => this.toAuction(doc));
+    return docs.map((doc) => toAuction(doc));
   }
 
   /**
@@ -279,10 +294,11 @@ export class AuctionsService {
       .select('code phases currentPhase available updatedAt')
       .lean()
       .exec();
+    const now = this.clock.now(); // AR-24
     return new Set(
       docs
-        .map((doc) => this.toAuction(doc))
-        .filter(isAuctionActive)
+        .map((doc) => toAuction(doc))
+        .filter((auction) => isAuctionActive(auction, now))
         .map((auction) => auction.code),
     );
   }
@@ -311,31 +327,12 @@ export class AuctionsService {
     }));
   }
 
-  private toAuction(doc: AuctionRecord): Auction {
-    const phases = doc.phases ?? [];
-
-    // Compute URLs from file objects (prefer publicUrl, fallback to originalUrl)
-    const imageUrl = doc.image?.publicUrl ?? doc.image?.originalUrl ?? null;
-    const matriculaUrl = doc.matricula?.publicUrl ?? doc.matricula?.originalUrl ?? null;
-    // TODO: editalUrl disabled - edital is tied to auction phase, not the auction itself
-    // const editalUrl = doc.edital?.publicUrl ?? doc.edital?.originalUrl ?? null;
-
-    return {
-      code: doc.code,
-      title: doc.title ?? null,
-      address: doc.address ?? null,
-      appraisalPrice: doc.appraisalPrice ?? null,
-      phases,
-      currentPhase: doc.currentPhase ?? phases[phases.length - 1] ?? null,
-      detailsUrl: doc.detailsUrl ?? null,
-      imageUrl,
-      matriculaUrl,
-      editalUrl: null, // Disabled - edital is tied to auction phase
-      description: doc.description ?? null,
-      fulfilled: doc.fulfilled ?? false,
-      available: doc.available ?? true,
-      updatedAt: doc.updatedAt,
-    };
+  /**
+   * The `Auction` of a stored record — for modules that hold one populated into their own
+   * documents (favorites), so they map it the same way without the auction schema (AR-09).
+   */
+  toAuction(record: AuctionRecord): Auction {
+    return toAuction(record);
   }
 
   /**
@@ -416,7 +413,7 @@ export class AuctionsService {
   async verifyAvailability(
     csvCodes: string[],
   ): Promise<{ checked: number; unavailable: number; errors: number }> {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const cutoff = subHours(this.clock.now(), 24); // AR-24
     const missingAuctions = await this.auctionRepository
       .find({
         fulfilled: true,
@@ -477,8 +474,8 @@ export class AuctionsService {
                 {
                   $set: {
                     available: false,
-                    availabilityCheckedAt: new Date(),
-                    updatedAt: new Date(),
+                    availabilityCheckedAt: this.clock.now(),
+                    updatedAt: this.clock.now(),
                   },
                 },
               );
@@ -489,7 +486,7 @@ export class AuctionsService {
             }
             await this.auctionRepository.updateOne(
               { code: auction.code },
-              { $set: { availabilityCheckedAt: new Date() } },
+              { $set: { availabilityCheckedAt: this.clock.now() } },
             );
             this.logger.debug(`[verifyAvailability] Auction ${auction.code} still available`);
             return true;
@@ -554,14 +551,6 @@ function stringFilter(value: unknown, field: string): string {
 function stringFilters(value: unknown, field: string): string[] {
   const values: unknown[] = Array.isArray(value) ? value : [value];
   return values.map((item) => stringFilter(item, field));
-}
-
-/** SC-10: a finite number; `NaN`, strings and objects are refused. */
-function numberFilter(value: unknown, field: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new DomainError('VALIDATION_FAILED', { fields: [field] });
-  }
-  return value;
 }
 
 /**

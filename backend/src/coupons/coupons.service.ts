@@ -1,13 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ConfigService } from '@nestjs/config';
-import type { Env } from '../config/env';
 import { Model } from 'mongoose';
-import Stripe from 'stripe';
+import { isValid, parseISO } from 'date-fns';
 import { CouponEntity, CouponDocument } from './schemas/coupon.schema';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { Coupon } from './interfaces/coupon.interface';
 import { DomainError } from '../common/errors/domain-error';
+import { Clock } from '../common/clock/clock';
+import { inBrasilia, startOfBrasiliaDay } from '../common/clock/brasilia-time';
+import { toDecimal128 } from '../common/money/decimal128';
+import { fromStoredCouponDiscount } from '../common/money/stored-money';
+import { PaymentGateway } from '../payments/payment-gateway';
 import {
   type PageRequest,
   type Paginated,
@@ -18,40 +21,38 @@ import {
 @Injectable()
 export class CouponsService {
   private readonly logger = new Logger(CouponsService.name);
-  private stripe: Stripe;
 
   constructor(
     @InjectModel(CouponEntity.name) private readonly couponModel: Model<CouponDocument>,
-    configService: ConfigService<Env, true>,
-  ) {
-    // AR-41: the key is required at boot.
-    this.stripe = new Stripe(configService.get('STRIPE_SECRET_KEY', { infer: true }));
-  }
+    // AR-10: Stripe through its port; the adapter turns reais into centavos (AR-20).
+    private readonly paymentGateway: PaymentGateway,
+    private readonly clock: Clock, // AR-24
+  ) {}
 
   async create(dto: CreateCouponDto): Promise<Coupon> {
-    // Create Stripe coupon with absolute amount off
-    const stripeCoupon = await this.stripe.coupons.create({
-      amount_off: dto.discountValue,
-      currency: 'brl',
-      duration: 'once',
-      name: dto.code,
-    });
+    // AR-23: a bare YYYY-MM-DD is midnight in Brasília; a full ISO instant keeps its own offset.
+    const validTo = new Date(parseISO(dto.validTo, { in: inBrasilia }).getTime());
+    // AR-24: "today or later" is today in Brasília, by the injected clock (moved here from the DTO,
+    // whose validator read the host's clock and zone).
+    if (!isValid(validTo) || validTo < startOfBrasiliaDay(this.clock.now())) {
+      throw new DomainError('VALIDATION_FAILED', { fields: ['validTo'] });
+    }
 
-    // Create Stripe promotion code (user-facing code)
-    const promoCode = await this.stripe.promotionCodes.create({
-      promotion: { type: 'coupon', coupon: stripeCoupon.id },
-      code: dto.code.toUpperCase(),
-      expires_at: Math.floor(new Date(dto.validTo).getTime() / 1000),
-      active: true,
+    const code = dto.code.toUpperCase();
+    const discount = await this.paymentGateway.createFixedDiscount({
+      code,
+      amountOff: dto.discountValue,
+      expiresAt: validTo,
     });
 
     const coupon = new this.couponModel({
-      code: dto.code.toUpperCase(),
-      discountValue: dto.discountValue,
-      validTo: new Date(dto.validTo),
+      code,
+      // AR-17: reais as Decimal128 — every writer writes the new shape (AR-28 expand).
+      discountValue: toDecimal128(dto.discountValue),
+      validTo,
       description: dto.description,
-      stripeCouponId: stripeCoupon.id,
-      stripePromotionCodeId: promoCode.id,
+      stripeCouponId: discount.couponId,
+      stripePromotionCodeId: discount.promotionCodeId,
       active: true,
     });
 
@@ -80,7 +81,8 @@ export class CouponsService {
   async validateCoupon(code: string): Promise<Coupon> {
     const coupon = await this.couponModel.findOne({ code: code.toUpperCase() }).exec();
 
-    if (!coupon || !coupon.active || new Date(coupon.validTo) < new Date()) {
+    // AR-24: expiry against the injected clock.
+    if (!coupon || !coupon.active || coupon.validTo < this.clock.now()) {
       throw new DomainError('COUPON_INVALID');
     }
 
@@ -94,12 +96,10 @@ export class CouponsService {
       throw new DomainError('COUPON_NOT_FOUND');
     }
 
-    // Deactivate promotion code in Stripe
+    // Deactivate the promotion code at the provider
     if (coupon.stripePromotionCodeId) {
       try {
-        await this.stripe.promotionCodes.update(coupon.stripePromotionCodeId, {
-          active: false,
-        });
+        await this.paymentGateway.deactivatePromotionCode(coupon.stripePromotionCodeId);
       } catch (error) {
         this.logger.warn(`Failed to deactivate Stripe promotion code: ${error}`);
       }
@@ -114,7 +114,8 @@ export class CouponsService {
     return {
       _id: doc._id.toString(),
       code: doc.code,
-      discountValue: doc.discountValue,
+      // EXPAND (AR-28): remove in contract step, #34 PR 2 — legacy centavos or Decimal128 reais.
+      discountValue: fromStoredCouponDiscount(doc.discountValue),
       validTo: doc.validTo,
       active: doc.active,
       stripeCouponId: doc.stripeCouponId ?? null,

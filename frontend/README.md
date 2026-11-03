@@ -107,6 +107,7 @@ frontend/
 │   │   └── chat/
 │   │       └── route.ts       # Chat API endpoint
 │   ├── components/patterns/   # Shared design-system patterns (Logo, PageShell, Money…)
+│   ├── components/DateField.tsx # Date / date-time input in Brasília time (DS-26)
 │   ├── theme/                 # MUI theme: tokens, light/dark schemes (DESIGN.md)
 │   ├── layout.tsx             # Root layout
 │   └── page.tsx               # Main chat interface
@@ -114,6 +115,7 @@ frontend/
 │   ├── env.ts                 # The only reader of process.env (AR-42)
 │   ├── backend.ts             # BFF helper: backendFetch / proxyToBackend (server-only)
 │   ├── money.ts, dates.ts     # Money (decimal.js) and date (date-fns) helpers
+│   ├── auction.ts             # Shared auction types (money as strings)
 │   └── mcp-server.ts          # MCP server (optional standalone)
 ├── messages/pt-BR.json        # next-intl catalogue (pt-BR)
 ├── test/                      # Vitest setup and structural tests
