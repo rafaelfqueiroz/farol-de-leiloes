@@ -16,14 +16,25 @@ export function pageCount(total: number, pageSize: number): number {
   return Math.max(1, Math.ceil(total / pageSize));
 }
 
-// A list the whole UI needs at once (a user's reminders, saved filters) is read page by page
-// instead of in one unbounded request; this caps the walk so a runaway `total` cannot loop.
-const MAX_PAGES = 20;
+/** The walk was abandoned because the caller no longer wants the answer; it is never a result. */
+export class PaginationCancelledError extends Error {
+  constructor() {
+    super('pagination cancelled');
+    this.name = 'PaginationCancelledError';
+  }
+}
 
 /**
- * Reads every page of a list endpoint, `MAX_PAGE_SIZE` items at a time (AR-35). `isCurrent` lets
- * the caller stop the walk once its answer is no longer wanted (an account change, #42).
- * Throws the `ApiError` of the first page that fails.
+ * Reads every page of a list endpoint, `MAX_PAGE_SIZE` items at a time, until it holds `total`
+ * items (AR-35). A list the whole UI needs at once (a user's reminders, saved filters) must be
+ * complete: there is no page cap, because a silently truncated list hides items (the oldest-first
+ * reminders would drop the later pending ones). The walk still ends if a page comes back empty (the
+ * total shrank meanwhile), so a shifting `total` cannot loop forever.
+ *
+ * `isCurrent` lets the caller stop the walk once its answer is no longer wanted (an account change,
+ * #42). That rejects with `PaginationCancelledError` rather than resolving with the pages read so
+ * far, so a cancelled walk can never be taken for a complete list. Throws the `ApiError` of the
+ * first page that fails.
  */
 export async function fetchAllPages<T>(
   path: string,
@@ -31,13 +42,13 @@ export async function fetchAllPages<T>(
   isCurrent: () => boolean = () => true,
 ): Promise<T[]> {
   const items: T[] = [];
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const separator = path.includes('?') ? '&' : '?';
+  const separator = path.includes('?') ? '&' : '?';
+  for (let page = 1; ; page++) {
     const response = await fetch(`${path}${separator}page=${page}&pageSize=${MAX_PAGE_SIZE}`, init);
     if (!response.ok) throw await readApiError(response);
     const body: Paginated<T> = await response.json();
+    if (!isCurrent()) throw new PaginationCancelledError();
     items.push(...body.items);
-    if (items.length >= body.total || body.items.length === 0 || !isCurrent()) break;
+    if (items.length >= body.total || body.items.length === 0) return items;
   }
-  return items;
 }

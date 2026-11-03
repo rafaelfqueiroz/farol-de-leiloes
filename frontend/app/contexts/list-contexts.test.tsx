@@ -45,10 +45,11 @@ const page = (items: unknown[], total: number, pageNumber: number) => ({
 });
 
 function RemindersProbe({ children }: { children?: ReactNode }) {
-  const { reminders, loading } = useReminders();
+  const { reminders, loading, loadFailed } = useReminders();
   return (
     <>
       <p>{loading ? 'carregando' : `lembretes ${reminders.length}`}</p>
+      <p>{loadFailed ? 'falhou' : 'ok'}</p>
       {children}
     </>
   );
@@ -94,6 +95,38 @@ describe('RemindersProvider', () => {
     );
 
     await waitFor(() => expect(screen.getByText('lembretes 0')).toBeInTheDocument());
+    expect(screen.getByText('falhou')).toBeInTheDocument();
+  });
+
+  it('flags a failure on a later page instead of showing the first pages as the whole list', async () => {
+    answers = [
+      () => page(items(0, 100), 130, 1),
+      () => ({ status: 500, body: { code: 'INTERNAL_ERROR', context: {} } }),
+    ];
+    render(
+      <RemindersProvider>
+        <RemindersProbe />
+      </RemindersProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('falhou')).toBeInTheDocument());
+    expect(screen.getByText('lembretes 0')).toBeInTheDocument();
+  });
+
+  it('reads past 20 pages so late pending reminders are not dropped (AR-35)', async () => {
+    const total = 2_050;
+    answers = Array.from(
+      { length: 21 },
+      (_, i) => () => page(items(i * 100, Math.min(100, total - i * 100)), total, i + 1),
+    );
+    render(
+      <RemindersProvider>
+        <RemindersProbe />
+      </RemindersProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('lembretes 2050')).toBeInTheDocument());
+    expect(requests).toHaveLength(21);
   });
 
   function Create({ onError }: { onError: (error: unknown) => void }) {

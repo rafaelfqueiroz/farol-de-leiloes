@@ -25,6 +25,8 @@ export interface SavedFilter {
 interface SavedFiltersContextType {
   savedFilters: SavedFilter[];
   loading: boolean;
+  /** The last load failed: `savedFilters` may be missing items (or stale), never a complete list. */
+  loadFailed: boolean;
   isAuthenticated: boolean;
   saveFilter: (name: string, filters: FilterData) => Promise<SavedFilter | null>;
   deleteFilter: (id: string) => Promise<boolean>;
@@ -36,6 +38,7 @@ const SavedFiltersContext = createContext<SavedFiltersContextType | undefined>(u
 export function SavedFiltersProvider({ children }: { children: ReactNode }) {
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -62,6 +65,7 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      setLoadFailed(false);
       // AR-35: the endpoint is paginated and the filter picker needs every filter, so they are
       // read page by page
       setSavedFilters(
@@ -72,6 +76,7 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
         setSavedFilters([]);
         setIsAuthenticated(false);
       } else {
+        setLoadFailed(true);
         reportClientError(error, { where: 'SavedFiltersContext.load' });
       }
     } finally {
@@ -145,6 +150,7 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
       value={{
         savedFilters,
         loading,
+        loadFailed,
         isAuthenticated,
         saveFilter,
         deleteFilter,

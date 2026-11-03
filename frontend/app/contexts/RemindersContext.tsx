@@ -43,6 +43,8 @@ export interface UpdateReminderData {
 interface RemindersContextType {
   reminders: Reminder[];
   loading: boolean;
+  /** The last load failed: `reminders` may be missing items (or stale), never a complete list. */
+  loadFailed: boolean;
   hasReminderForAuction: (auctionCode: string) => boolean;
   getReminderForAuction: (auctionCode: string) => Reminder | undefined;
   /**
@@ -61,6 +63,7 @@ const RemindersContext = createContext<RemindersContextType | undefined>(undefin
 export function RemindersProvider({ children }: { children: ReactNode }) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const router = useRouter();
 
   const getAuthHeaders = (): Record<string, string> => {
@@ -88,6 +91,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       }
 
       setLoading(true);
+      setLoadFailed(false);
       // AR-35: the endpoint is paginated; the sidebar count and the "has a reminder" check need
       // them all, so they are read page by page
       const items = await fetchAllPages<Reminder>(
@@ -95,12 +99,14 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         { headers: { Authorization: `Bearer ${token}` } },
         isLatest,
       );
+      // fetchAllPages rejects instead of returning part of the list, so `items` is complete
       if (isLatest()) setReminders(items);
     } catch (error) {
       if (!isLatest()) return;
       if (error instanceof ApiError && error.status === 401) {
         setReminders([]);
       } else {
+        setLoadFailed(true);
         reportClientError(error, { where: 'RemindersContext.load' });
       }
     } finally {
@@ -112,6 +118,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     latestRequest.current++;
     accountGeneration.current++;
     setReminders([]);
+    setLoadFailed(false);
     setLoading(false);
   }, []);
 
@@ -255,6 +262,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       value={{
         reminders,
         loading,
+        loadFailed,
         hasReminderForAuction,
         getReminderForAuction,
         createReminder,
