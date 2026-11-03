@@ -128,14 +128,23 @@ describe('CouponsService.validateCoupon', () => {
     );
   });
 
-  it('EXPAND: reads a legacy coupon of 1000 centavos as R$ 10,00', async () => {
+  it('reads the discount as Decimal128 reais, digit for digit', async () => {
+    const coupon = await build(
+      new Date('2026-01-15T12:00:00.000Z'),
+      stored({ discountValue: Types.Decimal128.fromString('10.50') }),
+    ).service.validateCoupon('bemvindo');
+
+    expect(coupon.discountValue).toEqual(new Decimal('10.5'));
+  });
+
+  // AR-28 contract: 1000 is a coupon the #34 migration never reached — legacy centavos. Reading
+  // it as reais would give R$ 1.000,00 instead of R$ 10,00, so it fails loudly (DV-34).
+  it('refuses a number discount rather than guess its unit', async () => {
     const legacy = stored({ discountValue: 1000 });
 
-    const coupon = await build(new Date('2026-01-15T12:00:00.000Z'), legacy).service.validateCoupon(
-      'bemvindo',
-    );
-
-    expect(coupon.discountValue).toEqual(new Decimal('10'));
+    await expect(
+      build(new Date('2026-01-15T12:00:00.000Z'), legacy).service.validateCoupon('bemvindo'),
+    ).rejects.toThrow('Stored money is not Decimal128');
   });
 });
 

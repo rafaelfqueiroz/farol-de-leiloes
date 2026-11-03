@@ -30,7 +30,10 @@ const LONG_AGO = new Date('2000-01-01T00:00:00.000Z');
 const UPDATED = new Date('2026-01-15T12:00:00.000Z');
 
 function auction(code: string, overrides: Record<string, unknown> = {}) {
-  const phase = { modality: PhaseModality.ONLINE_SALES, minimumPrice: 100000 };
+  const phase = {
+    modality: PhaseModality.ONLINE_SALES,
+    minimumPrice: Types.Decimal128.fromString('100000'), // AR-17
+  };
   return {
     code,
     available: true,

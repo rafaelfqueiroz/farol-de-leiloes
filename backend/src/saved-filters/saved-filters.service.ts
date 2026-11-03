@@ -8,8 +8,7 @@ import {
 } from './schemas/saved-filter.schema';
 import { FilterData, SavedFilter } from './interfaces/saved-filter.interface';
 import { DomainError } from '../common/errors/domain-error';
-import { toDecimal128 } from '../common/money/decimal128';
-import { fromStoredMoney } from '../common/money/stored-money';
+import { fromDecimal128OrNull, toDecimal128 } from '../common/money/decimal128';
 import {
   type PageRequest,
   type Paginated,
@@ -93,7 +92,7 @@ export class SavedFiltersService {
   }
 }
 
-/** AR-17: the price bounds are written as Decimal128 (AR-28 expand: writers write the new shape). */
+/** AR-17: the price bounds are written as Decimal128. */
 function toStoredFilterData(filters: FilterData): StoredFilterData {
   const { minMargin, maxMargin, ...criteria } = filters;
   const stored: StoredFilterData = { ...criteria };
@@ -105,9 +104,8 @@ function toStoredFilterData(filters: FilterData): StoredFilterData {
 function fromStoredFilterData(stored: StoredFilterData): FilterData {
   const { minMargin, maxMargin, ...criteria } = stored;
   const filters: FilterData = { ...criteria };
-  // EXPAND (AR-28): remove in contract step, #34 PR 2 — tolerates a legacy number.
-  const min = fromStoredMoney(minMargin);
-  const max = fromStoredMoney(maxMargin);
+  const min = fromDecimal128OrNull(minMargin);
+  const max = fromDecimal128OrNull(maxMargin);
   if (min !== null) filters.minMargin = min;
   if (max !== null) filters.maxMargin = max;
   return filters;

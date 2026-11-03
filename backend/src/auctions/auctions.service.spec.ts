@@ -196,8 +196,8 @@ describe('AuctionsService code lookups (SC-10)', () => {
   });
 });
 
-// AR-17 / AR-28 (expand): every writer writes Decimal128; a legacy number read back is rewritten
-// in the new shape. AR-24: the timestamps come from the injected clock.
+// AR-17: every writer writes Decimal128; stored phases, Decimal128 since the #34 migration, are
+// written back as read. AR-24: the timestamps come from the injected clock.
 describe('AuctionsService.upsertMany', () => {
   function build(existing: unknown[]) {
     const repo = {
@@ -242,9 +242,13 @@ describe('AuctionsService.upsertMany', () => {
     });
   });
 
-  it('appends a new phase and rewrites a legacy number price as Decimal128', async () => {
-    const legacy = { modality: PhaseModality.SFI_AUCTION, minimumPrice: 120000.5, phaseDates: [] };
-    const { service, repo } = build([{ code: 'A1', phases: [legacy] }]);
+  it('appends a new phase, writing the stored one back as it was read', async () => {
+    const stored = {
+      modality: PhaseModality.SFI_AUCTION,
+      minimumPrice: d128('120000.5'),
+      phaseDates: [],
+    };
+    const { service, repo } = build([{ code: 'A1', phases: [stored] }]);
 
     await service.upsertMany([{ code: 'A1', phases: [onlineSale] }]);
 
