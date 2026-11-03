@@ -34,11 +34,12 @@ API
 
 - The reference is the OpenAPI document (AR-33): Swagger UI at `/api/docs` and the JSON at `/api/docs-json` on a running API, outside production only. There is no hand-written route table; the controller and DTO decorators are the source, and `src/openapi.spec.ts` holds them to the contract.
 - Errors answer `{ code, context }` (AR-38). Lists take `page` and `pageSize` (max 100) and answer `{ items, total, page, pageSize }` (AR-35).
+- Money is a string of reais over JSON, both ways (AR-17): `"1234.56"` — a dot, at most two decimals, no thousands separator. Responses round once to two places, half-even (AR-19). Coupon discounts are reais too (they were integer centavos before #34). In MongoDB money is `Decimal128`; while #34's expand step is deployed, readers also accept the legacy number shape (`common/money/stored-money.ts`, removed with the migration in #34's second PR).
 
 Scheduling
 
-- A daily job runs at 03:00 (server time) to import all states.
-- Also triggers one initial import ~5s after startup.
+- Every schedule is Brasília time, whatever the server's zone (AR-25): the import of all states at 03:00, the detail-page scraper at 06:00, reminders every 15 minutes.
+- With `IMPORT_ON_START_UP=true`, one initial import also runs ~5s after startup.
 
 Notes
 
