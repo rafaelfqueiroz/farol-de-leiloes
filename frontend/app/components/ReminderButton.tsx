@@ -18,11 +18,8 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import dayjs, { Dayjs } from 'dayjs';
-import 'dayjs/locale/pt-br';
+import { TZDate } from '@date-fns/tz';
+import { subHours } from 'date-fns';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -30,6 +27,10 @@ import { useReminders, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useApiErrorMessage } from '@/lib/api-error';
+import { parseDate } from '@/lib/dates';
+import { TIME_ZONE } from '@/i18n/config';
+import DateField from './DateField';
+import DateText from './patterns/DateText';
 
 interface ReminderButtonProps {
   auctionCode: string;
@@ -52,7 +53,7 @@ export default function ReminderButton({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [channel, setChannel] = useState<ReminderChannel>('EMAIL');
-  const [scheduledAt, setScheduledAt] = useState<Dayjs | null>(null);
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
   const [description, setDescription] = useState('');
 
   const hasReminder = hasReminderForAuction(auctionCode);
@@ -69,8 +70,14 @@ export default function ReminderButton({
     setError(null);
 
     if (!scheduledAt && auctionDate) {
-      const date = dayjs(auctionDate).subtract(1, 'hour');
-      setScheduledAt(date);
+      // AR-23: one hour before the auction, computed on the Brasília clock
+      const start = parseDate(auctionDate);
+      if (start.kind === 'instant') {
+        // (TZDate#toISOString writes an offset; the API takes a UTC instant)
+        setScheduledAt(
+          new Date(subHours(new TZDate(start.date, TIME_ZONE), 1).getTime()).toISOString(),
+        );
+      }
     }
   };
 
@@ -92,7 +99,7 @@ export default function ReminderButton({
       const result = await createReminder({
         auctionId: auctionCode,
         channel,
-        scheduledAt: scheduledAt.toISOString(),
+        scheduledAt,
         description: description || undefined,
       });
 
@@ -128,13 +135,6 @@ export default function ReminderButton({
     }
   };
 
-  const formatDisplayDate = (dateStr: string): string => {
-    return new Date(dateStr).toLocaleString('pt-BR', {
-      dateStyle: 'short',
-      timeStyle: 'short',
-    });
-  };
-
   return (
     <>
       <IconButton
@@ -168,8 +168,8 @@ export default function ReminderButton({
             {hasReminder && existingReminder ? (
               <Box sx={{ mb: 2 }}>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Lembrete agendado para {formatDisplayDate(existingReminder.scheduledAt)} via{' '}
-                  {existingReminder.channel}
+                  Lembrete agendado para <DateText value={existingReminder.scheduledAt} withTime />{' '}
+                  via {existingReminder.channel}
                 </Alert>
                 {existingReminder.description && (
                   <Typography variant="body2" color="text.secondary">
@@ -197,20 +197,14 @@ export default function ReminderButton({
                   </Select>
                 </FormControl>
 
-                <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="pt-br">
-                  <DateTimePicker
-                    label="Data e hora do lembrete"
-                    value={scheduledAt}
-                    onChange={(newValue) => setScheduledAt(newValue)}
-                    timeSteps={{ minutes: 10 }}
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        helperText: 'O lembrete deve ser antes do início do leilão',
-                      },
-                    }}
-                  />
-                </LocalizationProvider>
+                <DateField
+                  type="datetime"
+                  label="Data e hora do lembrete"
+                  value={scheduledAt}
+                  onChange={setScheduledAt}
+                  minuteStep={10}
+                  helperText="O lembrete deve ser antes do início do leilão"
+                />
 
                 <TextField
                   label="Nota (opcional)"

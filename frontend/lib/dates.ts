@@ -100,3 +100,51 @@ export function relativeParts(value: string, now: Date): RelativeParts {
   const days = differenceInCalendarDays(new TZDate(parsed.date, TIME_ZONE), nowInZone);
   return { unit: 'days', count: Math.abs(days), direction };
 }
+
+// AR-23: AdapterDateFns edits plain `Date`s and ignores the pickers' `timezone` prop, so a
+// picker would show the *browser's* wall clock. These helpers move values between the API's
+// strings and a `Date` whose local fields read as the Brasília wall clock, so people pick
+// Brasília times wherever the browser is. (A wall time that does not exist in a browser zone
+// that has DST, such as 02:30 on its spring-forward day, is shifted by that browser; Brasília
+// itself has no DST.)
+
+/** An API instant (`2026-03-10T15:30:00Z`) -> a `Date` showing the Brasília wall clock. */
+export function instantToWallClock(value: string): Date {
+  const parsed = parseDate(value);
+  if (parsed.kind !== 'instant') throw new RangeError(`Expected an instant, got: ${value}`);
+  const zoned = new TZDate(parsed.date, TIME_ZONE);
+  return new Date(
+    zoned.getFullYear(),
+    zoned.getMonth(),
+    zoned.getDate(),
+    zoned.getHours(),
+    zoned.getMinutes(),
+  );
+}
+
+/** The Brasília wall clock a picker holds -> a UTC instant string (`...Z`) for the API. */
+export function wallClockToInstant(wall: Date): string {
+  const zoned = new TZDate(
+    wall.getFullYear(),
+    wall.getMonth(),
+    wall.getDate(),
+    wall.getHours(),
+    wall.getMinutes(),
+    0,
+    0,
+    TIME_ZONE,
+  );
+  return new Date(zoned.getTime()).toISOString();
+}
+
+/** A `YYYY-MM-DD` calendar date -> a `Date` at local midnight; never converted through a zone (AR-22). */
+export function calendarToWallClock(value: string): Date {
+  const parsed = parseDate(value);
+  if (parsed.kind !== 'calendar') throw new RangeError(`Expected a calendar date, got: ${value}`);
+  return new Date(parsed.year, parsed.month - 1, parsed.day);
+}
+
+/** The day a picker holds -> `YYYY-MM-DD` from its own fields, never shifted (AR-22). */
+export function wallClockToCalendar(wall: Date): string {
+  return format(wall, 'yyyy-MM-dd');
+}
