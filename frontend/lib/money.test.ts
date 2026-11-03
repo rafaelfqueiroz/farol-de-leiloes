@@ -1,6 +1,15 @@
 import Decimal from 'decimal.js';
 import { describe, expect, it } from 'vitest';
-import { formatMoney, formatMoneyCompact } from './money';
+import {
+  discountPercent,
+  formatMoney,
+  formatMoneyCompact,
+  formatPercent,
+  isMoneyString,
+  moneyFromSlider,
+  moneyToSlider,
+  parseMoneyInput,
+} from './money';
 
 const NBSP = '\u00a0';
 
@@ -90,5 +99,71 @@ describe('formatMoneyCompact', () => {
 
   it('accepts a Decimal', () => {
     expect(formatMoneyCompact(new Decimal('380000'))).toBe(`R$${NBSP}380${NBSP}mil`);
+  });
+});
+
+describe('money strings at the form boundary', () => {
+  it('recognises the API format', () => {
+    expect(['0', '10', '1234.56', '0.1'].every(isMoneyString)).toBe(true);
+    expect(['', '-1', '1,5', '1.234,56', '1e3', '1.234', ' 1', 'abc'].some(isMoneyString)).toBe(
+      false,
+    );
+  });
+
+  it('reads a typed amount into two places, accepting a comma', () => {
+    expect(parseMoneyInput('10')).toBe('10.00');
+    expect(parseMoneyInput('10,5')).toBe('10.50');
+    expect(parseMoneyInput(' 1234.56 ')).toBe('1234.56');
+    // 0.1 + 0.2 style input stays exact: no binary float on the way
+    expect(parseMoneyInput('0.30')).toBe('0.30');
+  });
+
+  it('refuses what is not a non-negative amount with at most two decimals', () => {
+    expect(parseMoneyInput('')).toBeNull();
+    expect(parseMoneyInput('-5')).toBeNull();
+    expect(parseMoneyInput('10,555')).toBeNull();
+    expect(parseMoneyInput('1.234,56')).toBeNull();
+    expect(parseMoneyInput('dez')).toBeNull();
+  });
+
+  it('moves between slider positions and money strings', () => {
+    expect(moneyFromSlider(0)).toBe('0.00');
+    expect(moneyFromSlider(1_250_000)).toBe('1250000.00');
+    expect(moneyToSlider('1250000.00')).toBe(1_250_000);
+    expect(moneyToSlider('50000.5')).toBe(50_000);
+  });
+});
+
+describe('discountPercent', () => {
+  it('is exact where binary floats are not', () => {
+    // (300000.10 - 200000.07) / 300000.10 * 100, with no float in between
+    expect(discountPercent('300000.10', '200000.07')?.toFixed(4)).toBe('33.3333');
+    expect(discountPercent('0.30', '0.10')?.toFixed(10)).toBe('66.6666666667');
+  });
+
+  it('is negative when the minimum is above the appraisal', () => {
+    expect(discountPercent('100.00', '125.00')?.toString()).toBe('-25');
+  });
+
+  it('is null when a figure is missing or the appraisal is not positive', () => {
+    expect(discountPercent(null, '100')).toBeNull();
+    expect(discountPercent('100', null)).toBeNull();
+    expect(discountPercent('0', '100')).toBeNull();
+  });
+});
+
+describe('formatPercent', () => {
+  it('uses the pt-BR decimal comma and one place', () => {
+    expect(formatPercent('12.5')).toBe('12,5%');
+    expect(formatPercent('33.3333')).toBe('33,3%');
+    expect(formatPercent('50')).toBe('50,0%');
+  });
+
+  it('rounds half to even, groups and keeps the sign', () => {
+    expect(formatPercent('0.25')).toBe('0,2%');
+    expect(formatPercent('0.35')).toBe('0,4%');
+    expect(formatPercent('1234.5', 0)).toBe('1.234%');
+    expect(formatPercent('-25')).toBe('-25,0%');
+    expect(formatPercent('-0.01')).toBe('0,0%');
   });
 });

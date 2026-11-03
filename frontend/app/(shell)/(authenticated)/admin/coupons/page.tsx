@@ -26,7 +26,14 @@ import {
   Pagination,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import { TZDate } from '@date-fns/tz';
+import { format } from 'date-fns';
+import DateField from '@/app/components/DateField';
+import DateText from '@/app/components/patterns/DateText';
+import Money from '@/app/components/patterns/Money';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { TIME_ZONE } from '@/i18n/config';
+import { parseMoneyInput } from '@/lib/money';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 import { pageCount, type Paginated } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
@@ -37,7 +44,8 @@ const PAGE_SIZE = 20;
 interface Coupon {
   _id: string;
   code: string;
-  discountValue: number;
+  /** Reais as a money string, e.g. "10.00" (AR-17). */
+  discountValue: string;
   validTo: string;
   active: boolean;
   description?: string;
@@ -107,6 +115,16 @@ export default function AdminCouponsPage() {
 
   const handleCreateCoupon = async () => {
     if (!newCode.trim() || !newDiscountValue || !newValidTo) return;
+    // the form field is free text in reais; the API takes a money string with two places
+    const discountValue = parseMoneyInput(newDiscountValue);
+    if (discountValue === null) {
+      setSnackbar({
+        open: true,
+        message: 'Informe o valor do desconto em reais, com até duas casas decimais',
+        severity: 'error',
+      });
+      return;
+    }
     setSaving(true);
 
     try {
@@ -119,7 +137,7 @@ export default function AdminCouponsPage() {
         },
         body: JSON.stringify({
           code: newCode.toUpperCase(),
-          discountValue: Math.round(parseFloat(newDiscountValue) * 100), // Convert BRL to cents
+          discountValue,
           validTo: newValidTo,
           description: newDescription || undefined,
         }),
@@ -222,10 +240,10 @@ export default function AdminCouponsPage() {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          R$ {(coupon.discountValue / 100).toFixed(2).replace('.', ',')}
+                          <Money value={coupon.discountValue} />
                         </TableCell>
                         <TableCell>
-                          {new Date(coupon.validTo).toLocaleDateString('pt-BR')}
+                          <DateText value={coupon.validTo} />
                         </TableCell>
                         <TableCell>
                           {!coupon.active ? (
@@ -315,18 +333,14 @@ export default function AdminCouponsPage() {
             placeholder="10.00"
             slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
           />
-          <TextField
-            fullWidth
-            label="Valido ate"
-            type="date"
-            value={newValidTo}
-            onChange={(e) => setNewValidTo(e.target.value)}
-            margin="normal"
-            slotProps={{
-              inputLabel: { shrink: true },
-              htmlInput: { min: new Date().toISOString().split('T')[0] },
-            }}
-          />
+          <Box sx={{ mt: 2, mb: 1 }}>
+            <DateField
+              label="Valido ate"
+              value={newValidTo || null}
+              onChange={(value) => setNewValidTo(value ?? '')}
+              min={format(new TZDate(new Date(), TIME_ZONE), 'yyyy-MM-dd')}
+            />
+          </Box>
           <TextField
             fullWidth
             label="Descricao (opcional)"
