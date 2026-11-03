@@ -1,7 +1,10 @@
+import type { Decimal } from '../../common/money/money';
+
 export interface Coupon {
   _id: string;
   code: string;
-  discountValue: number;
+  /** AR-17: the absolute discount in reais. */
+  discountValue: Decimal;
   validTo: Date;
   active: boolean;
   stripeCouponId: string | null;

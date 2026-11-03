@@ -6,13 +6,14 @@ import request from 'supertest';
 import { CouponsController } from './coupons.controller';
 import { CouponsService } from './coupons.service';
 import type { Coupon } from './interfaces/coupon.interface';
+import { Decimal } from '../common/money/money';
 import { createHttpApp, TEST_USER } from '../../test/support/http-app';
 import { itAnswersPages } from '../../test/support/pagination-contract';
 
 const COUPON: Coupon = {
   _id: '64b7f00000000000000000dd',
   code: 'BEMVINDO',
-  discountValue: 1000,
+  discountValue: new Decimal('10'),
   validTo: new Date('2026-12-31T00:00:00.000Z'),
   active: true,
   stripeCouponId: 'coupon_test',
@@ -49,6 +50,7 @@ describe('CouponsController over HTTP', () => {
       item: COUPON,
       expectedItem: {
         ...COUPON,
+        discountValue: '10.00', // AR-17: reais as a string, no longer centavos
         validTo: '2026-12-31T00:00:00.000Z',
         createdAt: '2026-01-15T12:00:00.000Z',
       },

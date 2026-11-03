@@ -9,6 +9,8 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { UsersService } from '../users/users.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { PaymentGateway } from './payment-gateway';
+import { StripePaymentGateway } from './adapters/stripe-payment-gateway';
 import { DomainError } from '../common/errors/domain-error';
 import { configureApp } from '../app.setup';
 import { testConfigService, TEST_ENV } from '../../test/support/test-env';
@@ -27,7 +29,7 @@ describe('Stripe webhook', () => {
 });
 
 // The webhook over HTTP, through the real Nest + Express 5 stack (#61) and the real Stripe
-// signature check: the signature covers the exact bytes Stripe sent, so this proves `rawBody`
+// signature check (the StripePaymentGateway adapter behind the PaymentGateway port, AR-10): the signature covers the exact bytes Stripe sent, so this proves `rawBody`
 // (main.ts) still hands the service the unparsed body, and that a request with no body — where
 // Express 5 leaves `req.body` undefined — is refused, never processed. supertest binds an
 // ephemeral loopback port in this process; no request leaves the machine and Stripe is never
@@ -51,6 +53,7 @@ describe('Stripe webhook over HTTP (raw body, Express 5)', () => {
       controllers: [PaymentsController],
       providers: [
         PaymentsService,
+        { provide: PaymentGateway, useClass: StripePaymentGateway },
         { provide: ConfigService, useValue: testConfigService() },
         { provide: UsersService, useValue: usersService },
         { provide: CouponsService, useValue: {} },
