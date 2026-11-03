@@ -12,6 +12,7 @@ import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interf
 import { ReminderEmailPayload } from './templates/reminder.template';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
 import { errorMessage } from '../common/error-message';
+import { BRASILIA_TIME_ZONE } from '../common/clock/brasilia-time';
 
 @Injectable()
 export class RemindersScheduler implements OnModuleInit {
@@ -39,7 +40,8 @@ export class RemindersScheduler implements OnModuleInit {
     this.logger.log('Reminders scheduler initialized. Running every 15 minutes.');
   }
 
-  @Cron('*/15 * * * *')
+  // AR-25: the zone is explicit on every cron, even one that runs every 15 minutes.
+  @Cron('*/15 * * * *', { timeZone: BRASILIA_TIME_ZONE })
   async processReminders() {
     const { enabled } = this.config.reminders;
 

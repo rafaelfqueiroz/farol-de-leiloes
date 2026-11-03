@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { addHours } from 'date-fns';
 import { UserEntity, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -8,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { DomainError } from '../common/errors/domain-error';
 import { serverOperators } from '../common/mongo/query-safety';
+import { Clock } from '../common/clock/clock';
 
 // SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34).
 const TEXT_FIELDS = [
@@ -27,7 +29,10 @@ const ADDRESS_FIELDS = ['street', 'city', 'state', 'zipCode'] as const;
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(UserEntity.name) private readonly userRepository: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(UserEntity.name) private readonly userRepository: Model<UserDocument>,
+    private readonly clock: Clock, // AR-24: token expiry is measured from the injected clock
+  ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserDocument> {
     // Check if user already exists
@@ -215,8 +220,7 @@ export class UsersService {
     const hashedToken = await bcrypt.hash(token, 10);
 
     // Set expiration to 1 hour from now
-    const expires = new Date();
-    expires.setHours(expires.getHours() + 1);
+    const expires = addHours(this.clock.now(), 1);
 
     await this.userRepository.findByIdAndUpdate(user._id, {
       resetPasswordToken: hashedToken,
@@ -229,7 +233,7 @@ export class UsersService {
   async resetPassword(token: string, newPassword: string): Promise<void> {
     const users = await this.userRepository
       .find({
-        resetPasswordExpires: serverOperators({ $gt: new Date() }),
+        resetPasswordExpires: serverOperators({ $gt: this.clock.now() }),
       })
       .exec();
 
@@ -270,8 +274,7 @@ export class UsersService {
     const hashedToken = await bcrypt.hash(token, 10);
 
     // Set expiration to 24 hours from now
-    const expires = new Date();
-    expires.setHours(expires.getHours() + 24);
+    const expires = addHours(this.clock.now(), 24);
 
     await this.userRepository.findByIdAndUpdate(userId, {
       emailVerificationToken: hashedToken,
@@ -284,7 +287,7 @@ export class UsersService {
   async verifyEmail(token: string): Promise<UserDocument> {
     const users = await this.userRepository
       .find({
-        emailVerificationExpires: serverOperators({ $gt: new Date() }),
+        emailVerificationExpires: serverOperators({ $gt: this.clock.now() }),
         emailVerified: false,
       })
       .exec();

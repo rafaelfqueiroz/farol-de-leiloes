@@ -1,11 +1,13 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { subDays } from 'date-fns';
 import { AuctionEntity, AuctionDocument } from '../schemas/auction.schema';
 import { StorageService } from '../../storage/storage.service';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
 import { errorMessage } from '../../common/error-message';
 import { serverOperators } from '../../common/mongo/query-safety';
+import { Clock } from '../../common/clock/clock';
 
 const CLEANUP_THRESHOLD_DAYS = 14;
 
@@ -21,6 +23,7 @@ export class AuctionCleanupService implements OnModuleInit {
     private readonly storageService: StorageService,
     @Inject(schedulerConfig.KEY)
     private readonly config: SchedulerConfig,
+    private readonly clock: Clock, // AR-24
   ) {}
 
   async onModuleInit() {
@@ -38,8 +41,7 @@ export class AuctionCleanupService implements OnModuleInit {
     this.logger.log('Starting unavailable auctions cleanup');
 
     try {
-      const thresholdDate = new Date();
-      thresholdDate.setDate(thresholdDate.getDate() - CLEANUP_THRESHOLD_DAYS);
+      const thresholdDate = subDays(this.clock.now(), CLEANUP_THRESHOLD_DAYS);
 
       const auctions = await this.auctionModel
         .find({
