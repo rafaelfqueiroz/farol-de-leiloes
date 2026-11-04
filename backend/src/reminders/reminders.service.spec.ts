@@ -116,4 +116,46 @@ describe('RemindersService and the clock (AR-24)', () => {
       new DomainError('REMINDER_AFTER_AUCTION_START'),
     );
   });
+
+  // AR-23 / #82: rounding runs first, in Brasília time, and the checks judge the rounded instant.
+  describe('rounding to 15 minutes (#82)', () => {
+    it('rounds across the hour and day boundary in Brasília: 23:53 -> 00:00 next day', () => {
+      const { schedule } = build();
+
+      // 16/01 23:53 in Brasília rounds to 17/01 00:00 Brasília = 03:00Z.
+      expect(schedule('2026-01-16T23:53:00')).toEqual(new Date('2026-01-17T03:00:00.000Z'));
+    });
+
+    it('rounds to the nearest quarter, down and up', () => {
+      const { schedule } = build();
+
+      expect(schedule('2026-01-16T10:07:00')).toEqual(new Date('2026-01-16T13:00:00.000Z'));
+      expect(schedule('2026-01-16T10:08:00')).toEqual(new Date('2026-01-16T13:15:00.000Z'));
+    });
+
+    it('always lands on an exact 15-minute boundary, dropping seconds and milliseconds', () => {
+      const { schedule } = build();
+
+      expect(schedule('2026-01-16T10:15:30.500')).toEqual(new Date('2026-01-16T13:15:00.000Z'));
+      expect(schedule('2026-01-16T10:14:59.999')).toEqual(new Date('2026-01-16T13:15:00.000Z'));
+    });
+
+    it('refuses a time that rounds onto the auction start', () => {
+      const { schedule } = build();
+
+      // Auction starts 20/01 13:00Z = 10:00 Brasília; 09:53 rounds to 10:00.
+      expect(() => schedule('2026-01-20T09:53:00')).toThrow(
+        new DomainError('REMINDER_AFTER_AUCTION_START'),
+      );
+    });
+
+    it('refuses a time just after now that rounds down onto now', () => {
+      const { schedule } = build();
+
+      // Now is 09:00 Brasília; 09:05 is in the future but rounds down to 09:00.
+      expect(() => schedule('2026-01-15T09:05:00')).toThrow(
+        new DomainError('REMINDER_DATE_IN_PAST'),
+      );
+    });
+  });
 });
