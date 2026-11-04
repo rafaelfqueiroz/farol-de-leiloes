@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -31,7 +31,7 @@ export interface DateFieldProps {
   /** The new value in the same form, or null while the field is empty or only partly typed. */
   onChange: (value: string | null) => void;
   helperText?: string;
-  /** The earliest choice, in the same form as `value`. */
+  /** The earliest choice, in the same form as `value`; datetime limits keep exact precision. */
   min?: string;
   /** Minutes between choices in the clock list; `datetime` only. */
   minuteStep?: number;
@@ -44,10 +44,8 @@ export interface DateFieldProps {
 function toPicker(value: string | null, type: 'date' | 'datetime'): Date | null {
   if (value === null) return null;
   try {
-    // DS-26: the field and its minimum have minute precision, matching the visible controls.
-    return type === 'datetime'
-      ? startOfMinute(instantToWallClock(value))
-      : calendarToWallClock(value);
+    // AR-22, DS-26: retain parent precision so validation checks the unchanged API value.
+    return type === 'datetime' ? instantToWallClock(value) : calendarToWallClock(value);
   } catch (error: unknown) {
     // AR-22: malformed API dates stay empty and editable rather than breaking the form.
     if (error instanceof RangeError) return null;
@@ -83,10 +81,15 @@ export default function DateField({
     setSynced(value);
     setDraft(toPicker(value, type));
   }
+  const minimum = useMemo(() => (min ? toPicker(min, type) : null), [min, type]);
 
   const handleChange = (picked: Date | null) => {
-    const next = fromPicker(picked, type);
-    setDraft(picked);
+    // DS-26: validate exactly the instant emitted after an edit, without hidden seconds.
+    // E.g. 02:30:00 is below a precise 02:30:50 minimum; an untouched 02:30:55 is valid.
+    const edited =
+      type === 'datetime' && picked !== null && isValid(picked) ? startOfMinute(picked) : picked;
+    const next = fromPicker(edited, type);
+    setDraft(edited);
     setSynced(next);
     onChange(next);
   };
@@ -109,7 +112,7 @@ export default function DateField({
           ampm={false}
           format="dd/MM/yyyy HH:mm"
           timeSteps={{ minutes: minuteStep }}
-          minDateTime={min ? (toPicker(min, 'datetime') ?? undefined) : undefined}
+          minDateTime={minimum ?? undefined}
           disabled={disabled}
           slotProps={slotProps}
         />
@@ -119,7 +122,7 @@ export default function DateField({
           value={draft}
           onChange={handleChange}
           format="dd/MM/yyyy"
-          minDate={min ? (toPicker(min, 'date') ?? undefined) : undefined}
+          minDate={minimum ?? undefined}
           disabled={disabled}
           slotProps={slotProps}
         />

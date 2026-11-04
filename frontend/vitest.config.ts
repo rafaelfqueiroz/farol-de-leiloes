@@ -4,7 +4,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 const dateTests = [
   'lib/dates.test.ts',
   'lib/brasilia-date-adapter.test.ts',
-  'app/components/DateField.test.tsx',
+  'app/components/DateField.dst.test.tsx',
 ];
 
 export default defineConfig({
@@ -18,11 +18,17 @@ export default defineConfig({
     setupFiles: ['./test/setup.ts'],
     exclude: [...configDefaults.exclude, '.next/**'],
     // TS-11, AR-23: forks apply the host zone before jsdom/MUI load. Keep the rest of the
-    // suite in Tokyo; run the actual picker and its bridge in every regression zone.
+    // suite in Tokyo; repeat only focused picker timezone cases and its bridge.
     projects: [
       {
         extends: true as const,
-        test: { name: 'unit', exclude: [...configDefaults.exclude, '.next/**', ...dateTests] },
+        test: {
+          name: 'unit',
+          // DV-18: future Playwright *.spec files must not run in jsdom. Keep this on the
+          // unit project: Vite concatenates inherited includes into the focused TZ projects.
+          include: ['**/*.test.{ts,tsx}'],
+          exclude: [...configDefaults.exclude, '.next/**', ...dateTests],
+        },
       },
       ...['America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Tokyo'].map((timeZone) => ({
         extends: true as const,
@@ -42,10 +48,10 @@ export default defineConfig({
       exclude: ['**/*.test.{ts,tsx}', '**/*.d.ts'],
       reporter: ['text-summary', 'text', 'lcov'],
       thresholds: {
-        // TESTING §7: floor rounded down from measured coverage, ratcheted up by #58.
+        // TESTING §7: floor rounded down from measured coverage; #58 lines, #87 branches.
         // The target remains 80% lines and branches (#57); the floor never goes down.
         lines: 55,
-        branches: 52,
+        branches: 53,
       },
     },
   },

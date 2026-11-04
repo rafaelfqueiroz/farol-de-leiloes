@@ -29,6 +29,12 @@ describe('BrasiliaDateAdapter construction boundaries (AR-23, DS-26)', () => {
     );
   });
 
+  it('accepts ISO construction strings, including a space delimiter, but rejects legacy strings', () => {
+    expect(toUtcInstant(adapter.date('2027-03-14 02:30'))).toBe('2027-03-14T05:30:00.000Z');
+    // AR-23: do not restore native Date's browser-dependent parsing for this private adapter.
+    expect(adapter.isValid(adapter.date('Sun, 14 Mar 2027 05:30:00 GMT'))).toBe(false);
+  });
+
   it('parses a pasted Brasília wall time without browser DST normalization', () => {
     const parsed = adapter.parse('14/03/2027 02:30', 'dd/MM/yyyy HH:mm');
     expect(parsed).not.toBeNull();

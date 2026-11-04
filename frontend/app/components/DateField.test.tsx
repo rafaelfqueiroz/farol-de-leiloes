@@ -1,97 +1,54 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { axe, renderWithProviders } from '@/test/render';
-import DateField, { type DateFieldProps } from './DateField';
-
-// A controlled host, like the dialogs that use the field.
-function Host({
-  initial = null,
-  onValue,
-  ...props
-}: Partial<Omit<DateFieldProps, 'value' | 'onChange'>> & {
-  initial?: string | null;
-  onValue?: (value: string | null) => void;
-}) {
-  const [value, setValue] = useState<string | null>(initial);
-  return (
-    <DateField
-      label="Data e hora"
-      {...props}
-      value={value}
-      onChange={(next) => {
-        setValue(next);
-        onValue?.(next);
-      }}
-    />
-  );
-}
+import DateField from './DateField';
+import { DateFieldHost as Host } from '@/test/date-field-host';
 
 describe('DateField (datetime)', () => {
-  it('shows Brasília 02:30 in a browser DST gap (AR-23, #86)', () => {
+  it.each([
+    ['2027-03-14T05:30:45.000Z', 'true'],
+    ['2027-03-14T05:30:50.122Z', 'true'],
+    ['2027-03-14T05:30:50.123Z', 'false'],
+    ['2027-03-14T05:30:50.124Z', 'false'],
+    ['2027-03-14T05:30:55.000Z', 'false'],
+  ])('validates untouched precise value %s against the exact minimum', (initial, invalid) => {
     const onValue = vi.fn();
-    const { container } = renderWithProviders(
-      <Host type="datetime" initial="2027-03-14T05:30:00.000Z" onValue={onValue} />,
+    renderWithProviders(
+      <Host type="datetime" initial={initial} min="2027-03-14T05:30:50.123Z" onValue={onValue} />,
     );
 
-    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:30');
-    // Display alone does not rewrite the parent API string.
+    expect(screen.getByRole('group', { name: 'Data e hora' })).toHaveAttribute(
+      'aria-invalid',
+      invalid,
+    );
     expect(onValue).not.toHaveBeenCalled();
   });
 
-  it('edits the real picker during a browser DST gap and emits Brasília UTC (#86)', async () => {
+  it('validates the whole-minute instant it emits after editing a precise parent', async () => {
     const onValue = vi.fn();
     renderWithProviders(
-      <Host type="datetime" initial="2027-03-14T05:30:00.000Z" onValue={onValue} />,
+      <Host
+        type="datetime"
+        initial="2027-03-14T05:31:55.000Z"
+        min="2027-03-14T05:30:50.123Z"
+        onValue={onValue}
+      />,
     );
 
-    await userEvent.click(screen.getByRole('spinbutton', { name: 'Minutos' }));
-    await userEvent.keyboard('{ArrowUp}');
-
-    // Brasília 02:31 = 05:31 UTC; LA's nonexistent local 02:31 must not become 03:31.
-    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:31:00.000Z');
-  });
-
-  it('types a Brasília gap time into an empty picker', async () => {
-    const onValue = vi.fn();
-    const { container } = renderWithProviders(<Host type="datetime" onValue={onValue} />);
-
-    await userEvent.click(screen.getByRole('spinbutton', { name: 'Dia' }));
-    await userEvent.keyboard('140320270230');
-
-    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:30');
-    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:30:00.000Z');
-  });
-
-  it('pastes a Brasília gap time into the actual picker', async () => {
-    const user = userEvent.setup();
-    const onValue = vi.fn();
-    const { container } = renderWithProviders(<Host type="datetime" onValue={onValue} />);
-
-    await user.click(screen.getByRole('spinbutton', { name: 'Dia' }));
-    await user.paste('14/03/2027 02:30');
-
-    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:30');
-    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:30:00.000Z');
-  });
-
-  it('compares a gap minimum using the visible minute precision', async () => {
-    const { container } = renderWithProviders(
-      <Host type="datetime" initial="2027-03-14T05:30:00.000Z" min="2027-03-14T05:30:45.123Z" />,
-    );
-
-    expect(screen.getByRole('group', { name: 'Data e hora' })).toHaveAttribute(
-      'aria-invalid',
-      'false',
-    );
     await userEvent.click(screen.getByRole('spinbutton', { name: 'Minutos' }));
     await userEvent.keyboard('{ArrowDown}');
 
-    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:29');
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:30:00.000Z');
     expect(screen.getByRole('group', { name: 'Data e hora' })).toHaveAttribute(
       'aria-invalid',
       'true',
+    );
+    await userEvent.keyboard('{ArrowUp}');
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:31:00.000Z');
+    expect(screen.getByRole('group', { name: 'Data e hora' })).toHaveAttribute(
+      'aria-invalid',
+      'false',
     );
   });
 
@@ -196,17 +153,6 @@ describe('DateField (datetime)', () => {
 });
 
 describe('DateField (date)', () => {
-  it('edits a calendar date on the browser DST transition without shifting the day', async () => {
-    const onValue = vi.fn();
-    const { container } = renderWithProviders(<Host initial="2027-03-14" onValue={onValue} />);
-
-    expect(container.querySelector('input')).toHaveValue('14/03/2027');
-    await userEvent.click(screen.getByRole('spinbutton', { name: 'Dia' }));
-    await userEvent.keyboard('{ArrowUp}');
-
-    expect(container.querySelector('input')).toHaveValue('15/03/2027');
-    expect(onValue).toHaveBeenLastCalledWith('2027-03-15');
-  });
   it.each(['light', 'dark'] as const)(
     'shows a calendar date as is and passes axe (%s)',
     async (scheme) => {

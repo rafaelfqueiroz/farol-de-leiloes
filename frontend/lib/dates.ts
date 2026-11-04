@@ -128,19 +128,14 @@ export function instantToWallClock(value: string): Date {
   return new TZDate(parsed.date, TIME_ZONE);
 }
 
-/** DS-26: picker edits have minute precision; seconds/milliseconds serialize as zero. */
+/**
+ * AR-22, DS-26: serialize the represented instant to minutes, never reinterpret local fields.
+ * Construct Brasília wall times with TZDate; a native Date already represents an instant.
+ */
 export function wallClockToInstant(wall: Date): string {
-  const zoned = new TZDate(
-    wall.getFullYear(),
-    wall.getMonth(),
-    wall.getDate(),
-    wall.getHours(),
-    wall.getMinutes(),
-    0,
-    0,
-    TIME_ZONE,
-  );
-  return toUtcInstant(zoned);
+  // Work on the timestamp: native local setters can select the other occurrence of a
+  // repeated minute during a browser fall-back, changing even an already valid instant.
+  return toUtcInstant(new Date(Math.floor(wall.getTime() / MINUTE) * MINUTE));
 }
 
 /** AR-22: construct a picker calendar date from its own parts, never from a UTC instant. */

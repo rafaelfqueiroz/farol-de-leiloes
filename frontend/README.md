@@ -178,17 +178,24 @@ Date values are serialized through `toUtcInstant` from `lib/dates.ts` (AR-22). I
 dates render the catalogue fallback through `DateText` and stay editable in `DateField`.
 
 `DateField` uses `BrasiliaDateAdapter`, a focused date-fns adapter extension whose construction
-and parsing entry points return Brasília `TZDate` values. Date-fns preserves that zone during
-picker edits, so a browser daylight-saving gap cannot normalize a valid Brasília time (#86).
+and parsing entry points return Brasília `TZDate` values. Construction accepts ISO strings
+(including a space delimiter); non-ISO legacy/RFC strings are intentionally unsupported. The
+private adapter fixes the zone to Brasília and ignores MUI's `timezone` argument, like the stock
+date-fns adapter. Date-fns preserves that zone during picker edits, so a browser daylight-saving
+gap cannot normalize a valid Brasília time (#86).
 Calendar dates are constructed from their own year/month/day and leave as `YYYY-MM-DD`.
-Date-time fields and their minimum have **minute precision**: hidden seconds/milliseconds are
-ignored in the picker, and edits emit UTC with `:00.000` seconds. Merely displaying an external
-value does not rewrite its parent string; an untouched form can retain its original precision.
-`instantToWallClock` itself preserves the instant's seconds/milliseconds; the field applies
-minute precision at its input boundary and `wallClockToInstant` at serialization.
+Date-time controls display and edit **whole minutes**, but the minimum keeps its exact
+seconds/milliseconds. An untouched external value retains its precision in both validation and
+the parent string. Edits normalize the draft and emitted UTC instant to `:00.000` seconds before
+validation: with a minimum of `02:30:50`, an untouched `02:30:55` is valid, while editing to
+`02:30` emits `02:30:00` and shows an error; `02:31` is the first valid whole minute.
+`instantToWallClock` preserves the instant's precision; `wallClockToInstant` serializes the
+represented instant to whole minutes without reinterpreting browser-local fields. Construct
+Brasília wall-clock inputs with `TZDate`, since a native `Date` already represents an instant.
 
-The general Vitest worker zone is pinned to `Asia/Tokyo`. Date helpers, the adapter and the real
-picker tests run in separate forked workers in `America/Los_Angeles`, `America/Sao_Paulo` and
+The general Vitest worker zone is pinned to `Asia/Tokyo`; generic picker interaction and axe
+tests run once. Date helpers, the adapter and focused `DateField.dst.test.tsx` cases run in
+separate forked workers in `America/Los_Angeles`, `America/Sao_Paulo` and
 `Asia/Tokyo`, asserting the actual native zone. Run only that matrix with
 `npm test -- --project 'dates:*'` (TS-11).
 
