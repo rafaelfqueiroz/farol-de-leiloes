@@ -29,6 +29,86 @@ function Host({
 }
 
 describe('DateField (datetime)', () => {
+  it('shows Brasília 02:30 in a browser DST gap (AR-23, #86)', () => {
+    const onValue = vi.fn();
+    const { container } = renderWithProviders(
+      <Host type="datetime" initial="2027-03-14T05:30:00.000Z" onValue={onValue} />,
+    );
+
+    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:30');
+    // Display alone does not rewrite the parent API string.
+    expect(onValue).not.toHaveBeenCalled();
+  });
+
+  it('edits the real picker during a browser DST gap and emits Brasília UTC (#86)', async () => {
+    const onValue = vi.fn();
+    renderWithProviders(
+      <Host type="datetime" initial="2027-03-14T05:30:00.000Z" onValue={onValue} />,
+    );
+
+    await userEvent.click(screen.getByRole('spinbutton', { name: 'Minutos' }));
+    await userEvent.keyboard('{ArrowUp}');
+
+    // Brasília 02:31 = 05:31 UTC; LA's nonexistent local 02:31 must not become 03:31.
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:31:00.000Z');
+  });
+
+  it('types a Brasília gap time into an empty picker', async () => {
+    const onValue = vi.fn();
+    const { container } = renderWithProviders(<Host type="datetime" onValue={onValue} />);
+
+    await userEvent.click(screen.getByRole('spinbutton', { name: 'Dia' }));
+    await userEvent.keyboard('140320270230');
+
+    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:30');
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:30:00.000Z');
+  });
+
+  it('pastes a Brasília gap time into the actual picker', async () => {
+    const user = userEvent.setup();
+    const onValue = vi.fn();
+    const { container } = renderWithProviders(<Host type="datetime" onValue={onValue} />);
+
+    await user.click(screen.getByRole('spinbutton', { name: 'Dia' }));
+    await user.paste('14/03/2027 02:30');
+
+    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:30');
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:30:00.000Z');
+  });
+
+  it('compares a gap minimum using the visible minute precision', async () => {
+    const { container } = renderWithProviders(
+      <Host type="datetime" initial="2027-03-14T05:30:00.000Z" min="2027-03-14T05:30:45.123Z" />,
+    );
+
+    expect(screen.getByRole('group', { name: 'Data e hora' })).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
+    await userEvent.click(screen.getByRole('spinbutton', { name: 'Minutos' }));
+    await userEvent.keyboard('{ArrowDown}');
+
+    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:29');
+    expect(screen.getByRole('group', { name: 'Data e hora' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  });
+
+  it('keeps untouched parent precision and emits whole minutes only after editing', async () => {
+    const onValue = vi.fn();
+    const { container } = renderWithProviders(
+      <Host type="datetime" initial="2027-03-14T05:30:45.123Z" onValue={onValue} />,
+    );
+
+    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:30');
+    expect(onValue).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('spinbutton', { name: 'Minutos' }));
+    await userEvent.keyboard('{ArrowUp}');
+
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:31:00.000Z');
+  });
+
   it('lets an invalid stored timestamp be corrected without breaking the form', async () => {
     const onValue = vi.fn();
     renderWithProviders(<Host type="datetime" initial="2026-03-10T15:30:00" onValue={onValue} />);
@@ -116,6 +196,17 @@ describe('DateField (datetime)', () => {
 });
 
 describe('DateField (date)', () => {
+  it('edits a calendar date on the browser DST transition without shifting the day', async () => {
+    const onValue = vi.fn();
+    const { container } = renderWithProviders(<Host initial="2027-03-14" onValue={onValue} />);
+
+    expect(container.querySelector('input')).toHaveValue('14/03/2027');
+    await userEvent.click(screen.getByRole('spinbutton', { name: 'Dia' }));
+    await userEvent.keyboard('{ArrowUp}');
+
+    expect(container.querySelector('input')).toHaveValue('15/03/2027');
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-15');
+  });
   it.each(['light', 'dark'] as const)(
     'shows a calendar date as is and passes axe (%s)',
     async (scheme) => {

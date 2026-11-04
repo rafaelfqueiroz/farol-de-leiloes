@@ -177,8 +177,20 @@ strings and handles the `ptBR` pickers centrally. Strict instant inputs use `try
 Date values are serialized through `toUtcInstant` from `lib/dates.ts` (AR-22). Invalid stored
 dates render the catalogue fallback through `DateText` and stay editable in `DateField`.
 
-The Vitest worker zone is pinned to `Asia/Tokyo`, so a Brasília developer host cannot hide a
-browser-local date regression.
+`DateField` uses `BrasiliaDateAdapter`, a focused date-fns adapter extension whose construction
+and parsing entry points return Brasília `TZDate` values. Date-fns preserves that zone during
+picker edits, so a browser daylight-saving gap cannot normalize a valid Brasília time (#86).
+Calendar dates are constructed from their own year/month/day and leave as `YYYY-MM-DD`.
+Date-time fields and their minimum have **minute precision**: hidden seconds/milliseconds are
+ignored in the picker, and edits emit UTC with `:00.000` seconds. Merely displaying an external
+value does not rewrite its parent string; an untouched form can retain its original precision.
+`instantToWallClock` itself preserves the instant's seconds/milliseconds; the field applies
+minute precision at its input boundary and `wallClockToInstant` at serialization.
+
+The general Vitest worker zone is pinned to `Asia/Tokyo`. Date helpers, the adapter and the real
+picker tests run in separate forked workers in `America/Los_Angeles`, `America/Sao_Paulo` and
+`Asia/Tokyo`, asserting the actual native zone. Run only that matrix with
+`npm test -- --project 'dates:*'` (TS-11).
 
 ## Technologies
 

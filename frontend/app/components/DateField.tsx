@@ -3,10 +3,9 @@
 import { useState } from 'react';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { ptBR as ptBRPickers } from '@mui/x-date-pickers/locales';
-import { isValid } from 'date-fns';
+import { isValid, startOfMinute } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   calendarToWallClock,
@@ -14,6 +13,7 @@ import {
   wallClockToCalendar,
   wallClockToInstant,
 } from '@/lib/dates';
+import { BrasiliaDateAdapter } from '@/lib/brasilia-date-adapter';
 
 // DS-26: @mui/x-date-pickers on the date-fns adapter, ptBR locale, Brasília zone (AR-23).
 const LOCALE_TEXT = ptBRPickers.components.MuiLocalizationProvider.defaultProps.localeText;
@@ -22,7 +22,8 @@ export interface DateFieldProps {
   label: string;
   /**
    * `date`: a `YYYY-MM-DD` calendar date, never shifted by a zone (AR-22).
-   * `datetime`: an ISO instant, shown and edited in Brasília time (AR-23).
+   * `datetime`: an ISO instant, shown and edited in Brasília time (AR-23), to the minute.
+   * Edits emit zero seconds/milliseconds; an untouched parent value is not rewritten.
    */
   type?: 'date' | 'datetime';
   /** The value in the form `type` names, or null. */
@@ -43,7 +44,10 @@ export interface DateFieldProps {
 function toPicker(value: string | null, type: 'date' | 'datetime'): Date | null {
   if (value === null) return null;
   try {
-    return type === 'datetime' ? instantToWallClock(value) : calendarToWallClock(value);
+    // DS-26: the field and its minimum have minute precision, matching the visible controls.
+    return type === 'datetime'
+      ? startOfMinute(instantToWallClock(value))
+      : calendarToWallClock(value);
   } catch (error: unknown) {
     // AR-22: malformed API dates stay empty and editable rather than breaking the form.
     if (error instanceof RangeError) return null;
@@ -93,7 +97,7 @@ export default function DateField({
 
   return (
     <LocalizationProvider
-      dateAdapter={AdapterDateFns}
+      dateAdapter={BrasiliaDateAdapter}
       adapterLocale={ptBR}
       localeText={LOCALE_TEXT}
     >

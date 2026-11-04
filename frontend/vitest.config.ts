@@ -1,6 +1,12 @@
 import react from '@vitejs/plugin-react';
 import { configDefaults, defineConfig } from 'vitest/config';
 
+const dateTests = [
+  'lib/dates.test.ts',
+  'lib/brasilia-date-adapter.test.ts',
+  'app/components/DateField.test.tsx',
+];
+
 export default defineConfig({
   plugins: [react()],
   // Vite 8 resolves the `@/` alias from tsconfig natively (DV-09)
@@ -10,8 +16,25 @@ export default defineConfig({
     // TS-06, AR-23: date regressions must also fail on a developer's Brasília host.
     env: { TZ: 'Asia/Tokyo' },
     setupFiles: ['./test/setup.ts'],
-    include: ['**/*.test.{ts,tsx}'],
     exclude: [...configDefaults.exclude, '.next/**'],
+    // TS-11, AR-23: forks apply the host zone before jsdom/MUI load. Keep the rest of the
+    // suite in Tokyo; run the actual picker and its bridge in every regression zone.
+    projects: [
+      {
+        extends: true as const,
+        test: { name: 'unit', exclude: [...configDefaults.exclude, '.next/**', ...dateTests] },
+      },
+      ...['America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Tokyo'].map((timeZone) => ({
+        extends: true as const,
+        test: {
+          name: `dates:${timeZone}`,
+          pool: 'forks' as const,
+          include: dateTests,
+          env: { TZ: timeZone },
+          provide: { timeZone },
+        },
+      })),
+    ],
     // TESTING §7: `npm run test:cov`. Every source file counts, imported by a test or not.
     coverage: {
       provider: 'v8',
