@@ -7,7 +7,7 @@ import { CreateCouponDto } from './dto/create-coupon.dto';
 import { Coupon } from './interfaces/coupon.interface';
 import { DomainError } from '../common/errors/domain-error';
 import { Clock } from '../common/clock/clock';
-import { inBrasilia, startOfBrasiliaDay } from '../common/clock/brasilia-time';
+import { endOfBrasiliaDay, inBrasilia, startOfBrasiliaDay } from '../common/clock/brasilia-time';
 import { fromDecimal128, toDecimal128 } from '../common/money/decimal128';
 import { PaymentGateway } from '../payments/payment-gateway';
 import {
@@ -16,6 +16,8 @@ import {
   paginated,
   skipOf,
 } from '../common/pagination/paginated';
+
+const BARE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 @Injectable()
 export class CouponsService {
@@ -29,8 +31,11 @@ export class CouponsService {
   ) {}
 
   async create(dto: CreateCouponDto): Promise<Coupon> {
-    // AR-23: a bare YYYY-MM-DD is midnight in Brasília; a full ISO instant keeps its own offset.
-    const validTo = new Date(parseISO(dto.validTo, { in: inBrasilia }).getTime());
+    // AR-23 / #83: "valid to D" means through the end of day D in Brasília, so a bare YYYY-MM-DD
+    // is 23:59:59.999 there; a full ISO instant keeps the caller's own instant.
+    const parsed = new Date(parseISO(dto.validTo, { in: inBrasilia }).getTime());
+    const validTo =
+      BARE_DATE.test(dto.validTo) && isValid(parsed) ? endOfBrasiliaDay(parsed) : parsed;
     // AR-24: "today or later" is today in Brasília, by the injected clock (moved here from the DTO,
     // whose validator read the host's clock and zone).
     if (!isValid(validTo) || validTo < startOfBrasiliaDay(this.clock.now())) {

@@ -3,7 +3,7 @@
 // @date-fns/tz and the IANA zone — never a fixed -03:00 offset (BR-003-28). Instants stay UTC
 // `Date`s (AR-22); this module only answers questions about Brasília's calendar and wall clock.
 import { TZDate, tz } from '@date-fns/tz';
-import { isSameDay, startOfDay } from 'date-fns';
+import { endOfDay, isSameDay, startOfDay } from 'date-fns';
 
 /** AR-23 / AR-25: the IANA zone of every date in the product, and of every @Cron. */
 export const BRASILIA_TIME_ZONE = 'America/Sao_Paulo';
@@ -40,6 +40,11 @@ export function brasiliaWallClockToInstant({
 /** Midnight in Brasília of the Brasília day `instant` falls on, as a UTC instant. */
 export function startOfBrasiliaDay(instant: Date): Date {
   return new Date(startOfDay(instant, { in: inBrasilia }).getTime());
+}
+
+/** 23:59:59.999 in Brasília of the Brasília day `instant` falls on, as a UTC instant. */
+export function endOfBrasiliaDay(instant: Date): Date {
+  return new Date(endOfDay(instant, { in: inBrasilia }).getTime());
 }
 
 /** Whether two instants fall on the same calendar day in Brasília. */

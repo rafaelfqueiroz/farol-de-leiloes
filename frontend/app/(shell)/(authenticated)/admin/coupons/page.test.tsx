@@ -14,7 +14,7 @@ const coupon = {
   _id: 'c1',
   code: 'DEZ',
   discountValue: '10.00',
-  validTo: '2026-12-31T03:00:00.000Z', // midnight at the start of 31 December in Brasília
+  validTo: '2027-01-01T02:59:59.999Z', // the end of 31 December in Brasília (#83)
   active: true,
   createdAt: '2026-01-01T03:00:00.000Z',
 };

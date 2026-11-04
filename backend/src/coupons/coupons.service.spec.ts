@@ -47,8 +47,8 @@ describe('CouponsService.create', () => {
 
     const coupon = await service.create(dto('2026-12-31'));
 
-    // A bare date is midnight in Brasília: 2026-12-31T03:00Z.
-    const validTo = new Date('2026-12-31T03:00:00.000Z');
+    // A bare date is valid through the end of that day in Brasília (#83): 2027-01-01T02:59:59.999Z.
+    const validTo = new Date('2027-01-01T02:59:59.999Z');
     expect(gateway.discountAmounts()).toEqual(['25.5']);
     expect(gateway.discounts[0]).toMatchObject({ code: 'BEMVINDO', expiresAt: validTo });
     expect(saved).toEqual([
@@ -70,6 +70,52 @@ describe('CouponsService.create', () => {
     await service.create(dto('2026-06-30T23:59:59Z'));
 
     expect(gateway.discounts[0]?.expiresAt).toEqual(new Date('2026-06-30T23:59:59.000Z'));
+  });
+
+  it('stores a bare date as the end of that day in Brasília and sends the same instant to the provider (#83)', async () => {
+    const { service, gateway, saved } = build(new Date('2026-01-15T03:00:00.000Z'));
+
+    const coupon = await service.create(dto('2026-01-15'));
+
+    const validTo = new Date('2026-01-16T02:59:59.999Z');
+    expect(saved[0]?.validTo).toEqual(validTo);
+    expect(gateway.discounts[0]?.expiresAt).toEqual(validTo);
+    expect(coupon.validTo).toEqual(validTo);
+  });
+
+  // TS-11: the last day of a month and a leap day end at 23:59:59.999 Brasília.
+  it.each([
+    ['2026-11-30', '2026-12-01T02:59:59.999Z'],
+    ['2028-02-29', '2028-03-01T02:59:59.999Z'],
+  ])('ends %s at the end of that Brasília day', async (day, expected) => {
+    const { service, saved } = build(new Date('2026-01-15T12:00:00.000Z'));
+
+    await service.create(dto(day));
+
+    expect(saved[0]?.validTo).toEqual(new Date(expected));
+  });
+
+  it('creates a coupon valid to today at 23:59 Brasília and it is not already expired (#83)', async () => {
+    const created = build(new Date('2026-01-15T02:59:00.000Z'));
+    const coupon = await created.service.create(dto('2026-01-14'));
+
+    const validate = build(new Date('2026-01-15T02:59:00.000Z'), {
+      _id: new Types.ObjectId('64b7f00000000000000000dd'),
+      code: 'BEMVINDO',
+      discountValue: Types.Decimal128.fromString('10'),
+      validTo: coupon.validTo,
+      active: true,
+      createdAt: CREATED,
+    });
+    await expect(validate.service.validateCoupon('bemvindo')).resolves.toMatchObject({
+      code: 'BEMVINDO',
+    });
+  });
+
+  it('creates a coupon valid to today at 00:00 Brasília', async () => {
+    const { service } = build(new Date('2026-01-14T03:00:00.000Z'));
+
+    await expect(service.create(dto('2026-01-14'))).resolves.toMatchObject({ code: 'BEMVINDO' });
   });
 
   // TS-11: at 23:59 in Brasília on 14/01 (02:59 UTC on 15/01) it is still 14/01 here, so a coupon
@@ -107,6 +153,16 @@ describe('CouponsService.validateCoupon', () => {
     active: true,
     createdAt: CREATED,
     ...overrides,
+  });
+
+  // #83 / TS-11: a coupon valid to 30/11 lasts through 23:59:59.999 Brasília, gone at 00:00 on 1/12.
+  it('BR: a coupon valid to a day works through its last millisecond in Brasília', async () => {
+    const endOfDay = stored({ validTo: new Date('2026-12-01T02:59:59.999Z') });
+    const at = (now: string) => build(new Date(now), endOfDay).service.validateCoupon('bemvindo');
+
+    await expect(at('2026-11-30T15:00:00.000Z')).resolves.toMatchObject({ code: 'BEMVINDO' });
+    await expect(at('2026-12-01T02:59:59.999Z')).resolves.toMatchObject({ code: 'BEMVINDO' });
+    await expect(at('2026-12-01T03:00:00.000Z')).rejects.toEqual(new DomainError('COUPON_INVALID'));
   });
 
   it('answers a valid coupon until the instant it expires, by the clock', async () => {

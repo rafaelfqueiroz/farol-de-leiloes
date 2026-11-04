@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BRASILIA_TIME_ZONE,
   brasiliaWallClockToInstant,
+  endOfBrasiliaDay,
   isSameBrasiliaDay,
   startOfBrasiliaDay,
 } from './brasilia-time';
@@ -81,6 +82,36 @@ describe('startOfBrasiliaDay', () => {
     // 01/03/2028 02:30 UTC = 29/02/2028 23:30 in Brasília.
     expect(startOfBrasiliaDay(utc('2028-03-01T02:30:00.000Z'))).toEqual(
       utc('2028-02-29T03:00:00.000Z'),
+    );
+  });
+});
+
+describe('endOfBrasiliaDay', () => {
+  it('is 23:59:59.999 Brasília (02:59:59.999 UTC next day) for 23:59 and for 00:00 on the day', () => {
+    // 15/01/2026 23:59 and 00:00 in Brasília.
+    expect(endOfBrasiliaDay(utc('2026-01-16T02:59:00.000Z'))).toEqual(
+      utc('2026-01-16T02:59:59.999Z'),
+    );
+    expect(endOfBrasiliaDay(utc('2026-01-15T03:00:00.000Z'))).toEqual(
+      utc('2026-01-16T02:59:59.999Z'),
+    );
+  });
+
+  it('ends the month on the last Brasília day', () => {
+    expect(endOfBrasiliaDay(utc('2026-11-30T15:00:00.000Z'))).toEqual(
+      utc('2026-12-01T02:59:59.999Z'),
+    );
+  });
+
+  it('ends 29 February in a leap year', () => {
+    expect(endOfBrasiliaDay(utc('2028-02-29T03:00:00.000Z'))).toEqual(
+      utc('2028-03-01T02:59:59.999Z'),
+    );
+  });
+
+  it('ends the year on 31 December', () => {
+    expect(endOfBrasiliaDay(utc('2026-12-31T03:00:00.000Z'))).toEqual(
+      utc('2027-01-01T02:59:59.999Z'),
     );
   });
 });
