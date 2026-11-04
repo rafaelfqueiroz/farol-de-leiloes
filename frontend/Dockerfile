@@ -14,8 +14,10 @@ COPY . .
 # arguments. They are public by definition and never hold a secret (SC-16).
 ARG NEXT_PUBLIC_AUCTIONS_API_URL
 ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_AUCTIONS_API_URL=$NEXT_PUBLIC_AUCTIONS_API_URL \
-  NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+  NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+  NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 RUN npm run build
 
 # --- runtime ------------------------------------------------------------------------------

@@ -19,6 +19,8 @@ export const publicEnvSchema = z.object({
   NEXT_PUBLIC_SITE_URL: urlWithDefault('https://faroldosleiloes.com.br').transform(
     withoutTrailingSlash,
   ),
+  // AR-47: a Sentry DSN is public by design (SC-16). Unset, Sentry is inert.
+  NEXT_PUBLIC_SENTRY_DSN: optionalUrl,
 });
 
 // Server-only values. Never `NEXT_PUBLIC_*`, and never read from a client component.
@@ -34,6 +36,8 @@ export type PublicEnv = {
   apiUrl: string;
   /** Canonical site origin, for metadata, the sitemap and robots. */
   siteUrl: string;
+  /** Sentry DSN; `undefined` keeps error reporting off (AR-47). */
+  sentryDsn: string | undefined;
 };
 export type ServerEnv = {
   /** Backend origin for server-side calls, without a trailing slash and without `/api`. */
@@ -45,6 +49,7 @@ export function parsePublicEnv(raw: Record<string, string | undefined>): PublicE
   return {
     apiUrl: parsed.NEXT_PUBLIC_AUCTIONS_API_URL,
     siteUrl: parsed.NEXT_PUBLIC_SITE_URL,
+    sentryDsn: parsed.NEXT_PUBLIC_SENTRY_DSN,
   };
 }
 
@@ -58,6 +63,7 @@ export function parseServerEnv(raw: Record<string, string | undefined>): ServerE
 export const publicEnv: PublicEnv = parsePublicEnv({
   NEXT_PUBLIC_AUCTIONS_API_URL: process.env.NEXT_PUBLIC_AUCTIONS_API_URL,
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+  NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
 });
 
 // Lazy so that importing this module from a shared file never touches server-only values, and so
@@ -72,3 +78,7 @@ export function serverEnv(): ServerEnv {
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   });
 }
+
+// TS-07: external services stay inert under test. NODE_ENV is set by Next.js and Vitest, not by
+// configuration, so it is not part of the documented schema.
+export const isTestRuntime: boolean = process.env.NODE_ENV === 'test';

@@ -4,11 +4,16 @@ import { type INestApplication, ValidationPipe, type ValidationError } from '@ne
 import { ConfigService } from '@nestjs/config';
 import { ApiExceptionFilter } from './common/errors/api-exception.filter';
 import { DomainError } from './common/errors/domain-error';
+import { requestContextMiddleware } from './common/observability/request-context';
 import type { AppConfigService } from './config/env';
 import { serveOpenApiDocs } from './openapi';
 
 export function configureApp(app: INestApplication): void {
   const config = app.get<AppConfigService>(ConfigService);
+
+  // AR-46: first in the chain, so everything after it (body parsing, guards, handlers, the error
+  // filter) logs with the request's correlation id, echoed as x-request-id.
+  app.use(requestContextMiddleware);
 
   app.setGlobalPrefix('api'); // AR-32
 

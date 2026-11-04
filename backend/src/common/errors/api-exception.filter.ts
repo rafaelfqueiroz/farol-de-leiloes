@@ -1,7 +1,8 @@
 // AR-38: the one place an error becomes an HTTP response, always `{ code, context }`.
 //   DomainError        → its code, the status from ERROR_STATUS, its context (AR-37, AR-40)
 //   built-in HTTP error → a generic code by status (unknown route, passport 401, body too large...)
-//   anything else       → logged, answered as a bare 500 INTERNAL_ERROR (ARCHITECTURE §9 faults)
+//   anything else       → logged, reported to Sentry, answered as a bare 500 INTERNAL_ERROR
+//                         (ARCHITECTURE §9 faults, AR-47)
 // No message, stack or request value ever reaches the response body (SC-15).
 import {
   type ArgumentsHost,
@@ -11,6 +12,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import { captureException } from '@sentry/nestjs';
 import type { Request, Response } from 'express';
 import type { ErrorCode } from './codes';
 import { DomainError, type ErrorContext } from './domain-error';
@@ -57,12 +59,16 @@ export class ApiExceptionFilter implements ExceptionFilter {
   // SC-15: the route pattern, never the URL (it may carry a token or an id the user typed), and
   // the stack without its first line, which repeats the message (a duplicate-key error quotes
   // the email it collided on).
+  // AR-47: the fault also goes to Sentry, tagged with the method and route pattern only; the
+  // scrubber (observability/sentry-scrubber.ts) removes the message and request data from the
+  // event. Without a DSN (and in tests) Sentry is not initialised and this is a no-op (TS-07).
   private logFault(exception: unknown, request: Request): void {
     const route = (request.route as { path?: string } | undefined)?.path ?? '(no route)';
     const name = exception instanceof Error ? exception.name : typeof exception;
     const frames =
       exception instanceof Error ? exception.stack?.split('\n').slice(1).join('\n') : undefined;
     this.logger.error(`Unhandled ${name} on ${request.method} ${route}`, frames);
+    captureException(exception, { tags: { method: request.method, route } });
   }
 }
 

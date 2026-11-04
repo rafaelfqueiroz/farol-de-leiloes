@@ -162,6 +162,8 @@ SPEC-003 BR-003-23 to BR-003-28 put every date the product shows, accepts or sch
 | **AR-47** | Sentry runs on backend and frontend with request bodies, headers, cookies and query strings scrubbed (`sendDefaultPii: false` plus a `beforeSend` scrubber). Sentry captures them by default, which would break SPEC-002 BR-002-28 on day one. |
 | **AR-48** | `GET /api/health` reports database reachability and the outcome and age of the last Caixa import. It is what the availability probe (SPEC-003 BR-003-02) and the deploy health check use. |
 
+Where it lives (#36): the logger options, the request and job correlation context (`@InJobContext` on every `@Cron`, enforced by `test/structural/cron-job-context.spec.ts`), the user hash and the Sentry scrubber are in `backend/src/common/observability/`; `src/instrument.ts` initialises Sentry before anything else loads. Sentry SDK v11 replaced the `sendDefaultPii` flag with `dataCollection`, which is set to collect no personal data (AR-47's intent). The health endpoint is `backend/src/health/`, its fields are explained in [the health-check runbook](../runbooks/health-check.md). Every job run, failed ones included, is recorded in `jobexecutions` with a `status` and, when failed, a stable `errorCode` (AR-03, SC-15).
+
 ## 12. Frontend structure
 
 | | |
