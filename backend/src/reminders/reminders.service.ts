@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { parseISO } from 'date-fns';
+import { parseISO, roundToNearestMinutes } from 'date-fns';
 import {
   ReminderEntity,
   ReminderDocument,
@@ -293,7 +293,18 @@ export class RemindersService {
   private validateAndNormalizeScheduledAt(scheduledAtStr: string, auctionStartDate: Date): Date {
     // An ISO string from the DTO: an offset, when given, says which instant it is; without one
     // it is Brasília wall-clock time (AR-23), never the server's own zone.
-    const scheduledAt = new Date(parseISO(scheduledAtStr, { in: inBrasilia }).getTime());
+    const parsed = parseISO(scheduledAtStr, { in: inBrasilia });
+
+    // AR-23 / #82: round to the nearest 15 minutes in Brasília time, seconds and milliseconds
+    // dropped, BEFORE validating — the stored instant is what must be in the future and before the
+    // auction start. date-fns v4 truncates by default, so the rounding method is explicit.
+    const scheduledAt = new Date(
+      roundToNearestMinutes(parsed, {
+        nearestTo: 15,
+        roundingMethod: 'round',
+        in: inBrasilia,
+      }).getTime(),
+    );
 
     if (scheduledAt <= this.clock.now()) {
       throw new DomainError('REMINDER_DATE_IN_PAST');
@@ -301,15 +312,6 @@ export class RemindersService {
 
     if (scheduledAt >= auctionStartDate) {
       throw new DomainError('REMINDER_AFTER_AUCTION_START');
-    }
-
-    const minutes = scheduledAt.getMinutes();
-    const normalizedMinutes = Math.round(minutes / 15) * 15;
-
-    if (normalizedMinutes !== minutes) {
-      scheduledAt.setMinutes(normalizedMinutes);
-      scheduledAt.setSeconds(0);
-      scheduledAt.setMilliseconds(0);
     }
 
     return scheduledAt;
