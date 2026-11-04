@@ -1,3 +1,5 @@
+import type { SubscriptionStatus } from '../../users/subscription-status';
+
 export interface UserProfile {
   _id: string;
   email: string;
@@ -5,6 +7,7 @@ export interface UserProfile {
   providers: string[];
   emailVerified: boolean;
   role: string;
+  subscriptionStatus: SubscriptionStatus | null;
   phone?: string;
   cpf?: string;
   dateOfBirth?: Date;
@@ -34,6 +37,7 @@ export interface AuthenticatedUser {
   emailVerified: boolean;
   providers: string[];
   role: string;
+  subscriptionStatus: SubscriptionStatus | null;
 }
 
 export interface AuthResult {

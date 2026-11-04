@@ -1,7 +1,9 @@
 // AR-36: the payment endpoints' responses, each field copied explicitly.
 import { ApiProperty } from '@nestjs/swagger';
 
-export const SUBSCRIPTION_STATUSES = ['active', 'canceled', 'past_due', 'incomplete'] as const;
+import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status';
+
+export { SUBSCRIPTION_STATUSES };
 
 export class CheckoutSessionResponseDto {
   @ApiProperty({ type: String, format: 'uri', description: 'Stripe Checkout page to redirect to' })

@@ -18,6 +18,7 @@ export const TEST_USER: AuthenticatedUser = {
   emailVerified: true,
   providers: ['local'],
   role: 'standard',
+  subscriptionStatus: 'active',
 };
 
 export interface HttpAppOptions {

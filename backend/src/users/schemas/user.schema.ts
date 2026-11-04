@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import { SUBSCRIPTION_STATUSES, SubscriptionStatus } from '../subscription-status';
 
 export type UserDocument = UserEntity & Document;
 
@@ -49,10 +50,10 @@ export class UserEntity extends Document {
   @Prop({
     type: String,
     required: false,
-    enum: ['active', 'canceled', 'past_due', 'incomplete', null],
+    enum: [...SUBSCRIPTION_STATUSES, null],
     default: null,
   })
-  subscriptionStatus?: string | null;
+  subscriptionStatus?: SubscriptionStatus | null;
 
   // Profile fields
   @Prop({ required: false })

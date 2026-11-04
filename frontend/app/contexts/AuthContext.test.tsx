@@ -87,4 +87,27 @@ describe('AuthProvider', () => {
     expect(result.current.user).toMatchObject({ _id: 'u1', email: 'a@b.com' });
     expect(result.current.user).not.toHaveProperty('userId');
   });
+
+  // Issue #75: hasSubscription comes from the subscriptionStatus GET /auth/me returns.
+  it.each([
+    ['active', true],
+    ['canceled', false],
+    ['past_due', false],
+    [null, false],
+  ])('hasSubscription for /auth/me subscriptionStatus %s is %s', async (status, expected) => {
+    window.localStorage.setItem('token', 'jwt');
+    answerWith(200, {
+      userId: 'u1',
+      email: 'a@b.com',
+      name: 'A',
+      providers: [],
+      role: 'free',
+      subscriptionStatus: status,
+    });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => expect(result.current.user).not.toBeNull());
+
+    expect(result.current.hasSubscription).toBe(expected);
+  });
 });
