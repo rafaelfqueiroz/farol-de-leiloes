@@ -23,7 +23,8 @@ export class CreateCouponDto {
   @ApiProperty({
     type: String,
     format: 'date-time',
-    description: 'Today (Brasília) or later; a bare YYYY-MM-DD is midnight in Brasília',
+    description:
+      'Today (Brasília) or later; a bare YYYY-MM-DD is valid through the end of that day in Brasília',
   })
   @IsDateString()
   @IsNotEmpty()
