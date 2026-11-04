@@ -72,26 +72,26 @@ describe('SearchFilters price range', () => {
     render(
       <SearchFilters
         onSearch={onSearch}
-        initialFilters={{ minMargin: '50000.00', maxMargin: '1500000.00' }}
+        initialFilters={{ minPrice: '50000.00', maxPrice: '1500000.00' }}
       />,
     );
 
     await userEvent.click(search());
 
     expect(onSearch).toHaveBeenCalledWith(
-      expect.objectContaining({ minMargin: '50000.00', maxMargin: '1500000.00' }),
+      expect.objectContaining({ minPrice: '50000.00', maxPrice: '1500000.00' }),
     );
   });
 
   it('sends no bound for a thumb left at the end of the slider', async () => {
     const onSearch = vi.fn();
-    render(<SearchFilters onSearch={onSearch} initialFilters={{ minMargin: '100000' }} />);
+    render(<SearchFilters onSearch={onSearch} initialFilters={{ minPrice: '100000' }} />);
 
     await userEvent.click(search());
 
     const sent = onSearch.mock.calls[0]?.[0];
-    expect(sent.minMargin).toBe('100000.00');
-    expect(sent.maxMargin).toBeUndefined();
+    expect(sent.minPrice).toBe('100000.00');
+    expect(sent.maxPrice).toBeUndefined();
   });
 
   it('saves the price bounds as money strings', async () => {
@@ -99,7 +99,7 @@ describe('SearchFilters price range', () => {
     render(
       <SearchFilters
         onSearch={vi.fn()}
-        initialFilters={{ minMargin: '250000.00', maxMargin: '1000000.00' }}
+        initialFilters={{ minPrice: '250000.00', maxPrice: '1000000.00' }}
       />,
     );
 
@@ -109,7 +109,7 @@ describe('SearchFilters price range', () => {
 
     expect(env.saved.saveFilter).toHaveBeenCalledWith(
       'Casas',
-      expect.objectContaining({ minMargin: '250000.00', maxMargin: '1000000.00' }),
+      expect.objectContaining({ minPrice: '250000.00', maxPrice: '1000000.00' }),
     );
   });
 
@@ -117,7 +117,7 @@ describe('SearchFilters price range', () => {
     render(
       <SearchFilters
         onSearch={vi.fn()}
-        initialFilters={{ minMargin: '50000.00', maxMargin: '1500000.00' }}
+        initialFilters={{ minPrice: '50000.00', maxPrice: '1500000.00' }}
       />,
     );
 

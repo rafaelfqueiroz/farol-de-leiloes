@@ -30,10 +30,10 @@ export class ChatResponseDto {
 
   // AR-17: price bounds in reais, as strings; pass them to GET /api/auctions unchanged.
   @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Lowest minimum price, BRL' })
-  minMargin?: string;
+  minPrice?: string;
 
   @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Highest minimum price, BRL' })
-  maxMargin?: string;
+  maxPrice?: string;
 
   @ApiPropertyOptional({ type: 'integer', minimum: 1 })
   page?: number;
@@ -46,8 +46,8 @@ export class ChatResponseDto {
     this.city = params.city;
     this.neighborhood = params.neighborhood;
     this.modality = params.modality;
-    this.minMargin = moneyToJson(params.minMargin);
-    this.maxMargin = moneyToJson(params.maxMargin);
+    this.minPrice = moneyToJson(params.minPrice);
+    this.maxPrice = moneyToJson(params.maxPrice);
     this.page = params.page;
     this.pageSize = params.pageSize;
   }

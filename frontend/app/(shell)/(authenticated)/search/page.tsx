@@ -32,16 +32,16 @@ function filtersFromQuery(query: QueryReader): AuctionFilters {
   const city = query.get('city');
   const neighborhood = query.get('neighborhood');
   const modality = query.get('modality');
-  const minMargin = query.get('minMargin');
-  const maxMargin = query.get('maxMargin');
+  const minPrice = query.get('minPrice');
+  const maxPrice = query.get('maxPrice');
   return {
     state: state || undefined,
     city: city ? city.split(',') : undefined,
     neighborhood: neighborhood ? neighborhood.split(',') : undefined,
     modality: modality ? modality.split(',') : undefined,
     // AR-17: price bounds stay money strings; a hand-edited URL with anything else is ignored
-    minMargin: minMargin && isMoneyString(minMargin) ? minMargin : undefined,
-    maxMargin: maxMargin && isMoneyString(maxMargin) ? maxMargin : undefined,
+    minPrice: minPrice && isMoneyString(minPrice) ? minPrice : undefined,
+    maxPrice: maxPrice && isMoneyString(maxPrice) ? maxPrice : undefined,
   };
 }
 
@@ -51,8 +51,8 @@ function hasFilters(filters: AuctionFilters): boolean {
     filters.city?.length ||
     filters.neighborhood?.length ||
     filters.modality?.length ||
-    filters.minMargin ||
-    filters.maxMargin,
+    filters.minPrice ||
+    filters.maxPrice,
   );
 }
 
@@ -64,8 +64,8 @@ function searchQuery(filters: AuctionFilters, page: number): string {
     params.set('neighborhood', filters.neighborhood.join(','));
   if (filters.modality && filters.modality.length > 0)
     params.set('modality', filters.modality.join(','));
-  if (filters.minMargin) params.set('minMargin', filters.minMargin);
-  if (filters.maxMargin) params.set('maxMargin', filters.maxMargin);
+  if (filters.minPrice) params.set('minPrice', filters.minPrice);
+  if (filters.maxPrice) params.set('maxPrice', filters.maxPrice);
   if (page > 1) params.set('page', page.toString());
   return params.toString();
 }
@@ -110,8 +110,8 @@ function SearchPageContent() {
       // Handle modality as array - join with comma for API
       if (filters.modality && filters.modality.length > 0)
         params.set('modality', filters.modality.join(','));
-      if (filters.minMargin) params.set('minMargin', filters.minMargin);
-      if (filters.maxMargin) params.set('maxMargin', filters.maxMargin);
+      if (filters.minPrice) params.set('minPrice', filters.minPrice);
+      if (filters.maxPrice) params.set('maxPrice', filters.maxPrice);
       // AR-35: the API pages by number and size
       params.set('page', page.toString());
       params.set('pageSize', size.toString());

@@ -118,7 +118,7 @@ describe('Money round trip through MongoDB (integration)', () => {
     it('filters by price with inclusive Decimal128 bounds', async () => {
       const codes = async (min: string, max: string) =>
         (
-          await auctions.query({ minMargin: new Decimal(min), maxMargin: new Decimal(max) }, PAGE)
+          await auctions.query({ minPrice: new Decimal(min), maxPrice: new Decimal(max) }, PAGE)
         ).items
           .map((auction) => auction.code)
           .sort();
@@ -184,12 +184,12 @@ describe('Money round trip through MongoDB (integration)', () => {
     it('stores the price bounds as Decimal128 and reads them back exactly', async () => {
       await savedFilters.create(USER.toString(), 'Até 300 mil', {
         state: 'RN',
-        maxMargin: new Decimal('300000.50'),
+        maxPrice: new Decimal('300000.50'),
       });
 
       const raw = await savedFilterModel.collection.findOne({ name: 'Até 300 mil' });
-      expect(raw?.filters.maxMargin).toEqual(Types.Decimal128.fromString('300000.5'));
-      expect(raw?.filters).not.toHaveProperty('minMargin');
+      expect(raw?.filters.maxPrice).toEqual(Types.Decimal128.fromString('300000.5'));
+      expect(raw?.filters).not.toHaveProperty('minPrice');
     });
 
     it('reads stored bounds back digit for digit, and a null bound as absent', async () => {
@@ -198,8 +198,8 @@ describe('Money round trip through MongoDB (integration)', () => {
         name: 'Migrado',
         filters: {
           city: ['Natal'],
-          minMargin: null,
-          maxMargin: Types.Decimal128.fromString('250000.5'),
+          minPrice: null,
+          maxPrice: Types.Decimal128.fromString('250000.5'),
         },
         createdAt: new Date('2025-01-01T00:00:00.000Z'),
         updatedAt: NOW,
@@ -209,9 +209,9 @@ describe('Money round trip through MongoDB (integration)', () => {
       const byName = new Map(page.items.map((filter) => [filter.name, filter.filters]));
       expect(byName.get('Migrado')).toEqual({
         city: ['Natal'],
-        maxMargin: new Decimal('250000.5'),
+        maxPrice: new Decimal('250000.5'),
       });
-      expect(byName.get('Até 300 mil')?.maxMargin?.toFixed()).toBe('300000.5');
+      expect(byName.get('Até 300 mil')?.maxPrice?.toFixed()).toBe('300000.5');
     });
   });
 });

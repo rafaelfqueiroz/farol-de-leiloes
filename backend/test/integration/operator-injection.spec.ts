@@ -175,10 +175,10 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       await expect(auctions.query({ neighborhood: GT_EMPTY }, page)).rejects.toMatchObject(refused);
       await expect(auctions.query({ modality: NE_NULL }, page)).rejects.toMatchObject(refused);
       await expect(
-        auctions.query({ minMargin: NE_NULL as unknown as Decimal }, page),
+        auctions.query({ minPrice: NE_NULL as unknown as Decimal }, page),
       ).rejects.toMatchObject(refused);
       await expect(
-        auctions.query({ maxMargin: new Decimal(Number.NaN) }, page),
+        auctions.query({ maxPrice: new Decimal(Number.NaN) }, page),
       ).rejects.toMatchObject(refused);
     });
 
@@ -199,15 +199,15 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       ).resolves.toEqual(['A2', 'A3']);
       const reais = (value: string) => new Decimal(value);
       await expect(
-        codes({ minMargin: reais('200000'), maxMargin: reais('300000') }),
+        codes({ minPrice: reais('200000'), maxPrice: reais('300000') }),
       ).resolves.toEqual(['A2']);
-      await expect(codes({ minMargin: reais('300000') })).resolves.toEqual(['A3']);
-      await expect(codes({ maxMargin: reais('100000') })).resolves.toEqual(['A1']);
+      await expect(codes({ minPrice: reais('300000') })).resolves.toEqual(['A3']);
+      await expect(codes({ maxPrice: reais('100000') })).resolves.toEqual(['A1']);
       // Inclusive bounds, compared by value: 100000.00 equals a stored 100000.
       await expect(
-        codes({ minMargin: reais('100000.00'), maxMargin: reais('250000') }),
+        codes({ minPrice: reais('100000.00'), maxPrice: reais('250000') }),
       ).resolves.toEqual(['A1', 'A2']);
-      await expect(codes({ minMargin: reais('250000.01') })).resolves.toEqual(['A3']);
+      await expect(codes({ minPrice: reais('250000.01') })).resolves.toEqual(['A3']);
     });
 
     it('treats a city with regex metacharacters as literal text', async () => {
