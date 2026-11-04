@@ -35,6 +35,7 @@ import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useReminders, Reminder, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useApiErrorMessage } from '@/lib/api-error';
+import { toUtcInstant, tryParseInstant } from '@/lib/dates';
 import DateField from './DateField';
 import DateText from './patterns/DateText';
 
@@ -84,7 +85,8 @@ export default function RemindersPage() {
   const handleOpenEditDialog = (reminder: Reminder) => {
     setSelectedReminder(reminder);
     setEditChannel(reminder.channel);
-    setEditScheduledAt(reminder.scheduledAt);
+    const instant = tryParseInstant(reminder.scheduledAt);
+    setEditScheduledAt(instant ? toUtcInstant(instant) : null);
     setEditDescription(reminder.description || '');
     setError(null);
     setEditDialogOpen(true);
@@ -109,7 +111,7 @@ export default function RemindersPage() {
   };
 
   const handleSaveEdit = async () => {
-    if (!selectedReminder || !editScheduledAt) {
+    if (!selectedReminder || !editScheduledAt || !tryParseInstant(editScheduledAt)) {
       setError('Selecione a data e hora do lembrete');
       return;
     }

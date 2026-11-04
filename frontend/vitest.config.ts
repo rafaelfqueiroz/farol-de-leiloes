@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: 'jsdom',
+    // TS-06, AR-23: date regressions must also fail on a developer's Brasília host.
+    env: { TZ: 'Asia/Tokyo' },
     setupFiles: ['./test/setup.ts'],
     include: ['**/*.test.{ts,tsx}'],
     exclude: [...configDefaults.exclude, '.next/**'],
@@ -17,11 +19,10 @@ export default defineConfig({
       exclude: ['**/*.test.{ts,tsx}', '**/*.d.ts'],
       reporter: ['text-summary', 'text', 'lcov'],
       thresholds: {
-        // A floor at the coverage measured when the gate was introduced (rounded down), not the
-        // target: TESTING §7 sets 80% lines and branches. The floor is ratcheted up toward 80%
-        // and tracked in #57; it never goes down.
-        lines: 24,
-        branches: 22,
+        // TESTING §7: floor rounded down from measured coverage, ratcheted up by #58.
+        // The target remains 80% lines and branches (#57); the floor never goes down.
+        lines: 55,
+        branches: 52,
       },
     },
   },

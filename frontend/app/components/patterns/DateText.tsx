@@ -45,11 +45,25 @@ export default function DateText({
   relative = false,
   now,
 }: DateTextProps) {
+  const t = useTranslations('patterns.dateText');
+  let dateTime: string;
+  let label: string;
+  try {
+    dateTime = toDateTimeAttribute(value);
+    label = withTime ? formatDateTime(value) : formatDate(value);
+  } catch (error: unknown) {
+    // AR-22, DS-29: one malformed legacy timestamp must not take down a whole list.
+    if (!(error instanceof RangeError)) throw error;
+    return (
+      <Typography component="span" variant="inherit">
+        {t('invalid')}
+      </Typography>
+    );
+  }
+
   return (
     <Typography component="span" variant="inherit" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-      <time dateTime={toDateTimeAttribute(value)}>
-        {withTime ? formatDateTime(value) : formatDate(value)}
-      </time>
+      <time dateTime={dateTime}>{label}</time>
       {relative ? <RelativeText parts={relativeParts(value, now ?? new Date())} /> : null}
     </Typography>
   );

@@ -7,13 +7,21 @@ import {
   parseDate,
   relativeParts,
   toDateTimeAttribute,
+  toUtcInstant,
+  tryParseInstant,
   wallClockToCalendar,
   wallClockToInstant,
 } from './dates';
+import { TZDate } from '@date-fns/tz';
+import { TIME_ZONE } from '@/i18n/config';
 
 // America/Sao_Paulo is UTC-3 all year (no DST since 2019), so the expectations are fixed.
 
 describe('formatDate', () => {
+  it('runs date regressions in the pinned non-Brasília zone (TS-06)', () => {
+    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe('Asia/Tokyo');
+    expect(new Date('2027-01-01T01:30:00Z').getHours()).toBe(10);
+  });
   it('formats an instant in Brasília time', () => {
     expect(formatDate('2026-03-10T15:30:00Z')).toBe('10/03/2026');
   });
@@ -38,6 +46,23 @@ describe('formatDate', () => {
     expect(formatDate('2026-03-10')).toBe('10/03/2026');
     expect(formatDate('2026-01-01')).toBe('01/01/2026');
     expect(formatDate('2028-02-29')).toBe('29/02/2028');
+  });
+});
+
+describe('strict instant form boundaries (AR-22/AR-23)', () => {
+  it('accepts zoned instants and rejects ambiguous, invalid or date-only input', () => {
+    expect(tryParseInstant('2026-03-10T12:30:00-03:00')?.getTime()).toBe(
+      Date.UTC(2026, 2, 10, 15, 30),
+    );
+    for (const input of ['2026-03-10T15:30:00', '2026-03-10', 'invalid', '']) {
+      expect(tryParseInstant(input)).toBeNull();
+    }
+  });
+
+  it('serializes Date subclasses as UTC instead of their local offset', () => {
+    const value = new TZDate('2027-01-01T01:30:00Z', TIME_ZONE);
+    expect(toUtcInstant(value)).toBe('2027-01-01T01:30:00.000Z');
+    expect(() => toUtcInstant(new Date('invalid'))).toThrow(RangeError);
   });
 });
 

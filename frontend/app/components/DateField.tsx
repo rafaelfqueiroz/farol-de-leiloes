@@ -42,7 +42,13 @@ export interface DateFieldProps {
 
 function toPicker(value: string | null, type: 'date' | 'datetime'): Date | null {
   if (value === null) return null;
-  return type === 'datetime' ? instantToWallClock(value) : calendarToWallClock(value);
+  try {
+    return type === 'datetime' ? instantToWallClock(value) : calendarToWallClock(value);
+  } catch (error: unknown) {
+    // AR-22: malformed API dates stay empty and editable rather than breaking the form.
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
 }
 
 function fromPicker(picked: Date | null, type: 'date' | 'datetime'): string | null {

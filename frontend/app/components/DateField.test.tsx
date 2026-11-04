@@ -29,6 +29,16 @@ function Host({
 }
 
 describe('DateField (datetime)', () => {
+  it('lets an invalid stored timestamp be corrected without breaking the form', async () => {
+    const onValue = vi.fn();
+    renderWithProviders(<Host type="datetime" initial="2026-03-10T15:30:00" onValue={onValue} />);
+
+    await userEvent.click(screen.getByRole('spinbutton', { name: 'Dia' }));
+    await userEvent.keyboard('100320262359');
+
+    expect(onValue).toHaveBeenLastCalledWith('2026-03-11T02:59:00.000Z');
+  });
+
   it.each(['light', 'dark'] as const)(
     'shows an instant as the Brasília wall clock and passes axe (%s)',
     async (scheme) => {

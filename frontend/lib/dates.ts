@@ -38,6 +38,22 @@ export function parseDate(value: string): ParsedDate {
   return { kind: 'instant', date };
 }
 
+/** Strict API/form boundary: ambiguous, invalid and date-only values have no reminder time. */
+export function tryParseInstant(value: string): Date | null {
+  try {
+    const parsed = parseDate(value);
+    return parsed.kind === 'instant' ? parsed.date : null;
+  } catch (error: unknown) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+}
+
+/** AR-22: normalize Date subclasses (including TZDate's offset ISO) to a UTC API instant. */
+export function toUtcInstant(value: Date): string {
+  return new Date(value.getTime()).toISOString();
+}
+
 /** `dd/MM/yyyy` (BR-003-20). A calendar date is formatted from its own parts, never shifted. */
 export function formatDate(value: string): string {
   const parsed = parseDate(value);
@@ -58,7 +74,7 @@ export function formatDateTime(value: string): string {
 /** Value for `<time dateTime>`: the calendar date as is, an instant normalised to UTC ISO. */
 export function toDateTimeAttribute(value: string): string {
   const parsed = parseDate(value);
-  return parsed.kind === 'calendar' ? value : parsed.date.toISOString();
+  return parsed.kind === 'calendar' ? value : toUtcInstant(parsed.date);
 }
 
 export type RelativeUnit = 'now' | 'today' | 'minutes' | 'hours' | 'days';
@@ -134,7 +150,7 @@ export function wallClockToInstant(wall: Date): string {
     0,
     TIME_ZONE,
   );
-  return new Date(zoned.getTime()).toISOString();
+  return toUtcInstant(zoned);
 }
 
 /** A `YYYY-MM-DD` calendar date -> a `Date` at local midnight; never converted through a zone (AR-22). */

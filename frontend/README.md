@@ -166,6 +166,20 @@ method, the raw body and the `Authorization` header, and returns the backend's s
 verbatim, so the `{ code, context }` error body (AR-37/AR-38) reaches the browser untouched. The BFF
 itself answers only `UNAUTHENTICATED` (401, no token) and `BACKEND_UNAVAILABLE` (502).
 
+## Dates and reminder pickers
+
+Dates use `date-fns` and `@date-fns/tz`, with the shared `TIME_ZONE` (`America/Sao_Paulo`)
+from `i18n/config.ts` (AR-22/AR-23). Render dates through `DateText` and the formatters in
+`lib/dates.ts` (DS-29).
+
+Reminder forms use the shared `DateField` primitive (DS-26), which accepts and returns API
+strings and handles the `ptBR` pickers centrally. Strict instant inputs use `tryParseInstant`;
+Date values are serialized through `toUtcInstant` from `lib/dates.ts` (AR-22). Invalid stored
+dates render the catalogue fallback through `DateText` and stay editable in `DateField`.
+
+The Vitest worker zone is pinned to `Asia/Tokyo`, so a Brasília developer host cannot hide a
+browser-local date regression.
+
 ## Technologies
 
 - [Next.js 16](https://nextjs.org/)

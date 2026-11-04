@@ -18,7 +18,6 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { TZDate } from '@date-fns/tz';
 import { subHours } from 'date-fns';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
@@ -27,8 +26,7 @@ import { useReminders, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useApiErrorMessage } from '@/lib/api-error';
-import { parseDate } from '@/lib/dates';
-import { TIME_ZONE } from '@/i18n/config';
+import { toUtcInstant, tryParseInstant } from '@/lib/dates';
 import DateField from './DateField';
 import DateText from './patterns/DateText';
 
@@ -69,15 +67,12 @@ export default function ReminderButton({
     setOpen(true);
     setError(null);
 
-    if (!scheduledAt && auctionDate) {
-      // AR-23: one hour before the auction, computed on the Brasília clock
-      const start = parseDate(auctionDate);
-      if (start.kind === 'instant') {
-        // (TZDate#toISOString writes an offset; the API takes a UTC instant)
-        setScheduledAt(
-          new Date(subHours(new TZDate(start.date, TIME_ZONE), 1).getTime()).toISOString(),
-        );
-      }
+    if (!hasReminder) {
+      // AR-22/AR-23: reopening starts a fresh draft from the current auction instant.
+      const start = auctionDate ? tryParseInstant(auctionDate) : null;
+      setScheduledAt(start ? toUtcInstant(subHours(start, 1)) : null);
+      setChannel('EMAIL');
+      setDescription('');
     }
   };
 
@@ -87,7 +82,7 @@ export default function ReminderButton({
   };
 
   const handleCreate = async () => {
-    if (!scheduledAt) {
+    if (!scheduledAt || !tryParseInstant(scheduledAt)) {
       setError('Selecione a data e hora do lembrete');
       return;
     }
