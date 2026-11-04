@@ -41,10 +41,10 @@ describe('serverOperators', () => {
 
 describe('decimalFilter', () => {
   it('AR-17: turns a finite Decimal into the Decimal128 bound stored prices compare with', () => {
-    expect(decimalFilter(new Decimal('300000.50'), 'maxMargin')).toEqual(
+    expect(decimalFilter(new Decimal('300000.50'), 'maxPrice')).toEqual(
       Types.Decimal128.fromString('300000.5'),
     );
-    expect(decimalFilter(new Decimal('0'), 'minMargin')).toEqual(Types.Decimal128.fromString('0'));
+    expect(decimalFilter(new Decimal('0'), 'minPrice')).toEqual(Types.Decimal128.fromString('0'));
   });
 
   it.each([
@@ -56,8 +56,8 @@ describe('decimalFilter', () => {
     ['Infinity', new Decimal(Number.POSITIVE_INFINITY)],
     ['undefined', undefined],
   ])('SC-10: refuses %s with VALIDATION_FAILED naming the field', (_label, value) => {
-    expect(() => decimalFilter(value, 'minMargin')).toThrow(
-      new DomainError('VALIDATION_FAILED', { fields: ['minMargin'] }),
+    expect(() => decimalFilter(value, 'minPrice')).toThrow(
+      new DomainError('VALIDATION_FAILED', { fields: ['minPrice'] }),
     );
   });
 });

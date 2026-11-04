@@ -11,8 +11,8 @@ export interface FilterData {
   neighborhood?: string[];
   modality?: string[];
   // BRL price bounds as money strings ("50000.00"); the API refuses JSON numbers (AR-17)
-  minMargin?: string;
-  maxMargin?: string;
+  minPrice?: string;
+  maxPrice?: string;
 }
 
 export interface SavedFilter {

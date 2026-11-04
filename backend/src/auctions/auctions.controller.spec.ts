@@ -104,26 +104,26 @@ describe('AuctionsController over HTTP (Express 5 query parsing)', () => {
       expect(auctions.query).not.toHaveBeenCalled();
     });
 
-    // AR-17: minMargin/maxMargin are prices in reais; a money string reaches the service as a
+    // AR-17: minPrice/maxPrice are prices in reais; a money string reaches the service as a
     // Decimal, never as a float.
     it('turns state and the price bounds into the service filters, prices as Decimal', async () => {
       await request(app.getHttpServer())
-        .get('/api/auctions?state=SP&minMargin=10&maxMargin=300000.50')
+        .get('/api/auctions?state=SP&minPrice=10&maxPrice=300000.50')
         .expect(200);
 
       expect(lastQueryFilters()).toEqual({
         state: 'SP',
-        minMargin: new Decimal('10'),
-        maxMargin: new Decimal('300000.50'),
+        minPrice: new Decimal('10'),
+        maxPrice: new Decimal('300000.50'),
       });
     });
 
     it.each(['lots', '-1', '1e5', '10.505', '1.234,56', '0x10', ''])(
-      'refuses minMargin=%s, which is not an amount of reais (MONEY_PATTERN)',
+      'refuses minPrice=%s, which is not an amount of reais (MONEY_PATTERN)',
       async (value) => {
         await request(app.getHttpServer())
-          .get(`/api/auctions?minMargin=${encodeURIComponent(value)}`)
-          .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['minMargin'] } });
+          .get(`/api/auctions?minPrice=${encodeURIComponent(value)}`)
+          .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['minPrice'] } });
 
         expect(auctions.query).not.toHaveBeenCalled();
       },
@@ -131,8 +131,8 @@ describe('AuctionsController over HTTP (Express 5 query parsing)', () => {
 
     it('refuses a repeated price bound', async () => {
       await request(app.getHttpServer())
-        .get('/api/auctions?maxMargin=1&maxMargin=2')
-        .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['maxMargin'] } });
+        .get('/api/auctions?maxPrice=1&maxPrice=2')
+        .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['maxPrice'] } });
     });
   });
 

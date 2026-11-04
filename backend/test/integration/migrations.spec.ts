@@ -10,6 +10,10 @@ import {
   conditionalUpdate,
   convertMoneyToDecimal128,
 } from '../../src/migrations/0001-money-decimal128.migration';
+import {
+  PriceBoundConflictError,
+  renameSavedFilterPriceBounds,
+} from '../../src/migrations/0002-saved-filter-price-bounds.migration';
 import type { Migration } from '../../src/migrations/migration';
 import { MIGRATIONS_COLLECTION, mongoMigrationLog } from '../../src/migrations/migration-log';
 import { MigrationFailedError, runMigrations } from '../../src/migrations/migration-runner';
@@ -22,6 +26,8 @@ const LATER = new Date('2026-11-04T12:00:00.000Z');
 const PHASE_DATE = new Date('2026-03-03T13:00:00.000Z');
 const USER = new Types.ObjectId('64b7f0000000000000000a01');
 const d128 = (value: string) => Types.Decimal128.fromString(value);
+// 0001 alone: its describe asserts the shapes it leaves, before 0002 renames the bounds (#81).
+const ONLY_0001 = MIGRATIONS.slice(0, 1);
 
 describe('Migrations (integration)', () => {
   const testDb = useTestDatabase();
@@ -101,7 +107,7 @@ describe('Migrations (integration)', () => {
     beforeAll(async () => {
       const before = await snapshot();
       await expect(
-        runMigrations(db, MIGRATIONS, mongoMigrationLog(db), new FakeClock(NOW)),
+        runMigrations(db, ONLY_0001, mongoMigrationLog(db), new FakeClock(NOW)),
       ).resolves.toEqual({ applied: ['0001-money-decimal128'], skipped: [] });
       afterFirstRun = await snapshot();
       converted = before.auctions.filter((doc) => doc.code === 'CONVERTED');
@@ -172,7 +178,7 @@ describe('Migrations (integration)', () => {
 
     it('records the id once, with the clock time; a second run skips it and changes nothing', async () => {
       await expect(
-        runMigrations(db, MIGRATIONS, mongoMigrationLog(db), new FakeClock(LATER)),
+        runMigrations(db, ONLY_0001, mongoMigrationLog(db), new FakeClock(LATER)),
       ).resolves.toEqual({ applied: [], skipped: ['0001-money-decimal128'] });
 
       expect(await all(MIGRATIONS_COLLECTION)).toEqual([
@@ -234,14 +240,14 @@ describe('Migrations (integration)', () => {
   describe('the runner with the MongoDB log', () => {
     it('stops at a failing migration and does not record it', async () => {
       const failing: Migration = {
-        id: '0002-always-fails',
+        id: '0099-always-fails',
         description: 'fails on purpose',
         up: async () => {
           throw new Error('boom');
         },
       };
       const never: Migration = {
-        id: '0003-never-runs',
+        id: '0100-never-runs',
         description: 'must not run',
         up: async () => {
           await db.collection('never').insertOne({ ran: true });
@@ -251,7 +257,7 @@ describe('Migrations (integration)', () => {
       await expect(
         runMigrations(
           db,
-          [...MIGRATIONS, failing, never],
+          [...ONLY_0001, failing, never],
           mongoMigrationLog(db),
           new FakeClock(LATER),
         ),
@@ -266,6 +272,85 @@ describe('Migrations (integration)', () => {
       await expect(mongoMigrationLog(db).record('0001-money-decimal128', LATER)).rejects.toThrow(
         /E11000/,
       );
+    });
+  });
+
+  describe('0001 then 0002-saved-filter-price-bounds, through the runner (#81)', () => {
+    const ALL = ['0001-money-decimal128', '0002-saved-filter-price-bounds'];
+    let afterFirstRun: Awaited<ReturnType<typeof snapshot>>;
+
+    beforeAll(async () => {
+      await db.collection('savedfilters').deleteMany({});
+      await db.collection(MIGRATIONS_COLLECTION).deleteMany({});
+      await db.collection('savedfilters').insertMany([
+        {
+          userId: USER,
+          name: 'Ambos',
+          filters: { city: ['Natal'], minMargin: 100000, maxMargin: 250000.5 },
+        },
+        { userId: USER, name: 'So maximo', filters: { maxMargin: 300000.5 } },
+        { userId: USER, name: 'So minimo nulo', filters: { minMargin: null, state: 'RN' } },
+        {
+          userId: USER,
+          name: 'Ja renomeado',
+          filters: { minPrice: d128('50000'), maxPrice: d128('90000.5') },
+        },
+        { userId: USER, name: 'Sem limites', filters: { state: 'SP' } },
+      ]);
+      const result = await runMigrations(db, MIGRATIONS, mongoMigrationLog(db), new FakeClock(NOW));
+      expect(result).toEqual({ applied: ALL, skipped: [] });
+      afterFirstRun = await snapshot();
+    });
+
+    it('renames the bounds, keeping their Decimal128 values, nulls and other criteria', async () => {
+      expect((await byKey('savedfilters', 'name', 'Ambos'))?.filters).toEqual({
+        city: ['Natal'],
+        minPrice: d128('100000'),
+        maxPrice: d128('250000.5'),
+      });
+      expect((await byKey('savedfilters', 'name', 'So maximo'))?.filters).toEqual({
+        maxPrice: d128('300000.5'),
+      });
+      expect((await byKey('savedfilters', 'name', 'So minimo nulo'))?.filters).toEqual({
+        minPrice: null,
+        state: 'RN',
+      });
+    });
+
+    it('leaves already-renamed documents and documents without bounds alone', async () => {
+      expect((await byKey('savedfilters', 'name', 'Ja renomeado'))?.filters).toEqual({
+        minPrice: d128('50000'),
+        maxPrice: d128('90000.5'),
+      });
+      expect((await byKey('savedfilters', 'name', 'Sem limites'))?.filters).toEqual({
+        state: 'SP',
+      });
+    });
+
+    it('a second run skips both and changes nothing; 0002 alone rewrites 0 documents', async () => {
+      await expect(
+        runMigrations(db, MIGRATIONS, mongoMigrationLog(db), new FakeClock(LATER)),
+      ).resolves.toEqual({ applied: [], skipped: ALL });
+      expect(await snapshot()).toEqual(afterFirstRun);
+
+      await expect(renameSavedFilterPriceBounds(db)).resolves.toEqual({
+        'filters.minPrice': 0,
+        'filters.maxPrice': 0,
+      });
+      expect(await snapshot()).toEqual(afterFirstRun);
+    });
+
+    it('stops on a document holding both names, writing nothing', async () => {
+      await db.collection('savedfilters').insertMany([
+        { userId: USER, name: 'Legado ok', filters: { maxMargin: d128('1') } },
+        { userId: USER, name: 'Conflito', filters: { minMargin: d128('1'), minPrice: d128('2') } },
+      ]);
+      const before = await snapshot();
+
+      await expect(renameSavedFilterPriceBounds(db)).rejects.toBeInstanceOf(
+        PriceBoundConflictError,
+      );
+      expect(await snapshot()).toEqual(before);
     });
   });
 });

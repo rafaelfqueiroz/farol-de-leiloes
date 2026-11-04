@@ -63,17 +63,16 @@ export class ListAuctionsQueryDto extends PaginationQueryDto {
   @IsString({ each: true })
   modality?: string | string[];
 
-  // AR-17: despite the name, these are prices (reais), not margins: the bounds of the current
-  // phase's minimum price. A money string becomes a Decimal at the edge, never a float.
+  // AR-17: BRL bounds of the current phase's minimum price (`currentPhase.minimumPrice`). A money string becomes a Decimal at the edge, never a float.
   @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Lowest minimum price, BRL' })
   @IsOptional()
   @IsMoneyString()
-  minMargin?: Decimal;
+  minPrice?: Decimal;
 
   @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Highest minimum price, BRL' })
   @IsOptional()
   @IsMoneyString()
-  maxMargin?: Decimal;
+  maxPrice?: Decimal;
 }
 
 export class NeighborhoodsQueryDto {

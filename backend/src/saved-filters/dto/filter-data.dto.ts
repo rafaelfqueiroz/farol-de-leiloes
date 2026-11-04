@@ -31,16 +31,16 @@ export class FilterDataDto {
   @IsString({ each: true })
   modality?: string[];
 
-  // Prices in reais, despite the name: the bounds of GET /api/auctions' minMargin/maxMargin.
+  // Prices in reais, despite the name: the bounds of GET /api/auctions' minPrice/maxPrice.
   @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Lowest minimum price, BRL' })
   @IsOptional()
   @IsMoneyString()
-  minMargin?: Decimal;
+  minPrice?: Decimal;
 
   @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Highest minimum price, BRL' })
   @IsOptional()
   @IsMoneyString()
-  maxMargin?: Decimal;
+  maxPrice?: Decimal;
 
   /**
    * Only the criteria that were given: the driver would store an undefined one as null, and
@@ -52,8 +52,8 @@ export class FilterDataDto {
       city: this.city,
       neighborhood: this.neighborhood,
       modality: this.modality,
-      minMargin: this.minMargin,
-      maxMargin: this.maxMargin,
+      minPrice: this.minPrice,
+      maxPrice: this.maxPrice,
     };
     return Object.fromEntries(
       Object.entries(data).filter(([, value]) => value !== undefined && value !== null),
@@ -75,17 +75,17 @@ export class FilterDataResponseDto {
   modality?: string[];
 
   @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Lowest minimum price, BRL' })
-  minMargin?: string;
+  minPrice?: string;
 
   @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Highest minimum price, BRL' })
-  maxMargin?: string;
+  maxPrice?: string;
 
   constructor(filters: FilterData) {
     this.state = filters.state;
     this.city = filters.city;
     this.neighborhood = filters.neighborhood;
     this.modality = filters.modality;
-    this.minMargin = moneyToJson(filters.minMargin);
-    this.maxMargin = moneyToJson(filters.maxMargin);
+    this.minPrice = moneyToJson(filters.minPrice);
+    this.maxPrice = moneyToJson(filters.maxPrice);
   }
 }

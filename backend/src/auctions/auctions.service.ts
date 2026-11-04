@@ -40,8 +40,8 @@ export interface QueryFilters {
   neighborhood?: string | string[];
   modality?: string | string[];
   /** Bounds of the current phase's minimum price, in reais (AR-17). */
-  minMargin?: Decimal;
-  maxMargin?: Decimal;
+  minPrice?: Decimal;
+  maxPrice?: Decimal;
 }
 
 const NEIGHBORHOODS_CACHE_PREFIX = 'neighborhoods';
@@ -226,14 +226,15 @@ export class AuctionsService {
         modalities.length === 1 ? { $eq: modalities[0] } : serverOperators({ $in: modalities });
     }
 
+    // minPrice/maxPrice are the query names for the bounds of currentPhase.minimumPrice (#81).
     // Filter by price range on currentPhase.minimumPrice, compared as Decimal128 (AR-17).
-    if (filters.minMargin !== undefined || filters.maxMargin !== undefined) {
+    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
       const priceMatch: Record<string, unknown> = {};
-      if (filters.minMargin !== undefined) {
-        priceMatch.$gte = decimalFilter(filters.minMargin, 'minMargin');
+      if (filters.minPrice !== undefined) {
+        priceMatch.$gte = decimalFilter(filters.minPrice, 'minPrice');
       }
-      if (filters.maxMargin !== undefined) {
-        priceMatch.$lte = decimalFilter(filters.maxMargin, 'maxMargin');
+      if (filters.maxPrice !== undefined) {
+        priceMatch.$lte = decimalFilter(filters.maxPrice, 'maxPrice');
       }
       query['currentPhase.minimumPrice'] = serverOperators(priceMatch);
     }

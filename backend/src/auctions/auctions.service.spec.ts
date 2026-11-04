@@ -109,14 +109,14 @@ describe('AuctionsService.query (SC-10)', () => {
 
   it('AR-17: builds the price range as Decimal128 bounds, including zero', async () => {
     const both = await builtQuery({
-      minMargin: new Decimal('0'),
-      maxMargin: new Decimal('500000'),
+      minPrice: new Decimal('0'),
+      maxPrice: new Decimal('500000'),
     });
     expect(both['currentPhase.minimumPrice']).toEqual(
       serverOperators({ $gte: d128('0'), $lte: d128('500000') }),
     );
 
-    const onlyMax = await builtQuery({ maxMargin: new Decimal('10.50') });
+    const onlyMax = await builtQuery({ maxPrice: new Decimal('10.50') });
     expect(onlyMax['currentPhase.minimumPrice']).toEqual(serverOperators({ $lte: d128('10.5') }));
   });
 
@@ -133,11 +133,11 @@ describe('AuctionsService.query (SC-10)', () => {
     ['neighborhood', { neighborhood: { $ne: null } }],
     ['modality', { modality: { $ne: null } }],
     ['modality', { modality: ['AUCTION', 7] }],
-    ['minMargin', { minMargin: '10' }],
-    ['minMargin', { minMargin: 10 }],
-    ['minMargin', { minMargin: new Decimal(Number.NaN) }],
-    ['maxMargin', { maxMargin: new Decimal(Number.POSITIVE_INFINITY) }],
-    ['maxMargin', { maxMargin: { $gt: 0 } }],
+    ['minPrice', { minPrice: '10' }],
+    ['minPrice', { minPrice: 10 }],
+    ['minPrice', { minPrice: new Decimal(Number.NaN) }],
+    ['maxPrice', { maxPrice: new Decimal(Number.POSITIVE_INFINITY) }],
+    ['maxPrice', { maxPrice: { $gt: 0 } }],
   ])(
     'refuses an operator, a non-Decimal or a non-finite value for %s with VALIDATION_FAILED',
     async (field, bad) => {

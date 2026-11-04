@@ -6,8 +6,8 @@ export interface FilterData {
   city?: string[];
   neighborhood?: string[];
   modality?: string[];
-  minMargin?: Decimal;
-  maxMargin?: Decimal;
+  minPrice?: Decimal;
+  maxPrice?: Decimal;
 }
 
 export interface SavedFilter {

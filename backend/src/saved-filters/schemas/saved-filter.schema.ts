@@ -11,8 +11,8 @@ export interface StoredFilterData {
   neighborhood?: string[];
   modality?: string[];
   // AR-17: price bounds in reais, as Decimal128.
-  minMargin?: Types.Decimal128 | null;
-  maxMargin?: Types.Decimal128 | null;
+  minPrice?: Types.Decimal128 | null;
+  maxPrice?: Types.Decimal128 | null;
 }
 
 @Schema({ collection: 'savedfilters', timestamps: true })

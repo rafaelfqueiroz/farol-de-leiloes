@@ -55,8 +55,8 @@ export interface AuctionFilters {
   neighborhood?: string[];
   modality?: string[];
   // BRL price bounds (not percentages) as money strings, e.g. "50000.00" (AR-17)
-  minMargin?: string;
-  maxMargin?: string;
+  minPrice?: string;
+  maxPrice?: string;
 }
 
 const BRAZILIAN_STATES = [
@@ -411,18 +411,18 @@ function formatPriceLabel(value: number): string {
   return formatMoneyCompact(moneyFromSlider(value));
 }
 
-function rangeFromFilters(minMargin?: string, maxMargin?: string): PriceRange {
+function rangeFromFilters(minPrice?: string, maxPrice?: string): PriceRange {
   return [
-    minMargin ? Math.min(moneyToSlider(minMargin), PRICE_MAX) : 0,
-    maxMargin ? Math.min(moneyToSlider(maxMargin), PRICE_MAX) : PRICE_MAX,
+    minPrice ? Math.min(moneyToSlider(minPrice), PRICE_MAX) : 0,
+    maxPrice ? Math.min(moneyToSlider(maxPrice), PRICE_MAX) : PRICE_MAX,
   ];
 }
 
 // A bound left at the end of the slider means "no bound": it is not sent.
-function filtersFromRange([min, max]: PriceRange): Pick<AuctionFilters, 'minMargin' | 'maxMargin'> {
+function filtersFromRange([min, max]: PriceRange): Pick<AuctionFilters, 'minPrice' | 'maxPrice'> {
   return {
-    minMargin: min > 0 ? moneyFromSlider(min) : undefined,
-    maxMargin: max < PRICE_MAX ? moneyFromSlider(max) : undefined,
+    minPrice: min > 0 ? moneyFromSlider(min) : undefined,
+    maxPrice: max < PRICE_MAX ? moneyFromSlider(max) : undefined,
   };
 }
 
@@ -434,7 +434,7 @@ export default function SearchFilters({
 }: SearchFiltersProps) {
   const [filters, setFilters] = useState<AuctionFilters>(initialFilters);
   const [priceRange, setPriceRange] = useState<PriceRange>(
-    rangeFromFilters(initialFilters.minMargin, initialFilters.maxMargin),
+    rangeFromFilters(initialFilters.minPrice, initialFilters.maxPrice),
   );
   const [drawerOpen, setDrawerOpen] = useState(true);
 
@@ -443,7 +443,7 @@ export default function SearchFilters({
   const initialFiltersKey = JSON.stringify(initialFilters);
   useEffect(() => {
     setFilters(initialFilters);
-    setPriceRange(rangeFromFilters(initialFilters.minMargin, initialFilters.maxMargin));
+    setPriceRange(rangeFromFilters(initialFilters.minPrice, initialFilters.maxPrice));
   }, [initialFiltersKey]);
   const [aiSearchInput, setAiSearchInput] = useState('');
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
@@ -619,7 +619,7 @@ export default function SearchFilters({
         neighborhood: savedFilterData.neighborhood,
         modality: savedFilterData.modality,
       });
-      setPriceRange(rangeFromFilters(savedFilterData.minMargin, savedFilterData.maxMargin));
+      setPriceRange(rangeFromFilters(savedFilterData.minPrice, savedFilterData.maxPrice));
     }
   };
 

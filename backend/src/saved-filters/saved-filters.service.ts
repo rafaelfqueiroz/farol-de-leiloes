@@ -94,19 +94,19 @@ export class SavedFiltersService {
 
 /** AR-17: the price bounds are written as Decimal128. */
 function toStoredFilterData(filters: FilterData): StoredFilterData {
-  const { minMargin, maxMargin, ...criteria } = filters;
+  const { minPrice, maxPrice, ...criteria } = filters;
   const stored: StoredFilterData = { ...criteria };
-  if (minMargin !== undefined) stored.minMargin = toDecimal128(minMargin);
-  if (maxMargin !== undefined) stored.maxMargin = toDecimal128(maxMargin);
+  if (minPrice !== undefined) stored.minPrice = toDecimal128(minPrice);
+  if (maxPrice !== undefined) stored.maxPrice = toDecimal128(maxPrice);
   return stored;
 }
 
 function fromStoredFilterData(stored: StoredFilterData): FilterData {
-  const { minMargin, maxMargin, ...criteria } = stored;
+  const { minPrice, maxPrice, ...criteria } = stored;
   const filters: FilterData = { ...criteria };
-  const min = fromDecimal128OrNull(minMargin);
-  const max = fromDecimal128OrNull(maxMargin);
-  if (min !== null) filters.minMargin = min;
-  if (max !== null) filters.maxMargin = max;
+  const min = fromDecimal128OrNull(minPrice);
+  const max = fromDecimal128OrNull(maxPrice);
+  if (min !== null) filters.minPrice = min;
+  if (max !== null) filters.maxPrice = max;
   return filters;
 }
