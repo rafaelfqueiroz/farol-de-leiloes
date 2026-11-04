@@ -1,209 +1,115 @@
-# Leilões Caixa - AI Assistant Frontend
+# Farol dos Leilões — frontend
 
-AI-powered interface to search and query auctions from Caixa Econômica Federal using natural language.
+Next.js 16 App Router with MUI 7 and next-intl (pt-BR only), served on port 3001. Application data comes from the NestJS API (port 3000) through BFF route handlers under `app/api/`, which forward to the backend via `lib/backend.ts`. Two browser calls go to the backend directly: the neighborhoods lookup in `app/components/SearchFilters.tsx` and the Google sign-in redirect in `app/login/page.tsx`.
 
-## Features
+Guidelines: [ARCHITECTURE](../docs/guidelines/ARCHITECTURE.md), [DESIGN](../docs/guidelines/DESIGN.md), [DEVELOPMENT](../docs/guidelines/DEVELOPMENT.md), [TESTING](../docs/guidelines/TESTING.md), [SECURITY](../docs/guidelines/SECURITY.md).
 
-- Natural language interface in Portuguese (PT-BR)
-- LangChain-powered AI agent for extracting filters from user queries
-- MCP (Model Context Protocol) server for structured API communication
-- Chat interface built with Next.js and MUI, styled through the design-system theme tokens
-- Automatic mapping of states, cities, modalities, and price ranges
+## Requirements
 
-## Architecture
+- Node.js 24.22.2 (`.node-version` and `engines`; DV-05)
+- The backend running on port 3000 (see `backend/README.md`)
+- Git hooks: run `npm install` once at the repository root (husky and lint-staged)
 
-- **Next.js 16**: React framework with App Router
-- **LangChain**: Agent framework for AI-powered query extraction
-- **OpenAI GPT-4**: Language model for understanding user intent
-- **MCP SDK**: Model Context Protocol for structured tool calling
-- **MUI 7**: Component library; all styling comes from the theme tokens in `app/theme/` (see [DESIGN.md](../docs/guidelines/DESIGN.md))
+## Setup
 
-## Prerequisites
+1. `npm ci`
+2. `cp .env.example .env.local` and adjust (see [Environment](#environment))
 
-- Node.js 24.22.2 (pinned in `.node-version`; DV-05)
-- Auctions API running on port 3000
+## Running
 
-## Installation
+- Development server: `npm run dev` (port 3001)
+- Production build and server: `npm run build`, then `npm start` (port 3001; requires a build first)
+- Container: `Dockerfile` builds a standalone image (`output: 'standalone'` in `next.config.ts`) that runs `node server.js` as a non-root user on port 3001. `NEXT_PUBLIC_*` values are build arguments; server-only values come from the runtime environment.
 
-1. Install dependencies (and, once at the repository root, run `npm install` to install the git hooks: husky + lint-staged):
-
-```bash
-npm install
-```
-
-2. Create `.env.local`:
-
-```bash
-cp .env.example .env.local
-```
-
-3. Review the variables in `.env.local` (every variable is documented in `.env.example`; the
-   defaults work against a backend on `localhost:3000`). They are read only through
-   `lib/env.ts` (AR-42):
-
-```
-NEXT_PUBLIC_AUCTIONS_API_URL=http://localhost:3000   # backend, as seen by the browser
-NEXT_PUBLIC_SITE_URL=https://faroldosleiloes.com.br  # canonical site origin
-BACKEND_API_URL=http://localhost:3000                # backend, as seen by the Next.js server
-```
-
-## Running the Application
-
-Development mode:
-
-```bash
-npm run dev
-```
-
-The frontend will be available at http://localhost:3001
-
-Production build:
-
-```bash
-npm run build
-npm start
-```
-
-The build uses `output: 'standalone'` (`next.config.ts`), which the deploy image runs: `Dockerfile` copies `.next/standalone` and serves `node server.js` on port 3001 as a non-root user. `NEXT_PUBLIC_*` values are build arguments there, passed by `deploy.yml` from repository variables (DEVELOPMENT §12). Vercel ignores the setting.
+Agents never start the applications (DV-18); the developer runs them.
 
 ## Scripts
 
-| Script                 | What it does                                                                                               |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `npm run typecheck`    | `tsc --noEmit`                                                                                             |
-| `npm test`             | Vitest (unit, component and structural tests)                                                              |
-| `npm run test:cov`     | `npm test` with the V8 coverage gate (TESTING §7); lcov report in `coverage/`                              |
-| `npm run lint`         | ESLint (legacy violations are suppressed in `eslint-suppressions.json` until #30)                          |
-| `npm run lint:fix`     | ESLint with `--fix`                                                                                        |
-| `npm run lint:prune`   | Drops suppressions that no longer occur, after fixing a legacy violation                                   |
-| `npm run format`       | Prettier, write                                                                                            |
-| `npm run format:check` | Prettier, check only                                                                                       |
-| `npm run check`        | `typecheck` + `lint` + `format:check` + `test`; the pre-push hook runs it when `frontend/` changes (DV-37) |
-| `npm run build`        | Next.js production build                                                                                   |
+| Script         | Behaviour                                                                    |
+| -------------- | ---------------------------------------------------------------------------- |
+| `dev`          | `next dev -p 3001`                                                           |
+| `build`        | `next build`                                                                 |
+| `start`        | `next start -p 3001`                                                         |
+| `typecheck`    | `tsc --noEmit`                                                               |
+| `test`         | `vitest run` (all projects, no coverage)                                     |
+| `test:cov`     | `vitest run --coverage`; thresholds in `vitest.config.ts`                    |
+| `lint`         | `eslint .`; fails on new violations and on suppressions that no longer occur |
+| `lint:fix`     | `eslint . --fix --pass-on-unpruned-suppressions`                             |
+| `lint:prune`   | `eslint . --prune-suppressions` (shrinks `eslint-suppressions.json`)         |
+| `format`       | `prettier --write .`                                                         |
+| `format:check` | `prettier --check .`                                                         |
+| `check`        | `typecheck` + `lint` + `format:check` + `test`                               |
 
-## Usage Examples
+`npm run check` is the definition of done (DV-20). The pre-push hook runs it in every package a push changes (DV-37), so it is also the gate before a push.
 
-Ask questions in natural Portuguese:
+E2E tests (Playwright, `npm run test:e2e`) are not set up yet; they arrive with [#3](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/3) (TESTING §6).
 
-- "Mostre leilões no estado de Rio Grande do Norte, cidade de Natal"
-- "Estou interessado em leilões da Caixa em Licitação Aberta no estado do RN e cidade do Natal, cujo valor seja de pelo menos R$200.000,00"
-- "Quais são os imóveis em São Paulo com preço entre R$100.000,00 e R$300.000,00?"
+## Environment
 
-The AI agent will:
+`lib/env.ts` is the only module that reads `process.env` (AR-42). Every variable it reads is listed with a comment in `.env.example`; `test/structural/env-example.test.ts` fails when the two differ (AR-44).
 
-1. Extract filters (state, city, neighborhood, modality, price range)
-2. Map state names to abbreviations (e.g., "Rio Grande do Norte" → "RN")
-3. Map auction modalities to enum values (e.g., "Licitação Aberta" → "OPEN_BIDDING")
-4. Convert currency values (e.g., "R$ 200.000,00" → 200000)
-5. Query the auctions API with the correct filters
-6. Present results in a clear, organized format
+| Variable                       | Scope              | Default                          | Notes                                                                                                                    |
+| ------------------------------ | ------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_AUCTIONS_API_URL` | Public, build time | `http://localhost:3000`          | Backend origin the browser reaches. Inlined into the bundle.                                                             |
+| `NEXT_PUBLIC_SITE_URL`         | Public, build time | `https://faroldosleiloes.com.br` | Canonical origin for metadata, sitemap and robots. Set it to `http://localhost:3001` locally.                            |
+| `BACKEND_API_URL`              | Server only        | `NEXT_PUBLIC_AUCTIONS_API_URL`   | Backend origin for route handlers, SSR and the sitemap. Set it when the server reaches the backend by a private address. |
 
-## Project Structure
+- Values have no trailing slash and no `/api`.
+- An empty value counts as unset.
+- `publicEnv` is safe to import anywhere. `serverEnv()` throws when called in the browser (AR-42).
+- No variable here is a secret. Secrets belong in the backend.
 
-```
-frontend/
-├── app/
-│   ├── api/
-│   │   └── chat/
-│   │       └── route.ts       # Chat API endpoint
-│   ├── components/patterns/   # Shared design-system patterns (Logo, PageShell, Money…)
-│   ├── components/DateField.tsx # Date / date-time input in Brasília time (DS-26)
-│   ├── theme/                 # MUI theme: tokens, light/dark schemes (DESIGN.md)
-│   ├── layout.tsx             # Root layout
-│   └── page.tsx               # Main chat interface
-├── lib/
-│   ├── env.ts                 # The only reader of process.env (AR-42)
-│   ├── backend.ts             # BFF helper: backendFetch / proxyToBackend (server-only)
-│   ├── money.ts, dates.ts     # Money (decimal.js) and date (date-fns) helpers
-│   ├── auction.ts             # Shared auction types (money as strings)
-│   └── mcp-server.ts          # MCP server (optional standalone)
-├── messages/pt-BR.json        # next-intl catalogue (pt-BR)
-├── test/                      # Vitest setup and structural tests
-├── .env.example               # Environment variables template
-├── next.config.ts             # Next.js configuration
-├── tsconfig.json              # TypeScript configuration
-└── package.json               # Dependencies and scripts
-```
+## BFF
 
-## How It Works
+`lib/backend.ts` is server-only. It is the one place route handlers reach the backend.
 
-1. **User Input**: User types a natural language query in Portuguese
-2. **API Route**: `/api/chat` receives the message
-3. **LangChain Agent**:
-   - GPT-4 analyzes the user's intent
-   - Extracts relevant filters (state, city, modality, price)
-   - Maps human-readable values to API parameters
-4. **Query Tool**: Makes HTTP request to auctions API with filters
-5. **Response**: AI formats and presents the results to the user
+- `backendFetch(path, init)` calls `${BACKEND_API_URL}/api${path}`. The path must start with `/`.
+- `proxyToBackend(request, path, { auth, query })` forwards the request method and raw body (none for GET and DELETE) and only the `Authorization` header. It sends `Content-Type: application/json` when there is a body.
+- `auth: true` without an `Authorization` header answers 401 `UNAUTHENTICATED` without calling the backend.
+- The backend's JSON answer passes through with its status, unchanged (AR-38). A non-JSON error status (a gateway page, an empty 5xx) becomes 502 `BACKEND_UNAVAILABLE`. A network failure also becomes 502 `BACKEND_UNAVAILABLE`.
+- Logs carry the route, the error name and the message only, never a body, header or token (SC-15).
 
-## MCP Server (Optional)
+Example: `app/api/search/route.ts` keeps the known filter parameters and calls `proxyToBackend(request, '/auctions', { query })`.
 
-The project includes an MCP server (`lib/mcp-server.ts`) that can be run standalone:
+AI search: `app/api/chat/route.ts` calls the backend's `/ai/extract-params`, then `/auctions` with the extracted filters. The language model lives in the backend (`backend/src/ai`); its provider is chosen by `LLM_PROVIDER` there.
 
-```bash
-npx tsx lib/mcp-server.ts
-```
+## Errors and i18n
 
-This allows the auctions API to be used as an MCP tool by other AI applications.
+- The backend answers errors as `{ code, context }` (AR-37, AR-38).
+- `readApiError(response)` in `lib/api-error.ts` turns a failed response into an `ApiError`. A body that is not `{ code, context }` becomes `UNKNOWN`.
+- `useApiErrorMessage()` returns the pt-BR text for an error: `errors.<CODE>` in `messages/pt-BR.json`, with the context interpolated (AR-39). An unknown code shows `errors.UNKNOWN`.
+- The frontend produces two codes itself: `UNKNOWN` and `BACKEND_UNAVAILABLE` (`FRONTEND_ERROR_CODES`). `UNAUTHENTICATED` comes from the BFF.
+- `test/structural/error-catalogue.test.ts` reads `backend/src/common/errors/codes.ts` and fails when a backend code has no `errors.<CODE>` message (AR-39).
+- Locale is pt-BR only (`i18n/config.ts`); there is no locale routing.
 
-## Environment Variables
+## Project structure
 
-Read only in `lib/env.ts` (AR-42) and listed, with comments, in `.env.example` (AR-44). None is a secret.
+| Path                           | Purpose                                                                                                         |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `app/`                         | App Router pages and layouts; `app/layout.tsx` is the root layout                                               |
+| `app/(shell)/`                 | Pages inside the app shell (`layout.tsx`), including `auction/[code]/`                                          |
+| `app/(shell)/(authenticated)/` | Signed-in pages (search, reminders, plans, admin, profile, support); the layout applies `RequireAuthentication` |
+| `app/api/`                     | BFF route handlers, one folder per backend resource                                                             |
+| `app/components/`              | Feature components and their tests                                                                              |
+| `app/components/patterns/`     | Shared UI patterns (`AppShell`, `PageHeader`, `EmptyState`, `Money`, and others)                                |
+| `app/contexts/`                | React contexts: auth, favorites, reminders, saved filters                                                       |
+| `app/theme/`                   | MUI theme, colour tokens, fonts and the colour-scheme control                                                   |
+| `lib/`                         | Server and shared helpers: `env.ts`, `backend.ts`, `api-error.ts`, money and date utilities                     |
+| `i18n/`                        | next-intl configuration and request setup (pt-BR only)                                                          |
+| `messages/`                    | `pt-BR.json`, the only message catalogue                                                                        |
+| `public/brand/`                | Logo and brand SVGs                                                                                             |
+| `test/`                        | Test setup, render helpers and `structural/` checks on the repository                                           |
+| `proxy.ts`                     | Next.js proxy (the former middleware); currently a pass-through                                                 |
+| `next.config.ts`               | next-intl plugin and standalone output                                                                          |
+| `Dockerfile`                   | Production image (build and runtime stages)                                                                     |
 
-| Variable                       | Where  | Default                          | Purpose                                                                    |
-| ------------------------------ | ------ | -------------------------------- | -------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_AUCTIONS_API_URL` | public | `http://localhost:3000`          | Backend origin as the browser reaches it (no trailing slash, no `/api`)    |
-| `NEXT_PUBLIC_SITE_URL`         | public | `https://faroldosleiloes.com.br` | Canonical site origin (metadata, sitemap, robots)                          |
-| `BACKEND_API_URL`              | server | `NEXT_PUBLIC_AUCTIONS_API_URL`   | Backend origin as the Next.js server reaches it (API routes, SSR, sitemap) |
+## Testing
 
-`BACKEND_API_URL` replaces the former `AUCTIONS_API_URL` (and the two spellings the API routes used).
-`OPENAI_API_KEY` is no longer read by the frontend.
+- Vitest with jsdom, Testing Library and vitest-axe. Tests sit next to the code (`*.test.ts(x)`); `test/structural/` checks the repository itself.
+- `vitest.config.ts` defines the projects: `unit` (all `*.test.ts(x)` except the date tests) and one `dates:<zone>` project per zone (`dates:America/Los_Angeles`, `dates:America/Sao_Paulo`, `dates:Asia/Tokyo`) for the date regressions. Run one with `npx vitest run --project dates:America/Sao_Paulo`.
+- Coverage thresholds are in `vitest.config.ts`. `npm run test:cov` enforces them.
+- Rules: [TESTING.md](../docs/guidelines/TESTING.md).
 
-## Calling the backend (BFF)
+## Conventions
 
-API routes under `app/api` are thin proxies built on `lib/backend.ts`: `proxyToBackend` forwards the
-method, the raw body and the `Authorization` header, and returns the backend's status and JSON body
-verbatim, so the `{ code, context }` error body (AR-37/AR-38) reaches the browser untouched. The BFF
-itself answers only `UNAUTHENTICATED` (401, no token) and `BACKEND_UNAVAILABLE` (502).
-
-## Dates and reminder pickers
-
-Dates use `date-fns` and `@date-fns/tz`, with the shared `TIME_ZONE` (`America/Sao_Paulo`)
-from `i18n/config.ts` (AR-22/AR-23). Render dates through `DateText` and the formatters in
-`lib/dates.ts` (DS-29).
-
-Reminder forms use the shared `DateField` primitive (DS-26), which accepts and returns API
-strings and handles the `ptBR` pickers centrally. Strict instant inputs use `tryParseInstant`;
-Date values are serialized through `toUtcInstant` from `lib/dates.ts` (AR-22). Invalid stored
-dates render the catalogue fallback through `DateText` and stay editable in `DateField`.
-
-`DateField` uses `BrasiliaDateAdapter`, a focused date-fns adapter extension whose construction
-and parsing entry points return Brasília `TZDate` values. Construction accepts ISO strings
-(including a space delimiter); non-ISO legacy/RFC strings are intentionally unsupported. The
-private adapter fixes the zone to Brasília and ignores MUI's `timezone` argument, like the stock
-date-fns adapter. Date-fns preserves that zone during picker edits, so a browser daylight-saving
-gap cannot normalize a valid Brasília time (#86).
-Calendar dates are constructed from their own year/month/day and leave as `YYYY-MM-DD`.
-Date-time controls display and edit **whole minutes**, but the minimum keeps its exact
-seconds/milliseconds. An untouched external value retains its precision in both validation and
-the parent string. Edits normalize the draft and emitted UTC instant to `:00.000` seconds before
-validation: with a minimum of `02:30:50`, an untouched `02:30:55` is valid, while editing to
-`02:30` emits `02:30:00` and shows an error; `02:31` is the first valid whole minute.
-`instantToWallClock` preserves the instant's precision; `wallClockToInstant` serializes the
-represented instant to whole minutes without reinterpreting browser-local fields. Construct
-Brasília wall-clock inputs with `TZDate`, since a native `Date` already represents an instant.
-
-The general Vitest worker zone is pinned to `Asia/Tokyo`; generic picker interaction and axe
-tests run once. Date helpers, the adapter and focused `DateField.dst.test.tsx` cases run in
-separate forked workers in `America/Los_Angeles`, `America/Sao_Paulo` and
-`Asia/Tokyo`, asserting the actual native zone. Run only that matrix with
-`npm test -- --project 'dates:*'` (TS-11).
-
-## Technologies
-
-- [Next.js 16](https://nextjs.org/)
-- [LangChain](https://js.langchain.com/)
-- [OpenAI](https://platform.openai.com/)
-- [MCP SDK](https://modelcontextprotocol.io/)
-- [MUI](https://mui.com/)
-- [TypeScript](https://www.typescriptlang.org/)
+Branches, Conventional Commits, the pull request flow and agent rules are in [DEVELOPMENT.md](../docs/guidelines/DEVELOPMENT.md). Update the affected docs in the same PR (DV-29).
