@@ -20,9 +20,12 @@ import {
 } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import dayjs, { Dayjs } from 'dayjs';
-import 'dayjs/locale/pt-br';
+import { TZDate } from '@date-fns/tz';
+import { isValid, subHours } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { AdapterDateFnsBrasilia } from '@/lib/adapter-date-fns-brasilia';
+import { TIME_ZONE } from '@/i18n/config';
+import DateText from '@/app/components/patterns/DateText';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -52,7 +55,7 @@ export default function ReminderButton({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [channel, setChannel] = useState<ReminderChannel>('EMAIL');
-  const [scheduledAt, setScheduledAt] = useState<Dayjs | null>(null);
+  const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [description, setDescription] = useState('');
 
   const hasReminder = hasReminderForAuction(auctionCode);
@@ -69,7 +72,7 @@ export default function ReminderButton({
     setError(null);
 
     if (!scheduledAt && auctionDate) {
-      const date = dayjs(auctionDate).subtract(1, 'hour');
+      const date = subHours(new TZDate(auctionDate, TIME_ZONE), 1);
       setScheduledAt(date);
     }
   };
@@ -80,7 +83,7 @@ export default function ReminderButton({
   };
 
   const handleCreate = async () => {
-    if (!scheduledAt) {
+    if (!scheduledAt || !isValid(scheduledAt)) {
       setError('Selecione a data e hora do lembrete');
       return;
     }
@@ -92,7 +95,8 @@ export default function ReminderButton({
       const result = await createReminder({
         auctionId: auctionCode,
         channel,
-        scheduledAt: scheduledAt.toISOString(),
+        // AR-22: TZDate serializes with an offset; the API receives a UTC instant.
+        scheduledAt: new Date(scheduledAt.getTime()).toISOString(),
         description: description || undefined,
       });
 
@@ -128,13 +132,6 @@ export default function ReminderButton({
     }
   };
 
-  const formatDisplayDate = (dateStr: string): string => {
-    return new Date(dateStr).toLocaleString('pt-BR', {
-      dateStyle: 'short',
-      timeStyle: 'short',
-    });
-  };
-
   return (
     <>
       <IconButton
@@ -168,8 +165,8 @@ export default function ReminderButton({
             {hasReminder && existingReminder ? (
               <Box sx={{ mb: 2 }}>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Lembrete agendado para {formatDisplayDate(existingReminder.scheduledAt)} via{' '}
-                  {existingReminder.channel}
+                  Lembrete agendado para <DateText value={existingReminder.scheduledAt} withTime />{' '}
+                  via {existingReminder.channel}
                 </Alert>
                 {existingReminder.description && (
                   <Typography variant="body2" color="text.secondary">
@@ -197,7 +194,7 @@ export default function ReminderButton({
                   </Select>
                 </FormControl>
 
-                <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="pt-br">
+                <LocalizationProvider dateAdapter={AdapterDateFnsBrasilia} adapterLocale={ptBR}>
                   <DateTimePicker
                     label="Data e hora do lembrete"
                     value={scheduledAt}

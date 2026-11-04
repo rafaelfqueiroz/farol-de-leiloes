@@ -358,8 +358,7 @@ The theme, tokens, shared patterns, formatters and logo from issue #38 are in pl
 | Rule | Today | Owner |
 |---|---|---|
 | DS-20 | Page strings are literals; only the `patterns` namespace is in the pt-BR catalogue | #39 |
-| DS-26 | Date pickers (`ReminderButton`, `RemindersPage`) still use `dayjs` | #34 |
-| DS-29 | Inline currency and date formatters (`Intl`, `toLocaleString`, `toFixed`) remain in about 8 files — `AuctionCard`, `AuctionDetailClient`, `auction/[code]/page`, `plans/page`, `admin/coupons/page`, `RemindersPage`, `ReminderButton`, `SearchFilters`, `AuctionList` — and are not yet replaced by `Money` / `DateText` | #39 / #34 |
+| DS-29 | Inline currency and date formatters (`Intl`, `toLocaleString`, `toFixed`) remain in about 8 files — `AuctionCard`, `AuctionDetailClient`, `auction/[code]/page`, `plans/page`, `admin/coupons/page`, `SearchFilters`, `AuctionList` — and are not yet replaced by `Money` / `DateText` | #39 / #34 |
 | DS-01, DS-11, DS-14, DS-15 | Numeric `fontSize` / `fontWeight` literals in 25 files; pages do not yet use `PageShell` / `PageHeader` | #43 |
 | DS-27 | Destructive confirmations are hand-rolled `Dialog`s (`RemindersPage` delete reminder, `plans` cancel subscription) instead of `ConfirmDialog`; some destructive actions have no confirmation at all (admin coupons "Invalidar", `ReminderButton` delete, `SearchFilters` delete saved filter) | no issue yet |
 | §6 | Busca com IA, Jornadas, Relatórios, Investidores and Equipe are not in the navigation yet; Escritório is reserved and empty | each destination's spec issue |

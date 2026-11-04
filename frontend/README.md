@@ -164,6 +164,19 @@ method, the raw body and the `Authorization` header, and returns the backend's s
 verbatim, so the `{ code, context }` error body (AR-37/AR-38) reaches the browser untouched. The BFF
 itself answers only `UNAUTHENTICATED` (401, no token) and `BACKEND_UNAVAILABLE` (502).
 
+## Dates and reminder pickers
+
+Dates use `date-fns` and `@date-fns/tz`, with the shared `TIME_ZONE` (`America/Sao_Paulo`)
+from `i18n/config.ts` (AR-22/AR-23). Render dates through `DateText` and the formatters in
+`lib/dates.ts` (DS-29).
+
+Reminder pickers use `ptBR` and `lib/adapter-date-fns-brasilia.ts` (DS-26). This fixed-zone
+extension of MUI's date-fns adapter constructs and parses `TZDate` values, including internal
+calendar references, so keyboard and calendar edits keep Brasília time regardless of the browser
+zone. Form values must be initialized as `TZDate` in `TIME_ZONE`. Serialize them with
+`new Date(value.getTime()).toISOString()` for UTC API timestamps: `TZDate.toISOString()` emits
+a local offset instead of `Z`.
+
 ## Technologies
 
 - [Next.js 16](https://nextjs.org/)

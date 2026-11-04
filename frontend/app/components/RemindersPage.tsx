@@ -27,9 +27,12 @@ import {
 } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import dayjs, { Dayjs } from 'dayjs';
-import 'dayjs/locale/pt-br';
+import { TZDate } from '@date-fns/tz';
+import { isValid } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { AdapterDateFnsBrasilia } from '@/lib/adapter-date-fns-brasilia';
+import { TIME_ZONE } from '@/i18n/config';
+import DateText from '@/app/components/patterns/DateText';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -53,13 +56,6 @@ const CHANNEL_LABELS: Record<ReminderChannel, string> = {
   WHATSAPP: 'WhatsApp',
 };
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
-}
-
 function formatAddress(auction: Reminder['auction']): string {
   const parts = [auction.city, auction.state].filter(Boolean);
   return parts.join(', ') || 'Localização não informada';
@@ -81,7 +77,7 @@ export default function RemindersPage() {
 
   // Edit form state
   const [editChannel, setEditChannel] = useState<ReminderChannel>('EMAIL');
-  const [editScheduledAt, setEditScheduledAt] = useState<Dayjs | null>(null);
+  const [editScheduledAt, setEditScheduledAt] = useState<Date | null>(null);
   const [editDescription, setEditDescription] = useState('');
 
   const isPremium = role === 'standard' || role === 'premium' || role === 'admin';
@@ -94,7 +90,7 @@ export default function RemindersPage() {
   const handleOpenEditDialog = (reminder: Reminder) => {
     setSelectedReminder(reminder);
     setEditChannel(reminder.channel);
-    setEditScheduledAt(dayjs(reminder.scheduledAt));
+    setEditScheduledAt(new TZDate(reminder.scheduledAt, TIME_ZONE));
     setEditDescription(reminder.description || '');
     setError(null);
     setEditDialogOpen(true);
@@ -119,7 +115,7 @@ export default function RemindersPage() {
   };
 
   const handleSaveEdit = async () => {
-    if (!selectedReminder || !editScheduledAt) {
+    if (!selectedReminder || !editScheduledAt || !isValid(editScheduledAt)) {
       setError('Selecione a data e hora do lembrete');
       return;
     }
@@ -130,7 +126,8 @@ export default function RemindersPage() {
     try {
       const success = await updateReminder(selectedReminder._id, {
         channel: editChannel,
-        scheduledAt: editScheduledAt.toISOString(),
+        // AR-22: keep the API instant in UTC after editing in Brasília.
+        scheduledAt: new Date(editScheduledAt.getTime()).toISOString(),
         description: editDescription || undefined,
       });
 
@@ -246,7 +243,8 @@ export default function RemindersPage() {
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                     <Typography variant="body2">
-                      <strong>Agendado para:</strong> {formatDate(reminder.scheduledAt)}
+                      <strong>Agendado para:</strong>{' '}
+                      <DateText value={reminder.scheduledAt} withTime />
                     </Typography>
                     {reminder.description && (
                       <Typography variant="body2" color="text.secondary">
@@ -324,7 +322,7 @@ export default function RemindersPage() {
                 </Select>
               </FormControl>
 
-              <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="pt-br">
+              <LocalizationProvider dateAdapter={AdapterDateFnsBrasilia} adapterLocale={ptBR}>
                 <DateTimePicker
                   label="Data e hora do lembrete"
                   value={editScheduledAt}
