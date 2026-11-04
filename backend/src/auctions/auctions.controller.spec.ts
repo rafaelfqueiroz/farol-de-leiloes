@@ -19,6 +19,8 @@ import { AuctionsService } from './auctions.service';
 import { configureApp } from '../app.setup';
 import { testConfigService } from '../../test/support/test-env';
 import { type PageRequest, paginated } from '../common/pagination/paginated';
+import { Decimal } from '../common/money/money';
+import { PhaseModality } from './schemas/auction.schema';
 
 const LIST_FILTERS = ['city', 'neighborhood', 'modality'] as const;
 
@@ -102,18 +104,35 @@ describe('AuctionsController over HTTP (Express 5 query parsing)', () => {
       expect(auctions.query).not.toHaveBeenCalled();
     });
 
-    it('turns state and margins into the service filters, as numbers', async () => {
+    // AR-17: minPrice/maxPrice are prices in reais; a money string reaches the service as a
+    // Decimal, never as a float.
+    it('turns state and the price bounds into the service filters, prices as Decimal', async () => {
       await request(app.getHttpServer())
-        .get('/api/auctions?state=SP&minMargin=10&maxMargin=40')
+        .get('/api/auctions?state=SP&minPrice=10&maxPrice=300000.50')
         .expect(200);
 
-      expect(lastQueryFilters()).toEqual({ state: 'SP', minMargin: 10, maxMargin: 40 });
+      expect(lastQueryFilters()).toEqual({
+        state: 'SP',
+        minPrice: new Decimal('10'),
+        maxPrice: new Decimal('300000.50'),
+      });
     });
 
-    it('refuses a margin that is not a number', async () => {
+    it.each(['lots', '-1', '1e5', '10.505', '1.234,56', '0x10', ''])(
+      'refuses minPrice=%s, which is not an amount of reais (MONEY_PATTERN)',
+      async (value) => {
+        await request(app.getHttpServer())
+          .get(`/api/auctions?minPrice=${encodeURIComponent(value)}`)
+          .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['minPrice'] } });
+
+        expect(auctions.query).not.toHaveBeenCalled();
+      },
+    );
+
+    it('refuses a repeated price bound', async () => {
       await request(app.getHttpServer())
-        .get('/api/auctions?minMargin=lots')
-        .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['minMargin'] } });
+        .get('/api/auctions?maxPrice=1&maxPrice=2')
+        .expect(400, { code: 'VALIDATION_FAILED', context: { fields: ['maxPrice'] } });
     });
   });
 
@@ -140,9 +159,9 @@ describe('AuctionsController over HTTP (Express 5 query parsing)', () => {
         code: '1444400000001',
         title: 'Casa',
         address: { city: 'Natal', state: 'RN' },
-        appraisalPrice: 100000,
-        phases: [],
-        currentPhase: null,
+        appraisalPrice: new Decimal('100000'),
+        phases: [{ modality: PhaseModality.SFI_AUCTION, minimumPrice: new Decimal('0.125') }],
+        currentPhase: { modality: PhaseModality.SFI_AUCTION, minimumPrice: null },
         detailsUrl: null,
         imageUrl: null,
         matriculaUrl: null,
@@ -157,7 +176,16 @@ describe('AuctionsController over HTTP (Express 5 query parsing)', () => {
       const response = await request(app.getHttpServer()).get('/api/auctions?page=2').expect(200);
 
       expect(response.body).toEqual({
-        items: [{ ...auction, updatedAt: '2026-01-15T12:00:00.000Z' }],
+        items: [
+          {
+            ...auction,
+            // AR-17 / AR-19: strings of reais, rounded once at the edge, half-even.
+            appraisalPrice: '100000.00',
+            phases: [{ modality: 'SFI_AUCTION', minimumPrice: '0.12' }],
+            currentPhase: { modality: 'SFI_AUCTION', minimumPrice: null },
+            updatedAt: '2026-01-15T12:00:00.000Z',
+          },
+        ],
         total: 41,
         page: 2,
         pageSize: 20,

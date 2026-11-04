@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 
 export type CouponDocument = CouponEntity & Document;
 
@@ -8,8 +8,12 @@ export class CouponEntity extends Document {
   @Prop({ required: true, unique: true, uppercase: true, trim: true })
   code!: string;
 
-  @Prop({ required: true })
-  discountValue!: number; // absolute discount in cents (BRL)
+  // AR-17: the absolute discount in reais, as Decimal128. It was integer centavos before #34 and
+  // was converted in place by migrations/0001-money-decimal128.ts (AR-29), which must run before
+  // this schema is deployed (DV-34): a Decimal128 path casts a leftover 1000 (centavos) on
+  // hydration to Decimal128 1000, which would read as R$ 1.000,00.
+  @Prop({ type: MongooseSchema.Types.Decimal128, required: true })
+  discountValue!: Types.Decimal128;
 
   @Prop({ required: true })
   validTo!: Date;

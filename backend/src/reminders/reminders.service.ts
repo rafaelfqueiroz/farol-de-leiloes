@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { parseISO } from 'date-fns';
 import {
   ReminderEntity,
   ReminderDocument,
@@ -16,6 +17,8 @@ import { AuctionRecord } from '../auctions/interfaces/auction.interface';
 import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface';
 import { DomainError } from '../common/errors/domain-error';
 import { serverOperators } from '../common/mongo/query-safety';
+import { Clock } from '../common/clock/clock';
+import { inBrasilia } from '../common/clock/brasilia-time';
 import {
   type PageRequest,
   type Paginated,
@@ -37,6 +40,7 @@ export class RemindersService {
     private readonly notificationLogModel: Model<NotificationLogDocument>,
     private readonly auctionsService: AuctionsService,
     private readonly usersService: UsersService,
+    private readonly clock: Clock, // AR-24
   ) {}
 
   async create(userId: string, dto: CreateReminderDto): Promise<PopulatedReminder> {
@@ -80,7 +84,7 @@ export class RemindersService {
       throw new DomainError('AUCTION_START_DATE_MISSING');
     }
 
-    if (new Date(auctionStartDate) <= new Date()) {
+    if (auctionStartDate <= this.clock.now()) {
       throw new DomainError('AUCTION_ALREADY_STARTED');
     }
 
@@ -212,7 +216,7 @@ export class RemindersService {
     return this.reminderModel
       .find({
         status: ReminderStatus.PENDING,
-        scheduledAt: serverOperators({ $lte: new Date() }),
+        scheduledAt: serverOperators({ $lte: this.clock.now() }),
       })
       .populate<{ auction: ReminderAuction }>('auction')
       .limit(limit)
@@ -287,9 +291,11 @@ export class RemindersService {
   }
 
   private validateAndNormalizeScheduledAt(scheduledAtStr: string, auctionStartDate: Date): Date {
-    const scheduledAt = new Date(scheduledAtStr);
+    // An ISO string from the DTO: an offset, when given, says which instant it is; without one
+    // it is Brasília wall-clock time (AR-23), never the server's own zone.
+    const scheduledAt = new Date(parseISO(scheduledAtStr, { in: inBrasilia }).getTime());
 
-    if (scheduledAt <= new Date()) {
+    if (scheduledAt <= this.clock.now()) {
       throw new DomainError('REMINDER_DATE_IN_PAST');
     }
 

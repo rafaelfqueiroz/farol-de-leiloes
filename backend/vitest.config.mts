@@ -38,7 +38,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.spec.ts', 'src/main.ts'],
+      // The process entry points: they only wire a Nest context and exit (main.ts, run.ts).
+      exclude: ['src/**/*.spec.ts', 'src/main.ts', 'src/migrations/run.ts'],
       reporter: ['text-summary', 'text', 'lcov'],
       thresholds: {
         // A floor at the coverage measured when the gate was introduced (rounded down), not the
@@ -47,9 +48,10 @@ export default defineConfig({
         // source, where Jest/ts-jest also counted the helpers tsc emits for decorators, so the
         // numbers moved without any code losing a test.
         // Raised in #35 by the HTTP and OpenAPI contract specs (measured 40.0% / 30.2%), then by
-        // the unit specs of the SC-10 query guards (measured 44.0% / 36.2%).
-        lines: 44,
-        branches: 36,
+        // the unit specs of the SC-10 query guards (measured 44.0% / 36.2%), then in #34 by the
+        // money, Clock and payment-port specs (measured 53.7% / 50.0%).
+        lines: 53,
+        branches: 50,
         // TS-24 / AR-06: `domain/` holds the critical modules, gated at 100% branch coverage.
         // The glob is static: Vitest ignores a threshold glob that matches no file, so the gate
         // is inert until the first src/<module>/domain/ file lands and applies the moment it

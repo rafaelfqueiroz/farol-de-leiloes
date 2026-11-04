@@ -55,6 +55,22 @@ describe('RemindersPage dates (AR-23, DS-26)', () => {
     env.reminders.updateReminder.mockResolvedValue(true);
   });
 
+  it('keeps the list and edit dialog usable when one stored instant has no zone', async () => {
+    env.reminders.reminders = [
+      { ...reminder, _id: 'invalid-1', scheduledAt: '2027-01-01T01:30:00' },
+      reminder,
+    ];
+    render(<RemindersPage />);
+    expect(screen.getByText('Data indisponível')).toBeInTheDocument();
+    expect(screen.getByText('31/12/2026 22:30')).toBeInTheDocument();
+    const edit = screen.getAllByRole('button', { name: 'Editar lembrete' })[0];
+    if (!edit) throw new Error('Expected the invalid reminder edit action');
+    await userEvent.click(edit);
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Selecione a data e hora do lembrete');
+    expect(env.reminders.updateReminder).not.toHaveBeenCalled();
+  });
+
   it('formats the list and edit picker in Brasília and saves an unchanged UTC instant', async () => {
     render(<RemindersPage />);
     expect(screen.getByText('31/12/2026 22:30')).toHaveAttribute(
@@ -62,8 +78,8 @@ describe('RemindersPage dates (AR-23, DS-26)', () => {
       '2027-01-01T01:30:00.000Z',
     );
     await userEvent.click(screen.getByRole('button', { name: 'Editar lembrete' }));
-    expect(screen.getByRole('spinbutton', { name: 'Day' })).toHaveTextContent('31');
-    expect(screen.getByRole('spinbutton', { name: 'Hours' })).toHaveTextContent('22');
+    expect(screen.getByRole('spinbutton', { name: 'Dia' })).toHaveTextContent('31');
+    expect(screen.getByRole('spinbutton', { name: 'Horas' })).toHaveTextContent('22');
     await userEvent.click(screen.getByRole('button', { name: 'Salvar' }));
     expect(env.reminders.updateReminder).toHaveBeenCalledWith('reminder-1', {
       channel: 'EMAIL',
@@ -75,9 +91,11 @@ describe('RemindersPage dates (AR-23, DS-26)', () => {
   it('keeps Brasília semantics after a keyboard calendar edit', async () => {
     render(<RemindersPage />);
     await userEvent.click(screen.getByRole('button', { name: 'Editar lembrete' }));
-    const day = screen.getByRole('spinbutton', { name: 'Day' });
+    const day = screen.getByRole('spinbutton', { name: 'Dia' });
     await userEvent.click(day);
     await userEvent.keyboard('30');
+    expect(day).toHaveTextContent('30');
+    expect(screen.getByRole('spinbutton', { name: 'Horas' })).toHaveTextContent('22');
     await userEvent.click(screen.getByRole('button', { name: 'Salvar' }));
     expect(env.reminders.updateReminder).toHaveBeenCalledWith(
       'reminder-1',

@@ -1,9 +1,11 @@
 // The search criteria a saved filter stores: the same filters GET /api/auctions takes, with the
-// list filters always as lists. Used for the request (AR-34) and, copied field by field, for the
-// response (AR-36).
+// list filters always as lists. FilterDataDto is the request (AR-34); FilterDataResponseDto the
+// response, each field copied explicitly (AR-36). Money is a string over JSON both ways (AR-17).
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsNumber, IsOptional, IsString, Min } from 'class-validator';
-import { FilterData } from '../schemas/saved-filter.schema';
+import { IsArray, IsOptional, IsString } from 'class-validator';
+import type { Decimal } from '../../common/money/money';
+import { IsMoneyString, MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto';
+import { FilterData } from '../interfaces/saved-filter.interface';
 
 export class FilterDataDto {
   @ApiPropertyOptional({ type: String, description: 'UF, e.g. SP' })
@@ -29,42 +31,61 @@ export class FilterDataDto {
   @IsString({ each: true })
   modality?: string[];
 
-  @ApiPropertyOptional({ type: Number, minimum: 0, description: 'BRL' })
+  // Prices in reais, despite the name: the bounds of GET /api/auctions' minPrice/maxPrice.
+  @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Lowest minimum price, BRL' })
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  minMargin?: number;
+  @IsMoneyString()
+  minPrice?: Decimal;
 
-  @ApiPropertyOptional({ type: Number, minimum: 0, description: 'BRL' })
+  @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Highest minimum price, BRL' })
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  maxMargin?: number;
+  @IsMoneyString()
+  maxPrice?: Decimal;
 
-  static from(filters: FilterData): FilterDataDto {
-    const dto = new FilterDataDto();
-    dto.state = filters.state;
-    dto.city = filters.city;
-    dto.neighborhood = filters.neighborhood;
-    dto.modality = filters.modality;
-    dto.minMargin = filters.minMargin;
-    dto.maxMargin = filters.maxMargin;
-    return dto;
-  }
-
-  /** The plain object stored in the document: only the criteria that were given. */
+  /**
+   * Only the criteria that were given: the driver would store an undefined one as null, and
+   * @IsOptional lets an explicit null through, which means the same as absent.
+   */
   toFilterData(): FilterData {
     const data: FilterData = {
       state: this.state,
       city: this.city,
       neighborhood: this.neighborhood,
       modality: this.modality,
-      minMargin: this.minMargin,
-      maxMargin: this.maxMargin,
+      minPrice: this.minPrice,
+      maxPrice: this.maxPrice,
     };
-    // The driver would store an undefined criterion as null.
     return Object.fromEntries(
-      Object.entries(data).filter(([, value]) => value !== undefined),
+      Object.entries(data).filter(([, value]) => value !== undefined && value !== null),
     ) as FilterData;
+  }
+}
+
+export class FilterDataResponseDto {
+  @ApiPropertyOptional({ type: String, description: 'UF, e.g. SP' })
+  state?: string;
+
+  @ApiPropertyOptional({ type: String, isArray: true })
+  city?: string[];
+
+  @ApiPropertyOptional({ type: String, isArray: true })
+  neighborhood?: string[];
+
+  @ApiPropertyOptional({ type: String, isArray: true })
+  modality?: string[];
+
+  @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Lowest minimum price, BRL' })
+  minPrice?: string;
+
+  @ApiPropertyOptional({ ...MONEY_API_PROPERTY, description: 'Highest minimum price, BRL' })
+  maxPrice?: string;
+
+  constructor(filters: FilterData) {
+    this.state = filters.state;
+    this.city = filters.city;
+    this.neighborhood = filters.neighborhood;
+    this.modality = filters.modality;
+    this.minPrice = moneyToJson(filters.minPrice);
+    this.maxPrice = moneyToJson(filters.maxPrice);
   }
 }

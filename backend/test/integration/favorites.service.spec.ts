@@ -15,6 +15,8 @@ import {
   PhaseModality,
 } from '../../src/auctions/schemas/auction.schema';
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety';
+import { Clock } from '../../src/common/clock/clock';
+import { FakeClock } from '../fakes/fake-clock';
 import { FavoritesService } from '../../src/favorites/favorites.service';
 import { FavoriteEntity, FavoriteSchema } from '../../src/favorites/schemas/favorite.schema';
 import { useTestDatabase } from '../support/test-database';
@@ -28,7 +30,10 @@ const LONG_AGO = new Date('2000-01-01T00:00:00.000Z');
 const UPDATED = new Date('2026-01-15T12:00:00.000Z');
 
 function auction(code: string, overrides: Record<string, unknown> = {}) {
-  const phase = { modality: PhaseModality.ONLINE_SALES, minimumPrice: 100000 };
+  const phase = {
+    modality: PhaseModality.ONLINE_SALES,
+    minimumPrice: Types.Decimal128.fromString('100000'), // AR-17
+  };
   return {
     code,
     available: true,
@@ -58,6 +63,7 @@ describe('FavoritesService (integration)', () => {
       providers: [
         FavoritesService,
         AuctionsService,
+        { provide: Clock, useValue: new FakeClock() },
         { provide: CACHE_MANAGER, useValue: {} },
         { provide: ConfigService, useValue: testConfigService() },
       ],

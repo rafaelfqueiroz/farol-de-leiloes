@@ -34,44 +34,10 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import { useFavorites } from '@/app/contexts/FavoritesContext';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { hasMinimumRole } from '@/app/components/RequireRole';
-
-interface ExpenseRule {
-  type: string;
-  description: string;
-}
-
-interface Phase {
-  modality: string;
-  minimumPrice?: number;
-  phaseDates?: string[];
-  paymentMethods?: string[];
-  expenseRules?: ExpenseRule[];
-}
-
-interface Address {
-  street?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
-  zipcode?: string;
-}
-
-export interface Auction {
-  code: string;
-  title: string;
-  address: Address;
-  appraisalPrice?: number;
-  phases: Phase[];
-  detailsUrl?: string;
-  imageUrl?: string;
-  matriculaUrl?: string;
-  editalUrl?: string;
-  description?: string;
-  fulfilled?: boolean;
-  available?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
+import Money from '@/app/components/patterns/Money';
+import DateText from '@/app/components/patterns/DateText';
+import type { AuctionDetail } from '@/lib/auction';
+import { discountPercent, formatPercent } from '@/lib/money';
 
 const MODALITY_LABELS: Record<string, string> = {
   SFI_AUCTION: 'Leilão SFI',
@@ -91,30 +57,13 @@ const DOCUMENT_LABELS: Record<string, string> = {
   edital: 'Edital e Anexos',
 };
 
-function formatCurrency(value?: number): string {
-  if (!value) return 'N/A';
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-}
-
-function formatDate(dateString?: string): string {
-  if (!dateString) return 'Não informado';
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-  }).format(date);
-}
-
-function formatAddress(address: Address): string {
+function formatAddress(address: AuctionDetail['address']): string {
   const parts = [address.street, address.neighborhood, address.city, address.state].filter(Boolean);
   return parts.join(', ') || 'Endereço não informado';
 }
 
 interface AuctionDetailClientProps {
-  auction: Auction;
+  auction: AuctionDetail;
 }
 
 export default function AuctionDetailClient({ auction }: AuctionDetailClientProps) {
@@ -140,10 +89,8 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
   };
 
   const lastPhase = auction.phases[auction.phases.length - 1];
-  const discount =
-    auction.appraisalPrice && lastPhase?.minimumPrice
-      ? ((auction.appraisalPrice - lastPhase.minimumPrice) / auction.appraisalPrice) * 100
-      : null;
+  // AR-17: Decimal arithmetic on the money strings, never JS numbers
+  const discount = discountPercent(auction.appraisalPrice, lastPhase?.minimumPrice ?? null);
 
   return (
     // #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar
@@ -292,7 +239,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                   mb: 3,
                 }}
               >
-                {auction.appraisalPrice && (
+                {auction.appraisalPrice !== null && (
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                     <HomeIcon sx={{ color: 'info.main' }} />
                     <Box>
@@ -300,13 +247,13 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                         Valor de Avaliação
                       </Typography>
                       <Typography variant="h6" fontWeight={600} color="info.main">
-                        {formatCurrency(auction.appraisalPrice)}
+                        <Money value={auction.appraisalPrice} />
                       </Typography>
                     </Box>
                   </Box>
                 )}
 
-                {lastPhase?.minimumPrice && (
+                {lastPhase?.minimumPrice != null && (
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                     <AttachMoneyIcon sx={{ color: 'success.main' }} />
                     <Box>
@@ -314,11 +261,11 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                         Lance Mínimo Atual
                       </Typography>
                       <Typography variant="h6" fontWeight={600} color="success.main">
-                        {formatCurrency(lastPhase.minimumPrice)}
+                        <Money value={lastPhase.minimumPrice} />
                       </Typography>
                       {discount !== null && (
                         <Chip
-                          label={`${discount.toFixed(1)}% de desconto`}
+                          label={`${formatPercent(discount)} de desconto`}
                           color="success"
                           size="small"
                           sx={{ mt: 0.5 }}
@@ -338,7 +285,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                       {lastPhase.phaseDates.map((date, idx, dates) => (
                         <Typography key={idx} variant="body1" fontWeight={600}>
                           {dates.length > 1 ? `${idx + 1}º Leilão: ` : ''}
-                          {formatDate(date)}
+                          <DateText value={date} withTime />
                         </Typography>
                       ))}
                     </Box>
@@ -506,17 +453,14 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                               color={index === auction.phases.length - 1 ? 'primary' : 'default'}
                             />
                           </TableCell>
-                          <TableCell align="right">{formatCurrency(phase.minimumPrice)}</TableCell>
+                          <TableCell align="right">
+                            <Money value={phase.minimumPrice} />
+                          </TableCell>
                           <TableCell>
                             {phase.phaseDates && phase.phaseDates.length > 0
                               ? phase.phaseDates.map((d, i) => (
                                   <Box key={i} component="span" sx={{ display: 'block' }}>
-                                    {new Date(d).toLocaleDateString('pt-BR', {
-                                      dateStyle: 'short',
-                                    })}{' '}
-                                    {new Date(d).toLocaleTimeString('pt-BR', {
-                                      timeStyle: 'short',
-                                    })}
+                                    <DateText value={d} withTime />
                                   </Box>
                                 ))
                               : 'Não informado'}
@@ -555,7 +499,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
               color="text.secondary"
               sx={{ display: 'block', textAlign: 'center', mt: 3 }}
             >
-              Última atualização: {formatDate(auction.updatedAt)}
+              Última atualização: <DateText value={auction.updatedAt} withTime />
             </Typography>
           )}
         </Box>

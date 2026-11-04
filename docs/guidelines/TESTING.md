@@ -38,7 +38,7 @@ A controller's HTTP contract that needs no database — query-string parsing, th
 | Folder | Holds |
 |---|---|
 | `backend/test/support/` | Harness code: `fixtures.ts` (paths of the captured Caixa fixtures), the MongoDB global setup and teardown, `test-database.ts` (`useTestDatabase()`), `silence-logger.ts` (the setup file that silences the Nest Logger) |
-| `backend/test/fakes/` | Hand-written fakes of ports (TS-03), e.g. `FakeClock` (TS-06) |
+| `backend/test/fakes/` | Hand-written fakes of ports (TS-03), e.g. `FakeClock` (TS-06), `FakePaymentGateway` (AR-10) |
 | `backend/test/builders/` | Test-data builders (TS-29), e.g. `aJobExecution()` |
 | `backend/test/fixtures/caixa/` | Captured Caixa pages and lists (TS-28) |
 
@@ -112,15 +112,15 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | Scope | Threshold | Blocking |
 |---|---|---|
 | Critical `domain/` modules (AR-06) | **100% branch** | ✅ |
-| Backend overall | **80% lines and branches** (temporary floor: 40% lines, 30% branches — #57) | ✅ |
-| Frontend overall | **80% lines and branches** (temporary floor: 49% lines, 45% branches — #57) | ✅ |
+| Backend overall | **80% lines and branches** (temporary floor: 53% lines, 50% branches — #57) | ✅ |
+| Frontend overall | **80% lines and branches** (temporary floor: 55% lines, 52% branches — #57) | ✅ |
 | Isolation — every owned collection | **100%** (TS-14, from #2) | ✅ |
 
 80% is the target. The legacy code was far below it when the gate was introduced, so each package commits a **floor** at the coverage measured then (rounded down): `coverage.thresholds` in `backend/vitest.config.mts` and in `frontend/vitest.config.ts`. The floor only goes up — a PR that raises coverage raises it — until it reaches 80%; #57 tracks the ratchet. `npm run test:cov` enforces it (backend: Vitest with V8 coverage over the `unit` and `structural` projects; frontend: Vitest with V8 coverage) and writes an lcov report to `coverage/`.
 
-The frontend floor reached 49% lines / 45% branches in #58, measured with the reminder picker timezone and formatting regression tests.
+The frontend coverage floor was re-measured in #58 at 55% lines / 52% branches, incorporating gains from earlier changes as well as the reminder regression tests.
 
-**The backend floor was re-baselined in #62.** The backend moved from Jest with ts-jest to Vitest with V8 coverage; the new instrument measures the source, where ts-jest also counted the helpers `tsc` emits for decorators. The floor went from 23% lines / 14% branches to 21% / 16% because the instrument changed, not because any code lost a test. It ratchets up from here as before: #61 raised it to 23% / 19% with the HTTP specs of the auctions and payments controllers, and #35 to 40% / 30% with the HTTP and OpenAPI contract specs, then to 44% / 36% with the unit specs of the SC-10 query guards.
+**The backend floor was re-baselined in #62.** The backend moved from Jest with ts-jest to Vitest with V8 coverage; the new instrument measures the source, where ts-jest also counted the helpers `tsc` emits for decorators. The floor went from 23% lines / 14% branches to 21% / 16% because the instrument changed, not because any code lost a test. It ratchets up from here as before: #61 raised it to 23% / 19% with the HTTP specs of the auctions and payments controllers, and #35 to 40% / 30% with the HTTP and OpenAPI contract specs, then to 44% / 36% with the unit specs of the SC-10 query guards; #34 to 53% / 50% with the money, Clock and payment-port specs.
 
 | | |
 |---|---|
@@ -160,6 +160,7 @@ ESLint rules that carry weight (beyond the recommended sets):
 | `no-restricted-imports` of other modules' `*.repository`/`schemas` | AR-09 |
 | `@typescript-eslint/no-explicit-any`, `no-non-null-assertion` | DV-02, DV-03 |
 | `no-console` | DV-11 |
+| `no-restricted-syntax` for argument-less `new Date()` / `Date.now()` outside `common/clock/` | AR-24 — "now" comes from the injected `Clock` |
 | `@typescript-eslint/no-floating-promises` | an un-awaited write is a silent data loss |
 | `no-restricted-syntax` for hex colours and `px` literals in `sx` (frontend) | DS-01 |
 | `react/jsx-no-literals` on components (frontend) | DS-20 |

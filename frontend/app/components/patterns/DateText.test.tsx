@@ -7,6 +7,20 @@ const now = new Date('2026-03-10T15:00:00Z'); // 12:00 in Brasília
 
 describe('DateText', () => {
   it.each(['light', 'dark'] as const)(
+    'keeps invalid timestamps readable without emitting an invalid time element (%s)',
+    async (scheme) => {
+      const { container } = renderWithProviders(
+        <DateText value="2027-01-01T01:30:00" withTime relative now={now} />,
+        { scheme },
+      );
+
+      expect(screen.getByText('Data indisponível')).toBeInTheDocument();
+      expect(container.querySelector('time')).toBeNull();
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
+
+  it.each(['light', 'dark'] as const)(
     'renders a <time> with the datetime and passes axe (%s)',
     async (scheme) => {
       const { container } = renderWithProviders(<DateText value="2026-03-10T15:30:00Z" />, {

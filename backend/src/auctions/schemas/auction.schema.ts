@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
 export enum PhaseModality {
   SFI_AUCTION = 'SFI_AUCTION',
@@ -36,9 +36,15 @@ export enum PaymentMethod {
   FINANCING = 'FINANCING', // Financiamento
 }
 
-export interface Phase {
+/**
+ * A phase as stored. `phases` and `currentPhase` are Mixed paths, so Mongoose casts nothing in
+ * them: every writer converts through toStoredPhase (auction.mapper.ts) and every reader through
+ * fromStoredPhase. In code a phase is the `Phase` of interfaces/auction.interface.ts.
+ */
+export interface StoredPhase {
   modality: PhaseModality;
-  minimumPrice?: number | null;
+  // AR-17: reais as Decimal128; null when Caixa gave no price.
+  minimumPrice?: Types.Decimal128 | null;
   phaseDates?: Date[];
   paymentMethods?: PaymentMethod[];
   expenseRules?: ExpenseRule[];
@@ -55,14 +61,15 @@ export class AuctionEntity {
   @Prop({ type: Object })
   address?: Address;
 
-  @Prop({ type: Number })
-  appraisalPrice?: number | null;
+  // AR-17: reais as Decimal128.
+  @Prop({ type: MongooseSchema.Types.Decimal128 })
+  appraisalPrice?: Types.Decimal128 | null;
 
   @Prop({ type: Array })
-  phases?: Phase[];
+  phases?: StoredPhase[];
 
   @Prop({ type: Object })
-  currentPhase?: Phase;
+  currentPhase?: StoredPhase;
 
   @Prop({ type: String })
   detailsUrl?: string | null;
@@ -99,4 +106,5 @@ export const AuctionSchema = SchemaFactory.createForClass(AuctionEntity);
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1 });
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1, 'address.neighborhood': 1 });
 AuctionSchema.index({ 'currentPhase.modality': 1 });
+// The price range filter compares Decimal128 bounds with Decimal128 prices (AR-17).
 AuctionSchema.index({ 'currentPhase.minimumPrice': 1 });

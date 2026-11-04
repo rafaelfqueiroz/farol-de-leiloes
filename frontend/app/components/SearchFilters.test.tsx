@@ -62,3 +62,65 @@ describe('SearchFilters saved filters load failure', () => {
     expect(screen.queryByText(messages.loadFailed.savedFilters.title)).not.toBeInTheDocument();
   });
 });
+
+// AR-17: the slider moves JS numbers, but the filters leave the form as money strings.
+describe('SearchFilters price range', () => {
+  const search = () => screen.getByRole('button', { name: 'Buscar Imóveis' });
+
+  it('sends the price bounds as money strings', async () => {
+    const onSearch = vi.fn();
+    render(
+      <SearchFilters
+        onSearch={onSearch}
+        initialFilters={{ minPrice: '50000.00', maxPrice: '1500000.00' }}
+      />,
+    );
+
+    await userEvent.click(search());
+
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({ minPrice: '50000.00', maxPrice: '1500000.00' }),
+    );
+  });
+
+  it('sends no bound for a thumb left at the end of the slider', async () => {
+    const onSearch = vi.fn();
+    render(<SearchFilters onSearch={onSearch} initialFilters={{ minPrice: '100000' }} />);
+
+    await userEvent.click(search());
+
+    const sent = onSearch.mock.calls[0]?.[0];
+    expect(sent.minPrice).toBe('100000.00');
+    expect(sent.maxPrice).toBeUndefined();
+  });
+
+  it('saves the price bounds as money strings', async () => {
+    env.saved.saveFilter.mockResolvedValue({});
+    render(
+      <SearchFilters
+        onSearch={vi.fn()}
+        initialFilters={{ minPrice: '250000.00', maxPrice: '1000000.00' }}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /salvar filtro/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: /nome/i }), 'Casas');
+    await userEvent.click(screen.getByRole('button', { name: /^salvar$/i }));
+
+    expect(env.saved.saveFilter).toHaveBeenCalledWith(
+      'Casas',
+      expect.objectContaining({ minPrice: '250000.00', maxPrice: '1000000.00' }),
+    );
+  });
+
+  it('labels the range with the shared compact money format', () => {
+    render(
+      <SearchFilters
+        onSearch={vi.fn()}
+        initialFilters={{ minPrice: '50000.00', maxPrice: '1500000.00' }}
+      />,
+    );
+
+    expect(screen.getByText('R$ 50 mil - R$ 1,5 mi')).toBeInTheDocument();
+  });
+});

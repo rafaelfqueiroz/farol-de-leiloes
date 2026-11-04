@@ -3,6 +3,7 @@ import * as cheerio from 'cheerio';
 // flags. Puppeteer 25 is ESM-only; this CommonJS build loads it through Node's require(esm).
 import puppeteer from 'puppeteer';
 import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema';
+import { brasiliaWallClockToInstant } from '../../common/clock/brasilia-time';
 
 export interface ScrapedPhaseDetails {
   paymentMethods?: PaymentMethod[];
@@ -151,8 +152,10 @@ function extractExpenseRules(html: string): ExpenseRule[] {
 }
 
 /**
- * Parses a date string in Brazilian format "DD/MM/YYYY - HHhMM" to a Date object
- * Example: "26/01/2026 - 10h00" -> Date
+ * Parses a date string in Brazilian format "DD/MM/YYYY - HHhMM" to a Date object.
+ * Caixa's pages show Brasília wall-clock time, so "26/01/2026 - 10h00" is 13:00 UTC (AR-23).
+ * It used to be built with `new Date(y, m, d, h, min)`, in the server's own zone: correct only
+ * on a server set to Brasília, three hours off on one in UTC.
  */
 function parseBrazilianDate(dateStr: string): Date | null {
   // Match pattern: DD/MM/YYYY - HHhMM
@@ -162,15 +165,13 @@ function parseBrazilianDate(dateStr: string): Date | null {
   const [, day, month, year, hours, minutes] = match;
   // Every group is mandatory, so this only narrows the types (DV-03).
   if (!day || !month || !year || !hours || !minutes) return null;
-  // Create date in Brazil timezone (UTC-3)
-  const date = new Date(
-    parseInt(year),
-    parseInt(month) - 1, // Month is 0-indexed
-    parseInt(day),
-    parseInt(hours),
-    parseInt(minutes),
-  );
-  return date;
+  return brasiliaWallClockToInstant({
+    year: parseInt(year),
+    month: parseInt(month),
+    day: parseInt(day),
+    hours: parseInt(hours),
+    minutes: parseInt(minutes),
+  });
 }
 
 /**
@@ -225,14 +226,15 @@ function extractPhaseDates(html: string): Date[] {
     const [, day, month, year, hours, minutes, seconds] = strListaMatch;
     // Every group is mandatory, so this only narrows the types (DV-03).
     if (!day || !month || !year || !hours || !minutes || !seconds) return phaseDates;
-    const date = new Date(
-      parseInt(year),
-      parseInt(month) - 1,
-      parseInt(day),
-      parseInt(hours),
-      parseInt(minutes),
-      parseInt(seconds),
-    );
+    // Brasília wall-clock time, as above (AR-23).
+    const date = brasiliaWallClockToInstant({
+      year: parseInt(year),
+      month: parseInt(month),
+      day: parseInt(day),
+      hours: parseInt(hours),
+      minutes: parseInt(minutes),
+      seconds: parseInt(seconds),
+    });
     phaseDates.push(date);
   }
 

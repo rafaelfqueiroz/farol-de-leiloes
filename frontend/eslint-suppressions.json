@@ -7,7 +7,7 @@
       "count": 1
     },
     "react/jsx-no-literals": {
-      "count": 13
+      "count": 12
     }
   },
   "app/(shell)/(authenticated)/plans/page.tsx": {

@@ -1,14 +1,9 @@
 // AR-36: an auction leaves the API through these classes only, each field copied explicitly, so
 // a field added to the stored document (storage keys, availability bookkeeping) never leaks.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Auction } from '../interfaces/auction.interface';
-import {
-  Address,
-  ExpenseRule,
-  Phase,
-  PaymentMethod,
-  PhaseModality,
-} from '../schemas/auction.schema';
+import { Auction, Phase } from '../interfaces/auction.interface';
+import { Address, ExpenseRule, PaymentMethod, PhaseModality } from '../schemas/auction.schema';
+import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto';
 
 export class AuctionAddressDto {
   @ApiPropertyOptional({ type: String })
@@ -52,8 +47,9 @@ export class AuctionPhaseDto {
   @ApiProperty({ enum: PhaseModality, enumName: 'PhaseModality' })
   modality: PhaseModality;
 
-  @ApiPropertyOptional({ type: Number, nullable: true, description: 'Minimum price in BRL' })
-  minimumPrice?: number | null;
+  // AR-17: money leaves the API as a string of reais.
+  @ApiProperty({ ...MONEY_API_PROPERTY, nullable: true, description: 'Minimum price in BRL' })
+  minimumPrice: string | null;
 
   @ApiPropertyOptional({ type: String, format: 'date-time', isArray: true })
   phaseDates?: Date[];
@@ -66,7 +62,7 @@ export class AuctionPhaseDto {
 
   constructor(phase: Phase) {
     this.modality = phase.modality;
-    this.minimumPrice = phase.minimumPrice;
+    this.minimumPrice = moneyToJson(phase.minimumPrice);
     this.phaseDates = phase.phaseDates;
     this.paymentMethods = phase.paymentMethods;
     this.expenseRules = phase.expenseRules?.map((rule) => new ExpenseRuleDto(rule));
@@ -83,8 +79,8 @@ export class AuctionResponseDto {
   @ApiProperty({ type: () => AuctionAddressDto, nullable: true })
   address: AuctionAddressDto | null;
 
-  @ApiProperty({ type: Number, nullable: true, description: 'Appraisal in BRL' })
-  appraisalPrice: number | null;
+  @ApiProperty({ ...MONEY_API_PROPERTY, nullable: true, description: 'Appraisal in BRL' })
+  appraisalPrice: string | null;
 
   @ApiProperty({ type: () => AuctionPhaseDto, isArray: true })
   phases: AuctionPhaseDto[];
@@ -120,7 +116,7 @@ export class AuctionResponseDto {
     this.code = auction.code;
     this.title = auction.title;
     this.address = auction.address ? new AuctionAddressDto(auction.address) : null;
-    this.appraisalPrice = auction.appraisalPrice;
+    this.appraisalPrice = moneyToJson(auction.appraisalPrice);
     this.phases = auction.phases.map((phase) => new AuctionPhaseDto(phase));
     this.currentPhase = auction.currentPhase ? new AuctionPhaseDto(auction.currentPhase) : null;
     this.detailsUrl = auction.detailsUrl;

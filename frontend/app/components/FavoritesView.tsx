@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Box, Pagination, Typography } from '@mui/material';
-import { useFavorites, type Auction } from '../contexts/FavoritesContext';
+import { useFavorites } from '../contexts/FavoritesContext';
+import type { Auction } from '@/lib/auction';
 import { useAuth } from '../contexts/AuthContext';
 import AuctionCard from './AuctionCard';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';

@@ -1,8 +1,10 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import AuctionDetailClient, { Auction } from './AuctionDetailClient';
+import AuctionDetailClient from './AuctionDetailClient';
 import { backendFetch } from '@/lib/backend';
 import { publicEnv } from '@/lib/env';
+import type { AuctionDetail } from '@/lib/auction';
+import { formatMoney } from '@/lib/money';
 import { reportClientError } from '@/lib/report-client-error';
 
 // ISR: Revalidate every hour
@@ -10,7 +12,7 @@ export const revalidate = 3600;
 
 const SITE_URL = publicEnv.siteUrl;
 
-async function fetchAuction(code: string): Promise<Auction | null> {
+async function fetchAuction(code: string): Promise<AuctionDetail | null> {
   try {
     const response = await backendFetch(`/auctions/${encodeURIComponent(code)}`, {
       next: { revalidate: 3600 },
@@ -27,17 +29,9 @@ async function fetchAuction(code: string): Promise<Auction | null> {
   }
 }
 
-function formatAddress(address: Auction['address']): string {
+function formatAddress(address: AuctionDetail['address']): string {
   const parts = [address.neighborhood, address.city, address.state].filter(Boolean);
   return parts.join(', ') || 'Localização não informada';
-}
-
-function formatCurrency(value?: number): string {
-  if (!value) return '';
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
 }
 
 type PageProps = {
@@ -58,7 +52,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const lastPhase = auction.phases[auction.phases.length - 1];
   const locationText = formatAddress(auction.address);
   const priceText = lastPhase?.minimumPrice
-    ? `Lance mínimo: ${formatCurrency(lastPhase.minimumPrice)}`
+    ? `Lance mínimo: ${formatMoney(lastPhase.minimumPrice)}`
     : '';
 
   const title = auction.title || `Imóvel em ${locationText}`;
@@ -103,7 +97,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-function generateJsonLd(auction: Auction) {
+function generateJsonLd(auction: AuctionDetail) {
   const lastPhase = auction.phases[auction.phases.length - 1];
 
   return {
@@ -114,7 +108,8 @@ function generateJsonLd(auction: Auction) {
     image: auction.imageUrl,
     offers: {
       '@type': 'Offer',
-      price: lastPhase?.minimumPrice || undefined,
+      // schema.org takes the price as a decimal string, which is what the API sends (AR-17)
+      price: lastPhase?.minimumPrice ?? undefined,
       priceCurrency: 'BRL',
       availability: auction.available ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut',
       url: `${SITE_URL}/auction/${auction.code}`,

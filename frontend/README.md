@@ -107,6 +107,7 @@ frontend/
 │   │   └── chat/
 │   │       └── route.ts       # Chat API endpoint
 │   ├── components/patterns/   # Shared design-system patterns (Logo, PageShell, Money…)
+│   ├── components/DateField.tsx # Date / date-time input in Brasília time (DS-26)
 │   ├── theme/                 # MUI theme: tokens, light/dark schemes (DESIGN.md)
 │   ├── layout.tsx             # Root layout
 │   └── page.tsx               # Main chat interface
@@ -114,6 +115,7 @@ frontend/
 │   ├── env.ts                 # The only reader of process.env (AR-42)
 │   ├── backend.ts             # BFF helper: backendFetch / proxyToBackend (server-only)
 │   ├── money.ts, dates.ts     # Money (decimal.js) and date (date-fns) helpers
+│   ├── auction.ts             # Shared auction types (money as strings)
 │   └── mcp-server.ts          # MCP server (optional standalone)
 ├── messages/pt-BR.json        # next-intl catalogue (pt-BR)
 ├── test/                      # Vitest setup and structural tests
@@ -170,12 +172,13 @@ Dates use `date-fns` and `@date-fns/tz`, with the shared `TIME_ZONE` (`America/S
 from `i18n/config.ts` (AR-22/AR-23). Render dates through `DateText` and the formatters in
 `lib/dates.ts` (DS-29).
 
-Reminder pickers use `ptBR` and `lib/adapter-date-fns-brasilia.ts` (DS-26). This fixed-zone
-extension of MUI's date-fns adapter constructs and parses `TZDate` values, including internal
-calendar references, so keyboard and calendar edits keep Brasília time regardless of the browser
-zone. Form values must be initialized as `TZDate` in `TIME_ZONE`. Serialize them with
-`new Date(value.getTime()).toISOString()` for UTC API timestamps: `TZDate.toISOString()` emits
-a local offset instead of `Z`.
+Reminder forms use the shared `DateField` primitive (DS-26), which accepts and returns API
+strings and handles the `ptBR` pickers centrally. Strict instant inputs use `tryParseInstant`;
+Date values are serialized through `toUtcInstant` from `lib/dates.ts` (AR-22). Invalid stored
+dates render the catalogue fallback through `DateText` and stay editable in `DateField`.
+
+The Vitest worker zone is pinned to `Asia/Tokyo`, so a Brasília developer host cannot hide a
+browser-local date regression.
 
 ## Technologies
 

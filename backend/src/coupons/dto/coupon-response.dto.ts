@@ -1,6 +1,7 @@
 // AR-36: a coupon leaves the API through these classes, each field copied explicitly.
 import { ApiProperty } from '@nestjs/swagger';
 import { Coupon } from '../interfaces/coupon.interface';
+import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto';
 
 export class CouponResponseDto {
   @ApiProperty({ type: String })
@@ -9,8 +10,9 @@ export class CouponResponseDto {
   @ApiProperty({ type: String })
   code: string;
 
-  @ApiProperty({ type: 'integer', description: 'Absolute discount in BRL cents' })
-  discountValue: number;
+  // AR-17: reais as a string (was integer centavos before #34).
+  @ApiProperty({ ...MONEY_API_PROPERTY, example: '10.00', description: 'Absolute discount in BRL' })
+  discountValue: string;
 
   @ApiProperty({ type: String, format: 'date-time' })
   validTo: Date;
@@ -33,7 +35,7 @@ export class CouponResponseDto {
   constructor(coupon: Coupon) {
     this._id = coupon._id;
     this.code = coupon.code;
-    this.discountValue = coupon.discountValue;
+    this.discountValue = moneyToJson(coupon.discountValue);
     this.validTo = coupon.validTo;
     this.active = coupon.active;
     this.stripeCouponId = coupon.stripeCouponId;
@@ -48,8 +50,9 @@ export class CouponValidationResponseDto {
   @ApiProperty({ type: String })
   code: string;
 
-  @ApiProperty({ type: 'integer', description: 'Absolute discount in BRL cents' })
-  discountValue: number;
+  // AR-17: reais as a string (was integer centavos before #34).
+  @ApiProperty({ ...MONEY_API_PROPERTY, example: '10.00', description: 'Absolute discount in BRL' })
+  discountValue: string;
 
   @ApiProperty({ type: String, format: 'date-time' })
   validTo: Date;
@@ -59,7 +62,7 @@ export class CouponValidationResponseDto {
 
   constructor(coupon: Coupon) {
     this.code = coupon.code;
-    this.discountValue = coupon.discountValue;
+    this.discountValue = moneyToJson(coupon.discountValue);
     this.validTo = coupon.validTo;
     this.description = coupon.description;
   }

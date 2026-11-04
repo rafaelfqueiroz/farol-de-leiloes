@@ -2,12 +2,14 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AuctionsService } from '../auctions.service';
 import { normalizeRows, parseCsv } from './parser';
-import { PhaseModality, Phase } from '../schemas/auction.schema';
+import { PhaseModality } from '../schemas/auction.schema';
+import type { Phase } from '../interfaces/auction.interface';
 import { JobExecutionService } from '../../common/services/job-execution.service';
 import { RunMode } from '../../common/schemas/job-execution.schema';
 import { CsvCacheService } from './csv-cache.service';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
 import { errorMessage } from '../../common/error-message';
+import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time';
 
 @Injectable()
 export class AuctionsImporter {
@@ -41,7 +43,8 @@ export class AuctionsImporter {
     }
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  // AR-25 / BR-003-27: 03:00 in Brasília, whatever zone the server runs in.
+  @Cron(CronExpression.EVERY_DAY_AT_3AM, { timeZone: BRASILIA_TIME_ZONE })
   async dailyJob() {
     const { enabled } = this.config.import;
 

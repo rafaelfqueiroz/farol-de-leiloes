@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { SavedFilterEntity, SavedFilterDocument, FilterData } from './schemas/saved-filter.schema';
-import { SavedFilter } from './interfaces/saved-filter.interface';
+import {
+  SavedFilterEntity,
+  SavedFilterDocument,
+  StoredFilterData,
+} from './schemas/saved-filter.schema';
+import { FilterData, SavedFilter } from './interfaces/saved-filter.interface';
 import { DomainError } from '../common/errors/domain-error';
+import { fromDecimal128OrNull, toDecimal128 } from '../common/money/decimal128';
 import {
   type PageRequest,
   type Paginated,
@@ -58,7 +63,7 @@ export class SavedFiltersService {
     const savedFilter = new this.savedFilterRepository({
       userId,
       name,
-      filters,
+      filters: toStoredFilterData(filters),
     });
 
     const saved = await savedFilter.save();
@@ -81,8 +86,27 @@ export class SavedFiltersService {
     return {
       _id: doc._id.toString(),
       name: doc.name,
-      filters: doc.filters,
+      filters: fromStoredFilterData(doc.filters),
       createdAt: doc.createdAt,
     };
   }
+}
+
+/** AR-17: the price bounds are written as Decimal128. */
+function toStoredFilterData(filters: FilterData): StoredFilterData {
+  const { minPrice, maxPrice, ...criteria } = filters;
+  const stored: StoredFilterData = { ...criteria };
+  if (minPrice !== undefined) stored.minPrice = toDecimal128(minPrice);
+  if (maxPrice !== undefined) stored.maxPrice = toDecimal128(maxPrice);
+  return stored;
+}
+
+function fromStoredFilterData(stored: StoredFilterData): FilterData {
+  const { minPrice, maxPrice, ...criteria } = stored;
+  const filters: FilterData = { ...criteria };
+  const min = fromDecimal128OrNull(minPrice);
+  const max = fromDecimal128OrNull(maxPrice);
+  if (min !== null) filters.minPrice = min;
+  if (max !== null) filters.maxPrice = max;
+  return filters;
 }

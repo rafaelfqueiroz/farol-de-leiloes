@@ -3,6 +3,8 @@ import * as bcrypt from 'bcrypt';
 import { DomainError } from '../common/errors/domain-error';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
+import { FakeClock, HOUR } from '../../test/fakes/fake-clock';
+import { serverOperators } from '../common/mongo/query-safety';
 
 type ServiceDeps = ConstructorParameters<typeof UsersService>;
 
@@ -19,7 +21,7 @@ function build(found: unknown = null) {
     .fn()
     .mockReturnValue({ select: vi.fn().mockReturnValue({ exec: selectExec }) });
   const model = { findOne, findOneAndUpdate };
-  const service = new UsersService(model as unknown as ServiceDeps[0]);
+  const service = new UsersService(model as unknown as ServiceDeps[0], new FakeClock());
   return { service, model, selectExec };
 }
 
@@ -185,5 +187,54 @@ describe('UsersService.update (SC-10)', () => {
     await expect(service.update('u1', { name: 'Ana' } as UpdateUserDto)).rejects.toEqual(
       new DomainError('USER_NOT_FOUND'),
     );
+  });
+});
+
+// AR-24 / TS-06: token lifetimes are measured from the injected clock, so expiry is testable.
+describe('UsersService token expiry (AR-24)', () => {
+  const NOW = new Date('2026-01-31T23:30:00.000Z');
+
+  function buildTokens(user: unknown) {
+    const model = {
+      findOne: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(user) }),
+      findById: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(user) }),
+      findByIdAndUpdate: vi.fn().mockResolvedValue({}),
+      find: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue([]) }),
+    };
+    const service = new UsersService(model as unknown as ServiceDeps[0], new FakeClock(NOW));
+    return { service, model };
+  }
+
+  it('a reset-password token expires one hour after it is issued', async () => {
+    const { service, model } = buildTokens({ _id: 'u1' });
+
+    await service.setResetPasswordToken('ana@example.test');
+
+    expect(model.findByIdAndUpdate).toHaveBeenCalledWith('u1', {
+      resetPasswordToken: expect.any(String),
+      resetPasswordExpires: new Date(NOW.getTime() + HOUR), // 2026-02-01T00:30Z
+    });
+  });
+
+  it('an e-mail verification token expires 24 hours after it is issued', async () => {
+    const { service, model } = buildTokens({ _id: 'u1' });
+
+    await service.setEmailVerificationToken('u1');
+
+    expect(model.findByIdAndUpdate).toHaveBeenCalledWith('u1', {
+      emailVerificationToken: expect.any(String),
+      emailVerificationExpires: new Date('2026-02-01T23:30:00.000Z'),
+    });
+  });
+
+  it('looks for unexpired tokens against the clock', async () => {
+    const { service, model } = buildTokens(null);
+
+    await expect(service.resetPassword('t', 'new-password')).rejects.toEqual(
+      new DomainError('INVALID_RESET_TOKEN'),
+    );
+    expect(model.find).toHaveBeenCalledWith({
+      resetPasswordExpires: serverOperators({ $gt: NOW }),
+    });
   });
 });

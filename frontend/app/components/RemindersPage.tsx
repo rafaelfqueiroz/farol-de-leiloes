@@ -25,14 +25,6 @@ import {
   CircularProgress,
   Skeleton,
 } from '@mui/material';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { TZDate } from '@date-fns/tz';
-import { isValid } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { AdapterDateFnsBrasilia } from '@/lib/adapter-date-fns-brasilia';
-import { TIME_ZONE } from '@/i18n/config';
-import DateText from '@/app/components/patterns/DateText';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -43,6 +35,9 @@ import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useReminders, Reminder, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useApiErrorMessage } from '@/lib/api-error';
+import { toUtcInstant, tryParseInstant } from '@/lib/dates';
+import DateField from './DateField';
+import DateText from './patterns/DateText';
 
 const CHANNEL_ICONS: Record<ReminderChannel, React.ReactElement> = {
   EMAIL: <EmailIcon fontSize="small" />,
@@ -77,7 +72,7 @@ export default function RemindersPage() {
 
   // Edit form state
   const [editChannel, setEditChannel] = useState<ReminderChannel>('EMAIL');
-  const [editScheduledAt, setEditScheduledAt] = useState<Date | null>(null);
+  const [editScheduledAt, setEditScheduledAt] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState('');
 
   const isPremium = role === 'standard' || role === 'premium' || role === 'admin';
@@ -90,7 +85,8 @@ export default function RemindersPage() {
   const handleOpenEditDialog = (reminder: Reminder) => {
     setSelectedReminder(reminder);
     setEditChannel(reminder.channel);
-    setEditScheduledAt(new TZDate(reminder.scheduledAt, TIME_ZONE));
+    const instant = tryParseInstant(reminder.scheduledAt);
+    setEditScheduledAt(instant ? toUtcInstant(instant) : null);
     setEditDescription(reminder.description || '');
     setError(null);
     setEditDialogOpen(true);
@@ -115,7 +111,7 @@ export default function RemindersPage() {
   };
 
   const handleSaveEdit = async () => {
-    if (!selectedReminder || !editScheduledAt || !isValid(editScheduledAt)) {
+    if (!selectedReminder || !editScheduledAt || !tryParseInstant(editScheduledAt)) {
       setError('Selecione a data e hora do lembrete');
       return;
     }
@@ -126,8 +122,7 @@ export default function RemindersPage() {
     try {
       const success = await updateReminder(selectedReminder._id, {
         channel: editChannel,
-        // AR-22: keep the API instant in UTC after editing in Brasília.
-        scheduledAt: new Date(editScheduledAt.getTime()).toISOString(),
+        scheduledAt: editScheduledAt,
         description: editDescription || undefined,
       });
 
@@ -322,20 +317,14 @@ export default function RemindersPage() {
                 </Select>
               </FormControl>
 
-              <LocalizationProvider dateAdapter={AdapterDateFnsBrasilia} adapterLocale={ptBR}>
-                <DateTimePicker
-                  label="Data e hora do lembrete"
-                  value={editScheduledAt}
-                  onChange={(newValue) => setEditScheduledAt(newValue)}
-                  timeSteps={{ minutes: 10 }}
-                  slotProps={{
-                    textField: {
-                      fullWidth: true,
-                      helperText: 'O lembrete deve ser antes do início do leilão',
-                    },
-                  }}
-                />
-              </LocalizationProvider>
+              <DateField
+                type="datetime"
+                label="Data e hora do lembrete"
+                value={editScheduledAt}
+                onChange={setEditScheduledAt}
+                minuteStep={10}
+                helperText="O lembrete deve ser antes do início do leilão"
+              />
 
               <TextField
                 label="Nota (opcional)"

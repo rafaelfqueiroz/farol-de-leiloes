@@ -5,6 +5,8 @@ import { CsvUpload, CsvUploadDocument } from './schemas/csv-upload.schema';
 import { StorageService } from '../../storage/storage.service';
 import { downloadCsvAllStates } from './downloader';
 import { errorMessage } from '../../common/error-message';
+import { Clock } from '../../common/clock/clock';
+import { isSameBrasiliaDay } from '../../common/clock/brasilia-time';
 
 @Injectable()
 export class CsvCacheService {
@@ -15,6 +17,7 @@ export class CsvCacheService {
     @InjectModel(CsvUpload.name)
     private readonly csvUploadModel: Model<CsvUploadDocument>,
     private readonly storage: StorageService,
+    private readonly clock: Clock, // AR-24
   ) {}
 
   async resolveCsv(): Promise<string> {
@@ -37,10 +40,12 @@ export class CsvCacheService {
     return this.fetchFromCaixaAndUpload();
   }
 
+  /**
+   * "Today" is today in Brasília (AR-23), by the injected clock (AR-24). It was the UTC date, so
+   * an upload at 22:00 in Brasília (01:00 UTC the next day) counted as tomorrow's.
+   */
   private isTodaysUpload(lastUpload: Date): boolean {
-    const today = new Date().toISOString().slice(0, 10);
-    const uploadDate = lastUpload.toISOString().slice(0, 10);
-    return today === uploadDate;
+    return isSameBrasiliaDay(lastUpload, this.clock.now());
   }
 
   private async fetchFromR2(): Promise<string> {
@@ -67,7 +72,7 @@ export class CsvCacheService {
     try {
       await this.csvUploadModel.findOneAndUpdate(
         {},
-        { lastUpload: new Date(), fileName, fileSize },
+        { lastUpload: this.clock.now(), fileName, fileSize },
         { upsert: true, new: true },
       );
     } catch (error) {

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LlmAdapter } from '../adapters/llm.adapter';
 import { MAX_PAGE_SIZE } from '../../common/pagination/pagination-query.dto';
+import { Decimal, isMoneyString } from '../../common/money/money';
 
 // State abbreviations mapping (full names → 2-letter codes)
 const STATE_ABBREVIATIONS: Record<string, string> = {
@@ -93,8 +94,9 @@ export interface AuctionQueryParams {
   city?: string;
   neighborhood?: string;
   modality?: string;
-  minMargin?: number;
-  maxMargin?: number;
+  /** Price bounds in reais (AR-17), as GET /api/auctions takes them. */
+  minPrice?: Decimal;
+  maxPrice?: Decimal;
   /** AR-35 paging, as GET /api/auctions takes it: page ≥ 1, pageSize 1..100. */
   page?: number;
   pageSize?: number;
@@ -107,8 +109,8 @@ Sua tarefa é analisar a mensagem do usuário e extrair os seguintes parâmetros
 - city: Nome da cidade
 - neighborhood: Nome do bairro
 - modality: Modalidade do leilão (SFI_AUCTION, OPEN_BIDDING, DIRECT_ONLINE_SALES, ONLINE_SALES)
-- minMargin: Valor mínimo em reais (número inteiro, sem formatação)
-- maxMargin: Valor máximo em reais (número inteiro, sem formatação)
+- minPrice: Valor mínimo em reais (número inteiro, sem formatação)
+- maxPrice: Valor máximo em reais (número inteiro, sem formatação)
 - pageSize: Quantidade de resultados por página (número inteiro de 1 a 100)
 - page: Número da página (número inteiro, a partir de 1)
 
@@ -125,10 +127,10 @@ Regras de conversão:
 Responda APENAS com um objeto JSON válido contendo os parâmetros encontrados. Se um parâmetro não for mencionado, não o inclua no JSON.
 
 Exemplos:
-- "Leilões em Natal/RN até 300 mil" → {"state": "RN", "city": "Natal", "maxMargin": 300000}
-- "Apartamentos em São Paulo acima de 500 mil" → {"state": "SP", "city": "São Paulo", "minMargin": 500000}
+- "Leilões em Natal/RN até 300 mil" → {"state": "RN", "city": "Natal", "maxPrice": 300000}
+- "Apartamentos em São Paulo acima de 500 mil" → {"state": "SP", "city": "São Paulo", "minPrice": 500000}
 - "Imóveis em leilão em Belo Horizonte" → {"state": "MG", "city": "Belo Horizonte", "modality": "SFI_AUCTION"}
-- "Casas no bairro Boa Viagem em Recife entre 200 e 400 mil" → {"state": "PE", "city": "Recife", "neighborhood": "Boa Viagem", "minMargin": 200000, "maxMargin": 400000}
+- "Casas no bairro Boa Viagem em Recife entre 200 e 400 mil" → {"state": "PE", "city": "Recife", "neighborhood": "Boa Viagem", "minPrice": 200000, "maxPrice": 400000}
 - "Mostre 50 imóveis em Natal/RN, página 2" → {"state": "RN", "city": "Natal", "pageSize": 50, "page": 2}`;
 
 @Injectable()
@@ -193,11 +195,11 @@ export class NlpService {
     const modality = nonEmptyString(values.modality);
     if (modality) params.modality = MODALITY_MAPPINGS[modality.toLowerCase()] ?? modality;
 
-    const minMargin = nonNegativeNumber(values.minMargin);
-    if (minMargin !== undefined) params.minMargin = minMargin;
+    const minPrice = moneyFromModel(values.minPrice);
+    if (minPrice !== undefined) params.minPrice = minPrice;
 
-    const maxMargin = nonNegativeNumber(values.maxMargin);
-    if (maxMargin !== undefined) params.maxMargin = maxMargin;
+    const maxPrice = moneyFromModel(values.maxPrice);
+    if (maxPrice !== undefined) params.maxPrice = maxPrice;
 
     const page = positiveInteger(values.page);
     if (page !== undefined) params.page = page;
@@ -214,8 +216,15 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 }
 
-function nonNegativeNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+/**
+ * AR-17: an amount of reais from the model's JSON, where the prompt asks for a plain number
+ * (300000). It becomes a Decimal through its text at once, and only when that text is an amount
+ * GET /api/auctions accepts (MONEY_PATTERN): a negative, an exponent (1e21) or a third decimal is
+ * dropped like any other mistyped value.
+ */
+function moneyFromModel(value: unknown): Decimal | undefined {
+  const text = typeof value === 'number' && Number.isFinite(value) ? String(value) : value;
+  return isMoneyString(text) ? new Decimal(text) : undefined;
 }
 
 function positiveInteger(value: unknown): number | undefined {

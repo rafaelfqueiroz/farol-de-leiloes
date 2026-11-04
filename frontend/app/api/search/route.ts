@@ -6,8 +6,8 @@ const FORWARDED_PARAMS = [
   'city',
   'neighborhood',
   'modality',
-  'minMargin',
-  'maxMargin',
+  'minPrice',
+  'maxPrice',
   'page',
   'pageSize',
 ] as const;

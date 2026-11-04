@@ -18,14 +18,7 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { TZDate } from '@date-fns/tz';
-import { isValid, subHours } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { AdapterDateFnsBrasilia } from '@/lib/adapter-date-fns-brasilia';
-import { TIME_ZONE } from '@/i18n/config';
-import DateText from '@/app/components/patterns/DateText';
+import { subHours } from 'date-fns';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -33,6 +26,9 @@ import { useReminders, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useApiErrorMessage } from '@/lib/api-error';
+import { toUtcInstant, tryParseInstant } from '@/lib/dates';
+import DateField from './DateField';
+import DateText from './patterns/DateText';
 
 interface ReminderButtonProps {
   auctionCode: string;
@@ -55,7 +51,7 @@ export default function ReminderButton({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [channel, setChannel] = useState<ReminderChannel>('EMAIL');
-  const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
   const [description, setDescription] = useState('');
 
   const hasReminder = hasReminderForAuction(auctionCode);
@@ -71,9 +67,12 @@ export default function ReminderButton({
     setOpen(true);
     setError(null);
 
-    if (!scheduledAt && auctionDate) {
-      const date = subHours(new TZDate(auctionDate, TIME_ZONE), 1);
-      setScheduledAt(date);
+    if (!hasReminder) {
+      // AR-22/AR-23: reopening starts a fresh draft from the current auction instant.
+      const start = auctionDate ? tryParseInstant(auctionDate) : null;
+      setScheduledAt(start ? toUtcInstant(subHours(start, 1)) : null);
+      setChannel('EMAIL');
+      setDescription('');
     }
   };
 
@@ -83,7 +82,7 @@ export default function ReminderButton({
   };
 
   const handleCreate = async () => {
-    if (!scheduledAt || !isValid(scheduledAt)) {
+    if (!scheduledAt || !tryParseInstant(scheduledAt)) {
       setError('Selecione a data e hora do lembrete');
       return;
     }
@@ -95,8 +94,7 @@ export default function ReminderButton({
       const result = await createReminder({
         auctionId: auctionCode,
         channel,
-        // AR-22: TZDate serializes with an offset; the API receives a UTC instant.
-        scheduledAt: new Date(scheduledAt.getTime()).toISOString(),
+        scheduledAt,
         description: description || undefined,
       });
 
@@ -194,20 +192,14 @@ export default function ReminderButton({
                   </Select>
                 </FormControl>
 
-                <LocalizationProvider dateAdapter={AdapterDateFnsBrasilia} adapterLocale={ptBR}>
-                  <DateTimePicker
-                    label="Data e hora do lembrete"
-                    value={scheduledAt}
-                    onChange={(newValue) => setScheduledAt(newValue)}
-                    timeSteps={{ minutes: 10 }}
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        helperText: 'O lembrete deve ser antes do início do leilão',
-                      },
-                    }}
-                  />
-                </LocalizationProvider>
+                <DateField
+                  type="datetime"
+                  label="Data e hora do lembrete"
+                  value={scheduledAt}
+                  onChange={setScheduledAt}
+                  minuteStep={10}
+                  helperText="O lembrete deve ser antes do início do leilão"
+                />
 
                 <TextField
                   label="Nota (opcional)"

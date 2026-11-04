@@ -38,6 +38,22 @@ export function parseDate(value: string): ParsedDate {
   return { kind: 'instant', date };
 }
 
+/** Strict API/form boundary: ambiguous, invalid and date-only values have no reminder time. */
+export function tryParseInstant(value: string): Date | null {
+  try {
+    const parsed = parseDate(value);
+    return parsed.kind === 'instant' ? parsed.date : null;
+  } catch (error: unknown) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+}
+
+/** AR-22: normalize Date subclasses (including TZDate's offset ISO) to a UTC API instant. */
+export function toUtcInstant(value: Date): string {
+  return new Date(value.getTime()).toISOString();
+}
+
 /** `dd/MM/yyyy` (BR-003-20). A calendar date is formatted from its own parts, never shifted. */
 export function formatDate(value: string): string {
   const parsed = parseDate(value);
@@ -58,7 +74,7 @@ export function formatDateTime(value: string): string {
 /** Value for `<time dateTime>`: the calendar date as is, an instant normalised to UTC ISO. */
 export function toDateTimeAttribute(value: string): string {
   const parsed = parseDate(value);
-  return parsed.kind === 'calendar' ? value : parsed.date.toISOString();
+  return parsed.kind === 'calendar' ? value : toUtcInstant(parsed.date);
 }
 
 export type RelativeUnit = 'now' | 'today' | 'minutes' | 'hours' | 'days';
@@ -99,4 +115,52 @@ export function relativeParts(value: string, now: Date): RelativeParts {
   if (abs < 24 * HOUR) return { unit: 'hours', count: Math.floor(abs / HOUR), direction };
   const days = differenceInCalendarDays(new TZDate(parsed.date, TIME_ZONE), nowInZone);
   return { unit: 'days', count: Math.abs(days), direction };
+}
+
+// AR-23: AdapterDateFns edits plain `Date`s and ignores the pickers' `timezone` prop, so a
+// picker would show the *browser's* wall clock. These helpers move values between the API's
+// strings and a `Date` whose local fields read as the Brasília wall clock, so people pick
+// Brasília times wherever the browser is. (A wall time that does not exist in a browser zone
+// that has DST, such as 02:30 on its spring-forward day, is shifted by that browser; Brasília
+// itself has no DST.)
+
+/** An API instant (`2026-03-10T15:30:00Z`) -> a `Date` showing the Brasília wall clock. */
+export function instantToWallClock(value: string): Date {
+  const parsed = parseDate(value);
+  if (parsed.kind !== 'instant') throw new RangeError(`Expected an instant, got: ${value}`);
+  const zoned = new TZDate(parsed.date, TIME_ZONE);
+  return new Date(
+    zoned.getFullYear(),
+    zoned.getMonth(),
+    zoned.getDate(),
+    zoned.getHours(),
+    zoned.getMinutes(),
+  );
+}
+
+/** The Brasília wall clock a picker holds -> a UTC instant string (`...Z`) for the API. */
+export function wallClockToInstant(wall: Date): string {
+  const zoned = new TZDate(
+    wall.getFullYear(),
+    wall.getMonth(),
+    wall.getDate(),
+    wall.getHours(),
+    wall.getMinutes(),
+    0,
+    0,
+    TIME_ZONE,
+  );
+  return toUtcInstant(zoned);
+}
+
+/** A `YYYY-MM-DD` calendar date -> a `Date` at local midnight; never converted through a zone (AR-22). */
+export function calendarToWallClock(value: string): Date {
+  const parsed = parseDate(value);
+  if (parsed.kind !== 'calendar') throw new RangeError(`Expected a calendar date, got: ${value}`);
+  return new Date(parsed.year, parsed.month - 1, parsed.day);
+}
+
+/** The day a picker holds -> `YYYY-MM-DD` from its own fields, never shifted (AR-22). */
+export function wallClockToCalendar(wall: Date): string {
+  return format(wall, 'yyyy-MM-dd');
 }

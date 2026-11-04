@@ -35,7 +35,8 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
-import type { Auction } from './AuctionList';
+import type { Auction } from '@/lib/auction';
+import { formatMoneyCompact, moneyFromSlider, moneyToSlider } from '@/lib/money';
 import { publicEnv } from '@/lib/env';
 import { reportClientError } from '@/lib/report-client-error';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
@@ -53,8 +54,9 @@ export interface AuctionFilters {
   city?: string[];
   neighborhood?: string[];
   modality?: string[];
-  minMargin?: number;
-  maxMargin?: number;
+  // BRL price bounds (not percentages) as money strings, e.g. "50000.00" (AR-17)
+  minPrice?: string;
+  maxPrice?: string;
 }
 
 const BRAZILIAN_STATES = [
@@ -391,24 +393,37 @@ const CITIES_BY_STATE: Record<string, string[]> = {
   ],
 };
 
-const PRICE_MARKS = [
-  { value: 0, label: 'R$ 0' },
-  { value: 500000, label: 'R$ 500k' },
-  { value: 1000000, label: 'R$ 1M' },
-  { value: 2000000, label: 'R$ 2M' },
-];
+// The slider thumbs are whole reais held as JS numbers: that is the Slider's API, not money. The
+// range crosses to the API as money strings only through `filtersFromRange` below (AR-17), and
+// comes back from the URL, saved filters and AI search through `rangeFromFilters`.
+const PRICE_MAX = 2_000_000;
+
+const PRICE_MARKS = [0, 500_000, 1_000_000, PRICE_MAX].map((value) => ({
+  value,
+  label: formatMoneyCompact(moneyFromSlider(value)),
+}));
 
 const DRAWER_WIDTH = 380;
 
 type PriceRange = [min: number, max: number];
 
-function formatCurrency(value: number): string {
-  if (value >= 1000000) {
-    return `R$ ${(value / 1000000).toFixed(1)}M`;
-  } else if (value >= 1000) {
-    return `R$ ${(value / 1000).toFixed(0)}k`;
-  }
-  return `R$ ${value}`;
+function formatPriceLabel(value: number): string {
+  return formatMoneyCompact(moneyFromSlider(value));
+}
+
+function rangeFromFilters(minPrice?: string, maxPrice?: string): PriceRange {
+  return [
+    minPrice ? Math.min(moneyToSlider(minPrice), PRICE_MAX) : 0,
+    maxPrice ? Math.min(moneyToSlider(maxPrice), PRICE_MAX) : PRICE_MAX,
+  ];
+}
+
+// A bound left at the end of the slider means "no bound": it is not sent.
+function filtersFromRange([min, max]: PriceRange): Pick<AuctionFilters, 'minPrice' | 'maxPrice'> {
+  return {
+    minPrice: min > 0 ? moneyFromSlider(min) : undefined,
+    maxPrice: max < PRICE_MAX ? moneyFromSlider(max) : undefined,
+  };
 }
 
 export default function SearchFilters({
@@ -418,10 +433,9 @@ export default function SearchFilters({
   initialFilters = {},
 }: SearchFiltersProps) {
   const [filters, setFilters] = useState<AuctionFilters>(initialFilters);
-  const [priceRange, setPriceRange] = useState<PriceRange>([
-    initialFilters.minMargin || 0,
-    initialFilters.maxMargin || 2000000,
-  ]);
+  const [priceRange, setPriceRange] = useState<PriceRange>(
+    rangeFromFilters(initialFilters.minPrice, initialFilters.maxPrice),
+  );
   const [drawerOpen, setDrawerOpen] = useState(true);
 
   // #42: the search page's filters follow the URL (Back/Forward, the AppShell links), so the form
@@ -429,7 +443,7 @@ export default function SearchFilters({
   const initialFiltersKey = JSON.stringify(initialFilters);
   useEffect(() => {
     setFilters(initialFilters);
-    setPriceRange([initialFilters.minMargin || 0, initialFilters.maxMargin || 2000000]);
+    setPriceRange(rangeFromFilters(initialFilters.minPrice, initialFilters.maxPrice));
   }, [initialFiltersKey]);
   const [aiSearchInput, setAiSearchInput] = useState('');
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
@@ -503,14 +517,13 @@ export default function SearchFilters({
     e.preventDefault();
     onSearch({
       ...filters,
-      minMargin: priceRange[0] > 0 ? priceRange[0] : undefined,
-      maxMargin: priceRange[1] < 2000000 ? priceRange[1] : undefined,
+      ...filtersFromRange(priceRange),
     });
   };
 
   const handleReset = () => {
     setFilters({});
-    setPriceRange([0, 2000000]);
+    setPriceRange([0, PRICE_MAX]);
   };
 
   const handleCityChange = (_: SyntheticEvent, newValue: string[]) => {
@@ -606,7 +619,7 @@ export default function SearchFilters({
         neighborhood: savedFilterData.neighborhood,
         modality: savedFilterData.modality,
       });
-      setPriceRange([savedFilterData.minMargin || 0, savedFilterData.maxMargin || 2000000]);
+      setPriceRange(rangeFromFilters(savedFilterData.minPrice, savedFilterData.maxPrice));
     }
   };
 
@@ -637,8 +650,7 @@ export default function SearchFilters({
         city: filters.city,
         neighborhood: filters.neighborhood,
         modality: filters.modality,
-        minMargin: priceRange[0] > 0 ? priceRange[0] : undefined,
-        maxMargin: priceRange[1] < 2000000 ? priceRange[1] : undefined,
+        ...filtersFromRange(priceRange),
       };
 
       await saveFilter(newFilterName.trim(), filterData);
@@ -1050,16 +1062,16 @@ export default function SearchFilters({
                     Faixa de preço
                   </Typography>
                   <Typography variant="body2" fontWeight={600}>
-                    {formatCurrency(priceRange[0])} - {formatCurrency(priceRange[1])}
+                    {formatPriceLabel(priceRange[0])} - {formatPriceLabel(priceRange[1])}
                   </Typography>
                 </Box>
                 <Slider
                   value={priceRange}
                   onChange={handlePriceChange}
                   valueLabelDisplay="auto"
-                  valueLabelFormat={formatCurrency}
+                  valueLabelFormat={formatPriceLabel}
                   min={0}
-                  max={2000000}
+                  max={PRICE_MAX}
                   step={50000}
                   marks={PRICE_MARKS}
                   sx={{
