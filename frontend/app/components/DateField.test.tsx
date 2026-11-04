@@ -1,34 +1,71 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { axe, renderWithProviders } from '@/test/render';
-import DateField, { type DateFieldProps } from './DateField';
-
-// A controlled host, like the dialogs that use the field.
-function Host({
-  initial = null,
-  onValue,
-  ...props
-}: Partial<Omit<DateFieldProps, 'value' | 'onChange'>> & {
-  initial?: string | null;
-  onValue?: (value: string | null) => void;
-}) {
-  const [value, setValue] = useState<string | null>(initial);
-  return (
-    <DateField
-      label="Data e hora"
-      {...props}
-      value={value}
-      onChange={(next) => {
-        setValue(next);
-        onValue?.(next);
-      }}
-    />
-  );
-}
+import DateField from './DateField';
+import { DateFieldHost as Host } from '@/test/date-field-host';
 
 describe('DateField (datetime)', () => {
+  it.each([
+    ['2027-03-14T05:30:45.000Z', 'true'],
+    ['2027-03-14T05:30:50.122Z', 'true'],
+    ['2027-03-14T05:30:50.123Z', 'false'],
+    ['2027-03-14T05:30:50.124Z', 'false'],
+    ['2027-03-14T05:30:55.000Z', 'false'],
+  ])('validates untouched precise value %s against the exact minimum', (initial, invalid) => {
+    const onValue = vi.fn();
+    renderWithProviders(
+      <Host type="datetime" initial={initial} min="2027-03-14T05:30:50.123Z" onValue={onValue} />,
+    );
+
+    expect(screen.getByRole('group', { name: 'Data e hora' })).toHaveAttribute(
+      'aria-invalid',
+      invalid,
+    );
+    expect(onValue).not.toHaveBeenCalled();
+  });
+
+  it('validates the whole-minute instant it emits after editing a precise parent', async () => {
+    const onValue = vi.fn();
+    renderWithProviders(
+      <Host
+        type="datetime"
+        initial="2027-03-14T05:31:55.000Z"
+        min="2027-03-14T05:30:50.123Z"
+        onValue={onValue}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('spinbutton', { name: 'Minutos' }));
+    await userEvent.keyboard('{ArrowDown}');
+
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:30:00.000Z');
+    expect(screen.getByRole('group', { name: 'Data e hora' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    await userEvent.keyboard('{ArrowUp}');
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:31:00.000Z');
+    expect(screen.getByRole('group', { name: 'Data e hora' })).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
+  });
+
+  it('keeps untouched parent precision and emits whole minutes only after editing', async () => {
+    const onValue = vi.fn();
+    const { container } = renderWithProviders(
+      <Host type="datetime" initial="2027-03-14T05:30:45.123Z" onValue={onValue} />,
+    );
+
+    expect(container.querySelector('input')).toHaveValue('14/03/2027 02:30');
+    expect(onValue).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('spinbutton', { name: 'Minutos' }));
+    await userEvent.keyboard('{ArrowUp}');
+
+    expect(onValue).toHaveBeenLastCalledWith('2027-03-14T05:31:00.000Z');
+  });
+
   it('lets an invalid stored timestamp be corrected without breaking the form', async () => {
     const onValue = vi.fn();
     renderWithProviders(<Host type="datetime" initial="2026-03-10T15:30:00" onValue={onValue} />);

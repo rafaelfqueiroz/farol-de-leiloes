@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import {
   calendarToWallClock,
   formatDate,
@@ -18,9 +18,13 @@ import { TIME_ZONE } from '@/i18n/config';
 // America/Sao_Paulo is UTC-3 all year (no DST since 2019), so the expectations are fixed.
 
 describe('formatDate', () => {
-  it('runs date regressions in the pinned non-Brasília zone (TS-06)', () => {
-    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe('Asia/Tokyo');
-    expect(new Date('2027-01-01T01:30:00Z').getHours()).toBe(10);
+  it('runs date regressions in the requested native worker zone (TS-06)', () => {
+    const timeZone = inject('timeZone');
+    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(timeZone);
+    // Only Los Angeles skips 02:30 on this date; this proves the native Date zone changed.
+    expect(new Date(2027, 2, 14, 2, 30).getHours()).toBe(
+      timeZone === 'America/Los_Angeles' ? 3 : 2,
+    );
   });
   it('formats an instant in Brasília time', () => {
     expect(formatDate('2026-03-10T15:30:00Z')).toBe('10/03/2026');
@@ -178,7 +182,7 @@ describe('relativeParts', () => {
   });
 });
 
-// TS-11: the picker helpers hold Brasília wall-clock fields in a plain Date. The assertions read
+// TS-11: the picker helpers hold Brasília wall-clock fields in a TZDate. The assertions read
 // those fields (getHours...), not the instant, so they hold whatever zone the machine runs in.
 const fields = (d: Date) => [
   d.getFullYear(),
@@ -189,6 +193,11 @@ const fields = (d: Date) => [
 ];
 
 describe('instantToWallClock', () => {
+  it('preserves Brasília 02:30 during a browser spring-forward gap (AR-23)', () => {
+    const wall = instantToWallClock('2027-03-14T05:30:00.000Z');
+    expect(fields(wall)).toEqual([2027, 3, 14, 2, 30]);
+    expect(wallClockToInstant(wall)).toBe('2027-03-14T05:30:00.000Z');
+  });
   it('shows 23:59 in Brasília for 02:59 UTC the next day', () => {
     expect(fields(instantToWallClock('2026-03-11T02:59:00Z'))).toEqual([2026, 3, 10, 23, 59]);
   });
@@ -222,26 +231,62 @@ describe('instantToWallClock', () => {
 });
 
 describe('wallClockToInstant', () => {
+  it('serializes a native Date as its represented instant, including a browser DST gap', () => {
+    // Native LA construction normalizes 02:30 to 03:30 PDT (10:30 UTC). The lost local
+    // 02:30 cannot be recovered; serialization must preserve that represented instant.
+    const expected: Record<string, string> = {
+      'America/Los_Angeles': '2027-03-14T10:30:00.000Z',
+      'America/Sao_Paulo': '2027-03-14T05:30:00.000Z',
+      'Asia/Tokyo': '2027-03-13T17:30:00.000Z',
+    };
+    expect(wallClockToInstant(new Date(2027, 2, 14, 2, 30))).toBe(expected[inject('timeZone')]);
+    expect(wallClockToInstant(new Date('2027-03-14T05:30:45.123Z'))).toBe(
+      '2027-03-14T05:30:00.000Z',
+    );
+    // LA's second 01:30 (PST) must not become the first 01:30 (PDT) via local setters.
+    expect(wallClockToInstant(new Date('2027-11-07T09:30:45.123Z'))).toBe(
+      '2027-11-07T09:30:00.000Z',
+    );
+  });
+  it('preserves precision while reading an instant and explicitly emits minutes after an edit', () => {
+    const wall = instantToWallClock('2027-03-14T05:30:45.123Z');
+    expect([wall.getSeconds(), wall.getMilliseconds()]).toEqual([45, 123]);
+    expect(wallClockToInstant(wall)).toBe('2027-03-14T05:30:00.000Z');
+  });
   it('turns 23:59 Brasília into the next UTC day', () => {
-    expect(wallClockToInstant(new Date(2026, 2, 10, 23, 59))).toBe('2026-03-11T02:59:00.000Z');
+    expect(wallClockToInstant(new TZDate(2026, 2, 10, 23, 59, TIME_ZONE))).toBe(
+      '2026-03-11T02:59:00.000Z',
+    );
   });
 
   it('turns 00:00 Brasília into 03:00 UTC the same day', () => {
-    expect(wallClockToInstant(new Date(2026, 2, 10, 0, 0))).toBe('2026-03-10T03:00:00.000Z');
+    expect(wallClockToInstant(new TZDate(2026, 2, 10, 0, 0, TIME_ZONE))).toBe(
+      '2026-03-10T03:00:00.000Z',
+    );
   });
 
   it('crosses a month end', () => {
-    expect(wallClockToInstant(new Date(2026, 0, 31, 23, 59))).toBe('2026-02-01T02:59:00.000Z');
+    expect(wallClockToInstant(new TZDate(2026, 0, 31, 23, 59, TIME_ZONE))).toBe(
+      '2026-02-01T02:59:00.000Z',
+    );
   });
 
   it('keeps 29 February', () => {
-    expect(wallClockToInstant(new Date(2028, 1, 29, 0, 0))).toBe('2028-02-29T03:00:00.000Z');
-    expect(wallClockToInstant(new Date(2028, 1, 29, 23, 59))).toBe('2028-03-01T02:59:00.000Z');
+    expect(wallClockToInstant(new TZDate(2028, 1, 29, 0, 0, TIME_ZONE))).toBe(
+      '2028-02-29T03:00:00.000Z',
+    );
+    expect(wallClockToInstant(new TZDate(2028, 1, 29, 23, 59, TIME_ZONE))).toBe(
+      '2028-03-01T02:59:00.000Z',
+    );
   });
 
   it('uses the zone rules of the date, not a fixed offset', () => {
-    expect(wallClockToInstant(new Date(2018, 10, 10, 12, 0))).toBe('2018-11-10T14:00:00.000Z');
-    expect(wallClockToInstant(new Date(2019, 10, 10, 12, 0))).toBe('2019-11-10T15:00:00.000Z');
+    expect(wallClockToInstant(new TZDate(2018, 10, 10, 12, 0, TIME_ZONE))).toBe(
+      '2018-11-10T14:00:00.000Z',
+    );
+    expect(wallClockToInstant(new TZDate(2019, 10, 10, 12, 0, TIME_ZONE))).toBe(
+      '2019-11-10T15:00:00.000Z',
+    );
   });
 
   it('round-trips with instantToWallClock', () => {
