@@ -1,5 +1,5 @@
+import type { Types } from 'mongoose';
 import type { Decimal } from '../../common/money/money';
-import type { StoredMoney } from '../../common/money/stored-money';
 import {
   Address,
   AuctionFile,
@@ -46,7 +46,7 @@ export interface AuctionRecord {
   code: string;
   title?: string | null;
   address?: Address;
-  appraisalPrice?: StoredMoney | null;
+  appraisalPrice?: Types.Decimal128 | null;
   phases?: StoredPhase[];
   currentPhase?: StoredPhase;
   detailsUrl?: string | null;

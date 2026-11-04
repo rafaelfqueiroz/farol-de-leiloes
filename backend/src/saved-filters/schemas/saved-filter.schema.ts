@@ -1,6 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
-import type { StoredMoney } from '../../common/money/stored-money';
 
 /**
  * The criteria as stored, in a Mixed path (Mongoose casts nothing in it). In code they are the
@@ -11,10 +10,9 @@ export interface StoredFilterData {
   city?: string[];
   neighborhood?: string[];
   modality?: string[];
-  // AR-17: price bounds in reais, as Decimal128. EXPAND (AR-28): remove in contract step, #34
-  // PR 2 — filters saved before #34 hold a number.
-  minMargin?: StoredMoney;
-  maxMargin?: StoredMoney;
+  // AR-17: price bounds in reais, as Decimal128.
+  minMargin?: Types.Decimal128 | null;
+  maxMargin?: Types.Decimal128 | null;
 }
 
 @Schema({ collection: 'savedfilters', timestamps: true })

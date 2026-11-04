@@ -1,6 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
-import type { StoredMoney } from '../../common/money/stored-money';
+import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
 export enum PhaseModality {
   SFI_AUCTION = 'SFI_AUCTION',
@@ -44,9 +43,8 @@ export enum PaymentMethod {
  */
 export interface StoredPhase {
   modality: PhaseModality;
-  // AR-17: reais as Decimal128. EXPAND (AR-28): remove in contract step, #34 PR 2 — documents
-  // written before #34 hold a number.
-  minimumPrice?: StoredMoney | null;
+  // AR-17: reais as Decimal128; null when Caixa gave no price.
+  minimumPrice?: Types.Decimal128 | null;
   phaseDates?: Date[];
   paymentMethods?: PaymentMethod[];
   expenseRules?: ExpenseRule[];
@@ -63,11 +61,9 @@ export class AuctionEntity {
   @Prop({ type: Object })
   address?: Address;
 
-  // AR-17: reais as Decimal128. EXPAND (AR-28): remove in contract step, #34 PR 2 — legacy
-  // documents hold a number (reais too, so a hydrated read casting it to Decimal128 keeps its
-  // value); lean reads see either shape and go through fromStoredMoney.
+  // AR-17: reais as Decimal128.
   @Prop({ type: MongooseSchema.Types.Decimal128 })
-  appraisalPrice?: StoredMoney | null;
+  appraisalPrice?: Types.Decimal128 | null;
 
   @Prop({ type: Array })
   phases?: StoredPhase[];
@@ -110,6 +106,5 @@ export const AuctionSchema = SchemaFactory.createForClass(AuctionEntity);
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1 });
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1, 'address.neighborhood': 1 });
 AuctionSchema.index({ 'currentPhase.modality': 1 });
-// MongoDB orders numbers across BSON types by value, so this index and the price range filter
-// serve Decimal128 and legacy number prices alike during the expand step (AR-28).
+// The price range filter compares Decimal128 bounds with Decimal128 prices (AR-17).
 AuctionSchema.index({ 'currentPhase.minimumPrice': 1 });

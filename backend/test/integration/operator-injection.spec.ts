@@ -52,7 +52,10 @@ const GT_EMPTY = { $gt: '' } as unknown as string;
 const REGEX_ALL = { $regex: '.*' } as unknown as string;
 
 function auction(code: string, overrides: Record<string, unknown> = {}) {
-  const phase = { modality: PhaseModality.ONLINE_SALES, minimumPrice: 100000 };
+  const phase = {
+    modality: PhaseModality.ONLINE_SALES,
+    minimumPrice: Types.Decimal128.fromString('100000'),
+  };
   return {
     code,
     available: true,
@@ -106,20 +109,19 @@ describe('SC-10: Mongo operator injection (integration)', () => {
     reminders = moduleRef.get(RemindersService);
 
     const auctionModel = moduleRef.get<Model<AuctionEntity>>(getModelToken(AuctionEntity.name));
-    // AR-28 (expand): A1 and A3 hold legacy number prices, A2 a Decimal128 one, so the range
-    // filter below is proven against both stored shapes.
-    const modality = (value: PhaseModality, minimumPrice: number | Types.Decimal128) => {
-      const phase = { modality: value, minimumPrice };
+    // AR-17: prices are stored as Decimal128.
+    const modality = (value: PhaseModality, minimumPrice: string) => {
+      const phase = { modality: value, minimumPrice: Types.Decimal128.fromString(minimumPrice) };
       return { phases: [phase], currentPhase: phase };
     };
     await auctionModel.collection.insertMany([
-      auction('A1', modality(PhaseModality.ONLINE_SALES, 100000)),
+      auction('A1', modality(PhaseModality.ONLINE_SALES, '100000')),
       auction('A2', {
-        ...modality(PhaseModality.SFI_AUCTION, Types.Decimal128.fromString('250000.00')),
+        ...modality(PhaseModality.SFI_AUCTION, '250000.00'),
         address: { state: 'SP', city: 'Santos', neighborhood: 'Gonzaga' },
       }),
       auction('A3', {
-        ...modality(PhaseModality.OPEN_BIDDING, 400000),
+        ...modality(PhaseModality.OPEN_BIDDING, '400000'),
         address: { state: 'RJ', city: 'Niteroi', neighborhood: 'Icarai' },
       }),
       auction('A4-unavailable', { available: false }),
@@ -201,7 +203,7 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       ).resolves.toEqual(['A2']);
       await expect(codes({ minMargin: reais('300000') })).resolves.toEqual(['A3']);
       await expect(codes({ maxMargin: reais('100000') })).resolves.toEqual(['A1']);
-      // Inclusive bounds, compared by value across Decimal128 and legacy numbers.
+      // Inclusive bounds, compared by value: 100000.00 equals a stored 100000.
       await expect(
         codes({ minMargin: reais('100000.00'), maxMargin: reais('250000') }),
       ).resolves.toEqual(['A1', 'A2']);

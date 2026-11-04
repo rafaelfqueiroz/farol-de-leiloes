@@ -2,7 +2,13 @@
 // trip is test/integration/money-round-trip.spec.ts (TESTING §1).
 import { describe, expect, it } from 'vitest';
 import { Types } from 'mongoose';
-import { fromDecimal128, isDecimal128, toDecimal128, toDecimal128OrNull } from './decimal128';
+import {
+  fromDecimal128,
+  fromDecimal128OrNull,
+  isDecimal128,
+  toDecimal128,
+  toDecimal128OrNull,
+} from './decimal128';
 import { Decimal } from './money';
 
 describe('toDecimal128 / fromDecimal128', () => {
@@ -37,7 +43,23 @@ describe('toDecimal128 / fromDecimal128', () => {
     expect(toDecimal128OrNull(null)).toBeNull();
     expect(toDecimal128OrNull(undefined)).toBeNull();
     expect(toDecimal128OrNull(new Decimal('5'))?.toString()).toBe('5');
+    expect(fromDecimal128OrNull(null)).toBeNull();
+    expect(fromDecimal128OrNull(undefined)).toBeNull();
+    expect(fromDecimal128OrNull(Types.Decimal128.fromString('5.10'))?.toFixed(2)).toBe('5.10');
   });
+
+  // Since the #34 migration every stored amount is Decimal128 (AR-28 contract): a number is a
+  // document the migration never reached, and reading it as reais could be off by 100 (a coupon's
+  // legacy centavos), so it fails loudly instead.
+  it.each([1000, 91589.89, '10.50', { $numberDecimal: '1' }])(
+    'refuses %s, which is not a Decimal128',
+    (value) => {
+      expect(() => fromDecimal128(value as unknown as Types.Decimal128)).toThrow(
+        'Stored money is not Decimal128',
+      );
+      expect(() => fromDecimal128OrNull(value as unknown as Types.Decimal128)).toThrow(TypeError);
+    },
+  );
 });
 
 describe('isDecimal128', () => {

@@ -7,7 +7,7 @@ import { Model, mongo } from 'mongoose';
 import { subHours } from 'date-fns';
 import { AuctionEntity, AuctionDocument, Address } from './schemas/auction.schema';
 import { Auction, AuctionRecord, Phase } from './interfaces/auction.interface';
-import { restorePhase, toAuction, toStoredPhase } from './auction.mapper';
+import { toAuction, toStoredPhase } from './auction.mapper';
 import { isAuctionActive } from './utils/auction-filters';
 import { fetchAndCheckAvailability } from './scraper/details-scraper';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
@@ -121,7 +121,7 @@ export class AuctionsService {
               code,
               title: item.title ?? null,
               address: item.address ?? {},
-              // AR-17: every price is written as Decimal128 (AR-28 expand: writers new shape).
+              // AR-17: every price is written as Decimal128.
               appraisalPrice: toDecimal128OrNull(item.appraisalPrice),
               phases: newPhases.map(toStoredPhase),
               currentPhase: toStoredPhase(newPhase),
@@ -139,11 +139,8 @@ export class AuctionsService {
         // Only add phase if modality is different
         if (lastPhase?.modality !== newPhase.modality) {
           updateOps++;
-          // The phases already stored are written back too, so they leave in the new shape.
-          const updatedPhases = [
-            ...existingPhases.map(restorePhase),
-            ...newPhases.map(toStoredPhase),
-          ];
+          // The phases already stored are written back as read: Decimal128 already (AR-17).
+          const updatedPhases = [...existingPhases, ...newPhases.map(toStoredPhase)];
           ops.push({
             updateOne: {
               filter: { code },

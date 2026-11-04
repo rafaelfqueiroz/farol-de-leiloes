@@ -38,7 +38,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.spec.ts', 'src/main.ts'],
+      // The process entry points: they only wire a Nest context and exit (main.ts, run.ts).
+      exclude: ['src/**/*.spec.ts', 'src/main.ts', 'src/migrations/run.ts'],
       reporter: ['text-summary', 'text', 'lcov'],
       thresholds: {
         // A floor at the coverage measured when the gate was introduced (rounded down), not the

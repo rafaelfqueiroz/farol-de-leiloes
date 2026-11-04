@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuctionsModule } from './auctions/auctions.module';
@@ -14,8 +14,8 @@ import { AiModule } from './ai/ai.module';
 import { SupportModule } from './support/support.module';
 import schedulerConfig from './config/scheduler.config';
 import r2Config from './config/r2.config';
-import { validateEnv, type AppConfigService } from './config/env';
-import { applyMongooseDefaults } from './common/mongo/query-safety';
+import { validateEnv } from './config/env';
+import { MONGOOSE_ROOT_OPTIONS } from './common/mongo/mongoose-root';
 
 @Module({
   imports: [
@@ -26,18 +26,7 @@ import { applyMongooseDefaults } from './common/mongo/query-safety';
       validate: validateEnv,
       load: [schedulerConfig, r2Config],
     }),
-    MongooseModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: AppConfigService) => {
-        // SC-10: before the first query, so no filter is ever read with operators from a request.
-        applyMongooseDefaults();
-        return {
-          uri: config.get('MONGODB_URI', { infer: true }),
-          retryAttempts: 3,
-        };
-      },
-    }),
+    MongooseModule.forRootAsync(MONGOOSE_ROOT_OPTIONS),
     ScheduleModule.forRoot(),
     UsersModule,
     AuthModule,

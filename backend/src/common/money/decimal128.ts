@@ -29,7 +29,22 @@ export function isDecimal128(value: unknown): value is Types.Decimal128 {
   );
 }
 
-/** Decimal128 → Decimal, digit for digit: the string form is parsed, never a float. */
+/**
+ * Decimal128 → Decimal, digit for digit: the string form is parsed, never a float.
+ *
+ * Anything else is a fault, not a price to guess (ARCHITECTURE §9): since #34's migration
+ * (`migrations/0001-money-decimal128.ts`, AR-29) every stored amount is Decimal128, so a JS
+ * `number` here means the migration was not run before this code was deployed (DV-34). A lean
+ * read is not cast by Mongoose, so without this check such a number would be read silently.
+ */
 export function fromDecimal128(value: Types.Decimal128): Decimal {
+  if (!isDecimal128(value)) {
+    throw new TypeError('Stored money is not Decimal128: run the migrations first (AR-29, DV-34)');
+  }
   return new Decimal(value.toString());
+}
+
+/** As fromDecimal128, keeping an absent amount absent. */
+export function fromDecimal128OrNull(value: Types.Decimal128 | null | undefined): Decimal | null {
+  return value === null || value === undefined ? null : fromDecimal128(value);
 }

@@ -27,8 +27,7 @@ export function serverOperators<T extends object>(operators: T): T {
  * SC-10 / AR-17: a money bound for a range filter, as the Decimal128 the stored prices are
  * compared with. Only a finite Decimal instance (the DTO's IsMoneyString output; never a forged
  * `toStringTag` object, which `Decimal.isDecimal` would accept) passes; a number, a string
- * or an operator object is a refused request, never a query. MongoDB compares Decimal128 with a
- * legacy number price by value, so the bound serves both shapes during the expand step (AR-28).
+ * or an operator object is a refused request, never a query.
  */
 export function decimalFilter(value: unknown, field: string): Types.Decimal128 {
   if (!(value instanceof Decimal) || !value.isFinite()) {

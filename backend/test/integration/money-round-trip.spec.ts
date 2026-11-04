@@ -1,7 +1,7 @@
 // Integration: Decimal128 ⇄ Decimal against a real MongoDB (Testcontainers, TESTING §1 — this
 // cannot be proven against a mock). Every writer stores Decimal128; every reader returns the
-// exact Decimal it was given, lean or hydrated; and in the expand step (AR-28) documents written
-// before #34 — money as a JS number, coupons in centavos — read back as the same reais.
+// exact Decimal it was given, lean or hydrated. Documents written before #34 — money as a JS
+// number, coupons in centavos — are converted by the migration (migrations.spec.ts).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
@@ -89,17 +89,12 @@ describe('Money round trip through MongoDB (integration)', () => {
           appraisalPrice: new Decimal(PRECISE),
           phases: [{ modality: PhaseModality.ONLINE_SALES, minimumPrice: new Decimal('91589.89') }],
         },
+        {
+          code: 'OLDER',
+          appraisalPrice: new Decimal('130000'),
+          phases: [{ modality: PhaseModality.ONLINE_SALES, minimumPrice: new Decimal('74628.94') }],
+        },
       ]);
-      // EXPAND: an auction as the importer wrote it before #34, prices as JS numbers.
-      const legacyPhase = { modality: PhaseModality.ONLINE_SALES, minimumPrice: 74628.94 };
-      await auctionModel.collection.insertOne({
-        code: 'LEGACY',
-        appraisalPrice: 130000,
-        phases: [legacyPhase],
-        currentPhase: legacyPhase,
-        available: true,
-        updatedAt: NOW,
-      });
     });
 
     it('stores every price as Decimal128 (AR-17)', async () => {
@@ -120,17 +115,7 @@ describe('Money round trip through MongoDB (integration)', () => {
       }
     });
 
-    it('EXPAND: reads a legacy number price as the same reais, lean and hydrated', async () => {
-      const hydrated = await auctions.findByCode('LEGACY');
-      const [lean] = await auctions.findAvailableByCodes(['LEGACY']);
-
-      for (const auction of [hydrated, lean]) {
-        expect(auction?.appraisalPrice?.toFixed()).toBe('130000');
-        expect(auction?.currentPhase?.minimumPrice?.toFixed()).toBe('74628.94');
-      }
-    });
-
-    it('filters both shapes by price with inclusive Decimal128 bounds', async () => {
+    it('filters by price with inclusive Decimal128 bounds', async () => {
       const codes = async (min: string, max: string) =>
         (
           await auctions.query({ minMargin: new Decimal(min), maxMargin: new Decimal(max) }, PAGE)
@@ -138,25 +123,25 @@ describe('Money round trip through MongoDB (integration)', () => {
           .map((auction) => auction.code)
           .sort();
 
-      await expect(codes('74628.94', '91589.89')).resolves.toEqual(['LEGACY', 'NEW']);
+      await expect(codes('74628.94', '91589.89')).resolves.toEqual(['NEW', 'OLDER']);
       await expect(codes('74628.95', '91589.89')).resolves.toEqual(['NEW']);
-      await expect(codes('0', '91589.88')).resolves.toEqual(['LEGACY']);
+      await expect(codes('0', '91589.88')).resolves.toEqual(['OLDER']);
     });
 
-    it('EXPAND: rewrites a legacy phase as Decimal128 when the importer appends a phase', async () => {
+    it('writes the stored phases back as read when the importer appends a phase', async () => {
       await auctions.upsertMany([
         {
-          code: 'LEGACY',
+          code: 'OLDER',
           phases: [{ modality: PhaseModality.SFI_AUCTION, minimumPrice: new Decimal('70000') }],
         },
       ]);
 
-      const raw = await auctionModel.collection.findOne({ code: 'LEGACY' });
+      const raw = await auctionModel.collection.findOne({ code: 'OLDER' });
       expect(raw?.phases.map((phase: { minimumPrice: unknown }) => phase.minimumPrice)).toEqual([
         Types.Decimal128.fromString('74628.94'),
         Types.Decimal128.fromString('70000'),
       ]);
-      const auction = await auctions.findByCode('LEGACY');
+      const auction = await auctions.findByCode('OLDER');
       expect(auction?.phases.map((phase) => phase.minimumPrice?.toFixed())).toEqual([
         '74628.94',
         '70000',
@@ -180,18 +165,18 @@ describe('Money round trip through MongoDB (integration)', () => {
       });
     });
 
-    it('EXPAND: reads a legacy coupon of 1000 centavos as R$ 10,00, hydrated', async () => {
+    it('reads a coupon the #34 migration converted (1050 centavos → 10.50) as R$ 10,50', async () => {
       await couponModel.collection.insertOne({
-        code: 'LEGADO',
-        discountValue: 1000,
+        code: 'MIGRADO',
+        discountValue: Types.Decimal128.fromString('10.50'),
         validTo: new Date('2026-12-31T03:00:00.000Z'),
         active: true,
         createdAt: NOW,
         updatedAt: NOW,
       });
 
-      const coupon = await coupons.validateCoupon('legado');
-      expect(coupon.discountValue.toFixed()).toBe('10');
+      const coupon = await coupons.validateCoupon('migrado');
+      expect(coupon.discountValue.toFixed(2)).toBe('10.50');
     });
   });
 
@@ -207,19 +192,25 @@ describe('Money round trip through MongoDB (integration)', () => {
       expect(raw?.filters).not.toHaveProperty('minMargin');
     });
 
-    it('EXPAND: reads a filter saved with number bounds as the same reais', async () => {
+    it('reads stored bounds back digit for digit, and a null bound as absent', async () => {
       await savedFilterModel.collection.insertOne({
         userId: USER,
-        name: 'Legado',
-        filters: { city: ['Natal'], minMargin: 100000, maxMargin: 250000.5 },
+        name: 'Migrado',
+        filters: {
+          city: ['Natal'],
+          minMargin: null,
+          maxMargin: Types.Decimal128.fromString('250000.5'),
+        },
         createdAt: new Date('2025-01-01T00:00:00.000Z'),
         updatedAt: NOW,
       });
 
       const page = await savedFilters.findPage(USER.toString(), PAGE);
       const byName = new Map(page.items.map((filter) => [filter.name, filter.filters]));
-      expect(byName.get('Legado')?.minMargin?.toFixed()).toBe('100000');
-      expect(byName.get('Legado')?.maxMargin?.toFixed()).toBe('250000.5');
+      expect(byName.get('Migrado')).toEqual({
+        city: ['Natal'],
+        maxMargin: new Decimal('250000.5'),
+      });
       expect(byName.get('Até 300 mil')?.maxMargin?.toFixed()).toBe('300000.5');
     });
   });

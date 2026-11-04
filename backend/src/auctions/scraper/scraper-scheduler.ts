@@ -8,7 +8,6 @@ import {
   AuctionFile,
   StoredPhase,
 } from '../schemas/auction.schema';
-import { restorePhase } from '../auction.mapper';
 import { fetchAndScrapeDetails } from './details-scraper';
 import { JobExecutionService } from '../../common/services/job-execution.service';
 import { RunMode } from '../../common/schemas/job-execution.schema';
@@ -246,10 +245,10 @@ export class AuctionDetailsScraper implements OnModuleInit {
         (lastPhase.phaseDates?.length ?? 0) > 0;
 
       if (!hasPhaseDetails) {
-        // Every phase is written back, so each leaves in the new money shape (AR-17, AR-28).
-        const updatedPhases: StoredPhase[] = phases.map(restorePhase);
+        // Stored phases are written back as read: their prices are already Decimal128 (AR-17).
+        const updatedPhases: StoredPhase[] = [...phases];
         const updatedLastPhase: StoredPhase = {
-          ...restorePhase(lastPhase),
+          ...lastPhase,
           paymentMethods: details.phaseDetails.paymentMethods,
           expenseRules: details.phaseDetails.expenseRules,
           phaseDates: details.phaseDetails.phaseDates,

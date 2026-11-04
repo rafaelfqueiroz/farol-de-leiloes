@@ -1,9 +1,9 @@
-// AR-17 / AR-28 (expand): stored auctions in either money shape read as Decimals; phases are
-// written as Decimal128 only.
+// AR-17: stored auctions hold Decimal128 prices, read as Decimals; phases are written as
+// Decimal128 only.
 import { describe, expect, it } from 'vitest';
 import { Types } from 'mongoose';
 import { Decimal } from '../common/money/money';
-import { restorePhase, toAuction, toStoredPhase } from './auction.mapper';
+import { fromStoredPhase, toAuction, toStoredPhase } from './auction.mapper';
 import { PaymentMethod, PhaseModality } from './schemas/auction.schema';
 
 const d128 = (value: string) => Types.Decimal128.fromString(value);
@@ -25,18 +25,17 @@ describe('toAuction', () => {
     expect(auction.currentPhase?.minimumPrice?.toFixed()).toBe('91589.89');
   });
 
-  it('EXPAND: reads legacy number prices as the same Decimals', () => {
-    const phase = { modality: PhaseModality.ONLINE_SALES, minimumPrice: 91589.89 };
-    const auction = toAuction({
-      code: 'A1',
-      appraisalPrice: 250000,
-      phases: [phase],
-      currentPhase: phase,
-      updatedAt: UPDATED,
-    });
+  // AR-28 contract: the #34 migration left no number price behind, so one is a fault.
+  it('refuses a number price, which only a skipped migration would leave (DV-34)', () => {
+    const legacy = { modality: PhaseModality.ONLINE_SALES, minimumPrice: 91589.89 };
+    const record = (overrides: object) =>
+      toAuction({ code: 'A1', updatedAt: UPDATED, ...overrides } as Parameters<
+        typeof toAuction
+      >[0]);
 
-    expect(auction.appraisalPrice).toEqual(new Decimal('250000'));
-    expect(auction.currentPhase?.minimumPrice).toEqual(new Decimal('91589.89'));
+    expect(() => record({ appraisalPrice: 250000 })).toThrow('Stored money is not Decimal128');
+    expect(() => record({ phases: [legacy] })).toThrow(TypeError);
+    expect(() => record({ currentPhase: legacy })).toThrow(TypeError);
   });
 
   it('answers null prices and defaults for a bare record, and the last phase as current', () => {
@@ -74,7 +73,7 @@ describe('toAuction', () => {
   });
 });
 
-describe('toStoredPhase / restorePhase', () => {
+describe('toStoredPhase', () => {
   it('AR-17: writes the price as Decimal128 and leaves absent fields absent', () => {
     expect(
       toStoredPhase({ modality: PhaseModality.ONLINE_SALES, minimumPrice: new Decimal('10.5') }),
@@ -85,16 +84,17 @@ describe('toStoredPhase / restorePhase', () => {
     });
   });
 
-  it('EXPAND: rewrites a legacy number price as Decimal128, keeping every other field', () => {
-    const dates = [new Date('2026-03-03T13:00:00.000Z')];
-    const legacy = {
+  it('round-trips a phase with every field through fromStoredPhase', () => {
+    const phase = {
       modality: PhaseModality.SFI_AUCTION,
-      minimumPrice: 120000.5,
-      phaseDates: dates,
+      minimumPrice: new Decimal('120000.5'),
+      phaseDates: [new Date('2026-03-03T13:00:00.000Z')],
       paymentMethods: [PaymentMethod.FGTS],
       expenseRules: [{ type: 'Condomínio', description: 'Comprador' }],
     };
 
-    expect(restorePhase(legacy)).toEqual({ ...legacy, minimumPrice: d128('120000.5') });
+    const stored = toStoredPhase(phase);
+    expect(stored).toEqual({ ...phase, minimumPrice: d128('120000.5') });
+    expect(fromStoredPhase(stored)).toEqual(phase);
   });
 });

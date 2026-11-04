@@ -97,6 +97,21 @@ Both packages expose the same script names:
 | `test:e2e` | Frontend only — Playwright against the Compose stack |
 | `test:cov` | `test` with the coverage gate (TESTING §7): backend `unit` + `structural` with V8 coverage, frontend Vitest with V8 coverage; lcov in `coverage/` |
 | `check` | `typecheck` + `lint` + `format:check` + `test`. **The pre-push hook runs it** in every package the push changes (DV-37). |
+| `migrate` | Backend only — applies the pending data migrations to the database `MONGODB_URI` names, from the compiled output (`node dist/migrations/run.js`, so `npm run build` first). See [Migrations](#migrations) below |
+
+### Migrations
+
+Backfills and data reshapes (AR-28, AR-29) are migrations in `backend/src/migrations/`, run by an in-house runner ([ADR-001](../adr/001-in-house-mongodb-migrations-runner.md)).
+
+**Writing one.**
+
+1. Add `NNNN-short-title.migration.ts`, the next number, exporting a `Migration`: `{ id: 'NNNN-short-title', description, up(db) }`. `up` uses the driver (`mongo.Db`) and names its collections; it never imports a schema or model, so it keeps doing what it did when it was written.
+2. Make `up` **idempotent**: select only documents still in the old shape (for a type change, `$type` on the old BSON types — never the `'number'` alias, which also matches `decimal`), and make each write conditional on the value read. The runner records a migration only after `up` resolves, so one that failed halfway runs again from the start. See `0001-money-decimal128.migration.ts`.
+3. Append it to `MIGRATIONS` in `registry.ts`. Never insert before, edit or remove an applied migration — migrations are forward-only; a mistake is fixed by a new one.
+4. Test it: unit specs for its conversions with hand-computed values (TS-04), and an integration spec that seeds the old shapes, documents already converted and nulls, runs it twice and asserts the second run changes nothing (`test/integration/migrations.spec.ts`).
+5. Log counts only, never document content (SC-15).
+
+**Running one.** `npm run migrate` reads the same validated environment as the API (AR-41) and refuses to run with an invalid one. It applies every migration not yet recorded in the `migrations` collection, in order, records each with its `appliedAt`, and stops at the first failure with exit code 1, leaving that migration unrecorded; running it again is safe. It is the gated step **before** new code starts (DV-34): the code of a contract step reads only the new shape and fails loudly on the old one. Until the deploy pipeline exists (BL-001, [#40](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40)), whose deploy job runs `npm run migrate` as its gated step, **the owner runs it by hand from their machine against the production database (MongoDB Atlas), before merging code that depends on it**. Like the API, it loads `.env` from the current directory (`@nestjs/config`), and variables already set in the process environment take precedence. To target production, pass Node an env file whose `MONGODB_URI` is the production cluster. Keep that file as the gitignored `backend/.env.production`. The command is `npm run build && node --env-file=.env.production dist/migrations/run.js`, run in `backend/`. Every variable the API requires must be in that file, because the environment is validated. Agents never run it: it writes to a real database (DV-19); their migrations run in Testcontainers through `test:integration`.
 
 ### Git hooks
 
@@ -249,7 +264,7 @@ The images:
 | | |
 |---|---|
 | **DV-33** | Images are tagged with the commit SHA. Rollback is redeploying a previous SHA, which only works because migrations are forward-only and expand/contract (AR-28). |
-| **DV-34** | Migrations (AR-29) run as a separate, gated step **before** the new code starts. A failed migration aborts the deploy and leaves the running version untouched. |
+| **DV-34** | Migrations (AR-29) run as a separate, gated step **before** the new code starts (`npm run migrate`, §6). A failed migration aborts the deploy and leaves the running version untouched. Until `deploy.yml` runs it (BL-001), the owner runs it by hand before deploying. |
 | **DV-35** | Deploy secrets live in the GitHub `deploy-production` environment, not repository secrets. Runtime secrets live in the host's secret store, never in CI logs or images. |
 | **DV-36** | `DEPLOY_ENABLED` is a repository variable separate from the secrets: unset, a missing secret is expected and the deploy skips; set, a missing secret is a fault and `preflight` fails. |
 

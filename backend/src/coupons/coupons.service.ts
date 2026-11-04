@@ -8,8 +8,7 @@ import { Coupon } from './interfaces/coupon.interface';
 import { DomainError } from '../common/errors/domain-error';
 import { Clock } from '../common/clock/clock';
 import { inBrasilia, startOfBrasiliaDay } from '../common/clock/brasilia-time';
-import { toDecimal128 } from '../common/money/decimal128';
-import { fromStoredCouponDiscount } from '../common/money/stored-money';
+import { fromDecimal128, toDecimal128 } from '../common/money/decimal128';
 import { PaymentGateway } from '../payments/payment-gateway';
 import {
   type PageRequest,
@@ -47,7 +46,7 @@ export class CouponsService {
 
     const coupon = new this.couponModel({
       code,
-      // AR-17: reais as Decimal128 — every writer writes the new shape (AR-28 expand).
+      // AR-17: reais as Decimal128.
       discountValue: toDecimal128(dto.discountValue),
       validTo,
       description: dto.description,
@@ -114,8 +113,7 @@ export class CouponsService {
     return {
       _id: doc._id.toString(),
       code: doc.code,
-      // EXPAND (AR-28): remove in contract step, #34 PR 2 — legacy centavos or Decimal128 reais.
-      discountValue: fromStoredCouponDiscount(doc.discountValue),
+      discountValue: fromDecimal128(doc.discountValue),
       validTo: doc.validTo,
       active: doc.active,
       stripeCouponId: doc.stripeCouponId ?? null,
