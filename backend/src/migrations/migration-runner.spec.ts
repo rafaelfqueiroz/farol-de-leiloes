@@ -157,6 +157,9 @@ describe('assertMigrationOrder', () => {
 
   it('holds for the real registry', () => {
     expect(() => assertMigrationOrder(MIGRATIONS)).not.toThrow();
-    expect(MIGRATIONS.map((m) => m.id)).toEqual(['0001-money-decimal128']);
+    expect(MIGRATIONS.map((m) => m.id)).toEqual([
+      '0001-money-decimal128',
+      '0002-saved-filter-price-bounds',
+    ]);
   });
 });
