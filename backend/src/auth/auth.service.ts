@@ -180,6 +180,7 @@ export class AuthService {
       providers: obj.providers,
       emailVerified: obj.emailVerified ?? false,
       role: obj.role ?? 'free',
+      subscriptionStatus: obj.subscriptionStatus ?? null,
       phone: obj.phone,
       cpf: obj.cpf,
       dateOfBirth: obj.dateOfBirth,

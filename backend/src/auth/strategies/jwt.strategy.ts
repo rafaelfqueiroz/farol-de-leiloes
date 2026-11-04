@@ -37,6 +37,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       emailVerified: user.emailVerified ?? false,
       providers: user.providers,
       role: user.role ?? 'free',
+      subscriptionStatus: user.subscriptionStatus ?? null,
     };
   }
 }

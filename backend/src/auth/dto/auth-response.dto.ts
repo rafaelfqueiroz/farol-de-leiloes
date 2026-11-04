@@ -2,6 +2,7 @@
 // UserProfile: the password hash, tokens and Stripe ids never reach a response.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AuthenticatedUser, AuthResult, UserProfile } from '../interfaces/auth.interface';
+import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status';
 import { SEX_VALUES } from './complete-profile.dto';
 
 export const PROVIDERS = ['local', 'google'] as const;
@@ -47,6 +48,9 @@ export class UserProfileResponseDto {
   @ApiProperty({ enum: ROLES, enumName: 'Role' })
   role: string;
 
+  @ApiProperty({ enum: SUBSCRIPTION_STATUSES, enumName: 'SubscriptionStatus', nullable: true })
+  subscriptionStatus: string | null;
+
   @ApiPropertyOptional({ type: String })
   phone?: string;
 
@@ -75,6 +79,7 @@ export class UserProfileResponseDto {
     this.providers = profile.providers;
     this.emailVerified = profile.emailVerified;
     this.role = profile.role;
+    this.subscriptionStatus = profile.subscriptionStatus;
     this.phone = profile.phone;
     this.cpf = profile.cpf;
     this.dateOfBirth = profile.dateOfBirth;
@@ -118,6 +123,9 @@ export class CurrentUserResponseDto {
   @ApiProperty({ enum: ROLES, enumName: 'Role' })
   role: string;
 
+  @ApiProperty({ enum: SUBSCRIPTION_STATUSES, enumName: 'SubscriptionStatus', nullable: true })
+  subscriptionStatus: string | null;
+
   constructor(user: AuthenticatedUser) {
     this.userId = user.userId;
     this.email = user.email;
@@ -125,6 +133,7 @@ export class CurrentUserResponseDto {
     this.emailVerified = user.emailVerified;
     this.providers = user.providers;
     this.role = user.role;
+    this.subscriptionStatus = user.subscriptionStatus;
   }
 }
 
