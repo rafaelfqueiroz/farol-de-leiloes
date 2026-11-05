@@ -1,9 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { Logger } from '@nestjs/common';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JwtStrategy } from './jwt.strategy';
 import { logContextFields, runWithLogContext } from '../../common/observability/log-context';
 import { hashUserId } from '../../common/observability/user-hash';
 import { DomainError } from '../../common/errors/domain-error';
 import { CurrentUserResponseDto } from '../dto/auth-response.dto';
+import { spyOnLogger } from '../../../test/support/logger-spy';
+
+afterEach(() => vi.restoreAllMocks());
 
 // Issue #75: the frontend derives hasSubscription from subscriptionStatus on /auth/me.
 describe('JwtStrategy.validate', () => {
@@ -37,6 +41,15 @@ describe('JwtStrategy.validate', () => {
 
   it('refuses a token for an account that no longer exists', async () => {
     await expect(build(null).validate(payload)).rejects.toEqual(new DomainError('UNAUTHENTICATED'));
+  });
+
+  it('SC-15: warns about an unknown account without the raw user id', async () => {
+    const logger = spyOnLogger();
+    const strategy = build(null);
+    (strategy as unknown as { logger: unknown }).logger = new Logger('JwtStrategy');
+    await strategy.validate({ ...payload, sub: 'user-id-ficticio' }).catch(() => undefined);
+    expect(logger.loggedText()).not.toBe('');
+    expect(logger.loggedText()).not.toContain('user-id-ficticio');
   });
 
   it('exposes subscriptionStatus in the /auth/me response', async () => {

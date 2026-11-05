@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env';
-import { errorMessage } from '../common/error-message';
+import { logSafeError } from '../common/errors/log-safe-error';
 
 export interface SmsPayload {
   auctionTitle: string;
@@ -26,23 +26,25 @@ export class SmsService {
     const message = this.formatMessage(payload);
 
     if (!this.isConfigured()) {
-      this.logger.log('='.repeat(60));
-      this.logger.log('SMS REMINDER (Development Mode)');
-      this.logger.log(`To: ${phoneNumber}`);
-      this.logger.log(`Message: ${message}`);
-      this.logger.log('='.repeat(60));
+      // SC-15 / AR-46: the recipient and the message body are personal data, even in development.
+      this.logger.log(
+        `SMS reminder simulated (development mode, no provider configured): auction ${payload.auctionCode}, ${message.length} chars`,
+      );
       return { success: true };
     }
 
     try {
       // TODO: Implement actual SMS provider integration (e.g., Twilio)
-      this.logger.log(`SMS sent to ${phoneNumber}`);
+      this.logger.log(`SMS reminder sent for auction ${payload.auctionCode}`);
       return { success: true };
     } catch (error) {
-      this.logger.error(`Failed to send SMS to ${phoneNumber}: ${errorMessage(error)}`);
+      this.logger.error(
+        `Failed to send SMS reminder for auction ${payload.auctionCode}: ${logSafeError(error)}`,
+      );
       return {
         success: false,
-        errorMessage: errorMessage(error),
+        // SC-15: the provider's message quotes the recipient; a stable code is stored and logged.
+        errorMessage: logSafeError(error),
       };
     }
   }

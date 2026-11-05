@@ -4,7 +4,7 @@ import type { Env } from '../config/env';
 import { UsersService } from '../users/users.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DomainError } from '../common/errors/domain-error';
-import { errorMessage } from '../common/error-message';
+import { logSafeError } from '../common/errors/log-safe-error';
 import { PaymentGateway, type PaymentEvent } from './payment-gateway';
 
 @Injectable()
@@ -81,7 +81,7 @@ export class PaymentsService {
     try {
       event = this.paymentGateway.parseWebhookEvent(rawBody, signature);
     } catch (err) {
-      this.logger.error(`Webhook signature verification failed: ${errorMessage(err)}`);
+      this.logger.error(`Webhook signature verification failed: ${logSafeError(err)}`);
       throw new DomainError('INVALID_WEBHOOK_SIGNATURE');
     }
 
@@ -93,7 +93,8 @@ export class PaymentsService {
             subscriptionStatus: 'active',
             role: 'standard',
           });
-          this.logger.log(`Subscription activated for user ${event.userId}`);
+          // SC-15 / AR-46: provider ids only; no user id until the hashed-id helper lands.
+          this.logger.log(`Subscription activated: ${event.subscriptionId}`);
         }
         break;
       }
@@ -110,7 +111,7 @@ export class PaymentsService {
             subscriptionStatus: 'canceled',
             role: 'free',
           });
-          this.logger.log(`Subscription canceled for user ${user._id}`);
+          this.logger.log(`Subscription canceled for Stripe customer ${event.customerId}`);
         }
         break;
       }
@@ -121,7 +122,7 @@ export class PaymentsService {
           await this.usersService.update(user._id.toString(), {
             subscriptionStatus: 'past_due',
           });
-          this.logger.warn(`Payment failed for user ${user._id}`);
+          this.logger.warn(`Payment failed for Stripe customer ${event.customerId}`);
         }
         break;
       }

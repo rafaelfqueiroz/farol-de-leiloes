@@ -9,6 +9,7 @@ import { DomainError } from '../common/errors/domain-error';
 import { Decimal } from '../common/money/money';
 import { FakeClock } from '../../test/fakes/fake-clock';
 import { FakePaymentGateway } from '../../test/fakes/fake-payment-gateway';
+import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy';
 
 type ServiceDeps = ConstructorParameters<typeof CouponsService>;
 
@@ -244,6 +245,20 @@ describe('CouponsService.invalidate', () => {
     gateway.failDeactivation = true;
 
     await expect(service.invalidate('id')).resolves.toMatchObject({ active: false });
+  });
+
+  it('SC-15: logs a provider failure by code, not by its message', async () => {
+    const logger = spyOnLogger();
+    const { service, gateway } = withCoupon(document());
+    gateway.failDeactivation = true;
+    vi.spyOn(gateway, 'deactivatePromotionCode').mockRejectedValue(
+      new Error('promo for fulana.ficticia@example.test'),
+    );
+
+    await service.invalidate('id');
+
+    expectNoneLogged(logger.loggedText(), ['fulana.ficticia@example.test']);
+    vi.restoreAllMocks();
   });
 
   it('answers COUPON_NOT_FOUND for an unknown id', async () => {

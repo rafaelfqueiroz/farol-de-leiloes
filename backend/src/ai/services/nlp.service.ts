@@ -148,17 +148,21 @@ export class NlpService {
         return {};
       }
 
-      this.logger.debug(`LLM raw response: ${responseText}`);
+      // SC-15 / SC-22: the model's answer echoes the user's query text; log sizes and key counts only.
+      this.logger.debug(`LLM response received (${responseText.length} chars)`);
 
       const params = this.parseJsonResponse(responseText);
-      this.logger.debug(`Parsed query params: ${JSON.stringify(params)}`);
+      this.logger.debug('LLM response parsed');
 
       const normalizedParams = this.normalizeParams(params);
-      this.logger.debug(`Normalized query params: ${JSON.stringify(normalizedParams)}`);
+      this.logger.debug(`Normalized query params: ${Object.keys(normalizedParams).join(',')}`);
 
       return normalizedParams;
     } catch (error) {
-      this.logger.error(`Error extracting query params: ${error}`);
+      // A JSON parse error quotes the model's text, so only the error class is logged.
+      this.logger.error(
+        `Error extracting query params: ${error instanceof Error ? error.name : 'unknown'}`,
+      );
       return {};
     }
   }

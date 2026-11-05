@@ -23,7 +23,8 @@ export class SupportService {
       dto.description,
     );
 
-    this.logger.log(`Support request submitted by ${userEmail}: "${dto.title}"`);
+    // SC-15: neither the sender nor the title (user content) is logged.
+    this.logger.log(`Support request submitted (title ${dto.title.length} chars)`);
 
     return { message: 'Solicitação de suporte enviada com sucesso.' };
   }

@@ -1,10 +1,11 @@
 // AR-10 / TS-03: PaymentsService against FakePaymentGateway — the provider is a port, so the
 // service is tested in its own vocabulary, with no Stripe types and no network (TS-07).
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PaymentsService } from './payments.service';
 import { DomainError } from '../common/errors/domain-error';
 import { FakePaymentGateway } from '../../test/fakes/fake-payment-gateway';
 import { testConfigService, TEST_ENV } from '../../test/support/test-env';
+import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy';
 
 type ServiceDeps = ConstructorParameters<typeof PaymentsService>;
 
@@ -168,5 +169,37 @@ describe('PaymentsService.cancelSubscription', () => {
       new DomainError('SUBSCRIPTION_NOT_FOUND'),
     );
     expect(gateway.cancelledSubscriptions).toEqual([]);
+  });
+});
+
+describe('PaymentsService.handleWebhook logging', () => {
+  const body = Buffer.from('{}');
+
+  afterEach(() => vi.restoreAllMocks());
+
+  // SC-15 / AR-46: a webhook log line names provider ids, never the user's id.
+  it.each([
+    [{ type: 'checkout.completed', userId: 'user-id-ficticio', subscriptionId: 's1' }],
+    [{ type: 'subscription.deleted', customerId: 'cus_1' }],
+    [{ type: 'invoice.payment_failed', customerId: 'cus_1' }],
+  ] as const)('logs no user id for %j', async (event) => {
+    const logger = spyOnLogger();
+    const { service, gateway, usersService } = build();
+    usersService.findByStripeCustomerId.mockResolvedValue({ _id: 'user-id-ficticio' });
+    gateway.nextWebhookEvent = event;
+
+    await service.handleWebhook(body, 'sig');
+
+    expectNoneLogged(logger.loggedText(), ['user-id-ficticio']);
+  });
+
+  it('logs a failed signature check by error class, not by its message', async () => {
+    const logger = spyOnLogger();
+    const { service, gateway } = build();
+    gateway.nextWebhookEvent = new Error('payload for fulana.ficticia@example.test');
+
+    await service.handleWebhook(body, 'sig').catch(() => undefined);
+
+    expectNoneLogged(logger.loggedText(), ['fulana.ficticia@example.test']);
   });
 });

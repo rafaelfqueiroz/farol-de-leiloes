@@ -11,6 +11,7 @@ import { ReminderChannel } from './schemas/reminder.schema';
 import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface';
 import { ReminderEmailPayload } from './templates/reminder.template';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
+import { logSafeError } from '../common/errors/log-safe-error';
 import { jobErrorCode } from '../common/services/job-error-code';
 import { BRASILIA_TIME_ZONE } from '../common/clock/brasilia-time';
 import { InJobContext } from '../common/observability/job-context';
@@ -168,9 +169,7 @@ export class RemindersScheduler implements OnModuleInit {
       await this.emailService.sendReminderEmail(user.email, payload);
       return { success: true };
     } catch (error) {
-      // SC-15: a code, not the SMTP error text (it may quote the recipient); it is logged below and
-      // stored in the notification log.
-      return { success: false, errorMessage: jobErrorCode(error) };
+      return { success: false, errorMessage: logSafeError(error) }; // SC-15: SMTP errors quote addresses
     }
   }
 }
