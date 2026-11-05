@@ -112,7 +112,7 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | Scope | Threshold | Blocking |
 |---|---|---|
 | Critical `domain/` modules (AR-06) | **100% branch** | ✅ |
-| Backend overall | **80% lines and branches** (temporary floor: 65% lines, 61% branches — #57) | ✅ |
+| Backend overall | **80% lines and branches** (temporary floor: 66% lines, 62% branches — #57) | ✅ |
 | Frontend overall | **80% lines and branches** (temporary floor: 55% lines, 53% branches — #57) | ✅ |
 | Isolation — every owned collection | **100%** (TS-14, from #2) | ✅ |
 
@@ -121,7 +121,7 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 The frontend coverage floor was re-measured in #58 at 55% lines / 52% branches, incorporating gains from earlier changes as well as the reminder regression tests.
 The DateField precision regressions in #87 raised the branch floor to 53%; the line floor stays at 55%.
 
-The module-boundary regressions in #51 measured 65.39% lines / 61.73% branches and raised the backend floor to 65% / 61%.
+The module-boundary regressions in #51 measured 65.39% lines / 61.73% branches and raised the backend floor to 65% / 61%. The PR #98 review regressions then measured 66.20% / 62.62%, raising the floor to 66% / 62%.
 
 **The backend floor was re-baselined in #62.** The backend moved from Jest with ts-jest to Vitest with V8 coverage; the new instrument measures the source, where ts-jest also counted the helpers `tsc` emits for decorators. The floor went from 23% lines / 14% branches to 21% / 16% because the instrument changed, not because any code lost a test. It ratchets up from here as before: #61 raised it to 23% / 19% with the HTTP specs of the auctions and payments controllers, and #35 to 40% / 30% with the HTTP and OpenAPI contract specs, then to 44% / 36% with the unit specs of the SC-10 query guards; #34 to 53% / 50% with the money, Clock and payment-port specs; #36 to 60% / 57% with the observability, health and job-outcome specs. #36 also landed the first `domain/` file (`src/health/domain/health-report.ts`), so the 100% branch gate of TS-24 is now live.
 

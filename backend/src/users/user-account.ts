@@ -1,8 +1,15 @@
 import type { SubscriptionStatus } from './subscription-status';
 
+export interface UserAddress {
+  street?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+}
+
 /** AR-09: account fields consumed through UsersService, without a Mongoose dependency. */
 export interface UserAccount {
-  _id: { toString(): string };
+  _id: string | { toHexString(): string };
   email: string;
   name: string;
   providers: string[];
@@ -13,12 +20,7 @@ export interface UserAccount {
   cpf?: string;
   dateOfBirth?: Date;
   sex?: string;
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zipCode?: string;
-  };
+  address?: UserAddress;
   createdAt: Date;
   updatedAt: Date;
 }

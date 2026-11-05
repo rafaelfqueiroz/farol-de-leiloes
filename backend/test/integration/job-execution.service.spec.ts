@@ -135,7 +135,19 @@ describe('JobExecutionService (integration)', () => {
 
   describe('recordFailure (AR-03)', () => {
     it('records a FAILED run with its code and the injected clock time', async () => {
-      await service.recordFailure(JOB, RunMode.AUTO, 'MongoServerError');
+      const result = await service.recordFailure(JOB, RunMode.AUTO, 'MongoServerError');
+
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+      expect(result).toEqual({
+        jobName: JOB,
+        runMode: RunMode.AUTO,
+        status: JobStatus.FAILED,
+        errorCode: 'MongoServerError',
+        finishedAt: NOW,
+      });
+      for (const persistenceField of ['save', 'toObject', '$__', '_doc', '_id', '__v']) {
+        expect(result).not.toHaveProperty(persistenceField);
+      }
 
       const stored = await executions.findOne({ jobName: JOB }).lean();
       expect(stored).toMatchObject({
@@ -192,9 +204,30 @@ describe('JobExecutionService (integration)', () => {
 
   describe('recordExecution', () => {
     it('stamps the injected clock time, and the window runs from it', async () => {
-      await service.recordExecution(JOB, RunMode.MANUAL);
+      const result = await service.recordExecution(JOB, RunMode.MANUAL);
+
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+      expect(result).toEqual({
+        jobName: JOB,
+        runMode: RunMode.MANUAL,
+        status: JobStatus.SUCCESS,
+        finishedAt: NOW,
+      });
+      for (const persistenceField of ['save', 'toObject', '$__', '_doc', '_id', '__v']) {
+        expect(result).not.toHaveProperty(persistenceField);
+      }
+
+      const stored = await executions.findOne({ jobName: JOB }).lean();
+      expect(stored).toMatchObject({
+        jobName: JOB,
+        runMode: RunMode.MANUAL,
+        status: JobStatus.SUCCESS,
+        finishedAt: NOW,
+      });
 
       const last = await service.getLastExecution(JOB, RunMode.MANUAL);
+      expect(last).toEqual(result);
+      expect(Object.getPrototypeOf(last)).toBe(Object.prototype);
       expect(last?.finishedAt.toISOString()).toBe('2026-01-15T12:00:00.000Z');
       expect(last?.status).toBe(JobStatus.SUCCESS);
 

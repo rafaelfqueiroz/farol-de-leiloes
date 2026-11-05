@@ -175,6 +175,7 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       });
       await expect(auctions.findDocumentById('64b7f0000000000000000d02')).resolves.toBeNull();
       await expect(auctions.findDocumentById('not-an-id')).resolves.toBeNull();
+      await expect(auctions.findDocumentById('abcdefghijkl')).resolves.toBeNull();
       await expect(auctions.findDocumentById(NE_NULL)).resolves.toBeNull();
       await expect(auctions.findDocumentById(GT_EMPTY)).resolves.toBeNull();
     });

@@ -130,7 +130,7 @@ export class AuthService {
   private generateToken(user: UserAccount): string {
     const payload = {
       email: user.email,
-      sub: user._id.toString(),
+      sub: typeof user._id === 'string' ? user._id : user._id.toHexString(),
       name: user.name,
     };
     return this.jwtService.sign(payload);
@@ -167,26 +167,34 @@ export class AuthService {
     }
     return {
       emailVerified: user.emailVerified ?? false,
-      providers: user.providers,
+      providers: Array.from(user.providers),
     };
   }
 
   private toUserProfile(user: UserAccount): UserProfile {
+    // AR-09 / SC-01: return detached public values, never hydrated document internals.
     return {
-      _id: user._id.toString(),
+      _id: typeof user._id === 'string' ? user._id : user._id.toHexString(),
       email: user.email,
       name: user.name,
-      providers: user.providers,
+      providers: Array.from(user.providers),
       emailVerified: user.emailVerified ?? false,
       role: user.role ?? 'free',
       subscriptionStatus: user.subscriptionStatus ?? null,
       phone: user.phone,
       cpf: user.cpf,
-      dateOfBirth: user.dateOfBirth,
+      dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth) : undefined,
       sex: user.sex,
-      address: user.address,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
+      address: user.address
+        ? {
+            street: user.address.street,
+            city: user.address.city,
+            state: user.address.state,
+            zipCode: user.address.zipCode,
+          }
+        : undefined,
+      createdAt: new Date(user.createdAt),
+      updatedAt: new Date(user.updatedAt),
     };
   }
 }

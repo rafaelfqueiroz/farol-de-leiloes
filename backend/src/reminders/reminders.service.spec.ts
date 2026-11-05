@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Types } from 'mongoose';
 import { DomainError } from '../common/errors/domain-error';
 import { RemindersService } from './reminders.service';
 import type { CreateReminderDto } from './dto/create-reminder.dto';
 import { FakeClock } from '../../test/fakes/fake-clock';
 import { serverOperators } from '../common/mongo/query-safety';
+import { ReminderChannel, ReminderStatus } from './schemas/reminder.schema';
 
 type ServiceDeps = ConstructorParameters<typeof RemindersService>;
 
@@ -41,12 +43,66 @@ describe('RemindersService auction lookup boundary (AR-09)', () => {
   });
 
   it('uses the code match without an id lookup', async () => {
-    const { service, auctionsService } = build({ phases: [] });
+    const userId = new Types.ObjectId('64b000000000000000000002');
+    const auctionId = new Types.ObjectId('64b000000000000000000001');
+    const reminderId = new Types.ObjectId('64b000000000000000000003');
+    const auction = {
+      _id: auctionId,
+      phases: [{ phaseDates: ['2026-01-20T13:00:00.000Z'] }],
+    };
+    const auctionsService = {
+      findDocumentByCode: vi.fn().mockResolvedValue(auction),
+      findDocumentById: vi.fn().mockResolvedValue(null),
+    };
+    const persisted: Record<string, unknown>[] = [];
+    const populated = { _id: reminderId, auction, status: ReminderStatus.PENDING };
+    class ReminderPersistenceFake {
+      constructor(fields: Record<string, unknown>) {
+        persisted.push(fields);
+      }
 
-    await expect(service.create('u1', dto('A1'))).rejects.toEqual(
-      new DomainError('USER_NOT_FOUND'),
+      async save() {
+        return { _id: reminderId };
+      }
+
+      static findById = vi.fn().mockReturnValue({
+        populate: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(populated) }),
+      });
+    }
+    const service = new RemindersService(
+      ReminderPersistenceFake as unknown as ServiceDeps[0],
+      {} as ServiceDeps[1],
+      auctionsService as unknown as ServiceDeps[2],
+      {
+        findByIdFull: vi.fn().mockResolvedValue({
+          role: 'free',
+          email: 'reminder@example.test',
+          emailVerified: true,
+        }),
+      } as unknown as ServiceDeps[3],
+      new FakeClock(new Date('2026-01-15T12:00:00.000Z')),
     );
+
+    await expect(
+      service.create(userId.toHexString(), {
+        auctionId: 'A1',
+        channel: ReminderChannel.EMAIL,
+        scheduledAt: '2026-01-16T12:00:00.000Z',
+      }),
+    ).resolves.toBe(populated);
+    expect(persisted).toEqual([
+      {
+        userId,
+        auction: auctionId,
+        channel: ReminderChannel.EMAIL,
+        scheduledAt: new Date('2026-01-16T12:00:00.000Z'),
+        description: undefined,
+        status: ReminderStatus.PENDING,
+      },
+    ]);
+    expect(auctionsService.findDocumentByCode).toHaveBeenCalledWith('A1');
     expect(auctionsService.findDocumentById).not.toHaveBeenCalled();
+    expect(ReminderPersistenceFake.findById).toHaveBeenCalledWith(reminderId);
   });
 
   it('resolves the saved auction id through AuctionsService when rescheduling', async () => {

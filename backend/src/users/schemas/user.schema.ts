@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { SUBSCRIPTION_STATUSES, SubscriptionStatus } from '../subscription-status';
-import type { UserAccount } from '../user-account';
+import type { UserAccount, UserAddress } from '../user-account';
 
 export type UserDocument = UserEntity & Document;
 
@@ -76,12 +76,7 @@ export class UserEntity extends Document implements UserAccount {
   sex?: string;
 
   @Prop({ type: Object, required: false })
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zipCode?: string;
-  };
+  address?: UserAddress;
 }
 
 export const UserSchema = SchemaFactory.createForClass(UserEntity);

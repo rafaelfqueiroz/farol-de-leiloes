@@ -23,7 +23,7 @@ describe('AuthService account contract (AR-09)', () => {
 
   function account(overrides: Partial<UserAccount> = {}): UserAccount {
     return {
-      _id: { toString: () => ID },
+      _id: ID,
       email: 'account@example.test',
       name: 'Test Account',
       providers: ['google'],
@@ -61,6 +61,19 @@ describe('AuthService account contract (AR-09)', () => {
         createdAt: CREATED,
         updatedAt: UPDATED,
       },
+    });
+  });
+
+  it('normalizes ObjectId-like account ids through their explicit hex conversion', async () => {
+    const { service, sign } = build();
+
+    const result = await service.googleLogin(account({ _id: { toHexString: () => ID } }));
+
+    expect(result.user._id).toBe(ID);
+    expect(sign).toHaveBeenCalledWith({
+      email: 'account@example.test',
+      sub: ID,
+      name: 'Test Account',
     });
   });
 

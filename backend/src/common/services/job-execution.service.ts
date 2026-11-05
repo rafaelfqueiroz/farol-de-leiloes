@@ -38,7 +38,7 @@ export class JobExecutionService {
       ...fields,
       finishedAt: this.clock.now(), // AR-24
     });
-    return execution.save();
+    return this.toRecord(await execution.save());
   }
 
   /**
@@ -46,11 +46,23 @@ export class JobExecutionService {
    * predates #36 and was a success, hence `$ne` rather than `SUCCESS`.
    */
   async getLastExecution(jobName: string, runMode: RunMode): Promise<JobExecutionRecord | null> {
-    return this.jobExecutionRepository
+    const execution = await this.jobExecutionRepository
       .findOne({ jobName, runMode, status: { $ne: JobStatus.FAILED } })
       .sort({ finishedAt: -1 })
       .lean()
       .exec();
+    return execution ? this.toRecord(execution) : null;
+  }
+
+  /** AR-09: expose only plain public fields, never a hydrated document or persistence metadata. */
+  private toRecord(execution: JobExecutionRecord): JobExecutionRecord {
+    return {
+      jobName: execution.jobName,
+      runMode: execution.runMode,
+      finishedAt: new Date(execution.finishedAt.getTime()),
+      ...(execution.status === undefined ? {} : { status: execution.status }),
+      ...(execution.errorCode === undefined ? {} : { errorCode: execution.errorCode }),
+    };
   }
 
   /**

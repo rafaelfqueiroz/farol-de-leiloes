@@ -225,11 +225,22 @@ describe('AuctionsService document id lookups (AR-09, SC-10)', () => {
     expect(repo.findOne).not.toHaveBeenCalled();
   });
 
-  it('preserves the missing-auction result when a lookup rejects an invalid id', async () => {
-    const { service, exec } = build();
-    exec.mockRejectedValue(new Error('cast'));
+  it.each(['not-an-id', '', 'abcdefghijkl', '64b00000000000000000000g'])(
+    'finds nothing and never queries for malformed id %j',
+    async (id) => {
+      const { service, repo } = build();
 
-    await expect(service.findDocumentById('not-an-id')).resolves.toBeNull();
+      await expect(service.findDocumentById(id)).resolves.toBeNull();
+      expect(repo.findOne).not.toHaveBeenCalled();
+    },
+  );
+
+  it('propagates database failures for a valid id', async () => {
+    const { service, exec } = build();
+    const databaseError = new Error('database unavailable');
+    exec.mockRejectedValue(databaseError);
+
+    await expect(service.findDocumentById('64b000000000000000000001')).rejects.toBe(databaseError);
   });
 });
 
