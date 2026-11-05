@@ -12,6 +12,8 @@ import { CouponsModule } from './coupons/coupons.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { AiModule } from './ai/ai.module';
 import { SupportModule } from './support/support.module';
+import { HealthModule } from './health/health.module';
+import { ObservabilityModule } from './common/observability/observability.module';
 import schedulerConfig from './config/scheduler.config';
 import r2Config from './config/r2.config';
 import { validateEnv } from './config/env';
@@ -26,6 +28,7 @@ import { MONGOOSE_ROOT_OPTIONS } from './common/mongo/mongoose-root';
       validate: validateEnv,
       load: [schedulerConfig, r2Config],
     }),
+    ObservabilityModule, // AR-45: nestjs-pino, before the modules that log
     MongooseModule.forRootAsync(MONGOOSE_ROOT_OPTIONS),
     ScheduleModule.forRoot(),
     UsersModule,
@@ -38,6 +41,7 @@ import { MONGOOSE_ROOT_OPTIONS } from './common/mongo/mongoose-root';
     RemindersModule,
     AiModule,
     SupportModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

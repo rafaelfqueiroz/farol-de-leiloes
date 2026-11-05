@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { captureException } from '@sentry/nestjs';
 import { AuctionsService } from '../auctions.service';
 import { normalizeRows, parseCsv } from './parser';
 import { PhaseModality } from '../schemas/auction.schema';
@@ -8,13 +9,18 @@ import { JobExecutionService } from '../../common/services/job-execution.service
 import { RunMode } from '../../common/schemas/job-execution.schema';
 import { CsvCacheService } from './csv-cache.service';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
-import { errorMessage } from '../../common/error-message';
 import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time';
+import { InJobContext, runInJobContext } from '../../common/observability/job-context';
+import { jobErrorCode } from '../../common/services/job-error-code';
+import { AUCTIONS_IMPORT_JOB } from './import-job';
+
+/** Delay of the optional startup import (IMPORT_ON_START_UP), so boot finishes first. */
+export const STARTUP_IMPORT_DELAY_MS = 5000;
 
 @Injectable()
 export class AuctionsImporter {
   private readonly logger = new Logger(AuctionsImporter.name);
-  private readonly jobName = 'auctions-import';
+  private readonly jobName = AUCTIONS_IMPORT_JOB;
 
   constructor(
     private readonly auctions: AuctionsService,
@@ -35,7 +41,13 @@ export class AuctionsImporter {
 
     if (onStartup) {
       this.logger.log('Running import on startup (IMPORT_ON_START_UP=true)');
-      setTimeout(() => this.runImport(RunMode.MANUAL), 5000);
+      // AR-46: its own job context. The failure is already logged and recorded by runImport; the
+      // catch keeps it from becoming an unhandled rejection, which would crash the process.
+      setTimeout(() => {
+        runInJobContext(this.jobName, () => this.runImport(RunMode.MANUAL)).catch(() => {
+          this.logger.warn('Startup import failed; the daily schedule will run it again');
+        });
+      }, STARTUP_IMPORT_DELAY_MS);
     } else {
       this.logger.log(
         'Skipping startup import (IMPORT_ON_START_UP=false), will run on schedule only',
@@ -45,6 +57,7 @@ export class AuctionsImporter {
 
   // AR-25 / BR-003-27: 03:00 in Brasília, whatever zone the server runs in.
   @Cron(CronExpression.EVERY_DAY_AT_3AM, { timeZone: BRASILIA_TIME_ZONE })
+  @InJobContext(AUCTIONS_IMPORT_JOB) // AR-46
   async dailyJob() {
     const { enabled } = this.config.import;
 
@@ -154,8 +167,22 @@ export class AuctionsImporter {
       await this.jobExecutionService.recordExecution(this.jobName, runMode);
       this.logger.log(`Execution recorded in database`);
     } catch (e) {
-      this.logger.error(`Failed import: ${errorMessage(e)}`);
+      // SC-15: the stable code, never the message (it may quote a URL or a value).
+      this.logger.error(`Failed import: ${jobErrorCode(e)}`);
+      // AR-47: cron and startup runs alike; the scrubber drops the message from the event.
+      captureException(e, { tags: { jobName: this.jobName } });
+      await this.recordFailure(runMode, e);
       throw e;
+    }
+  }
+
+  /** AR-03: a failed run is recorded too (GET /api/health reports it, AR-48). */
+  private async recordFailure(runMode: RunMode, error: unknown): Promise<void> {
+    try {
+      await this.jobExecutionService.recordFailure(this.jobName, runMode, jobErrorCode(error));
+    } catch (recordError) {
+      // The original failure is what the caller must see; this one is only logged.
+      this.logger.error(`Could not record the failed import: ${jobErrorCode(recordError)}`);
     }
   }
 

@@ -131,6 +131,42 @@ describe('validateEnv', () => {
     });
   });
 
+  describe('observability (ARCHITECTURE §11)', () => {
+    it('requires LOG_HASH_SECRET in production only (AR-41, AR-46)', () => {
+      expect(
+        errorOf({ ...TEST_ENV, NODE_ENV: 'production', LOG_HASH_SECRET: undefined }),
+      ).toContain('LOG_HASH_SECRET: required when NODE_ENV is production');
+      for (const NODE_ENV of ['development', 'test']) {
+        expect(testEnv({ NODE_ENV, LOG_HASH_SECRET: undefined }).LOG_HASH_SECRET).toBeUndefined();
+      }
+    });
+
+    it('refuses a LOG_HASH_SECRET shorter than 32 characters', () => {
+      expect(errorOf({ ...TEST_ENV, LOG_HASH_SECRET: 'too-short-key' })).toContain(
+        'LOG_HASH_SECRET:',
+      );
+      expect(testEnv({ LOG_HASH_SECRET: 'k'.repeat(32) }).LOG_HASH_SECRET).toBe('k'.repeat(32));
+    });
+
+    it('defaults LOG_LEVEL to info and refuses an unknown level', () => {
+      expect(testEnv({ LOG_LEVEL: undefined }).LOG_LEVEL).toBe('info');
+      expect(testEnv({ LOG_LEVEL: 'debug' }).LOG_LEVEL).toBe('debug');
+      expect(errorOf({ ...TEST_ENV, LOG_LEVEL: 'verbose' })).toContain('LOG_LEVEL:');
+    });
+
+    it('keeps the test environment silent (TESTING §2)', () => {
+      expect(testEnv().LOG_LEVEL).toBe('silent');
+    });
+
+    it('leaves SENTRY_DSN optional, in production too, and refuses a malformed one', () => {
+      expect(testEnv({ NODE_ENV: 'production' }).SENTRY_DSN).toBeUndefined();
+      expect(testEnv({ SENTRY_DSN: 'https://key@o0.ingest.example.test/1' }).SENTRY_DSN).toBe(
+        'https://key@o0.ingest.example.test/1',
+      );
+      expect(errorOf({ ...TEST_ENV, SENTRY_DSN: 'not-a-dsn' })).toContain('SENTRY_DSN:');
+    });
+  });
+
   it('describes every variable once', () => {
     expect(new Set(ENV_KEYS).size).toBe(ENV_KEYS.length);
   });

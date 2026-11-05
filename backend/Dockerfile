@@ -30,6 +30,10 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 3000
-# No HEALTHCHECK until GET /api/health exists (AR-48). Runtime configuration and secrets come
-# from the host's environment, never from the image (SC-16, DV-35).
+# AR-48: the container is healthy while GET /api/health answers 2xx (ok or degraded); it answers
+# 503 only when MongoDB is unreachable. The slim image has no curl, so Node's fetch probes it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/health', { signal: AbortSignal.timeout(4000) }).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+# Runtime configuration and secrets come from the host's environment, never from the image
+# (SC-16, DV-35).
 CMD ["node", "dist/main.js"]

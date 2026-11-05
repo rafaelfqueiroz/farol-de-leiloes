@@ -12,12 +12,16 @@ import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interf
 import { ReminderEmailPayload } from './templates/reminder.template';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
 import { logSafeError } from '../common/errors/log-safe-error';
+import { jobErrorCode } from '../common/services/job-error-code';
 import { BRASILIA_TIME_ZONE } from '../common/clock/brasilia-time';
+import { InJobContext } from '../common/observability/job-context';
+
+export const REMINDERS_JOB = 'reminders-processor';
 
 @Injectable()
 export class RemindersScheduler implements OnModuleInit {
   private readonly logger = new Logger(RemindersScheduler.name);
-  private readonly jobName = 'reminders-processor';
+  private readonly jobName = REMINDERS_JOB;
 
   constructor(
     private readonly remindersService: RemindersService,
@@ -42,6 +46,7 @@ export class RemindersScheduler implements OnModuleInit {
 
   // AR-25: the zone is explicit on every cron, even one that runs every 15 minutes.
   @Cron('*/15 * * * *', { timeZone: BRASILIA_TIME_ZONE })
+  @InJobContext(REMINDERS_JOB) // AR-46
   async processReminders() {
     const { enabled } = this.config.reminders;
 
@@ -64,7 +69,7 @@ export class RemindersScheduler implements OnModuleInit {
 
       await this.jobExecutionService.recordExecution(this.jobName, RunMode.AUTO);
     } catch (error) {
-      this.logger.error(`Failed to process reminders: ${logSafeError(error)}`);
+      this.logger.error(`Failed to process reminders: ${jobErrorCode(error)}`);
     }
   }
 
@@ -141,7 +146,7 @@ export class RemindersScheduler implements OnModuleInit {
         this.logger.error(`Reminder ${reminder._id} failed: ${result.errorMessage}`);
       }
     } catch (error) {
-      this.logger.error(`Error processing reminder ${reminder._id}: ${logSafeError(error)}`);
+      this.logger.error(`Error processing reminder ${reminder._id}: ${jobErrorCode(error)}`);
     }
   }
 

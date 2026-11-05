@@ -52,6 +52,7 @@ E2E tests (Playwright, `npm run test:e2e`) are not set up yet; they arrive with 
 | ------------------------------ | ------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `NEXT_PUBLIC_AUCTIONS_API_URL` | Public, build time | `http://localhost:3000`          | Backend origin the browser reaches. Inlined into the bundle.                                                             |
 | `NEXT_PUBLIC_SITE_URL`         | Public, build time | `https://faroldosleiloes.com.br` | Canonical origin for metadata, sitemap and robots. Set it to `http://localhost:3001` locally.                            |
+| `NEXT_PUBLIC_SENTRY_DSN`       | Public, build time | unset (Sentry inert)             | Sentry DSN (public by design, SC-16). Events are scrubbed of bodies, headers, cookies, queries and users (AR-47, SC-15). |
 | `BACKEND_API_URL`              | Server only        | `NEXT_PUBLIC_AUCTIONS_API_URL`   | Backend origin for route handlers, SSR and the sitemap. Set it when the server reaches the backend by a private address. |
 
 - Values have no trailing slash and no `/api`.

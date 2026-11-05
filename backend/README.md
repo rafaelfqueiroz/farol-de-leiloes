@@ -40,10 +40,17 @@ API
 - Errors answer `{ code, context }` (AR-38). Lists take `page` and `pageSize` (max 100) and answer `{ items, total, page, pageSize }` (AR-35).
 - Money is a string of reais over JSON, both ways (AR-17): `"1234.56"` — a dot, at most two decimals, no thousands separator. Responses round once to two places, half-even (AR-19). Coupon discounts are reais too (they were integer centavos before #34). In MongoDB money is `Decimal128` only: migration `0001-money-decimal128` converted the documents written before #34, and a reader refuses any other shape.
 
+Observability (ARCHITECTURE §11)
+
+- Logs are JSON lines on stdout from nestjs-pino behind the NestJS `Logger` (AR-45); `LOG_LEVEL` sets the level (default `info`). Every line carries a `correlationId`: the request's id (an incoming `x-request-id` is kept only when it matches `^[A-Za-z0-9-]{8,64}$`, otherwise a UUID; echoed in the response header) or, for a job run, its own id plus `jobName` (AR-46). A signed-in user appears only as `userHash`, an HMAC-SHA256 of the id keyed by `LOG_HASH_SECRET` (required in production; without it no user id is logged). Request lines hold method, route, status and response time; never headers, cookies, query strings or bodies, and a successful `/api/health` probe is not logged (a failing one is). Errors are logged as their class and stack frames, never their message (SC-15).
+- Sentry (`@sentry/nestjs`) reports 5xx faults (tagged with method and route) and failed import and scraper runs (tagged with `jobName`), scrubbed of request data, user, messages, host name and all but the runtime and trace contexts (AR-47). It is inert without `SENTRY_DSN` and always in tests. `src/instrument.ts` reads the DSN from the process environment before `.env` is loaded, so set it in the host environment.
+- `GET /api/health` (public): database reachability and the outcome and age of the last Caixa import; `503` only when the database is down (AR-48). The image's `HEALTHCHECK` calls it. Field by field: `docs/runbooks/health-check.md`.
+
 Scheduling
 
 - Every schedule is Brasília time, whatever the server's zone (AR-25): the import of all states at 03:00, the detail-page scraper at 06:00, reminders every 15 minutes.
 - With `IMPORT_ON_START_UP=true`, one initial import also runs ~5s after startup.
+- Every run of the import and the details scraper is recorded in `jobexecutions` with `status` `SUCCESS` or `FAILED` (and a stable `errorCode`, never a message). A failed run does not count as "ran recently", so the next scheduled run retries (AR-03).
 
 Notes
 

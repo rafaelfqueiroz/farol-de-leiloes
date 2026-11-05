@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { captureException } from '@sentry/nestjs';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
@@ -13,15 +14,18 @@ import { JobExecutionService } from '../../common/services/job-execution.service
 import { RunMode } from '../../common/schemas/job-execution.schema';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
 import { StorageService } from '../../storage/storage.service';
-import { errorMessage } from '../../common/error-message';
 import { serverOperators } from '../../common/mongo/query-safety';
 import { Clock } from '../../common/clock/clock';
 import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time';
+import { InJobContext, runInJobContext } from '../../common/observability/job-context';
+import { jobErrorCode } from '../../common/services/job-error-code';
+
+export const DETAILS_SCRAPER_JOB = 'auction-details-scraper';
 
 @Injectable()
 export class AuctionDetailsScraper implements OnModuleInit {
   private readonly logger = new Logger(AuctionDetailsScraper.name);
-  private readonly jobName = 'auction-details-scraper';
+  private readonly jobName = DETAILS_SCRAPER_JOB;
   private readonly batchSize = 15; // Process 10 auctions at a time
   private readonly concurrency = 3; // Process 3 auctions in parallel within each batch
   private readonly delayBetweenGroups = 500; // 500ms delay between concurrent groups
@@ -53,7 +57,13 @@ export class AuctionDetailsScraper implements OnModuleInit {
 
     if (onStartup) {
       this.logger.log('Running scraper on startup (SCRAPER_ON_START_UP=true)');
-      setTimeout(() => this.runScraper(RunMode.MANUAL), 5000);
+      // AR-46: its own job context; the catch keeps a failure (already logged and recorded by
+      // runScraper) from becoming an unhandled rejection.
+      setTimeout(() => {
+        runInJobContext(this.jobName, () => this.runScraper(RunMode.MANUAL)).catch(() => {
+          this.logger.warn('Startup scraper failed; the daily schedule will run it again');
+        });
+      }, 5000);
     } else {
       this.logger.log(
         'Skipping startup scraper (SCRAPER_ON_START_UP=false), will run on schedule only',
@@ -66,6 +76,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
    * time no longer depends on the server running in UTC (it was '0 9 * * *' in server time).
    */
   @Cron('0 6 * * *', { timeZone: BRASILIA_TIME_ZONE })
+  @InJobContext(DETAILS_SCRAPER_JOB) // AR-46
   async dailyScraperJob() {
     const { enabled } = this.config.scraper;
 
@@ -99,8 +110,21 @@ export class AuctionDetailsScraper implements OnModuleInit {
       await this.jobExecutionService.recordExecution(this.jobName, runMode);
       this.logger.log('Execution recorded in database');
     } catch (e) {
-      this.logger.error(`Failed scraping: ${errorMessage(e)}`);
+      // SC-15: the stable code, never the message.
+      this.logger.error(`Failed scraping: ${jobErrorCode(e)}`);
+      // AR-47: cron and startup runs alike; the scrubber drops the message from the event.
+      captureException(e, { tags: { jobName: this.jobName } });
+      await this.recordFailure(runMode, e);
       throw e;
+    }
+  }
+
+  /** AR-03: a failed run is recorded too, with a stable code only (SC-15). */
+  private async recordFailure(runMode: RunMode, error: unknown): Promise<void> {
+    try {
+      await this.jobExecutionService.recordFailure(this.jobName, runMode, jobErrorCode(error));
+    } catch (recordError) {
+      this.logger.error(`Could not record the failed scraping run: ${jobErrorCode(recordError)}`);
     }
   }
 
@@ -149,7 +173,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
             } else {
               errorCount++;
               this.logger.error(
-                `Error scraping auction ${group[k]?.code}: ${errorMessage(result.reason)}`,
+                `Error scraping auction ${group[k]?.code}: ${jobErrorCode(result.reason)}`,
               );
             }
           }
@@ -160,7 +184,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
 
       this.logger.log(`Scraping completed: ${scrapedCount} images scraped, ${errorCount} errors`);
     } catch (error) {
-      this.logger.error(`Failed to scrape auction details: ${errorMessage(error)}`);
+      this.logger.error(`Failed to scrape auction details: ${jobErrorCode(error)}`);
       throw error;
     }
   }
