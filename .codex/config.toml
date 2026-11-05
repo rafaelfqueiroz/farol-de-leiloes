@@ -1,0 +1,10 @@
+[mcp_servers.mongodb-local]
+command = "npx"
+args = [
+    "-y",
+    "mongodb-mcp-server@latest",
+    "--readOnly",
+]
+
+[mcp_servers.mongodb-local.env]
+MDB_MCP_CONNECTION_STRING = "mongodb://localhost:27017/auctions"
