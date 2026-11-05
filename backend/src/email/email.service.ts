@@ -11,8 +11,8 @@ import {
   ReminderEmailPayload,
 } from '../reminders/templates/reminder.template';
 
-// SC-15 / AR-46: no recipient address, name or message content in any log line below. The token
-// link is printed only in development (see logSimulatedLink); elsewhere only the kind of email.
+// SC-15 / SC-16 / AR-46: no recipient address, name, message content or token link is logged,
+// including when SMTP is unavailable in development.
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter | null = null;
@@ -44,16 +44,8 @@ export class EmailService {
     }
   }
 
-  /**
-   * Without SMTP nothing is sent. The URL carries a one-time token, which is a secret (SC-16): it
-   * is printed only when NODE_ENV is 'development', so a developer can follow the link locally.
-   * Any other environment must never log it (SC-15); it logs the kind of email only.
-   */
-  private logSimulatedLink(kind: string, url: string): void {
-    if (this.configService.get('NODE_ENV', { infer: true }) === 'development') {
-      this.logger.log(`${kind} simulated (SMTP not configured). Link: ${url}`);
-      return;
-    }
+  // SC-15 / SC-16: the fallback reports only the email kind; token URLs remain secret everywhere.
+  private logSimulatedEmail(kind: string): void {
     this.logger.log(`${kind} simulated (SMTP not configured)`);
   }
 
@@ -62,7 +54,7 @@ export class EmailService {
     const verificationUrl = `${frontendUrl}/verify-email/${token}`;
 
     if (!this.transporter) {
-      this.logSimulatedLink('Verification email', verificationUrl);
+      this.logSimulatedEmail('Verification email');
       return;
     }
 
@@ -83,7 +75,7 @@ export class EmailService {
     const resetUrl = `${frontendUrl}/reset-password/${token}`;
 
     if (!this.transporter) {
-      this.logSimulatedLink('Password reset email', resetUrl);
+      this.logSimulatedEmail('Password reset email');
       return;
     }
 
