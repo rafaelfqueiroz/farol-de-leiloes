@@ -26,7 +26,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
-      this.logger.warn(`JWT validation - User not found for ID: ${payload.sub}`);
+      // SC-15 / AR-46: no raw user id in a log line.
+      this.logger.warn('JWT validation - user not found');
       // A token for an account that no longer exists authenticates nobody.
       throw new DomainError('UNAUTHENTICATED');
     }

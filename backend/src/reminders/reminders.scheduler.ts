@@ -11,7 +11,7 @@ import { ReminderChannel } from './schemas/reminder.schema';
 import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface';
 import { ReminderEmailPayload } from './templates/reminder.template';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
-import { errorMessage } from '../common/error-message';
+import { logSafeError } from '../common/errors/log-safe-error';
 import { BRASILIA_TIME_ZONE } from '../common/clock/brasilia-time';
 
 @Injectable()
@@ -64,7 +64,7 @@ export class RemindersScheduler implements OnModuleInit {
 
       await this.jobExecutionService.recordExecution(this.jobName, RunMode.AUTO);
     } catch (error) {
-      this.logger.error(`Failed to process reminders: ${errorMessage(error)}`);
+      this.logger.error(`Failed to process reminders: ${logSafeError(error)}`);
     }
   }
 
@@ -141,7 +141,7 @@ export class RemindersScheduler implements OnModuleInit {
         this.logger.error(`Reminder ${reminder._id} failed: ${result.errorMessage}`);
       }
     } catch (error) {
-      this.logger.error(`Error processing reminder ${reminder._id}: ${errorMessage(error)}`);
+      this.logger.error(`Error processing reminder ${reminder._id}: ${logSafeError(error)}`);
     }
   }
 
@@ -164,7 +164,7 @@ export class RemindersScheduler implements OnModuleInit {
       await this.emailService.sendReminderEmail(user.email, payload);
       return { success: true };
     } catch (error) {
-      return { success: false, errorMessage: errorMessage(error) };
+      return { success: false, errorMessage: logSafeError(error) }; // SC-15: SMTP errors quote addresses
     }
   }
 }

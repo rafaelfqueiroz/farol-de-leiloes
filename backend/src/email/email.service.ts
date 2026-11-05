@@ -11,8 +11,8 @@ import {
   ReminderEmailPayload,
 } from '../reminders/templates/reminder.template';
 
-// SC-15: no recipient address, name or message content in any log line below; the development
-// fallback logs only what a developer needs to follow the link.
+// SC-15 / AR-46: no recipient address, name or message content in any log line below. The token
+// link is printed only in development (see logSimulatedLink); elsewhere only the kind of email.
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter | null = null;
@@ -40,8 +40,21 @@ export class EmailService {
       });
       this.logger.log('Email transporter initialized');
     } else {
-      this.logger.warn('SMTP configuration not found. Emails will be logged to console.');
+      this.logger.warn('SMTP configuration not found. Emails are not sent (development mode).');
     }
+  }
+
+  /**
+   * Without SMTP nothing is sent. The URL carries a one-time token, which is a secret (SC-16): it
+   * is printed only when NODE_ENV is 'development', so a developer can follow the link locally.
+   * Any other environment must never log it (SC-15); it logs the kind of email only.
+   */
+  private logSimulatedLink(kind: string, url: string): void {
+    if (this.configService.get('NODE_ENV', { infer: true }) === 'development') {
+      this.logger.log(`${kind} simulated (SMTP not configured). Link: ${url}`);
+      return;
+    }
+    this.logger.log(`${kind} simulated (SMTP not configured)`);
   }
 
   async sendVerificationEmail(email: string, token: string, name: string): Promise<void> {
@@ -49,10 +62,7 @@ export class EmailService {
     const verificationUrl = `${frontendUrl}/verify-email/${token}`;
 
     if (!this.transporter) {
-      this.logger.log('='.repeat(60));
-      this.logger.log('VERIFICATION EMAIL (Development Mode)');
-      this.logger.log(`Verification URL: ${verificationUrl}`);
-      this.logger.log('='.repeat(60));
+      this.logSimulatedLink('Verification email', verificationUrl);
       return;
     }
 
@@ -73,10 +83,7 @@ export class EmailService {
     const resetUrl = `${frontendUrl}/reset-password/${token}`;
 
     if (!this.transporter) {
-      this.logger.log('='.repeat(60));
-      this.logger.log('PASSWORD RESET EMAIL (Development Mode)');
-      this.logger.log(`Reset URL: ${resetUrl}`);
-      this.logger.log('='.repeat(60));
+      this.logSimulatedLink('Password reset email', resetUrl);
       return;
     }
 
@@ -110,10 +117,7 @@ export class EmailService {
     `;
 
     if (!this.transporter) {
-      this.logger.log('='.repeat(60));
-      this.logger.log('SUPPORT REQUEST EMAIL (Development Mode)');
-      this.logger.log(`To: ${to}`);
-      this.logger.log('='.repeat(60));
+      this.logger.log('Support request email simulated (development mode, SMTP not configured)');
       return;
     }
 
@@ -127,16 +131,14 @@ export class EmailService {
       html,
     });
 
-    this.logger.log(`Support email sent to ${to}`);
+    this.logger.log('Support request email sent'); // SC-15: no recipient, no content
   }
 
   async sendReminderEmail(email: string, payload: ReminderEmailPayload): Promise<void> {
     if (!this.transporter) {
-      this.logger.log('='.repeat(60));
-      this.logger.log('AUCTION REMINDER EMAIL (Development Mode)');
-      this.logger.log(`Auction: ${payload.auctionTitle || payload.auctionCode}`);
-      this.logger.log(`Location: ${payload.auctionCity}, ${payload.auctionState}`);
-      this.logger.log('='.repeat(60));
+      this.logger.log(
+        `Reminder email simulated (development mode, SMTP not configured): auction ${payload.auctionCode}`,
+      );
       return;
     }
 

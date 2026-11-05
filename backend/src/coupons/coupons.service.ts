@@ -10,6 +10,7 @@ import { Clock } from '../common/clock/clock';
 import { endOfBrasiliaDay, inBrasilia, startOfBrasiliaDay } from '../common/clock/brasilia-time';
 import { fromDecimal128, toDecimal128 } from '../common/money/decimal128';
 import { PaymentGateway } from '../payments/payment-gateway';
+import { logSafeError } from '../common/errors/log-safe-error';
 import {
   type PageRequest,
   type Paginated,
@@ -105,7 +106,7 @@ export class CouponsService {
       try {
         await this.paymentGateway.deactivatePromotionCode(coupon.stripePromotionCodeId);
       } catch (error) {
-        this.logger.warn(`Failed to deactivate Stripe promotion code: ${error}`);
+        this.logger.warn(`Failed to deactivate Stripe promotion code: ${logSafeError(error)}`);
       }
     }
 

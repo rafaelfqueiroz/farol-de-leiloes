@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env';
-import { errorMessage } from '../common/error-message';
+import { logSafeError } from '../common/errors/log-safe-error';
 
 export interface WhatsAppPayload {
   userName: string;
@@ -29,29 +29,25 @@ export class WhatsAppService {
     payload: WhatsAppPayload,
   ): Promise<WhatsAppResult> {
     if (!this.isConfigured()) {
-      this.logger.log('='.repeat(60));
-      this.logger.log('WHATSAPP REMINDER (Development Mode)');
-      this.logger.log(`To: ${phoneNumber}`);
-      this.logger.log(`User: ${payload.userName}`);
-      this.logger.log(`Auction: ${payload.auctionTitle || payload.auctionCode}`);
+      // SC-15 / AR-46: the recipient, the user's name and the reminder text are personal data.
       this.logger.log(
-        `Location: ${payload.auctionCity ?? 'N/A'}, ${payload.auctionState ?? 'N/A'}`,
+        `WhatsApp reminder simulated (development mode, no provider configured): auction ${payload.auctionCode}`,
       );
-      this.logger.log(`Details URL: ${payload.auctionDetailsUrl ?? 'N/A'}`);
-      this.logger.log(`Description: ${payload.description ?? 'N/A'}`);
-      this.logger.log('='.repeat(60));
       return { success: true };
     }
 
     try {
       // TODO: Implement WhatsApp Business API integration (e.g., Twilio, Meta)
-      this.logger.log(`WhatsApp message sent to ${phoneNumber}`);
+      this.logger.log(`WhatsApp reminder sent for auction ${payload.auctionCode}`);
       return { success: true };
     } catch (error) {
-      this.logger.error(`Failed to send WhatsApp to ${phoneNumber}: ${errorMessage(error)}`);
+      this.logger.error(
+        `Failed to send WhatsApp reminder for auction ${payload.auctionCode}: ${logSafeError(error)}`,
+      );
       return {
         success: false,
-        errorMessage: errorMessage(error),
+        // SC-15: the provider's message quotes the recipient; a stable code is stored and logged.
+        errorMessage: logSafeError(error),
       };
     }
   }
