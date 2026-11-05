@@ -6,7 +6,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { CompleteProfileDto } from './dto/complete-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { UserDocument } from '../users/schemas/user.schema';
+import type { UserAccount } from '../users/user-account';
 import { UserProfile, AuthResult } from './interfaces/auth.interface';
 import { DomainError } from '../common/errors/domain-error';
 
@@ -51,7 +51,7 @@ export class AuthService {
     };
   }
 
-  async googleLogin(user: UserDocument): Promise<AuthResult> {
+  async googleLogin(user: UserAccount): Promise<AuthResult> {
     const accessToken = this.generateToken(user);
     return {
       accessToken,
@@ -127,10 +127,10 @@ export class AuthService {
     await this.usersService.setPassword(userId, newPassword);
   }
 
-  private generateToken(user: UserDocument): string {
+  private generateToken(user: UserAccount): string {
     const payload = {
       email: user.email,
-      sub: user._id.toString(),
+      sub: typeof user._id === 'string' ? user._id : user._id.toHexString(),
       name: user.name,
     };
     return this.jwtService.sign(payload);
@@ -167,27 +167,34 @@ export class AuthService {
     }
     return {
       emailVerified: user.emailVerified ?? false,
-      providers: user.providers,
+      providers: Array.from(user.providers),
     };
   }
 
-  private toUserProfile(user: UserDocument): UserProfile {
-    const obj = typeof user.toObject === 'function' ? user.toObject() : user;
+  private toUserProfile(user: UserAccount): UserProfile {
+    // AR-09 / SC-01: return detached public values, never hydrated document internals.
     return {
-      _id: obj._id.toString(),
-      email: obj.email,
-      name: obj.name,
-      providers: obj.providers,
-      emailVerified: obj.emailVerified ?? false,
-      role: obj.role ?? 'free',
-      subscriptionStatus: obj.subscriptionStatus ?? null,
-      phone: obj.phone,
-      cpf: obj.cpf,
-      dateOfBirth: obj.dateOfBirth,
-      sex: obj.sex,
-      address: obj.address,
-      createdAt: obj.createdAt,
-      updatedAt: obj.updatedAt,
+      _id: typeof user._id === 'string' ? user._id : user._id.toHexString(),
+      email: user.email,
+      name: user.name,
+      providers: Array.from(user.providers),
+      emailVerified: user.emailVerified ?? false,
+      role: user.role ?? 'free',
+      subscriptionStatus: user.subscriptionStatus ?? null,
+      phone: user.phone,
+      cpf: user.cpf,
+      dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth) : undefined,
+      sex: user.sex,
+      address: user.address
+        ? {
+            street: user.address.street,
+            city: user.address.city,
+            state: user.address.state,
+            zipCode: user.address.zipCode,
+          }
+        : undefined,
+      createdAt: new Date(user.createdAt),
+      updatedAt: new Date(user.updatedAt),
     };
   }
 }

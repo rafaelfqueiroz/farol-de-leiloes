@@ -196,6 +196,54 @@ describe('AuctionsService code lookups (SC-10)', () => {
   });
 });
 
+describe('AuctionsService document id lookups (AR-09, SC-10)', () => {
+  function build() {
+    const exec = vi.fn().mockResolvedValue(null);
+    const repo = { findOne: vi.fn().mockReturnValue({ exec }) };
+    const service = new AuctionsService(
+      repo as unknown as ServiceDeps[0],
+      {} as ServiceDeps[1],
+      { get: vi.fn().mockReturnValue(undefined) } as unknown as ServiceDeps[2],
+      new FakeClock(NOW),
+    );
+    return { service, repo, exec };
+  }
+
+  it('compares the document id by equality, including unavailable auctions', async () => {
+    const { service, repo, exec } = build();
+    const doc = { code: 'A1', available: false };
+    exec.mockResolvedValue(doc);
+
+    await expect(service.findDocumentById('64b000000000000000000001')).resolves.toBe(doc);
+    expect(repo.findOne).toHaveBeenCalledWith({ _id: { $eq: '64b000000000000000000001' } });
+  });
+
+  it('finds nothing and never queries for an operator object', async () => {
+    const { service, repo } = build();
+
+    await expect(service.findDocumentById({ $ne: null } as unknown as string)).resolves.toBeNull();
+    expect(repo.findOne).not.toHaveBeenCalled();
+  });
+
+  it.each(['not-an-id', '', 'abcdefghijkl', '64b00000000000000000000g'])(
+    'finds nothing and never queries for malformed id %j',
+    async (id) => {
+      const { service, repo } = build();
+
+      await expect(service.findDocumentById(id)).resolves.toBeNull();
+      expect(repo.findOne).not.toHaveBeenCalled();
+    },
+  );
+
+  it('propagates database failures for a valid id', async () => {
+    const { service, exec } = build();
+    const databaseError = new Error('database unavailable');
+    exec.mockRejectedValue(databaseError);
+
+    await expect(service.findDocumentById('64b000000000000000000001')).rejects.toBe(databaseError);
+  });
+});
+
 // AR-17: every writer writes Decimal128; stored phases, Decimal128 since the #34 migration, are
 // written back as read. AR-24: the timestamps come from the injected clock.
 describe('AuctionsService.upsertMany', () => {

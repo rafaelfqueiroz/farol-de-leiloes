@@ -73,6 +73,10 @@ backend/src/<module>/
 | **AR-09** | Modules talk to each other through exported services, never by importing another module's repository, schema or model. A module that needs another's data asks its service. |
 | **AR-10** | Each external system sits behind a port named for the role, not the vendor: `PaymentGateway` (Stripe), `LanguageModel` (OpenAI), `FileStore` (R2), `Mailer` (SMTP), `CaixaSource`. The adapter takes the vendor name. Tests use hand-written fakes of the port (TS-03). |
 
+The `common/` module follows AR-09 too; it is not exempted as a shared kernel. Job persistence stays behind `JobExecutionService`; callers import its framework-free run enums and record/outcome contracts from `common/job-execution.ts`. Auth consumes the `users/user-account.ts` contract through `UsersService`, and reminders resolve both auction codes and document ids through `AuctionsService` (#51, DV-09). Public contracts contain no schema or repository imports. Job execution results and auth profiles are detached plain values, including profile arrays and address objects; callers cannot save or mutate their source documents through them. `UserAddress` is shared by the account, schema and profile contracts.
+
+The AR-09 import lint is complemented by `test/structural/module-model-boundary.spec.ts`: it rejects production `db.model(...)` and `connection.model(...)` calls, including static bracket access and optional chaining. Owning modules use their injected models; other modules ask an exported service. Test files are excluded from the production scan so their harnesses can register models.
+
 ## 4. Ownership and isolation
 
 SPEC-002 is the source of truth. The architectural consequences:

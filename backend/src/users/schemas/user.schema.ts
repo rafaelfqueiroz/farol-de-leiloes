@@ -1,11 +1,18 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import { SUBSCRIPTION_STATUSES, SubscriptionStatus } from '../subscription-status';
+import type { UserAccount, UserAddress } from '../user-account';
 
 export type UserDocument = UserEntity & Document;
 
 @Schema({ collection: 'users', timestamps: true })
-export class UserEntity extends Document {
+export class UserEntity extends Document implements UserAccount {
+  override _id!: Types.ObjectId;
+
+  // Supplied by timestamps: true; part of the public UsersService account contract (AR-09).
+  createdAt!: Date;
+  updatedAt!: Date;
+
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email!: string;
 
@@ -69,12 +76,7 @@ export class UserEntity extends Document {
   sex?: string;
 
   @Prop({ type: Object, required: false })
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zipCode?: string;
-  };
+  address?: UserAddress;
 }
 
 export const UserSchema = SchemaFactory.createForClass(UserEntity);

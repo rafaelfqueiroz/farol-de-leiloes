@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { Model, mongo } from 'mongoose';
+import { isObjectIdOrHexString, Model, mongo } from 'mongoose';
 import { subHours } from 'date-fns';
 import { AuctionEntity, AuctionDocument, Address } from './schemas/auction.schema';
 import { Auction, AuctionRecord, Phase } from './interfaces/auction.interface';
@@ -305,6 +305,13 @@ export class AuctionsService {
     // SC-10: as findByCode, a non-string code finds nothing.
     if (typeof code !== 'string') return null;
     return this.auctionRepository.findOne({ code: { $eq: code } }).exec();
+  }
+
+  /** AR-09: reminders resolve legacy document ids through the auctions service boundary. */
+  async findDocumentById(id: string): Promise<AuctionDocument | null> {
+    // SC-10: reject operator objects and malformed ids before querying; database faults propagate.
+    if (typeof id !== 'string' || !isObjectIdOrHexString(id)) return null;
+    return this.auctionRepository.findOne({ _id: { $eq: id } }).exec();
   }
 
   /**

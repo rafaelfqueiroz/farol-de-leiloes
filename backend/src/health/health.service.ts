@@ -3,7 +3,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import { Clock } from '../common/clock/clock';
-import { JobExecutionService, type JobOutcome } from '../common/services/job-execution.service';
+import { JobExecutionService } from '../common/services/job-execution.service';
+import type { JobOutcome } from '../common/job-execution';
 import { AUCTIONS_IMPORT_JOB } from '../auctions/importer/import-job';
 import {
   assessLastImport,

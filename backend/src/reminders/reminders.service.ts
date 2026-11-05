@@ -46,24 +46,13 @@ export class RemindersService {
   async create(userId: string, dto: CreateReminderDto): Promise<PopulatedReminder> {
     const auction = await this.auctionsService.findDocumentByCode(dto.auctionId);
     if (!auction) {
-      const auctionById = await this.findAuctionById(dto.auctionId);
+      const auctionById = await this.auctionsService.findDocumentById(dto.auctionId);
       if (!auctionById) {
         throw new DomainError('AUCTION_NOT_FOUND');
       }
       return this.createWithAuction(userId, dto, auctionById);
     }
     return this.createWithAuction(userId, dto, auction);
-  }
-
-  private async findAuctionById(auctionId: string): Promise<ReminderTarget | null> {
-    // SC-10: an id is text; anything else (an operator object) is no auction.
-    if (typeof auctionId !== 'string') return null;
-    try {
-      const AuctionModel = this.reminderModel.db.model<AuctionRecord>('AuctionEntity');
-      return await AuctionModel.findOne({ _id: { $eq: auctionId } }).exec();
-    } catch {
-      return null;
-    }
   }
 
   private async createWithAuction(
@@ -159,7 +148,7 @@ export class RemindersService {
     }
 
     if (dto.scheduledAt) {
-      const auction = await this.findAuctionById(reminder.auction.toString());
+      const auction = await this.auctionsService.findDocumentById(reminder.auction.toString());
       if (!auction) {
         throw new DomainError('AUCTION_NOT_FOUND');
       }

@@ -1,8 +1,8 @@
-import { JobExecution, JobStatus, RunMode } from '../../src/common/schemas/job-execution.schema';
+import { type JobExecutionRecord, JobStatus, RunMode } from '../../src/common/job-execution';
 import { DEFAULT_FAKE_NOW } from '../fakes/fake-clock';
 
 /**
- * TS-29: builds a `JobExecution` with sensible defaults so a test states only what it cares
+ * TS-29: builds a `JobExecutionRecord` with sensible defaults so a test states only what it cares
  * about:
  *
  *   aJobExecution().named('import-csv').finishedAt(clock.now()).build()
@@ -10,7 +10,7 @@ import { DEFAULT_FAKE_NOW } from '../fakes/fake-clock';
  * `build()` returns a plain object, ready for `Model.create()` or a fake repository.
  */
 export class JobExecutionBuilder {
-  private props: JobExecution = {
+  private props: JobExecutionRecord = {
     jobName: 'test-job',
     runMode: RunMode.AUTO,
     finishedAt: new Date(DEFAULT_FAKE_NOW.getTime()),
@@ -50,7 +50,7 @@ export class JobExecutionBuilder {
     return this;
   }
 
-  build(): JobExecution {
+  build(): JobExecutionRecord {
     return { ...this.props, finishedAt: new Date(this.props.finishedAt.getTime()) };
   }
 }

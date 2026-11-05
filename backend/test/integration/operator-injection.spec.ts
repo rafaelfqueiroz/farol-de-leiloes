@@ -163,6 +163,23 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       await expect(auctions.findDocumentByCode('A1')).resolves.toMatchObject({ code: 'A1' });
     });
 
+    it('findDocumentById accepts exact ids and rejects missing, invalid and operator ids', async () => {
+      const auctionModel = moduleRef.get<Model<AuctionEntity>>(getModelToken(AuctionEntity.name));
+      const id = new Types.ObjectId('64b7f0000000000000000d01');
+      await auctionModel.collection.insertOne(auction('id-lookup', { _id: id, available: false }));
+
+      // AR-09: the service owns the legacy reminder lookup, including unavailable auctions.
+      await expect(auctions.findDocumentById(id.toString())).resolves.toMatchObject({
+        code: 'id-lookup',
+        available: false,
+      });
+      await expect(auctions.findDocumentById('64b7f0000000000000000d02')).resolves.toBeNull();
+      await expect(auctions.findDocumentById('not-an-id')).resolves.toBeNull();
+      await expect(auctions.findDocumentById('abcdefghijkl')).resolves.toBeNull();
+      await expect(auctions.findDocumentById(NE_NULL)).resolves.toBeNull();
+      await expect(auctions.findDocumentById(GT_EMPTY)).resolves.toBeNull();
+    });
+
     it('query refuses an operator object in any filter, leaking no auction', async () => {
       const page = { page: 1, pageSize: 20 };
       const refused = { code: 'VALIDATION_FAILED' };
@@ -266,6 +283,51 @@ describe('SC-10: Mongo operator injection (integration)', () => {
 
   describe('RemindersService', () => {
     const REMINDER_ID = new Types.ObjectId('64b7f0000000000000000c01');
+
+    it('creates by code or document id and reschedules through AuctionsService (AR-09)', async () => {
+      const userId = new Types.ObjectId('64b7f0000000000000000e01');
+      const auctionId = new Types.ObjectId('64b7f0000000000000000e02');
+      const userModel = moduleRef.get<Model<UserEntity>>(getModelToken(UserEntity.name));
+      const auctionModel = moduleRef.get<Model<AuctionEntity>>(getModelToken(AuctionEntity.name));
+      await userModel.collection.insertOne({
+        _id: userId,
+        name: 'Reminder Test Account',
+        email: 'reminder@example.test',
+        emailVerified: true,
+        role: 'free',
+        providers: ['local'],
+      });
+      await auctionModel.collection.insertOne(
+        auction('reminder-lookup', {
+          _id: auctionId,
+          available: false,
+          phases: [{ modality: PhaseModality.SFI_AUCTION, phaseDates: [FAR_FUTURE] }],
+        }),
+      );
+      const dto = {
+        auctionId: 'reminder-lookup',
+        channel: ReminderChannel.EMAIL,
+        scheduledAt: '2026-01-16T12:00:00.000Z',
+      };
+
+      const byCode = await reminders.create(userId.toString(), dto);
+      const byId = await reminders.create(userId.toString(), {
+        ...dto,
+        auctionId: auctionId.toString(),
+      });
+      expect(byCode.auction).toMatchObject({ _id: auctionId, code: 'reminder-lookup' });
+      expect(byId.auction).toMatchObject({ _id: auctionId, code: 'reminder-lookup' });
+
+      const updated = await reminders.update(userId.toString(), byId._id.toString(), {
+        scheduledAt: '2026-01-17T12:00:00.000Z',
+      });
+      expect(updated.scheduledAt).toEqual(new Date('2026-01-17T12:00:00.000Z'));
+      for (const invalid of ['not-an-id', NE_NULL]) {
+        await expect(
+          reminders.create(userId.toString(), { ...dto, auctionId: invalid }),
+        ).rejects.toMatchObject({ code: 'AUCTION_NOT_FOUND' });
+      }
+    });
 
     it('getDueReminders keeps its $lte filter; findOne never reads an operator id', async () => {
       const reminderModel = moduleRef.get<Model<ReminderEntity>>(

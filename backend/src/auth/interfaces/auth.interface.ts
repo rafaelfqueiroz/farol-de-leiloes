@@ -1,4 +1,5 @@
 import type { SubscriptionStatus } from '../../users/subscription-status';
+import type { UserAddress } from '../../users/user-account';
 
 export interface UserProfile {
   _id: string;
@@ -12,12 +13,7 @@ export interface UserProfile {
   cpf?: string;
   dateOfBirth?: Date;
   sex?: string;
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zipCode?: string;
-  };
+  address?: UserAddress;
   createdAt: Date;
   updatedAt: Date;
 }
