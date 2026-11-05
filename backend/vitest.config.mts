@@ -52,8 +52,9 @@ export default defineConfig({
         // the unit specs of the SC-10 query guards (measured 44.0% / 36.2%), then in #34 by the
         // money, Clock and payment-port specs (measured 53.7% / 50.0%), then in #36 by the
         // observability, health and job-outcome specs (measured 60.2% / 57.0%).
-        lines: 60,
-        branches: 57,
+        // Raised in #51 by the module-boundary regressions (measured 65.39% / 61.73%).
+        lines: 65,
+        branches: 61,
         // TS-24 / AR-06: `domain/` holds the critical modules, gated at 100% branch coverage.
         // The glob is static: Vitest ignores a threshold glob that matches no file, so the gate
         // is inert until the first src/<module>/domain/ file lands and applies the moment it

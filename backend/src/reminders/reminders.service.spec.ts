@@ -7,52 +7,58 @@ import { serverOperators } from '../common/mongo/query-safety';
 
 type ServiceDeps = ConstructorParameters<typeof RemindersService>;
 
-// SC-10: the fallback lookup of an auction by id compares by equality, and a non-string id is no
-// auction. `create` reaches it only when no auction has the given code.
-describe('RemindersService.create auction lookup by id (SC-10)', () => {
-  function build(byId: { findOne: ReturnType<typeof vi.fn> }) {
-    const reminderModel = { db: { model: vi.fn().mockReturnValue(byId) } };
-    const auctionsService = { findDocumentByCode: vi.fn().mockResolvedValue(null) };
+// AR-09: both reminder creation and rescheduling reach auctions only through their service.
+describe('RemindersService auction lookup boundary (AR-09)', () => {
+  function build(codeResult: unknown = null) {
+    const auctionsService = {
+      findDocumentByCode: vi.fn().mockResolvedValue(codeResult),
+      findDocumentById: vi.fn().mockResolvedValue(null),
+    };
+    const reminder = { status: 'PENDING', auction: { toString: () => '64b000000000000000000001' } };
     const service = new RemindersService(
-      reminderModel as unknown as ServiceDeps[0],
+      { findOne: vi.fn().mockResolvedValue(reminder) } as unknown as ServiceDeps[0],
       {} as ServiceDeps[1],
       auctionsService as unknown as ServiceDeps[2],
-      {} as ServiceDeps[3],
+      { findByIdFull: vi.fn().mockResolvedValue(null) } as unknown as ServiceDeps[3],
       new FakeClock(),
     );
-    return { service, reminderModel };
+    return { service, auctionsService };
   }
 
   const dto = (auctionId: unknown) => ({ auctionId }) as unknown as CreateReminderDto;
 
-  it('looks the auction up by _id with equality when the code is unknown', async () => {
-    const findOne = vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(null) });
-    const { service } = build({ findOne });
+  it('falls back to AuctionsService by id when no auction has the given code', async () => {
+    const { service, auctionsService } = build();
 
     await expect(service.create('u1', dto('64b000000000000000000001'))).rejects.toEqual(
       new DomainError('AUCTION_NOT_FOUND'),
     );
-    expect(findOne).toHaveBeenCalledWith({ _id: { $eq: '64b000000000000000000001' } });
+    expect(auctionsService.findDocumentByCode).toHaveBeenCalledWith('64b000000000000000000001');
+    expect(auctionsService.findDocumentById).toHaveBeenCalledWith('64b000000000000000000001');
+    expect(auctionsService.findDocumentByCode.mock.invocationCallOrder[0]).toBeLessThan(
+      auctionsService.findDocumentById.mock.invocationCallOrder[0] ?? 0,
+    );
   });
 
-  it('treats a non-string id as no auction, without querying', async () => {
-    const findOne = vi.fn();
-    const { service, reminderModel } = build({ findOne });
+  it('uses the code match without an id lookup', async () => {
+    const { service, auctionsService } = build({ phases: [] });
 
-    await expect(service.create('u1', dto({ $ne: null }))).rejects.toEqual(
-      new DomainError('AUCTION_NOT_FOUND'),
+    await expect(service.create('u1', dto('A1'))).rejects.toEqual(
+      new DomainError('USER_NOT_FOUND'),
     );
-    expect(reminderModel.db.model).not.toHaveBeenCalled();
-    expect(findOne).not.toHaveBeenCalled();
+    expect(auctionsService.findDocumentById).not.toHaveBeenCalled();
   });
 
-  it('treats a lookup error as no auction', async () => {
-    const findOne = vi.fn().mockReturnValue({ exec: vi.fn().mockRejectedValue(new Error('cast')) });
-    const { service } = build({ findOne });
+  it('resolves the saved auction id through AuctionsService when rescheduling', async () => {
+    const { service, auctionsService } = build();
 
-    await expect(service.create('u1', dto('not-an-id'))).rejects.toEqual(
-      new DomainError('AUCTION_NOT_FOUND'),
-    );
+    await expect(
+      service.update('64b000000000000000000002', 'r1', {
+        scheduledAt: '2026-01-16T12:00:00.000Z',
+      }),
+    ).rejects.toEqual(new DomainError('AUCTION_NOT_FOUND'));
+    expect(auctionsService.findDocumentById).toHaveBeenCalledWith('64b000000000000000000001');
+    expect(auctionsService.findDocumentByCode).not.toHaveBeenCalled();
   });
 });
 

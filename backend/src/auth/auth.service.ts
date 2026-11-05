@@ -6,7 +6,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { CompleteProfileDto } from './dto/complete-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { UserDocument } from '../users/schemas/user.schema';
+import type { UserAccount } from '../users/user-account';
 import { UserProfile, AuthResult } from './interfaces/auth.interface';
 import { DomainError } from '../common/errors/domain-error';
 
@@ -51,7 +51,7 @@ export class AuthService {
     };
   }
 
-  async googleLogin(user: UserDocument): Promise<AuthResult> {
+  async googleLogin(user: UserAccount): Promise<AuthResult> {
     const accessToken = this.generateToken(user);
     return {
       accessToken,
@@ -127,7 +127,7 @@ export class AuthService {
     await this.usersService.setPassword(userId, newPassword);
   }
 
-  private generateToken(user: UserDocument): string {
+  private generateToken(user: UserAccount): string {
     const payload = {
       email: user.email,
       sub: user._id.toString(),
@@ -171,23 +171,22 @@ export class AuthService {
     };
   }
 
-  private toUserProfile(user: UserDocument): UserProfile {
-    const obj = typeof user.toObject === 'function' ? user.toObject() : user;
+  private toUserProfile(user: UserAccount): UserProfile {
     return {
-      _id: obj._id.toString(),
-      email: obj.email,
-      name: obj.name,
-      providers: obj.providers,
-      emailVerified: obj.emailVerified ?? false,
-      role: obj.role ?? 'free',
-      subscriptionStatus: obj.subscriptionStatus ?? null,
-      phone: obj.phone,
-      cpf: obj.cpf,
-      dateOfBirth: obj.dateOfBirth,
-      sex: obj.sex,
-      address: obj.address,
-      createdAt: obj.createdAt,
-      updatedAt: obj.updatedAt,
+      _id: user._id.toString(),
+      email: user.email,
+      name: user.name,
+      providers: user.providers,
+      emailVerified: user.emailVerified ?? false,
+      role: user.role ?? 'free',
+      subscriptionStatus: user.subscriptionStatus ?? null,
+      phone: user.phone,
+      cpf: user.cpf,
+      dateOfBirth: user.dateOfBirth,
+      sex: user.sex,
+      address: user.address,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
   }
 }

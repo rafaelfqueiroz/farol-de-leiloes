@@ -1,19 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-
-export enum RunMode {
-  MANUAL = 'MANUAL',
-  AUTO = 'AUTO',
-}
-
-/** AR-03: the outcome of a run. */
-export enum JobStatus {
-  SUCCESS = 'SUCCESS',
-  FAILED = 'FAILED',
-}
+import { type JobExecutionRecord, JobStatus, RunMode } from '../job-execution';
 
 @Schema({ collection: 'jobexecutions', timestamps: true })
-export class JobExecution {
+export class JobExecution implements JobExecutionRecord {
   @Prop({ required: true, index: true })
   jobName!: string;
 

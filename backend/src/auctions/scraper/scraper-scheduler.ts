@@ -11,7 +11,7 @@ import {
 } from '../schemas/auction.schema';
 import { fetchAndScrapeDetails } from './details-scraper';
 import { JobExecutionService } from '../../common/services/job-execution.service';
-import { RunMode } from '../../common/schemas/job-execution.schema';
+import { RunMode } from '../../common/job-execution';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
 import { StorageService } from '../../storage/storage.service';
 import { serverOperators } from '../../common/mongo/query-safety';

@@ -2,20 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Clock } from '../clock/clock';
-import {
-  JobExecution,
-  JobExecutionDocument,
-  JobStatus,
-  RunMode,
-} from '../schemas/job-execution.schema';
-
-/** The outcome of a job's last run, with a legacy row's absent status read as SUCCESS. */
-export interface JobOutcome {
-  status: `${JobStatus}`;
-  runMode: `${RunMode}`;
-  finishedAt: Date;
-  errorCode?: string;
-}
+import { JobExecution, JobExecutionDocument } from '../schemas/job-execution.schema';
+import { type JobExecutionRecord, type JobOutcome, JobStatus, RunMode } from '../job-execution';
 
 @Injectable()
 export class JobExecutionService {
@@ -28,20 +16,24 @@ export class JobExecutionService {
   /**
    * Record a successful job execution
    */
-  async recordExecution(jobName: string, runMode: RunMode): Promise<JobExecution> {
+  async recordExecution(jobName: string, runMode: RunMode): Promise<JobExecutionRecord> {
     return this.record({ jobName, runMode, status: JobStatus.SUCCESS });
   }
 
   /**
    * AR-03: record a failed run, with a stable code only (job-error-code.ts, SC-15).
    */
-  async recordFailure(jobName: string, runMode: RunMode, errorCode: string): Promise<JobExecution> {
+  async recordFailure(
+    jobName: string,
+    runMode: RunMode,
+    errorCode: string,
+  ): Promise<JobExecutionRecord> {
     return this.record({ jobName, runMode, status: JobStatus.FAILED, errorCode });
   }
 
   private async record(
-    fields: Pick<JobExecution, 'jobName' | 'runMode' | 'status' | 'errorCode'>,
-  ): Promise<JobExecution> {
+    fields: Pick<JobExecutionRecord, 'jobName' | 'runMode' | 'status' | 'errorCode'>,
+  ): Promise<JobExecutionRecord> {
     const execution = new this.jobExecutionRepository({
       ...fields,
       finishedAt: this.clock.now(), // AR-24
@@ -53,7 +45,7 @@ export class JobExecutionService {
    * Get the last successful execution for a specific job and run mode. A row without a status
    * predates #36 and was a success, hence `$ne` rather than `SUCCESS`.
    */
-  async getLastExecution(jobName: string, runMode: RunMode): Promise<JobExecution | null> {
+  async getLastExecution(jobName: string, runMode: RunMode): Promise<JobExecutionRecord | null> {
     return this.jobExecutionRepository
       .findOne({ jobName, runMode, status: { $ne: JobStatus.FAILED } })
       .sort({ finishedAt: -1 })

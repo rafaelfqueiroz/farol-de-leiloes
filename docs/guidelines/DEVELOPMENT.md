@@ -88,7 +88,7 @@ Both packages expose the same script names:
 | Script | Does |
 |---|---|
 | `typecheck` | `tsc --noEmit` |
-| `lint` / `lint:fix` | ESLint. The remaining legacy violations are bulk suppressions in `eslint-suppressions.json`, each owned by an issue: backend AR-09 imports (#51); frontend JSX literals (#39), `px` in `sx` (#43), and the React hooks, a11y and Next rules (#52). `lint` fails on a new violation and on a suppression that no longer occurs, which `npm run lint:prune` removes |
+| `lint` / `lint:fix` | ESLint. The remaining legacy violations are bulk suppressions in `eslint-suppressions.json`, each owned by an issue: frontend JSX literals (#39), `px` in `sx` (#43), and the React hooks, a11y and Next rules (#52). The backend has no remaining bulk suppressions (#51, AR-09). `lint` fails on a new violation and on a suppression that no longer occurs, which `npm run lint:prune` removes |
 | `format` / `format:check` | Prettier |
 | `test` | Fast tests, no Docker. Backend: Vitest projects `unit` (specs next to their source, `domain/` included) and `structural` (`test/structural/`); frontend: Vitest |
 | `test:integration` | Backend only — `test/integration/` on a Testcontainers MongoDB (TESTING §2). **Needs Docker running**; without it, stops with "Docker is required (DV-17)" |

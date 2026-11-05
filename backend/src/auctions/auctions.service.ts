@@ -307,6 +307,18 @@ export class AuctionsService {
     return this.auctionRepository.findOne({ code: { $eq: code } }).exec();
   }
 
+  /** AR-09: reminders resolve legacy document ids through the auctions service boundary. */
+  async findDocumentById(id: string): Promise<AuctionDocument | null> {
+    // SC-10: never let an operator object become an id filter.
+    if (typeof id !== 'string') return null;
+    try {
+      return await this.auctionRepository.findOne({ _id: { $eq: id } }).exec();
+    } catch {
+      // Preserve the reminder lookup's missing-auction result for invalid ids/lookup errors.
+      return null;
+    }
+  }
+
   /**
    * Get all auction codes for sitemap generation
    * Returns codes of active auctions sorted by updatedAt

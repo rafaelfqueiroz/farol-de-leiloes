@@ -10,9 +10,8 @@ import { CommonModule } from '../../src/common/common.module';
 import {
   JobExecution,
   type JobExecutionDocument,
-  JobStatus,
-  RunMode,
 } from '../../src/common/schemas/job-execution.schema';
+import { JobStatus, RunMode } from '../../src/common/job-execution';
 import { JobExecutionService } from '../../src/common/services/job-execution.service';
 import { aJobExecution } from '../builders/job-execution.builder';
 import { FakeClock, HOUR, MINUTE } from '../fakes/fake-clock';

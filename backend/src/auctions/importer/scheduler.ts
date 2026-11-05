@@ -6,7 +6,7 @@ import { normalizeRows, parseCsv } from './parser';
 import { PhaseModality } from '../schemas/auction.schema';
 import type { Phase } from '../interfaces/auction.interface';
 import { JobExecutionService } from '../../common/services/job-execution.service';
-import { RunMode } from '../../common/schemas/job-execution.schema';
+import { RunMode } from '../../common/job-execution';
 import { CsvCacheService } from './csv-cache.service';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
 import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time';

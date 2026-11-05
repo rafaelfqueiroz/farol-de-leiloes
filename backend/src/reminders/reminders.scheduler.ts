@@ -6,7 +6,7 @@ import { EmailService } from '../email/email.service';
 import { SmsService } from '../notifications/sms.service';
 import { WhatsAppService } from '../notifications/whatsapp.service';
 import { JobExecutionService } from '../common/services/job-execution.service';
-import { RunMode } from '../common/schemas/job-execution.schema';
+import { RunMode } from '../common/job-execution';
 import { ReminderChannel } from './schemas/reminder.schema';
 import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface';
 import { ReminderEmailPayload } from './templates/reminder.template';
