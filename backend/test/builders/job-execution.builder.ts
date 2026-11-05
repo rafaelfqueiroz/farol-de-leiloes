@@ -1,4 +1,4 @@
-import { JobExecution, RunMode } from '../../src/common/schemas/job-execution.schema';
+import { JobExecution, JobStatus, RunMode } from '../../src/common/schemas/job-execution.schema';
 import { DEFAULT_FAKE_NOW } from '../fakes/fake-clock';
 
 /**
@@ -14,6 +14,7 @@ export class JobExecutionBuilder {
     jobName: 'test-job',
     runMode: RunMode.AUTO,
     finishedAt: new Date(DEFAULT_FAKE_NOW.getTime()),
+    status: JobStatus.SUCCESS,
   };
 
   named(jobName: string): this {
@@ -28,6 +29,20 @@ export class JobExecutionBuilder {
 
   manual(): this {
     return this.inMode(RunMode.MANUAL);
+  }
+
+  /** AR-03: a failed run, with its stable code. */
+  failed(errorCode = 'Error'): this {
+    this.props.status = JobStatus.FAILED;
+    this.props.errorCode = errorCode;
+    return this;
+  }
+
+  /** A row recorded before #36, when only successes were recorded and there was no status. */
+  legacy(): this {
+    delete this.props.status;
+    delete this.props.errorCode;
+    return this;
   }
 
   finishedAt(finishedAt: Date): this {

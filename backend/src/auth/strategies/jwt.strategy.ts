@@ -6,10 +6,13 @@ import type { Env } from '../../config/env';
 import { UsersService } from '../../users/users.service';
 import { AuthenticatedUser, JwtPayload } from '../interfaces/auth.interface';
 import { DomainError } from '../../common/errors/domain-error';
+import { setLogUserHash } from '../../common/observability/log-context';
+import { hashUserId } from '../../common/observability/user-hash';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   private readonly logger = new Logger(JwtStrategy.name);
+  private readonly logHashSecret: string | undefined;
 
   constructor(
     private usersService: UsersService,
@@ -21,12 +24,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ignoreExpiration: false,
       secretOrKey: configService.get('JWT_SECRET', { infer: true }),
     });
+    this.logHashSecret = configService.get('LOG_HASH_SECRET', { infer: true });
   }
 
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
+    // AR-46: the hashed user joins the request's log context here, where every JWT-protected
+    // request first proves who it is: before the guard returns, so the lines of later guards, the
+    // handler and the error filter all carry it. An interceptor would only see the user after
+    // every guard ran. Without LOG_HASH_SECRET no user id is logged at all (AR-41, SC-15).
+    setLogUserHash(hashUserId(this.logHashSecret, payload.sub));
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
-      this.logger.warn(`JWT validation - User not found for ID: ${payload.sub}`);
+      // SC-15: the line carries the user hash from the context, never the raw id.
+      this.logger.warn('JWT validation - user not found');
       // A token for an account that no longer exists authenticates nobody.
       throw new DomainError('UNAUTHENTICATED');
     }

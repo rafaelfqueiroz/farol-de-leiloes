@@ -10,6 +10,7 @@ import { CommonModule } from '../../src/common/common.module';
 import {
   JobExecution,
   type JobExecutionDocument,
+  JobStatus,
   RunMode,
 } from '../../src/common/schemas/job-execution.schema';
 import { JobExecutionService } from '../../src/common/services/job-execution.service';
@@ -89,6 +90,105 @@ describe('JobExecutionService (integration)', () => {
 
       await expect(service.hasRunRecently(JOB, RunMode.AUTO, 24)).resolves.toBe(false);
     });
+
+    it('ignores a FAILED run, so the next scheduled run retries', async () => {
+      // Failed 1 h ago (11:00Z): within 24 h, but not a run that counts.
+      await executions.create(
+        aJobExecution()
+          .named(JOB)
+          .failed()
+          .finishedAt(new Date('2026-01-15T11:00:00.000Z'))
+          .build(),
+      );
+
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 24)).resolves.toBe(false);
+    });
+
+    it('measures from the last successful run when a later one failed', async () => {
+      // Success at 2026-01-14T14:00Z (22 h before now), failure at 11:00Z (1 h before now).
+      await executions.create([
+        aJobExecution().named(JOB).finishedAt(new Date('2026-01-14T14:00:00.000Z')).build(),
+        aJobExecution()
+          .named(JOB)
+          .failed()
+          .finishedAt(new Date('2026-01-15T11:00:00.000Z'))
+          .build(),
+      ]);
+
+      // 22 h < 23 h -> recent; 22 h < 22 h is false.
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 23)).resolves.toBe(true);
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 22)).resolves.toBe(false);
+    });
+
+    it('counts a row without a status (written before #36) as a success', async () => {
+      await executions.create(
+        aJobExecution()
+          .named(JOB)
+          .legacy()
+          .finishedAt(new Date('2026-01-15T11:00:00.000Z'))
+          .build(),
+      );
+      expect((await executions.findOne({ jobName: JOB }).lean())?.status).toBeUndefined();
+
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 24)).resolves.toBe(true);
+    });
+  });
+
+  describe('recordFailure (AR-03)', () => {
+    it('records a FAILED run with its code and the injected clock time', async () => {
+      await service.recordFailure(JOB, RunMode.AUTO, 'MongoServerError');
+
+      const stored = await executions.findOne({ jobName: JOB }).lean();
+      expect(stored).toMatchObject({
+        jobName: JOB,
+        runMode: RunMode.AUTO,
+        status: JobStatus.FAILED,
+        errorCode: 'MongoServerError',
+      });
+      expect(stored?.finishedAt.toISOString()).toBe('2026-01-15T12:00:00.000Z');
+    });
+  });
+
+  describe('getLastOutcome (AR-48)', () => {
+    it('is null when the job never ran', async () => {
+      await expect(service.getLastOutcome(JOB)).resolves.toBeNull();
+    });
+
+    it('is the latest run in any run mode, failed or not', async () => {
+      await executions.create([
+        aJobExecution().named(JOB).finishedAt(new Date('2026-01-15T03:00:00.000Z')).build(),
+        aJobExecution()
+          .named(JOB)
+          .manual()
+          .failed('DownloadError')
+          .finishedAt(new Date('2026-01-15T09:00:00.000Z'))
+          .build(),
+        aJobExecution().named('other-job').finishedAt(new Date('2026-01-15T11:00:00.000Z')).build(),
+      ]);
+
+      await expect(service.getLastOutcome(JOB)).resolves.toEqual({
+        status: 'FAILED',
+        runMode: 'MANUAL',
+        finishedAt: new Date('2026-01-15T09:00:00.000Z'),
+        errorCode: 'DownloadError',
+      });
+    });
+
+    it('reads a row without a status as SUCCESS', async () => {
+      await executions.create(
+        aJobExecution()
+          .named(JOB)
+          .legacy()
+          .finishedAt(new Date('2026-01-15T03:00:00.000Z'))
+          .build(),
+      );
+
+      await expect(service.getLastOutcome(JOB)).resolves.toEqual({
+        status: 'SUCCESS',
+        runMode: 'AUTO',
+        finishedAt: new Date('2026-01-15T03:00:00.000Z'),
+      });
+    });
   });
 
   describe('recordExecution', () => {
@@ -97,6 +197,7 @@ describe('JobExecutionService (integration)', () => {
 
       const last = await service.getLastExecution(JOB, RunMode.MANUAL);
       expect(last?.finishedAt.toISOString()).toBe('2026-01-15T12:00:00.000Z');
+      expect(last?.status).toBe(JobStatus.SUCCESS);
 
       // 23 h 59 min later (2026-01-16T11:59Z): still within 24 h.
       clock.advance(23 * HOUR + 59 * MINUTE);

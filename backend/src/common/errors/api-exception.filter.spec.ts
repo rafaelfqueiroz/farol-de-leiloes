@@ -2,6 +2,7 @@
 // the real Nest + Express stack and the app's own setup (configureApp). supertest binds an
 // ephemeral loopback port in this process; nothing leaves the machine (TS-01).
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { captureException } from '@sentry/nestjs';
 import {
   Body,
   ConflictException,
@@ -23,6 +24,11 @@ import { testConfigService } from '../../../test/support/test-env';
 import { ERROR_CODES, type ErrorCode } from './codes';
 import { DomainError } from './domain-error';
 import { ERROR_STATUS } from './error-status';
+
+// TS-03: the Sentry SDK has no port of ours (the filter calls it directly, ARCHITECTURE §9), so
+// it is replaced with vi.mock to observe what the filter reports; nothing is sent either way
+// (TS-07), since Sentry is never initialised in tests.
+vi.mock('@sentry/nestjs', () => ({ captureException: vi.fn() }));
 
 // Fake personal data the responses and logs must never echo (TS-27).
 const SECRET = 'ana.souza@example.test';
@@ -172,5 +178,27 @@ describe('ApiExceptionFilter over HTTP', () => {
     expect(logged).toHaveBeenCalledTimes(1);
     expect(logged.mock.calls[0]?.[0]).toBe('Unhandled Error on GET /api/probe/fault');
     expect(JSON.stringify(logged.mock.calls)).not.toContain(SECRET);
+  });
+
+  it('reports a fault to Sentry tagged with the method and route pattern only (AR-47)', async () => {
+    await http().get('/api/probe/fault?email=ana.souza%40example.test').expect(500);
+
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { method: 'GET', route: '/api/probe/fault' },
+    });
+  });
+
+  it('reports no client error or domain outcome to Sentry', async () => {
+    await http().get('/api/probe/forbidden').expect(403);
+    await http().get('/api/probe/domain/NOT_FOUND').expect(404);
+    await http().get('/api/no-such-route').expect(404);
+
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it('echoes a request id on every response, errors included (AR-46)', async () => {
+    const response = await http().get('/api/probe/fault').set('x-request-id', 'bff-0123-abcd');
+    expect(response.headers['x-request-id']).toBe('bff-0123-abcd');
   });
 });

@@ -5,3 +5,4 @@ Procedures someone follows **while something is going wrong**: no context, no ti
 | Runbook | When |
 |---|---|
 | [incident-response.md](incident-response.md) | Any unauthorised access, loss or disclosure of personal data (SC-31) |
+| [health-check.md](health-check.md) | The container is unhealthy, a health probe alerts, or the auction data may be out of date: reading `GET /api/health` (AR-48) |

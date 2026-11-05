@@ -1,69 +1,68 @@
+import { captureException } from '@sentry/nextjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reportClientError } from './report-client-error';
 
+vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
+
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
-function spyOnConsoleError() {
-  return vi.spyOn(console, 'error').mockImplementation(() => undefined);
+function lastReport() {
+  const [error, hint] = vi.mocked(captureException).mock.calls[0] ?? [];
+  return { error: error as Error, hint };
 }
 
 describe('reportClientError', () => {
-  it('reports the where label, the error name and its message', () => {
-    const spy = spyOnConsoleError();
-
+  it('reports the error name and message with the where label as a tag', () => {
     reportClientError(new TypeError('Failed to fetch'), { where: 'FavoritesContext.load' });
 
-    expect(spy).toHaveBeenCalledExactlyOnceWith(
-      '[FavoritesContext.load] TypeError: Failed to fetch',
-    );
+    const { error, hint } = lastReport();
+    expect(error.name).toBe('TypeError');
+    expect(error.message).toBe('Failed to fetch');
+    expect(hint).toEqual({ tags: { where: 'FavoritesContext.load' } });
   });
 
   it('does not report the stack, the cause or anything else attached to the error', () => {
-    const spy = spyOnConsoleError();
-    const error = new Error('boom', { cause: { token: 'secret-token-value' } });
-    Object.assign(error, { payload: { email: 'someone@example.test' } });
+    const original = new Error('boom', { cause: { token: 'secret-token-value' } });
+    Object.assign(original, { payload: { email: 'someone@example.test' } });
 
-    reportClientError(error, { where: 'api/auth/login POST' });
+    reportClientError(original, { where: 'api/auth/login POST' });
 
-    const reported = JSON.stringify(spy.mock.calls);
-    expect(reported).not.toContain('secret-token-value');
-    expect(reported).not.toContain('someone@example.test');
-    // a stack names the file it was thrown from
-    expect(reported).not.toContain('report-client-error.test');
+    const { error } = lastReport();
+    expect(error).not.toBe(original);
+    expect(error.cause).toBeUndefined();
+    expect(error.stack).toBeUndefined();
+    expect(JSON.stringify(error)).not.toContain('someone@example.test');
+    expect(JSON.stringify(error)).not.toContain('secret-token-value');
   });
 
   it('labels the report "unknown" when no context is given', () => {
-    const spy = spyOnConsoleError();
-
     reportClientError(new Error('x'));
 
-    expect(spy).toHaveBeenCalledExactlyOnceWith('[unknown] Error: x');
+    expect(lastReport().hint).toEqual({ tags: { where: 'unknown' } });
   });
 
   it('keeps a thrown string, which carries no stack', () => {
-    const spy = spyOnConsoleError();
-
     reportClientError('plain failure', { where: 'somewhere' });
 
-    expect(spy).toHaveBeenCalledExactlyOnceWith('[somewhere] NonError: plain failure');
+    const { error } = lastReport();
+    expect(error.name).toBe('NonError');
+    expect(error.message).toBe('plain failure');
   });
 
   it('reports a thrown object without echoing its contents', () => {
-    const spy = spyOnConsoleError();
-
     reportClientError({ email: 'someone@example.test' }, { where: 'somewhere' });
 
-    expect(spy).toHaveBeenCalledExactlyOnceWith('[somewhere] NonError: ');
+    const { error } = lastReport();
+    expect(error.message).toBe('');
+    expect(JSON.stringify(error)).not.toContain('someone@example.test');
   });
 
   it('survives null and undefined', () => {
-    const spy = spyOnConsoleError();
-
     reportClientError(null, { where: 'a' });
     reportClientError(undefined, { where: 'b' });
 
-    expect(spy).toHaveBeenCalledTimes(2);
+    expect(captureException).toHaveBeenCalledTimes(2);
   });
 });

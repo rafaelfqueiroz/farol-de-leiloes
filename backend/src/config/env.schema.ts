@@ -23,6 +23,9 @@ export const LLM_PROVIDER_KEY = {
   anthropic: 'ANTHROPIC_API_KEY',
 } as const satisfies Record<Exclude<LlmProvider, 'ollama'>, string>;
 
+// pino's levels (nestjs-pino maps Nest's log/verbose onto info/trace); `silent` turns logging off.
+export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
+
 export const envSchema = z
   .object({
     // Server
@@ -84,11 +87,28 @@ export const envSchema = z
     NEIGHBORHOODS_CACHE_ENABLED: flag.default(false),
     // Milliseconds; 600000 = 10 minutes.
     NEIGHBORHOODS_CACHE_TTL: positiveInt.default(600_000),
+
+    // Observability (ARCHITECTURE §11)
+    LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+    // AR-46: the HMAC key of the hashed user id in log lines. Required in production (superRefine
+    // below); elsewhere it may be absent, and then no user id is logged at all: there is no
+    // fallback key (AR-41).
+    LOG_HASH_SECRET: z.string().min(32).optional(),
+    // AR-47: absent means Sentry stays inert (src/instrument.ts).
+    SENTRY_DSN: url.optional(),
   })
   .superRefine(
     (env, ctx) => {
-      // Runs even when other variables failed (`when` below), so one boot lists every problem;
-      // the provider itself may then be the invalid value, hence the lookup guard.
+      // Runs even when other variables failed (`when` below), so one boot lists every problem.
+      // AR-41/AR-46: production never runs without the log hash key.
+      if (env.NODE_ENV === 'production' && !env.LOG_HASH_SECRET) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['LOG_HASH_SECRET'],
+          message: 'required when NODE_ENV is production',
+        });
+      }
+      // The provider itself may be the invalid value, hence the lookup guard.
       const provider = env.LLM_PROVIDER;
       if (provider === 'ollama' || !(provider in LLM_PROVIDER_KEY)) return;
       const key = LLM_PROVIDER_KEY[provider];

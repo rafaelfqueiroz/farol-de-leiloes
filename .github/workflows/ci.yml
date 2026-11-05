@@ -233,6 +233,7 @@ jobs:
             build-args: |
               NEXT_PUBLIC_AUCTIONS_API_URL=${{ vars.NEXT_PUBLIC_AUCTIONS_API_URL }}
               NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
+              NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

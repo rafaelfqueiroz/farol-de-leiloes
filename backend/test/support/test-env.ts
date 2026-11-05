@@ -27,6 +27,10 @@ export const TEST_ENV = {
   R2_SECRET_ACCESS_KEY: 'test-r2-secret',
   R2_BUCKET: 'test-bucket',
   R2_PUBLIC_URL: 'https://files.example.test',
+  // Tests are silent (TESTING §2): whatever builds the pino logger in a spec logs nothing.
+  LOG_LEVEL: 'silent',
+  // Required in production (AR-46), so a spec overriding NODE_ENV=production still boots.
+  LOG_HASH_SECRET: 'test-log-hash-secret-not-a-real-one-000',
 } as const satisfies Record<string, string>;
 
 /** The validated test environment, with `overrides` (raw strings, as the process would hold). */
