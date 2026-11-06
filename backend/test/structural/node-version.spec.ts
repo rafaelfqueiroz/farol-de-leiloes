@@ -91,7 +91,7 @@ describe('node image parsing', () => {
     const content = [
       '    image: node:24.22.2-slim',
       'FROM node:24.22.2-alpine AS build',
-      '    image: mongo:7',
+      '    image: mongo:8',
     ].join('\n');
     expect(nodeImageTags(content)).toEqual(['24.22.2-slim', '24.22.2-alpine']);
   });

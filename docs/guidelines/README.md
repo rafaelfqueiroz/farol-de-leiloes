@@ -21,7 +21,7 @@ Alongside: [`docs/adr/`](../adr/README.md) for technical decisions, [`docs/runbo
 | | |
 |---|---|
 | Language | TypeScript, strict, Node 24 LTS pinned everywhere |
-| Backend | NestJS · Mongoose · MongoDB 7 |
+| Backend | NestJS · Mongoose · MongoDB 8 |
 | Frontend | Next.js App Router · React · MUI · next-intl (pt-BR) |
 | Money / time | `Decimal128` + `decimal.js` · `date-fns` + `@date-fns/tz` (Brasília) |
 | Integrations | Stripe · OpenAI · Cloudflare R2 · SMTP · Google sign-in · Caixa |
