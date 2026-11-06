@@ -50,7 +50,7 @@ export default defineConfig({
       thresholds: {
         // TESTING §7: floor rounded down from measured coverage; #37 security regressions.
         // The target remains 80% lines and branches (#57); the floor never goes down.
-        lines: 56,
+        lines: 57,
         branches: 54,
       },
     },

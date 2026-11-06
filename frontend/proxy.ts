@@ -14,20 +14,13 @@ export function proxy(request: NextRequest): NextResponse {
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set(cspHeaderName, policy);
-  // A cached document would reuse a nonce across requests (SC-17).
-  response.headers.set('Cache-Control', 'private, no-store');
+  // SC-17: Next marks dynamic HTML/404s no-store. Preserve its asset and metadata
+  // caching instead of setting a cache header before the response type is known.
   return response;
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
-  ],
+  // A missing API/asset URL can render the HTML 404; no path prefix is trusted
+  // to identify the response type or to bypass nonce-header sanitization (SC-17).
+  matcher: ['/:path*'],
 };

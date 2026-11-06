@@ -107,6 +107,24 @@ describe('validateEnv', () => {
     (FRONTEND_URL) => expect(errorOf({ ...TEST_ENV, FRONTEND_URL })).toContain('FRONTEND_URL:'),
   );
 
+  it.each([
+    ['https://app.example.test/', 'https://app.example.test'],
+    ['https://APP.example.test:443/', 'https://app.example.test'],
+    ['http://localhost:3001/', 'http://localhost:3001'],
+  ])('SC-17: normalizes FRONTEND_URL %s for every URL-building consumer', (input, origin) => {
+    const config = testEnv({ FRONTEND_URL: input });
+    expect(config.FRONTEND_URL).toBe(origin);
+    for (const path of [
+      '/auth/callback',
+      '/verify-email/test-token',
+      '/reset-password/test-token',
+      '/plans/success',
+      '/plans/cancel',
+    ]) {
+      expect(new URL(`${config.FRONTEND_URL}${path}`).pathname).toBe(path);
+    }
+  });
+
   it('coerces numbers', () => {
     expect(testEnv({ PORT: '8080', NEIGHBORHOODS_CACHE_TTL: '1000' })).toMatchObject({
       PORT: 8080,

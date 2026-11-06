@@ -62,18 +62,23 @@ E2E tests (Playwright, `npm run test:e2e`) are not set up yet; they arrive with 
 
 ## Security headers
 
-`next.config.ts` applies HSTS (`max-age=31536000; includeSubDomains`), `X-Frame-Options: DENY`,
+`next.config.ts` applies host-only HSTS (`max-age=15552000`, six months), `X-Frame-Options: DENY`,
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and an explicit
 CSP to every response (SC-17). Serve production through HTTPS; browsers honor HSTS over HTTPS.
+HSTS does not include subdomains or preload: subdomains have not been audited for HTTPS support.
 
-For HTML, `proxy.ts` generates a fresh 128-bit nonce and replaces caller-supplied nonce/CSP headers
-before rendering. Next's runtime scripts, MUI's color-scheme script and Emotion styles share that
+`proxy.ts` generates a fresh 128-bit nonce and replaces caller-supplied nonce/CSP headers on every
+path, including missing API/asset URLs that may render the HTML 404. Next's runtime scripts,
+MUI's color-scheme script and Emotion styles share that
 nonce. Only style attributes allow `unsafe-inline`, because MUI uses them for positioning and CSS
 variables; scripts never allow `unsafe-inline` or `unsafe-eval`. Connections are limited to this
 origin and the configured public API/Sentry origins; property images may load over HTTPS.
 
 Reading request headers in the root layout makes HTML dynamic. Do not cache HTML in a CDN: it
 would reuse a nonce. Auction data fetches still revalidate hourly, independently of HTML rendering.
+The proxy leaves `Cache-Control` to Next: dynamic HTML and errors are not stored, while icons,
+brand images, robots and the sitemap retain their normal caching. JSON-LD is a non-executable
+data block; escaping `<` protects its contents without a nonce.
 Development sends this same policy as `Content-Security-Policy-Report-Only`, because Next's
 development diagnostics require eval; production enforces `Content-Security-Policy`.
 

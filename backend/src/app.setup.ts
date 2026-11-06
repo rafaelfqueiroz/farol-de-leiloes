@@ -11,6 +11,7 @@ import { serveOpenApiDocs } from './openapi';
 
 export function configureApp(app: INestApplication): void {
   const config = app.get<AppConfigService>(ConfigService);
+  const isProduction = config.get('NODE_ENV', { infer: true }) === 'production';
 
   // AR-46: first in the chain, so everything after it (body parsing, guards, handlers, the error
   // filter) logs with the request's correlation id, echoed as x-request-id.
@@ -19,7 +20,15 @@ export function configureApp(app: INestApplication): void {
   // SC-17: security headers apply to successes, validation failures and authentication errors.
   app.use(
     helmet({
-      contentSecurityPolicy: { directives: { frameAncestors: ["'none'"] } },
+      contentSecurityPolicy: {
+        directives: {
+          frameAncestors: ["'none'"],
+          // SC-17: HTTPS in production; local/LAN Swagger remains usable over HTTP.
+          upgradeInsecureRequests: isProduction ? [] : null,
+        },
+      },
+      // SC-17: six months for this host only; no unaudited subdomain or preload commitment.
+      strictTransportSecurity: { maxAge: 15_552_000, includeSubDomains: false, preload: false },
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
       frameguard: { action: 'deny' },
     }),
@@ -29,7 +38,7 @@ export function configureApp(app: INestApplication): void {
 
   app.enableCors({
     // SC-17: one exact, boot-validated origin; never reflect an arbitrary requester.
-    origin: [new URL(config.get('FRONTEND_URL', { infer: true })).origin],
+    origin: [config.get('FRONTEND_URL', { infer: true })],
     credentials: true,
   });
 
@@ -50,7 +59,7 @@ export function configureApp(app: INestApplication): void {
 
   // AR-33: the OpenAPI reference at /api/docs, after the prefix so its paths carry /api. Not in
   // production: the deployed API does not publish a map of its own surface.
-  if (config.get('NODE_ENV', { infer: true }) !== 'production') {
+  if (!isProduction) {
     serveOpenApiDocs(app);
   }
 }

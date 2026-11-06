@@ -1,6 +1,5 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { headers } from 'next/headers';
 import AuctionDetailClient from './AuctionDetailClient';
 import { backendFetch } from '@/lib/backend';
 import { publicEnv } from '@/lib/env';
@@ -134,13 +133,11 @@ export default async function AuctionDetailPage({ params }: PageProps) {
   }
 
   const jsonLd = generateJsonLd(auction);
-  const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   return (
     <>
       <script
         type="application/ld+json"
-        nonce={nonce}
         // SC-17: auction text must never terminate the JSON script element.
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />

@@ -1,6 +1,10 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { contentSecurityPolicy } from './security-headers';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('SC-17 content security policy', () => {
   it('denies embedding, plugins, foreign base URLs and form submissions', () => {
@@ -28,5 +32,20 @@ describe('SC-17 content security policy', () => {
     expect(
       policy.split('; ').find((directive) => directive.startsWith('connect-src')),
     ).not.toContain('*');
+  });
+
+  it('uses configured origins without exposing DSN credentials or paths across nonce changes', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AUCTIONS_API_URL', 'https://api.example:444/');
+    vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN', 'https://public-key@sentry.example/42');
+    vi.resetModules();
+    const { contentSecurityPolicy: configuredPolicy } = await import('./security-headers');
+    for (const nonce of ['first-nonce', 'second-nonce']) {
+      const policy = configuredPolicy(nonce);
+      expect(policy.split('; ')).toContain(
+        "connect-src 'self' https://api.example:444 https://sentry.example",
+      );
+      expect(policy).not.toContain('public-key');
+      expect(policy).not.toContain('/42');
+    }
   });
 });
