@@ -29,7 +29,7 @@ Alongside: [`docs/adr/`](../adr/README.md) for technical decisions, [`docs/runbo
 | Testing | Vitest + Testcontainers (backend) · Vitest + Testing Library (frontend) · Playwright |
 | Quality gates | ESLint · Prettier · husky (pre-commit lint-staged, pre-push `check` per changed package) · GitHub Actions · CodeQL — hooks and lint in place (#29); CI, CodeQL and the protected `main` in place (#33); E2E with #3 |
 | Package manager | npm, one lockfile per package |
-| Hosting | Undecided — deploy gated off (BL-001) |
+| Hosting | Hostinger VPS in Brazil, MongoDB Atlas ([ADR-002](../adr/002-hosting-and-environments.md)) — deploy gated off until live (BL-001) |
 
 ## Five rules that carry the most weight
 
@@ -62,7 +62,7 @@ Decided, not built, each with the trigger that ends the deferral.
 
 | ID | Item | Trigger |
 |---|---|---|
-| [BL-001](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40) | Hosting and deploy target (app, MongoDB, backups); turn on `deploy.yml` (DEVELOPMENT §12) | Before the first external user |
+| [BL-001](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40) | Provision the hosting chosen in [ADR-002](../adr/002-hosting-and-environments.md) (app, MongoDB, backups, staging); turn on `deploy.yml` (DEVELOPMENT §12) | Before the first external user |
 | BL-002 | Performance harness: reference workload + budgets on release candidates (TESTING §10), planned in [#3](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/3) | With BL-001, before the first release candidate |
 | [BL-003](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/38) | Design-system code — theme folder, patterns, logo files, migration of screens. The brand itself is decided (DESIGN v1.1, DS-01–DS-30) | Second PR of #38 |
 

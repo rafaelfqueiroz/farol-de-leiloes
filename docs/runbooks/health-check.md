@@ -6,7 +6,7 @@
 
 ## Known gaps
 
-- **No hosting yet** (BL-001): there is no availability probe or deploy health check calling it. Today only the backend image's Docker `HEALTHCHECK` uses it.
+- **Hosting is not live yet** (BL-001, [ADR-002](../adr/002-hosting-and-environments.md)): there is no availability probe or deploy health check calling it. Today only the backend image's Docker `HEALTHCHECK` uses it.
 - **No alerting on `degraded`.** The container stays healthy while the import is failed or stale (only `down` answers 503), so a degraded import is noticed only by someone reading the endpoint, or by a probe that checks the body.
 - Only the Caixa import is reported. The details scraper and the reminders job record their runs (`jobexecutions`) but do not appear here.
 
