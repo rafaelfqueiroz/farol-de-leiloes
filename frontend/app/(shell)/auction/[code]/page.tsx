@@ -7,9 +7,6 @@ import type { AuctionDetail } from '@/lib/auction';
 import { formatMoney } from '@/lib/money';
 import { reportClientError } from '@/lib/report-client-error';
 
-// ISR: Revalidate every hour
-export const revalidate = 3600;
-
 const SITE_URL = publicEnv.siteUrl;
 
 async function fetchAuction(code: string): Promise<AuctionDetail | null> {
@@ -141,7 +138,8 @@ export default async function AuctionDetailPage({ params }: PageProps) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        // SC-17: auction text must never terminate the JSON script element.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
       <AuctionDetailClient auction={auction} />
     </>

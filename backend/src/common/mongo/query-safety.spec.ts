@@ -1,5 +1,5 @@
 import mongoose, { Types } from 'mongoose';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { applyMongooseDefaults, decimalFilter, serverOperators } from './query-safety';
 import { DomainError } from '../errors/domain-error';
 import { Decimal } from '../money/money';
@@ -7,14 +7,54 @@ import { Decimal } from '../money/money';
 describe('applyMongooseDefaults', () => {
   afterEach(() => {
     mongoose.set('sanitizeFilter', false);
+    mongoose.set('strictQuery', false);
   });
 
-  it('SC-10: turns sanitizeFilter on for every model', () => {
+  it('SC-10: turns sanitizeFilter and strictQuery on for every model', () => {
     mongoose.set('sanitizeFilter', false);
+    mongoose.set('strictQuery', false);
 
     applyMongooseDefaults();
 
     expect(mongoose.get('sanitizeFilter')).toBe(true);
+    expect(mongoose.get('strictQuery')).toBe('throw');
+  });
+});
+
+describe('SC-10: unknown filter paths fail closed', () => {
+  const model = mongoose.model('StrictQueryRegression', new mongoose.Schema({ code: String }));
+
+  beforeEach(() => applyMongooseDefaults());
+  afterEach(() => {
+    mongoose.set('sanitizeFilter', false);
+    mongoose.set('strictQuery', false);
+  });
+
+  it.each(['find', 'deleteOne', 'deleteMany', 'updateMany'])(
+    'refuses %s rather than dropping an unknown predicate',
+    (operation) => {
+      const filters: Record<string, unknown>[] = [
+        { ownerId: 'missing-schema-owner' },
+        { $or: [{ missingImage: 'asset' }] },
+      ];
+      for (const filter of filters) {
+        const query =
+          operation === 'updateMany'
+            ? model.updateMany(filter, { $set: { code: 'changed' } })
+            : operation === 'deleteOne'
+              ? model.deleteOne(filter)
+              : operation === 'deleteMany'
+                ? model.deleteMany(filter)
+                : model.find(filter);
+        // Real Mongoose casting reproduces the reviewed widening before any database operation.
+        expect(() => query.cast(model)).toThrow(mongoose.Error.StrictModeError);
+      }
+    },
+  );
+
+  it('preserves a valid server-built filter instead of widening it', () => {
+    const query = model.find({ $or: [{ code: { $eq: 'A1' } }] });
+    expect(query.cast(model)).toEqual({ $or: [{ code: { $eq: 'A1' } }] });
   });
 });
 

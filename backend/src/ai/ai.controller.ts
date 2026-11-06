@@ -1,3 +1,4 @@
+import { Public } from '../auth/decorators/public.decorator';
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { NlpService } from './services/nlp.service';
@@ -10,6 +11,7 @@ import { ApiErrorResponses } from '../common/errors/api-error-responses.decorato
 export class AiController {
   constructor(private readonly nlpService: NlpService) {}
 
+  @Public()
   @Post('extract-params')
   @ApiOperation({ summary: 'Turn a search written in words into auction search parameters' })
   @ApiCreatedResponse({ type: ChatResponseDto })

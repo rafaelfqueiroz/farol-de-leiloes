@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import InitColorSchemeScript from '@mui/material/InitColorSchemeScript';
 import { getLocale, getMessages, getTimeZone } from 'next-intl/server';
 import { AuthProvider } from './contexts/AuthContext';
@@ -18,13 +19,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     getTimeZone(),
     getMessages(),
   ]);
+  // SC-17: headers() makes HTML dynamic so every render uses the request's nonce.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   return (
     // DS-07: the scheme class is set on <html> before hydration
     <html lang={locale} suppressHydrationWarning className={inter.variable}>
       <body>
-        <InitColorSchemeScript attribute="class" />
-        <AppThemeProvider locale={locale} timeZone={timeZone} messages={messages}>
+        <InitColorSchemeScript attribute="class" nonce={nonce} />
+        <AppThemeProvider locale={locale} timeZone={timeZone} messages={messages} nonce={nonce}>
           <AuthProvider>
             <FavoritesProvider>
               <RemindersProvider>{children}</RemindersProvider>

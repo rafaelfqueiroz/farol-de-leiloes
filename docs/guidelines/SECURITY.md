@@ -42,9 +42,9 @@ The specs say **what** must hold; this document says **how the code makes it hol
 
 | | |
 |---|---|
-| **SC-10** | Every input is a validated DTO (AR-34). Request values never become MongoDB operators: no spreading `req.query`/`req.body` into a filter, `sanitizeFilter: true` and `strictQuery: true` on the connection, and any free-form sort/filter field is checked against an allowlist. `sanitizeFilter` is switched on by `applyMongooseDefaults()` (`backend/src/common/mongo/query-safety.ts`) before the first query; a scalar taken from a request is compared as `{ field: { $eq: value } }` after a `typeof` check, and operators the server writes itself (`$in`, `$gte`, `$exists` ...) are wrapped in `serverOperators(...)`, never a value that came from a request. An update is built from whitelisted fields under `$set`, never from the DTO object. |
+| **SC-10** | Every input is a validated DTO (AR-34). Request values never become MongoDB operators: no spreading `req.query`/`req.body` into a filter, `sanitizeFilter: true` and `strictQuery: 'throw'` on the connection, and any free-form sort/filter field is checked against an allowlist. `sanitizeFilter` and `strictQuery` are switched on by `applyMongooseDefaults()` (`backend/src/common/mongo/query-safety.ts`) before the first query; unknown schema paths must throw, including inside `$or`, rather than being stripped and widening reads or writes (AR-12). A scalar taken from a request is compared as `{ field: { $eq: value } }` after a `typeof` check, and operators the server writes itself (`$in`, `$gte`, `$exists` ...) are wrapped in `serverOperators(...)`, never a value that came from a request. An update is built from whitelisted fields under `$set`, never from the DTO object. |
 | **SC-11** | The Stripe webhook verifies the signature against the **raw** body, is idempotent by event id, and is the only path that changes plan state. The checkout redirect never upgrades anything. |
-| **SC-12** | CSV/XLSX exports neutralise cells starting with `=`, `+`, `-`, `@`, tab or carriage return (formula injection). |
+| **SC-12** | CSV exports neutralise formula prefixes (`=`, `+`, `-`, `@`) even after leading whitespace, and leading tab, carriage return or newline (formula injection). Use `neutralizeCsvCell` (`backend/src/common/exports/csv-cell.ts`) on each untrusted text cell before CSV quoting. XLSX exports instead create explicit string cells and never set formula properties from untrusted input; CSV apostrophe prefixes would be visible text there. These boundaries are ready for SPEC-010 exports. |
 | **SC-13** | Uploads (SPEC-017) go straight to R2 through a presigned URL scoped to one key, with an allowlist of content types, a size cap, and the type re-checked from the stored object's bytes before it is marked usable. Files are never served from the application origin. |
 | **SC-14** | The server never fetches a URL a user supplied. Outbound requests go only to configured hosts (Caixa, Stripe, OpenAI, R2, mail/SMS providers). |
 
@@ -54,8 +54,10 @@ The specs say **what** must hold; this document says **how the code makes it hol
 |---|---|
 | **SC-15** | **No personal or client data in logs, error messages, Sentry, analytics or job records** — no names, emails, phones, CPFs, journey content, figures, profiles or support messages (SPEC-002 BR-002-28). Ids, codes and counts only; a user appears as a hashed id (AR-46, AR-47). |
 | **SC-16** | Secrets come from the environment only, are validated at boot (AR-41), never logged, never committed, never baked into an image (each package's `.dockerignore` excludes `.env*`), never sent to the browser. A `NEXT_PUBLIC_` variable is public by definition and never holds a secret. |
-| **SC-17** | Transport and headers: HTTPS only with HSTS; `helmet` on the API; on the web, an explicit Content-Security-Policy (no `unsafe-eval`; `unsafe-inline` only where MUI's style injection needs it, with a nonce when available), `frame-ancestors 'none'`, `Referrer-Policy: strict-origin-when-cross-origin`. CORS is an explicit allowlist, never `*` with credentials. No `dangerouslySetInnerHTML` with anything not sanitised. |
+| **SC-17** | Transport and headers: HTTPS only with host-only HSTS (`max-age=15552000`, six months; no `includeSubDomains` or preload until a separate audited decision); `helmet` on the API; on the web, an explicit Content-Security-Policy (no `unsafe-eval`; `unsafe-inline` only where MUI's style injection needs it, with a nonce when available), `frame-ancestors 'none'`, `Referrer-Policy: strict-origin-when-cross-origin`. CORS is an explicit allowlist, never `*` with credentials. No `dangerouslySetInnerHTML` with anything not sanitised. |
 | **SC-18** | R2 buckets are private. Download links are issued per request after an authorization check and expire in 60 seconds (BR-002-09); they are never stored, emailed or logged. Object keys are random and carry no personal data. |
+
+The baseline in #37 registers `JwtAuthGuard` globally in `AuthModule`; only `@Public()` metadata skips JWT authentication (SC-07). `configureApp` adds Helmet, while its CORS allowlist contains only the validated, normalized `FRONTEND_URL` HTTP(S) origin (SC-17). The frontend config declares security headers and its proxy supplies a fresh CSP nonce to Next.js and MUI on each HTML request; production enforces CSP and development reports violations without allowing `unsafe-eval`. See both package READMEs for operation and cache details.
 
 ## 6. Supply chain
 
@@ -149,9 +151,6 @@ Code that predates these guidelines and breaks them. Each has a follow-up issue;
 | SC-02 | `frontend/app/contexts/AuthContext.tsx` | JWT in `localStorage` |
 | SC-03 | `backend/src/auth/` | 7-day JWT with no per-request status/version check |
 | SC-04 | `backend/src/auth/` | No throttling |
-| SC-07 | `backend/src/main.ts`, controllers | Guards per route, not deny-by-default |
-| SC-17 | `backend/src/main.ts`, `frontend/next.config.ts` | No `helmet`, no CSP |
-| SC-10 | `backend/src/app.module.ts` | `sanitizeFilter` is on; `strictQuery` is not yet (Mongoose default `false`) |
 | SC-24 | `backend/src/auctions/importer/downloader.ts` (#4) | Spoofed browser User-Agent on the list download through curl. The stealth plugin is gone (#61); the image and matrícula copies to R2 now send the honest `CAIXA_USER_AGENT` (#65) |
 | AR-11–AR-16 | all user-data modules | No `ownerType`/`ownerId`, no scoped repositories, no isolation tests |
 | AR-45 / DV-11 | 75 call sites | `console.*` |

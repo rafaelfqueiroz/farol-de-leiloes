@@ -1,5 +1,5 @@
 // AR-33: a route behind JwtAuthGuard documents the bearer token it needs and its 401. Kept next to
-// the guard so the two travel together; the guard itself stays an explicit @UseGuards.
+// the globally registered guard; @Public() is the explicit opt-out (SC-07).
 import { applyDecorators } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { ApiUnauthenticatedResponse } from '../../common/errors/api-error-responses.decorator';

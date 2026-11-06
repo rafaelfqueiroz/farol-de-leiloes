@@ -1,3 +1,4 @@
+import { Public } from '../auth/decorators/public.decorator';
 import {
   Controller,
   Post,
@@ -5,7 +6,6 @@ import {
   Body,
   Headers,
   Req,
-  UseGuards,
   HttpCode,
   HttpStatus,
   RawBodyRequest,
@@ -21,7 +21,6 @@ import {
 } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
 import { DomainError } from '../common/errors/domain-error';
@@ -41,7 +40,6 @@ export class PaymentsController {
   constructor(private paymentsService: PaymentsService) {}
 
   @Post('create-checkout-session')
-  @UseGuards(JwtAuthGuard)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Open a Stripe Checkout session for a plan' })
   @ApiCreatedResponse({ type: CheckoutSessionResponseDto })
@@ -61,6 +59,7 @@ export class PaymentsController {
   // AR-34 exemption: Stripe's signature covers the exact bytes it sent, so this route reads the
   // raw body (rawBody, main.ts) instead of a parsed, validated DTO; the signature check is the
   // validation. Documented here, and exempted by name in openapi.spec.ts.
+  @Public()
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Stripe webhook: verifies the signature over the raw body' })
@@ -87,7 +86,6 @@ export class PaymentsController {
   }
 
   @Get('subscription-status')
-  @UseGuards(JwtAuthGuard)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'The signed-in user plan and subscription state' })
   @ApiOkResponse({ type: SubscriptionStatusResponseDto })
@@ -99,7 +97,6 @@ export class PaymentsController {
   }
 
   @Post('cancel-subscription')
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Cancel the signed-in user subscription' })

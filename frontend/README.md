@@ -60,6 +60,28 @@ E2E tests (Playwright, `npm run test:e2e`) are not set up yet; they arrive with 
 - `publicEnv` is safe to import anywhere. `serverEnv()` throws when called in the browser (AR-42).
 - No variable here is a secret. Secrets belong in the backend.
 
+## Security headers
+
+`next.config.ts` applies host-only HSTS (`max-age=15552000`, six months), `X-Frame-Options: DENY`,
+`X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and an explicit
+CSP to every response (SC-17). Serve production through HTTPS; browsers honor HSTS over HTTPS.
+HSTS does not include subdomains or preload: subdomains have not been audited for HTTPS support.
+
+`proxy.ts` generates a fresh 128-bit nonce and replaces caller-supplied nonce/CSP headers on every
+path, including missing API/asset URLs that may render the HTML 404. Next's runtime scripts,
+MUI's color-scheme script and Emotion styles share that
+nonce. Only style attributes allow `unsafe-inline`, because MUI uses them for positioning and CSS
+variables; scripts never allow `unsafe-inline` or `unsafe-eval`. Connections are limited to this
+origin and the configured public API/Sentry origins; property images may load over HTTPS.
+
+Reading request headers in the root layout makes HTML dynamic. Do not cache HTML in a CDN: it
+would reuse a nonce. Auction data fetches still revalidate hourly, independently of HTML rendering.
+The proxy leaves `Cache-Control` to Next: dynamic HTML and errors are not stored, while icons,
+brand images, robots and the sitemap retain their normal caching. JSON-LD is a non-executable
+data block; escaping `<` protects its contents without a nonce.
+Development sends this same policy as `Content-Security-Policy-Report-Only`, because Next's
+development diagnostics require eval; production enforces `Content-Security-Policy`.
+
 ## BFF
 
 `lib/backend.ts` is server-only. It is the one place route handlers reach the backend.
@@ -100,8 +122,8 @@ AI search: `app/api/chat/route.ts` calls the backend's `/ai/extract-params`, the
 | `messages/`                    | `pt-BR.json`, the only message catalogue                                                                        |
 | `public/brand/`                | Logo and brand SVGs                                                                                             |
 | `test/`                        | Test setup, render helpers and `structural/` checks on the repository                                           |
-| `proxy.ts`                     | Next.js proxy (the former middleware); currently a pass-through                                                 |
-| `next.config.ts`               | next-intl plugin and standalone output                                                                          |
+| `proxy.ts`                     | Per-request CSP nonce for dynamic HTML                                                                          |
+| `next.config.ts`               | next-intl plugin, standalone output and security headers                                                        |
 | `Dockerfile`                   | Production image (build and runtime stages)                                                                     |
 
 ## Testing

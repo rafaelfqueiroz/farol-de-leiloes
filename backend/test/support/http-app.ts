@@ -6,7 +6,8 @@ import type { ExecutionContext, INestApplication, ModuleMetadata } from '@nestjs
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { configureApp } from '../../src/app.setup';
-import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
+import { IS_PUBLIC } from '../../src/auth/decorators/public.decorator';
+import { APP_GUARD, Reflector } from '@nestjs/core';
 import type { AuthenticatedUser } from '../../src/auth/interfaces/auth.interface';
 import { testConfigService } from './test-env';
 
@@ -32,21 +33,32 @@ export async function createHttpApp(
   metadata: ModuleMetadata,
   { user = TEST_USER, env = {} }: HttpAppOptions = {},
 ): Promise<INestApplication> {
+  const reflector = new Reflector();
   const moduleRef = await Test.createTestingModule({
     ...metadata,
     providers: [
       ...(metadata.providers ?? []),
       { provide: ConfigService, useValue: testConfigService(env) },
-    ],
-  })
-    .overrideGuard(JwtAuthGuard)
-    .useValue({
-      canActivate: (context: ExecutionContext) => {
-        context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>().user = user;
-        return true;
+      {
+        provide: APP_GUARD,
+        useValue: {
+          canActivate: (context: ExecutionContext) => {
+            // SC-07: mirror production's opt-out so public controller specs stay anonymous.
+            if (
+              reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
+                context.getHandler(),
+                context.getClass(),
+              ])
+            ) {
+              return true;
+            }
+            context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>().user = user;
+            return true;
+          },
+        },
       },
-    })
-    .compile();
+    ],
+  }).compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
   await app.init();

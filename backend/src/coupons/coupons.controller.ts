@@ -11,7 +11,6 @@ import { CouponsService } from './coupons.service';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
 import { CouponResponseDto, CouponValidationResponseDto } from './dto/coupon-response.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
@@ -34,7 +33,7 @@ export class CouponsController {
   constructor(private couponsService: CouponsService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('admin')
   @ApiOperation({ summary: 'Create a coupon and its Stripe promotion code (admin)' })
   @ApiCreatedResponse({ type: CouponResponseDto })
@@ -45,7 +44,7 @@ export class CouponsController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('admin')
   @ApiOperation({ summary: 'Every coupon, newest first (admin, paginated, AR-35)' })
   @ApiPaginatedResponse(CouponResponseDto)
@@ -56,7 +55,7 @@ export class CouponsController {
   }
 
   @Patch(':id/invalidate')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('admin')
   @ApiOperation({ summary: 'Deactivate a coupon and its Stripe promotion code (admin)' })
   @ApiOkResponse({ type: CouponResponseDto })
@@ -68,7 +67,6 @@ export class CouponsController {
   }
 
   @Post('validate')
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Check that a coupon code can be used at checkout' })
   @ApiCreatedResponse({ type: CouponValidationResponseDto })
   async validate(@Body() dto: ValidateCouponDto): Promise<CouponValidationResponseDto> {

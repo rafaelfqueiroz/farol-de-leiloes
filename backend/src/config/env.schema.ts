@@ -31,7 +31,25 @@ export const envSchema = z
     // Server
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: positiveInt.default(3000),
-    FRONTEND_URL: url,
+    // SC-17: CORS uses an exact HTTP(S) origin, with no credentials, path, query or wildcard.
+    FRONTEND_URL: url
+      .refine((value) => {
+        try {
+          const parsed = new URL(value);
+          return (
+            ['http:', 'https:'].includes(parsed.protocol) &&
+            !parsed.username &&
+            !parsed.password &&
+            parsed.pathname === '/' &&
+            !parsed.search &&
+            !parsed.hash &&
+            !parsed.hostname.includes('*')
+          );
+        } catch {
+          return false;
+        }
+      }, 'must be an HTTP(S) origin')
+      .transform((value) => new URL(value).origin),
     MONGODB_URI: required,
 
     // Auth

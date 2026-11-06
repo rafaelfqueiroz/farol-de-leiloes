@@ -11,6 +11,8 @@ import { Decimal } from '../money/money';
  */
 export function applyMongooseDefaults(): void {
   mongoose.set('sanitizeFilter', true);
+  // SC-10 / AR-12: unknown schema paths must fail closed, never disappear from an owner filter.
+  mongoose.set('strictQuery', 'throw');
 }
 
 /**

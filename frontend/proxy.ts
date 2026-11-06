@@ -1,21 +1,26 @@
-import { NextResponse } from 'next/server';
+import { randomBytes } from 'node:crypto';
+import { NextResponse, type NextRequest } from 'next/server';
+import { cspHeaderName } from '@/lib/env';
+import { contentSecurityPolicy } from '@/lib/security-headers';
 
-// The token lives in localStorage, so the server cannot tell whether a request is authenticated:
-// each page redirects to /login (or home) on its own. This proxy only exists for future
-// enhancements, such as route protection once the session moves to a cookie.
-export function proxy() {
-  return NextResponse.next();
+export function proxy(request: NextRequest): NextResponse {
+  // SC-17: overwrite untrusted inbound headers before Next extracts the script nonce.
+  const nonce = randomBytes(16).toString('base64');
+  const policy = contentSecurityPolicy(nonce);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('Content-Security-Policy', policy);
+  requestHeaders.delete('Content-Security-Policy-Report-Only');
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set(cspHeaderName, policy);
+  // SC-17: Next marks dynamic HTML/404s no-store. Preserve its asset and metadata
+  // caching instead of setting a cache header before the response type is known.
+  return response;
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
-  ],
+  // A missing API/asset URL can render the HTML 404; no path prefix is trusted
+  // to identify the response type or to bypass nonce-header sanitization (SC-17).
+  matcher: ['/:path*'],
 };
