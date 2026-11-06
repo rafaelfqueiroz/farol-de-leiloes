@@ -13,7 +13,7 @@ import { readdirSync } from 'fs';
 import { join } from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { INestApplication, Type } from '@nestjs/common';
-import { GUARDS_METADATA, PATH_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
+import { PATH_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -21,7 +21,8 @@ import { DECORATORS, type OpenAPIObject } from '@nestjs/swagger';
 import { getMetadataStorage } from 'class-validator';
 import request from 'supertest';
 import { configureApp } from './app.setup';
-import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { IS_PUBLIC } from './auth/decorators/public.decorator';
+import { Reflector } from '@nestjs/core';
 import { createOpenApiDocument } from './openapi';
 import { testConfigService } from '../test/support/test-env';
 
@@ -215,12 +216,10 @@ describe('OpenAPI document (AR-33)', () => {
   it('declares bearer auth and 401 exactly on the routes behind JwtAuthGuard', () => {
     const mismatched = controllers.flatMap((controller) =>
       handlersOf(controller).flatMap((handler) => {
-        const guards = [
-          ...((Reflect.getMetadata(GUARDS_METADATA, controller) ?? []) as unknown[]),
-          ...((Reflect.getMetadata(GUARDS_METADATA, controller.prototype[handler]) ??
-            []) as unknown[]),
-        ];
-        const guarded = guards.includes(JwtAuthGuard);
+        const guarded = !new Reflector().getAllAndOverride<boolean>(IS_PUBLIC, [
+          controller.prototype[handler],
+          controller,
+        ]);
         const operation = operationById(`${controller.name}_${handler}`);
         const documented =
           (operation.security ?? []).some((requirement) => 'bearer' in requirement) &&

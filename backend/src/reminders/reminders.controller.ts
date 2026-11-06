@@ -9,7 +9,6 @@ import {
   Query,
   HttpCode,
   HttpStatus,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
@@ -20,7 +19,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { RemindersService } from './reminders.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
 import { CreateReminderDto } from './dto/create-reminder.dto';
@@ -39,7 +37,6 @@ const NOT_FOUND = { description: 'REMINDER_NOT_FOUND', type: ErrorResponseDto };
 @ApiErrorResponses()
 @ApiJwtAuth()
 @Controller('reminders')
-@UseGuards(JwtAuthGuard)
 export class RemindersController {
   constructor(private readonly remindersService: RemindersService) {}
 

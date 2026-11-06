@@ -94,6 +94,19 @@ describe('validateEnv', () => {
     });
   });
 
+  it.each([
+    '*',
+    'file:///tmp/app',
+    'https://user:pass@example.test',
+    'https://*.example.test',
+    'https://example.test/path',
+    'https://example.test?query=1',
+    'https://example.test#fragment',
+  ])(
+    'SC-17: refuses a frontend URL that is not a single exact HTTP(S) origin: %s',
+    (FRONTEND_URL) => expect(errorOf({ ...TEST_ENV, FRONTEND_URL })).toContain('FRONTEND_URL:'),
+  );
+
   it('coerces numbers', () => {
     expect(testEnv({ PORT: '8080', NEIGHBORHOODS_CACHE_TTL: '1000' })).toMatchObject({
       PORT: 8080,

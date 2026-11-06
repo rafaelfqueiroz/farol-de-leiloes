@@ -1,10 +1,22 @@
-import { NextResponse } from 'next/server';
+import { randomBytes } from 'node:crypto';
+import { NextResponse, type NextRequest } from 'next/server';
+import { cspHeaderName } from '@/lib/env';
+import { contentSecurityPolicy } from '@/lib/security-headers';
 
-// The token lives in localStorage, so the server cannot tell whether a request is authenticated:
-// each page redirects to /login (or home) on its own. This proxy only exists for future
-// enhancements, such as route protection once the session moves to a cookie.
-export function proxy() {
-  return NextResponse.next();
+export function proxy(request: NextRequest): NextResponse {
+  // SC-17: overwrite untrusted inbound headers before Next extracts the script nonce.
+  const nonce = randomBytes(16).toString('base64');
+  const policy = contentSecurityPolicy(nonce);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('Content-Security-Policy', policy);
+  requestHeaders.delete('Content-Security-Policy-Report-Only');
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set(cspHeaderName, policy);
+  // A cached document would reuse a nonce across requests (SC-17).
+  response.headers.set('Cache-Control', 'private, no-store');
+  return response;
 }
 
 export const config = {

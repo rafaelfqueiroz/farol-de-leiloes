@@ -8,7 +8,6 @@ import {
   Query,
   HttpCode,
   HttpStatus,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
@@ -21,7 +20,6 @@ import {
 import { FavoritesService } from './favorites.service';
 import { AddFavoriteDto } from './dto/add-favorite.dto';
 import { FavoriteCodesResponseDto } from './dto/favorite-codes-response.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
 import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
@@ -36,7 +34,6 @@ import { mapPage, type Paginated } from '../common/pagination/paginated';
 @ApiErrorResponses()
 @ApiJwtAuth()
 @Controller('favorites')
-@UseGuards(JwtAuthGuard)
 export class FavoritesController {
   constructor(private readonly favoritesService: FavoritesService) {}
 

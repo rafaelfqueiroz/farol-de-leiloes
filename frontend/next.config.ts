@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
+import { cspHeaderName } from './lib/env';
+import { contentSecurityPolicy } from './lib/security-headers';
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 
@@ -13,6 +15,21 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: projectRoot,
   turbopack: { root: projectRoot },
+  // SC-17: applies to every route, including static assets and BFF responses.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: cspHeaderName, value: contentSecurityPolicy() },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
+    ];
+  },
 };
 
 export default withNextIntl(nextConfig);

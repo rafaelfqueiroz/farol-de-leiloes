@@ -82,3 +82,10 @@ export function serverEnv(): ServerEnv {
 // TS-07: external services stay inert under test. NODE_ENV is set by Next.js and Vitest, not by
 // configuration, so it is not part of the documented schema.
 export const isTestRuntime: boolean = process.env.NODE_ENV === 'test';
+
+// SC-17: Next's development diagnostics need eval. Keep the strict policy report-only
+// there instead of weakening the production policy with unsafe-eval.
+export const cspHeaderName: 'Content-Security-Policy' | 'Content-Security-Policy-Report-Only' =
+  process.env.NODE_ENV === 'development'
+    ? 'Content-Security-Policy-Report-Only'
+    : 'Content-Security-Policy';

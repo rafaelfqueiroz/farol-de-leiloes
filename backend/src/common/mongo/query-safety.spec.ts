@@ -7,14 +7,17 @@ import { Decimal } from '../money/money';
 describe('applyMongooseDefaults', () => {
   afterEach(() => {
     mongoose.set('sanitizeFilter', false);
+    mongoose.set('strictQuery', false);
   });
 
-  it('SC-10: turns sanitizeFilter on for every model', () => {
+  it('SC-10: turns sanitizeFilter and strictQuery on for every model', () => {
     mongoose.set('sanitizeFilter', false);
+    mongoose.set('strictQuery', false);
 
     applyMongooseDefaults();
 
     expect(mongoose.get('sanitizeFilter')).toBe(true);
+    expect(mongoose.get('strictQuery')).toBe(true);
   });
 });
 

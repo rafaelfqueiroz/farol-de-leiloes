@@ -1,6 +1,7 @@
 // The HTTP surface every app instance shares: main.ts and the HTTP-level specs both call
 // configureApp, so a spec exercises the same prefix, validation and error shape production does.
 import { type INestApplication, ValidationPipe, type ValidationError } from '@nestjs/common';
+import helmet from 'helmet';
 import { ConfigService } from '@nestjs/config';
 import { ApiExceptionFilter } from './common/errors/api-exception.filter';
 import { DomainError } from './common/errors/domain-error';
@@ -15,10 +16,20 @@ export function configureApp(app: INestApplication): void {
   // filter) logs with the request's correlation id, echoed as x-request-id.
   app.use(requestContextMiddleware);
 
+  // SC-17: security headers apply to successes, validation failures and authentication errors.
+  app.use(
+    helmet({
+      contentSecurityPolicy: { directives: { frameAncestors: ["'none'"] } },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      frameguard: { action: 'deny' },
+    }),
+  );
+
   app.setGlobalPrefix('api'); // AR-32
 
   app.enableCors({
-    origin: config.get('FRONTEND_URL', { infer: true }),
+    // SC-17: one exact, boot-validated origin; never reflect an arbitrary requester.
+    origin: [new URL(config.get('FRONTEND_URL', { infer: true })).origin],
     credentials: true,
   });
 

@@ -6,7 +6,7 @@ import type { ExecutionContext, INestApplication, ModuleMetadata } from '@nestjs
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { configureApp } from '../../src/app.setup';
-import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
+import { APP_GUARD } from '@nestjs/core';
 import type { AuthenticatedUser } from '../../src/auth/interfaces/auth.interface';
 import { testConfigService } from './test-env';
 
@@ -37,16 +37,17 @@ export async function createHttpApp(
     providers: [
       ...(metadata.providers ?? []),
       { provide: ConfigService, useValue: testConfigService(env) },
-    ],
-  })
-    .overrideGuard(JwtAuthGuard)
-    .useValue({
-      canActivate: (context: ExecutionContext) => {
-        context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>().user = user;
-        return true;
+      {
+        provide: APP_GUARD,
+        useValue: {
+          canActivate: (context: ExecutionContext) => {
+            context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>().user = user;
+            return true;
+          },
+        },
       },
-    })
-    .compile();
+    ],
+  }).compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
   await app.init();

@@ -40,6 +40,15 @@ API
 - Errors answer `{ code, context }` (AR-38). Lists take `page` and `pageSize` (max 100) and answer `{ items, total, page, pageSize }` (AR-35).
 - Money is a string of reais over JSON, both ways (AR-17): `"1234.56"` — a dot, at most two decimals, no thousands separator. Responses round once to two places, half-even (AR-19). Coupon discounts are reais too (they were integer centavos before #34). In MongoDB money is `Decimal128` only: migration `0001-money-decimal128` converted the documents written before #34, and a reader refuses any other shape.
 
+Security baseline (SC-07, SC-10, SC-12, SC-16, SC-17)
+
+- Authentication is global through `AuthModule`'s `JwtAuthGuard`. A new endpoint requires a JWT automatically; anonymous endpoints must declare `@Public()` on their method or controller. Keep `@ApiJwtAuth()` on protected endpoints for the OpenAPI contract. Google OAuth still runs its own Google guard; the public Stripe webhook still verifies its signature.
+- `configureApp` applies Helmet to all API responses, including errors: HSTS, framing denied, `nosniff`, and `strict-origin-when-cross-origin`. The nonproduction Swagger UI uses same-origin external scripts under the same CSP. Serve the API behind HTTPS in production.
+- CORS credentials are allowed only for the exact `FRONTEND_URL` origin. Its boot validation accepts HTTP(S) origins (a trailing slash is allowed), rejecting credentials, wildcard hosts, paths, queries and fragments. A different frontend origin requires an explicit configuration change.
+- Mongoose enables both `sanitizeFilter` and `strictQuery` before the first query. Keep query fields explicitly allowlisted in DTOs and builders, sorts fixed by the server, and trusted server operators behind `serverOperators`; stripping unknown fields is no substitute for validation.
+- Future SPEC-010 CSV/XLSX exports must call `neutralizeSpreadsheetCell` (`src/common/exports/spreadsheet-cell.ts`) on every untrusted text cell before serialization. It prefixes an apostrophe for `=`, `+`, `-`, `@`, tab and carriage return; the serializer must still quote CSV delimiters and quotes.
+- Secrets remain server-side and are never logged; the frontend's explicitly allowed public environment values contain no secrets (SC-16).
+
 Observability (ARCHITECTURE §11)
 
 - Logs are JSON lines on stdout from nestjs-pino behind the NestJS `Logger` (AR-45); `LOG_LEVEL` sets the level (default `info`). Every line carries a `correlationId`: the request's id (an incoming `x-request-id` is kept only when it matches `^[A-Za-z0-9-]{8,64}$`, otherwise a UUID; echoed in the response header) or, for a job run, its own id plus `jobName` (AR-46). A signed-in user appears only as `userHash`, an HMAC-SHA256 of the id keyed by `LOG_HASH_SECRET` (required in production; without it no user id is logged). Request lines hold method, route, status and response time; never headers, cookies, query strings or bodies, and a successful `/api/health` probe is not logged (a failing one is). Errors are logged as their class and stack frames, never their message (SC-15).

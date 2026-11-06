@@ -1,14 +1,12 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import AuctionDetailClient from './AuctionDetailClient';
 import { backendFetch } from '@/lib/backend';
 import { publicEnv } from '@/lib/env';
 import type { AuctionDetail } from '@/lib/auction';
 import { formatMoney } from '@/lib/money';
 import { reportClientError } from '@/lib/report-client-error';
-
-// ISR: Revalidate every hour
-export const revalidate = 3600;
 
 const SITE_URL = publicEnv.siteUrl;
 
@@ -136,12 +134,15 @@ export default async function AuctionDetailPage({ params }: PageProps) {
   }
 
   const jsonLd = generateJsonLd(auction);
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   return (
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        nonce={nonce}
+        // SC-17: auction text must never terminate the JSON script element.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
       <AuctionDetailClient auction={auction} />
     </>

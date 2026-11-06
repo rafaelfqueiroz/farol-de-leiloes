@@ -1,3 +1,4 @@
+import { Public } from '../auth/decorators/public.decorator';
 import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import {
   ApiOkResponse,
@@ -10,11 +11,12 @@ import { ApiErrorResponses } from '../common/errors/api-error-responses.decorato
 import { HealthResponseDto } from './dto/health-response.dto';
 import { HealthService } from './health.service';
 
-// AR-48: public, no guard: the container HEALTHCHECK, the deploy check and the availability
+// AR-48/SC-07: explicitly public: the container HEALTHCHECK, the deploy check and the availability
 // probe (SPEC-003 BR-003-02) call it unauthenticated. 503 only when the database is unreachable;
 // a degraded import still answers 200, since the API keeps serving.
 @ApiTags('health')
 @ApiErrorResponses()
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(private readonly health: HealthService) {}

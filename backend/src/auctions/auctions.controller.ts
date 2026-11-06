@@ -1,3 +1,4 @@
+import { Public } from '../auth/decorators/public.decorator';
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuctionsService } from './auctions.service';
@@ -15,6 +16,7 @@ import { mapPage, type Paginated } from '../common/pagination/paginated';
 
 @ApiTags('auctions')
 @ApiErrorResponses()
+@Public()
 @Controller('auctions')
 export class AuctionsController {
   constructor(private readonly auctions: AuctionsService) {}

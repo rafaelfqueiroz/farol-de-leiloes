@@ -8,7 +8,6 @@ import {
   Query,
   HttpCode,
   HttpStatus,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
@@ -18,7 +17,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { SavedFiltersService } from './saved-filters.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
 import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
@@ -34,7 +32,6 @@ import { mapPage, type Paginated } from '../common/pagination/paginated';
 @ApiErrorResponses()
 @ApiJwtAuth()
 @Controller('saved-filters')
-@UseGuards(JwtAuthGuard)
 export class SavedFiltersController {
   constructor(private readonly savedFiltersService: SavedFiltersService) {}
 

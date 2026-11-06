@@ -11,6 +11,7 @@ interface AppThemeProviderProps {
   locale: Locale;
   timeZone: string;
   messages: AbstractIntlMessages;
+  nonce?: string;
 }
 
 // DS-07: the one ThemeProvider, in the root layout. Mode follows the system until the user picks
@@ -20,9 +21,10 @@ export default function AppThemeProvider({
   locale,
   timeZone,
   messages,
+  nonce,
 }: AppThemeProviderProps) {
   return (
-    <AppRouterCacheProvider>
+    <AppRouterCacheProvider options={{ nonce }}>
       <ThemeProvider theme={theme} defaultMode="system">
         <CssBaseline />
         <NextIntlClientProvider locale={locale} timeZone={timeZone} messages={messages}>

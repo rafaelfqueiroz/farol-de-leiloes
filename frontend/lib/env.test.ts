@@ -7,7 +7,29 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('SC-17 CSP enforcement mode', () => {
+  it.each([
+    ['production', 'Content-Security-Policy'],
+    ['development', 'Content-Security-Policy-Report-Only'],
+  ])('uses %s mode without relaxing script policy', async (mode, header) => {
+    vi.stubEnv('NODE_ENV', mode);
+    vi.resetModules();
+    expect((await import('./env')).cspHeaderName).toBe(header);
+  });
+});
+
 describe('parsePublicEnv', () => {
+  it('SC-16: exposes only the approved public URLs and public Sentry DSN', () => {
+    expect(Object.keys(publicEnvSchema.shape).sort()).toEqual([
+      'NEXT_PUBLIC_AUCTIONS_API_URL',
+      'NEXT_PUBLIC_SENTRY_DSN',
+      'NEXT_PUBLIC_SITE_URL',
+    ]);
+    expect(parsePublicEnv({ NEXT_PUBLIC_JWT_SECRET: 'must-stay-private' })).not.toHaveProperty(
+      'NEXT_PUBLIC_JWT_SECRET',
+    );
+  });
+
   it('falls back to the local defaults when nothing is set (CI builds with no environment)', () => {
     expect(parsePublicEnv({})).toEqual({
       apiUrl: 'http://localhost:3000',

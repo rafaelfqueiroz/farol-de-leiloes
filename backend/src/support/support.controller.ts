@@ -1,7 +1,6 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SupportService } from './support.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
 import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
@@ -13,7 +12,6 @@ import { ApiErrorResponses } from '../common/errors/api-error-responses.decorato
 @ApiErrorResponses()
 @ApiJwtAuth()
 @Controller('support')
-@UseGuards(JwtAuthGuard)
 export class SupportController {
   constructor(private readonly supportService: SupportService) {}
 

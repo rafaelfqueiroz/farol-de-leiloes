@@ -1,3 +1,4 @@
+import { Public } from './decorators/public.decorator';
 import {
   Controller,
   Post,
@@ -36,7 +37,6 @@ import {
 import { ApiJwtAuth } from './decorators/api-jwt-auth.decorator';
 import { MessageResponseDto } from '../common/dto/message-response.dto';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthenticatedUser } from './interfaces/auth.interface';
@@ -55,6 +55,7 @@ export class AuthController {
     private readonly config: ConfigService<Env, true>,
   ) {}
 
+  @Public()
   @Post('register')
   @ApiOperation({ summary: 'Create a local account and send the verification email' })
   @ApiCreatedResponse({ type: AuthResponseDto })
@@ -63,6 +64,7 @@ export class AuthController {
     return new AuthResponseDto(result);
   }
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sign in with email and password' })
@@ -72,6 +74,7 @@ export class AuthController {
     return new AuthResponseDto(result);
   }
 
+  @Public()
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: 'Start Google sign-in (browser redirect to Google)' })
@@ -80,6 +83,7 @@ export class AuthController {
     // Initiates Google OAuth flow
   }
 
+  @Public()
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: 'Google sign-in callback (browser redirect to the frontend)' })
@@ -92,6 +96,7 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/callback?token=${result.accessToken}`);
   }
 
+  @Public()
   @Post('reset-password-request')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Email a password reset link (same answer whether or not it exists)' })
@@ -101,6 +106,7 @@ export class AuthController {
     return new MessageResponseDto('Password reset email sent');
   }
 
+  @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Set a new password with a reset token' })
@@ -111,7 +117,6 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'The signed-in user' })
   @ApiOkResponse({ type: CurrentUserResponseDto })
@@ -120,7 +125,6 @@ export class AuthController {
   }
 
   @Post('logout')
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Sign out (the client discards its token)' })
@@ -131,7 +135,6 @@ export class AuthController {
   }
 
   @Patch('profile')
-  @UseGuards(JwtAuthGuard)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Change the signed-in user name or email' })
   @ApiOkResponse({ type: UserProfileResponseDto })
@@ -144,7 +147,6 @@ export class AuthController {
   }
 
   @Post('change-password')
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Change the password of a local account' })
@@ -162,7 +164,6 @@ export class AuthController {
   }
 
   @Post('set-password')
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Add a password to a Google-only account' })
@@ -175,6 +176,7 @@ export class AuthController {
     return new MessageResponseDto('Password set successfully');
   }
 
+  @Public()
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Confirm an email address with its verification token' })
@@ -185,7 +187,6 @@ export class AuthController {
   }
 
   @Post('resend-verification')
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Send the verification email again' })
@@ -196,7 +197,6 @@ export class AuthController {
   }
 
   @Get('verification-status')
-  @UseGuards(JwtAuthGuard)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Whether the signed-in user email is verified' })
   @ApiOkResponse({ type: VerificationStatusResponseDto })
@@ -208,7 +208,6 @@ export class AuthController {
   }
 
   @Patch('profile/complete')
-  @UseGuards(JwtAuthGuard)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Fill in the profile details (phone, CPF, address...)' })
   @ApiOkResponse({ type: UserProfileResponseDto })
@@ -221,7 +220,6 @@ export class AuthController {
   }
 
   @Get('profile/full')
-  @UseGuards(JwtAuthGuard)
   @ApiJwtAuth()
   @ApiOperation({ summary: 'The signed-in user full profile' })
   @ApiOkResponse({ type: UserProfileResponseDto })
