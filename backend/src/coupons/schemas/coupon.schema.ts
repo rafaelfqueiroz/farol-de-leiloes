@@ -36,5 +36,3 @@ export class CouponEntity extends Document {
 }
 
 export const CouponSchema = SchemaFactory.createForClass(CouponEntity);
-
-CouponSchema.index({ code: 1 }, { unique: true });

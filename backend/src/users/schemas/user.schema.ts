@@ -81,8 +81,6 @@ export class UserEntity extends Document implements UserAccount {
 
 export const UserSchema = SchemaFactory.createForClass(UserEntity);
 
-// Create indexes
-UserSchema.index({ email: 1 });
-UserSchema.index({ googleId: 1 }, { sparse: true });
-UserSchema.index({ stripeCustomerId: 1 }, { sparse: true });
+// email, googleId and stripeCustomerId are indexed by their `unique` @Prop options; declaring them
+// again here makes Mongoose 9 warn about duplicate indexes (TESTING §2: stray output is a defect).
 UserSchema.index({ role: 1 });

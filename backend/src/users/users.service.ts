@@ -97,7 +97,7 @@ export class UsersService {
           emailVerified: true,
           $addToSet: { providers: 'google' },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
 
@@ -118,7 +118,7 @@ export class UsersService {
           password: hashedPassword,
           $addToSet: { providers: 'local' },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .select('-password')
       .exec();
@@ -148,7 +148,7 @@ export class UsersService {
     }
 
     const user = await this.userRepository
-      .findOneAndUpdate({ _id: { $eq: id } }, { $set: fields }, { new: true })
+      .findOneAndUpdate({ _id: { $eq: id } }, { $set: fields }, { returnDocument: 'after' })
       .select('-password')
       .exec();
 

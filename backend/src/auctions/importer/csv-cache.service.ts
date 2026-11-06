@@ -73,7 +73,7 @@ export class CsvCacheService {
       await this.csvUploadModel.findOneAndUpdate(
         {},
         { lastUpload: this.clock.now(), fileName, fileSize },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
     } catch (error) {
       this.logger.error(`Failed to save CSV upload record: ${errorMessage(error)}`);

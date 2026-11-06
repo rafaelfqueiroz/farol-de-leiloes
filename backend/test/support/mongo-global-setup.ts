@@ -10,7 +10,7 @@ function dockerRequired(cause: unknown): Error {
   const reason = cause instanceof Error ? cause.message : String(cause);
   const message = [
     '',
-    'Docker is required (DV-17): test:integration and test:isolation start MongoDB (mongo:7)',
+    `Docker is required (DV-17): test:integration and test:isolation start MongoDB (${MONGO_IMAGE})`,
     'with Testcontainers. Start Docker (Docker Desktop, Colima, OrbStack...) and run again.',
     'Rancher Desktop without admin access: DOCKER_HOST=unix://$HOME/.rd/docker.sock and',
     'TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock (or docker.host in',
