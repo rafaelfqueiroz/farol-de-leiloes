@@ -28,7 +28,7 @@ Where a rule describes code that does not exist yet, the follow-up issue that bu
 | Logs / errors | `nestjs-pino` · Sentry (§11) |
 | Tests | Vitest (backend and frontend) · Testing Library (frontend) · Testcontainers · Playwright |
 | Runtime | Node 24 LTS, pinned everywhere (DV-05) |
-| Hosting | Undecided. Deploy is gated off (DEVELOPMENT §8, BL-001) |
+| Hosting | Hostinger VPS in Brazil, MongoDB Atlas ([ADR-002](../adr/002-hosting-and-environments.md)). Deploy is gated off until it is live (DEVELOPMENT §12, BL-001) |
 
 ## 2. Runtime topology
 

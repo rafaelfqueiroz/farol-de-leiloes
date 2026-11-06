@@ -240,11 +240,11 @@ Every workflow pins each action to a full commit SHA with its version in a comme
 
 ### Hosting today
 
-The production deploy target is undecided (BL-001, [#40](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40)). Meanwhile two platform integrations run outside these workflows: **Vercel** builds a preview for each PR and deploys the frontend to its Production environment on every push to `main`, and a **Railway** integration is connected to the repository. Neither is gated by the checks above, and neither is the deploy described below; reconciling them with `deploy.yml` is part of BL-001. The deploy environment is named `deploy-production` so it stays separate from the `Production` environment Vercel reports to (GitHub environment names are case-insensitive); Railway reports to its own, `acceptable-courtesy / production`.
+The target is a Hostinger VPS in Brazil for both applications and both environments, with MongoDB on Atlas ([ADR-002](../adr/002-hosting-and-environments.md)); it is not live yet (BL-001, [#40](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40)). Until it is, two platform integrations still run outside these workflows: **Vercel** builds a preview for each PR and deploys the frontend to its Production environment on every push to `main`, and a **Railway** integration is connected to the repository. Neither is gated by the checks above, and neither is the deploy described below; ADR-002 retires both. The deploy environment is named `deploy-production` so it stays separate from the `Production` environment Vercel reports to (GitHub environment names are case-insensitive); Railway reports to its own, `acceptable-courtesy / production`.
 
-### `deploy.yml` — gated until a target exists
+### `deploy.yml` — gated until the target is live
 
-**There is no deploy target yet** (BL-001). The workflow exists so the images are published on every push to `main`, long before there is anywhere to send them; the build itself is proven on every PR by `backend-image` and `frontend-image` in `ci.yml`:
+**The target is chosen but not provisioned** ([ADR-002](../adr/002-hosting-and-environments.md), BL-001). The workflow exists so the images are published on every push to `main`, long before there is anywhere to send them; the build itself is proven on every PR by `backend-image` and `frontend-image` in `ci.yml`:
 
 ```
 build images (backend, frontend) ─► tag with commit SHA ─► push to GHCR
