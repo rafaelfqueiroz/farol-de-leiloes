@@ -1,0 +1,37 @@
+# Reverse proxy and TLS for production (ADR-002). SITE_DOMAIN and API_DOMAIN come from
+# /etc/farol/caddy.env; Caddy obtains and renews the certificates from Let's Encrypt.
+#
+# Access logs are off (Caddy's default) on purpose: URLs and client addresses must not reach logs
+# (SC-15). Do not add a `log` directive.
+#
+# HSTS is not set here: the frontend sends it from next.config.ts and the API from helmet in
+# app.setup.ts, both with the SC-17 value, so a second header would only duplicate it.
+#
+# No proxy is trusted, because Cloudflare is DNS-only (ADR-002): incoming X-Forwarded-For is discarded,
+# so a client cannot spoof its address (SC-04). Turning on Cloudflare's proxy needs trusted_proxies
+# here, see docs/runbooks/deploy-and-rollback.md.
+
+(maintenance) {
+	# The backend is down while a deploy replaces it (ADR-002); the frontend may restart too.
+	handle_errors 502 503 504 {
+		header Content-Type "text/plain; charset=utf-8"
+		header Retry-After "30"
+		respond "Estamos em manutenção rápida. Tente novamente em instantes." 503
+	}
+}
+
+{$SITE_DOMAIN} {
+	import maintenance
+	encode zstd gzip
+	reverse_proxy frontend:3001
+}
+
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}
+
+{$API_DOMAIN} {
+	import maintenance
+	encode zstd gzip
+	reverse_proxy backend:3000
+}

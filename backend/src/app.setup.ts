@@ -13,6 +13,16 @@ export function configureApp(app: INestApplication): void {
   const config = app.get<AppConfigService>(ConfigService);
   const isProduction = config.get('NODE_ENV', { infer: true }) === 'production';
 
+  // SC-04: behind a reverse proxy req.ip is the proxy's address unless its hops are trusted. Only
+  // when configured, so a directly reachable process never honours a spoofed X-Forwarded-For.
+  const proxyHops = config.get('TRUST_PROXY_HOPS', { infer: true });
+  if (proxyHops > 0) {
+    (app.getHttpAdapter().getInstance() as { set(setting: string, value: number): void }).set(
+      'trust proxy',
+      proxyHops,
+    );
+  }
+
   // AR-46: first in the chain, so everything after it (body parsing, guards, handlers, the error
   // filter) logs with the request's correlation id, echoed as x-request-id.
   app.use(requestContextMiddleware);
