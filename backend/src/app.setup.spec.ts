@@ -1,5 +1,5 @@
 // SC-17: security headers and CORS apply through the same setup used by the API.
-import { Controller, Get, type INestApplication } from '@nestjs/common';
+import { Controller, Get, Req, type INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createHttpApp } from '../test/support/http-app';
@@ -9,6 +9,11 @@ class SecurityTestController {
   @Get()
   get() {
     return { ok: true };
+  }
+
+  @Get('ip')
+  ip(@Req() req: { ip: string }) {
+    return { ip: req.ip };
   }
 }
 
@@ -89,5 +94,34 @@ describe('API transport headers and CORS (SC-17)', () => {
     } finally {
       await production.close();
     }
+  });
+});
+
+describe('client address behind the reverse proxy (SC-04, TRUST_PROXY_HOPS)', () => {
+  const forwarded = '203.0.113.7';
+
+  async function clientIp(env: Record<string, string>): Promise<string> {
+    const app = await createHttpApp({ controllers: [SecurityTestController] }, { env });
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/api/security-test/ip')
+        .set('X-Forwarded-For', forwarded)
+        .expect(200);
+      return (response.body as { ip: string }).ip;
+    } finally {
+      await app.close();
+    }
+  }
+
+  it('takes req.ip from X-Forwarded-For when one proxy hop is trusted', async () => {
+    expect(await clientIp({ TRUST_PROXY_HOPS: '1' })).toBe(forwarded);
+  });
+
+  it('ignores X-Forwarded-For by default, so a direct caller cannot spoof its address', async () => {
+    expect(await clientIp({})).not.toBe(forwarded);
+  });
+
+  it('ignores X-Forwarded-For with 0 hops', async () => {
+    expect(await clientIp({ TRUST_PROXY_HOPS: '0' })).not.toBe(forwarded);
   });
 });
