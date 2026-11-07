@@ -50,6 +50,10 @@ export const envSchema = z
         }
       }, 'must be an HTTP(S) origin')
       .transform((value) => new URL(value).origin),
+    // SC-04: how many reverse-proxy hops (Caddy = 1) sit in front of the API, so req.ip is the
+    // client and not the proxy. 0 means the process is reached directly and X-Forwarded-For is
+    // ignored, so a caller cannot spoof its address.
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
     MONGODB_URI: required,
 
     // Auth
