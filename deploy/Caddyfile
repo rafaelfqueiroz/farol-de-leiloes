@@ -6,6 +6,10 @@
 #
 # HSTS is not set here: the frontend sends it from next.config.ts and the API from helmet in
 # app.setup.ts, both with the SC-17 value, so a second header would only duplicate it.
+#
+# No proxy is trusted, because Cloudflare is DNS-only (ADR-002): incoming X-Forwarded-For is discarded,
+# so a client cannot spoof its address (SC-04). Turning on Cloudflare's proxy needs trusted_proxies
+# here, see docs/runbooks/deploy-and-rollback.md.
 
 (maintenance) {
 	# The backend is down while a deploy replaces it (ADR-002); the frontend may restart too.

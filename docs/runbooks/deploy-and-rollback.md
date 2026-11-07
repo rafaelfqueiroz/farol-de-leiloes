@@ -28,7 +28,7 @@
 1. **As root on the fresh Ubuntu LTS VPS, run the setup script** with two public keys, the owner's (for `admin`) and the deploy key (for `deploy`); the same key may be passed twice: `bash setup-server.sh "<admin public key>" "<deploy public key>"`. It installs Docker and Compose, creates `admin` (sudo, no password, key only) and `deploy` (docker group only, no sudo), closes SSH to passwords and root, enables the firewall (SSH, 80, 443/tcp and udp) and automatic updates, and creates `/etc/farol` and `/srv/farol`. **Before closing the root session**, open a second one as `admin` and confirm `sudo -v` works. The docker group is root-equivalent, so guard the deploy key (it will live in the `deploy-production` GitHub environment, DV-35).
 2. **As `deploy`, copy the `deploy/` folder** to `/srv/farol`.
 3. **As `admin`, with sudo, fill the env files** in `/etc/farol` (root:deploy, mode 640; `deploy` can only read them), by hand, e.g. `sudoedit /etc/farol/backend.env`:
-   - `backend.env`: every variable of `backend/.env.example` (AR-41). Production values: `FRONTEND_URL=https://<site-domain>`; `GOOGLE_CALLBACK_URL=https://<api-domain>/api/auth/google/callback`, also registered with Google; `TRUST_PROXY_HOPS=1` (Caddy is one hop; without it every request looks like it comes from the proxy and throttling by origin, SC-04, breaks); `LOG_HASH_SECRET`; `SENTRY_DSN`; and the Atlas `MONGODB_URI` whose access list allows only this server's IP. `NODE_ENV=production` comes from the image. **If Cloudflare's proxy (orange cloud) is ever turned on, set `TRUST_PROXY_HOPS=2`**, because it adds a hop.
+   - `backend.env`: every variable of `backend/.env.example` (AR-41). Production values: `FRONTEND_URL=https://<site-domain>`; `GOOGLE_CALLBACK_URL=https://<api-domain>/api/auth/google/callback`, also registered with Google; `TRUST_PROXY_HOPS=1` (Caddy is one hop; without it every request looks like it comes from the proxy and throttling by origin, SC-04, breaks); `LOG_HASH_SECRET`; `SENTRY_DSN`; and the Atlas `MONGODB_URI` whose access list allows only this server's IP. `NODE_ENV=production` comes from the image. **Do not change the hop count on its own:** turning on Cloudflare's proxy also needs a Caddy change, see [Turn on Cloudflare's proxy](#turn-on-cloudflares-proxy).
    - `frontend.env`: `BACKEND_API_URL=http://backend:3000`, because the frontend's server code (SSR, API routes, sitemap) reaches the backend over the private network. `NEXT_PUBLIC_*` is inlined into the image at build time and is not set here.
    - `caddy.env`: `SITE_DOMAIN=<domain>` and `API_DOMAIN=api.<domain>`.
 4. **Register the Stripe webhook** in the Stripe dashboard: endpoint `https://<api-domain>/api/payments/webhook`, and put its signing secret in `STRIPE_WEBHOOK_SECRET` in `backend.env`.
@@ -52,3 +52,25 @@ Run in `/srv/farol`, as `deploy` (use `admin` with sudo only for server administ
 
 1. Set `RELEASE_SHA` to the previous SHA and repeat the deploy steps 2, 4 and 5. Skip step 3: migrations are forward-only and expand/contract (AR-28), so the previous code runs on the migrated database. A contract step that already removed the old shape cannot be rolled back this way; restore is then the only path ([backup-and-restore.md](backup-and-restore.md)).
 2. Write down what failed and when, and open an issue.
+
+### Turn on Cloudflare's proxy
+
+The default is DNS-only (ADR-002). Behind the proxy (orange cloud), Cloudflare is one more hop. Caddy [ignores incoming `X-Forwarded-For` from an untrusted peer](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#defaults), so `TRUST_PROXY_HOPS=2` alone makes the backend see Cloudflare's edge address, and per-origin limits (SC-04) then treat many users as one. Do these in order, while the records are still DNS-only:
+
+1. **Update the subprocessor table and the privacy policy** (SC-30): Cloudflare would then see the site's traffic.
+2. **Trust Cloudflare's ranges in Caddy, and only those.** Copy the current [IPv4](https://www.cloudflare.com/ips-v4/) and [IPv6](https://www.cloudflare.com/ips-v6/) lists into a global block at the top of the `Caddyfile`, through a reviewed change:
+
+   ```caddyfile
+   {
+   	servers {
+   		trusted_proxies static <every Cloudflare IPv4 and IPv6 range>
+   	}
+   }
+   ```
+
+   Never use `private_ranges` or a wider range here: any peer listed can forge the client address. Then, as `deploy`, run `dc up -d --force-recreate caddy`.
+3. **As `admin`, set `TRUST_PROXY_HOPS=2`** in `backend.env`, then, as `deploy`, run `dc stop backend && dc up -d backend`. Caddy then forwards `<client>, <Cloudflare edge>`, and two trusted hops make `req.ip` the client. A direct request still resolves to its real address, because Caddy discards the header it sent.
+4. **Turn on the proxy** in Cloudflare.
+5. **Keep the ranges current.** Cloudflare's lists change, and requests from a missing range are treated as untrusted, so those users share the edge address. Check the lists when reviewing this runbook.
+
+No endpoint reports the client address today, so this cannot be confirmed from outside. Check it with SC-04's limits once they exist.
