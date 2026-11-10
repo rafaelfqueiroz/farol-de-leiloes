@@ -8,7 +8,9 @@
 #   admin  - the owner: sudo without a password (it has no password), edits /etc/farol, runs apt.
 #   deploy - used by the deploy job: docker group only, no sudo. Docker group membership is
 #            root-equivalent (a container can mount the host), so guard the deploy key accordingly.
-# Root login over SSH is closed, so admin is the only way to administer the server.
+# SSH login settings are left untouched: root and password login stay open until the owner has
+# proven that admin can log in and use sudo, then runs close-ssh-login.sh (copy it to the server
+# together with this script).
 #
 # The arguments are PUBLIC keys. The script is idempotent: running it again
 # changes nothing that is already in place. It holds no secret: the runtime env files in /etc/farol
@@ -41,7 +43,15 @@ apt-get update
 # Creates the user if missing and makes its authorized_keys contain the given key.
 ensure_user_with_key() {
   local user="$1" key="$2" ssh_dir="/home/$1/.ssh"
-  id "$user" >/dev/null 2>&1 || adduser --disabled-password --gecos "" "$user"
+  if ! id "$user" >/dev/null 2>&1; then
+    # Some provider images ship a group with this name (an empty `admin` on
+    # Hostinger's Ubuntu 26.04) and adduser refuses to create the user over it.
+    if getent group "$user" >/dev/null; then
+      adduser --disabled-password --gecos "" --ingroup "$user" "$user"
+    else
+      adduser --disabled-password --gecos "" "$user"
+    fi
+  fi
   install -d -m 700 -o "$user" -g "$user" "$ssh_dir"
   touch "$ssh_dir/authorized_keys"
   grep -qxF "$key" "$ssh_dir/authorized_keys" || echo "$key" >>"$ssh_dir/authorized_keys"
@@ -100,20 +110,8 @@ for f in backend.env frontend.env caddy.env; do
 done
 install -d -m 750 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /srv/farol
 
-echo "==> SSH: key only, no root login (after confirming both users have a key)"
-if [[ -s "/home/$ADMIN_USER/.ssh/authorized_keys" && -s "/home/$DEPLOY_USER/.ssh/authorized_keys" ]]; then
-  cat >/etc/ssh/sshd_config.d/10-farol-hardening.conf <<'SSHD'
-PasswordAuthentication no
-KbdInteractiveAuthentication no
-PermitRootLogin no
-SSHD
-  sshd -t
-  # ssh.service is socket-activated on Ubuntu 24.04 and may be inactive; this does not fail then.
-  systemctl try-reload-or-restart ssh
-else
-  echo "A user has no key; leaving SSH login settings unchanged." >&2
-  exit 1
-fi
-
-echo "Done. Before closing this session, open a second one: ssh $ADMIN_USER@<server>, and confirm"
-echo "'sudo -v' works. Only then close this one. The deploy job connects as $DEPLOY_USER."
+echo "Done. SSH login is still open: this script does not change it."
+echo "Next, from your machine, open a second session: ssh -i <admin key> $ADMIN_USER@<server>"
+echo "and confirm 'sudo -n true' works there. Then, from that session, close password and root login:"
+echo "  sudo bash close-ssh-login.sh"
+echo "The deploy job connects as $DEPLOY_USER."
