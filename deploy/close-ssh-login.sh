@@ -26,16 +26,30 @@ if [[ ! -f /etc/sudoers.d/90-farol-admin ]]; then
   exit 1
 fi
 
+# Keep the previous file outside sshd_config.d (sshd never reads it) so a failed check can restore it.
+PREVIOUS=""
+if [[ -e "$CONF" ]]; then
+  PREVIOUS="$(mktemp)"
+  cp -p "$CONF" "$PREVIOUS"
+fi
+
 cat >"$CONF" <<'SSHD'
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
 SSHD
 if ! sshd -t; then
-  rm -f "$CONF"
-  echo "sshd -t failed; removed $CONF and left SSH login settings unchanged." >&2
+  if [[ -n "$PREVIOUS" ]]; then
+    cp -p "$PREVIOUS" "$CONF"
+    rm -f "$PREVIOUS"
+    echo "sshd -t failed; restored the previous $CONF and left SSH login settings unchanged." >&2
+  else
+    rm -f "$CONF"
+    echo "sshd -t failed; removed $CONF and left SSH login settings unchanged." >&2
+  fi
   exit 1
 fi
+[[ -z "$PREVIOUS" ]] || rm -f "$PREVIOUS"
 # ssh.service is socket-activated on some Ubuntu releases and may be inactive; this does not fail then.
 systemctl try-reload-or-restart ssh
 
