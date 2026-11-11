@@ -7,7 +7,7 @@ import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 export const TEST_MONGODB_URI = 'TEST_MONGODB_URI';
 
 /** TESTING §2: the same major as production. */
-export const MONGO_IMAGE = 'mongo:8';
+export const MONGO_IMAGE = 'mongo:8.0';
 
 interface SharedMongo {
   container: StartedMongoDBContainer;
