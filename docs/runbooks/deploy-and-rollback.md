@@ -12,6 +12,7 @@
 - **Single server.** No redundancy: the host is a single point of failure against BR-003-01.
 - Staging does not exist (#103); there is nothing to rehearse a deploy on.
 - **No domain yet.** Until one is bought (ADR-002), production runs on the VPS's Hostinger hostname, see [Without a domain](#without-a-domain). Google sign-in stays in OAuth Testing mode (up to 100 test users), because publishing the consent screen needs a domain we own.
+- **Free database tier.** Production uses the Atlas free cluster until Flex is needed, with no backups; see [backup-and-restore.md](backup-and-restore.md)'s known gaps. Take a `mongodump` before every migration until then, not only risky ones.
 
 ## Do not
 

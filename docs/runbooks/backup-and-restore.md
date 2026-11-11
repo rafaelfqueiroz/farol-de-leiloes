@@ -6,8 +6,9 @@
 
 ## Known gaps
 
-- **The upgrade to Atlas Flex has not happened yet.** The policy below is Flex's; the current free cluster has no continuous backup, so until the upgrade a `mongodump` is the only copy.
-- **No restore drill has run yet.** Until one does, this runbook is untested and a backup is a hope, not a fact. It must run before the first external user.
+- **Production runs on the Atlas free cluster until Flex is needed.** This is the owner's decision of 2026-11-11; ADR-002 still names Flex as the target. The free cluster has no backups at all, so a `mongodump` (below) is the only copy, and the policy below applies only after the upgrade.
+  - **Upgrade to Flex before any of these:** real personal or payment data in production (a lost database could not be restored); storage approaching the free cluster's 512 MB; the free tier's throughput or connection limits being hit (the daily import and the scraper are the likeliest).
+- **No restore drill has run yet.** Until one does, this runbook is untested and a backup is a hope, not a fact. It must run before the first external user. Until Flex, the drill runs from a `mongodump` into a temporary cluster, since there is no snapshot to restore.
 - Flex's policy is fixed: **8 daily snapshots**, no on-demand snapshot and no point-in-time restore. Up to **24 hours of data can be lost**.
 - Where Flex snapshots are stored is not verified (ADR-002).
 
