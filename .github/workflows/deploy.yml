@@ -1,11 +1,15 @@
-# DEVELOPMENT §12. There is no deploy target yet (BL-001, #40): this workflow publishes the
-# images to GHCR on every push to `main`, tagged with the full commit SHA (DV-33); ci.yml builds
-# the same images on every PR without pushing. `preflight` is gated on the DEPLOY_ENABLED
-# repository variable (DV-36).
+# DEVELOPMENT §12. `images` publishes both images to GHCR on every push to `main`, tagged with the
+# full commit SHA (DV-33); ci.yml builds the same images on every PR without pushing.
 #
-# Not here yet, and added with BL-001: the gated migration step before the new code starts
-# (DV-34), the rollout, the `GET /api/health` check (AR-48) and rollback by redeploying a
-# previous SHA.
+# With the DEPLOY_ENABLED repository variable unset, `preflight` and `deploy` are skipped and the
+# run stays green (DV-36). Set, `preflight` checks the deploy secrets of the `deploy-production`
+# environment (DV-35) and `deploy` releases the commit to the VPS (ADR-002) over SSH as `deploy`,
+# automating docs/runbooks/deploy-and-rollback.md through deploy/release.sh: pull, the gated
+# migration (DV-34, a failure stops with the running version untouched), the single backend
+# replaced, `GET /api/health` from the runner (AR-48), and on failure an automatic rollback to the
+# previous SHA without migrations (DV-33, AR-28), after which the job still fails.
+#
+# The workflow-level concurrency group queues runs, so two deploys never overlap.
 #
 # No npm or build cache in a publishing workflow, so a poisoned cache cannot reach an image.
 name: Deploy
@@ -39,6 +43,7 @@ jobs:
             build-args: |
               NEXT_PUBLIC_AUCTIONS_API_URL=${{ vars.NEXT_PUBLIC_AUCTIONS_API_URL }}
               NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
+              NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,20 +65,181 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           build-args: ${{ matrix.build-args }}
 
-  # DV-36: DEPLOY_ENABLED unset → this job is skipped and the run stays green. Set → every deploy
-  # secret must be present, or the job fails loudly. Deploy secrets live in the `deploy-production`
-  # environment (DV-35).
+  # DV-36: DEPLOY_ENABLED unset → this job and `deploy` are skipped and the run stays green. Set →
+  # every deploy secret must be present, or the job fails loudly. Deploy secrets live in the
+  # `deploy-production` environment (DV-35). Only `main` deploys.
   preflight:
     needs: images
-    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    if: ${{ vars.DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: deploy-production
     permissions: {}
     steps:
-      - name: Deploy secrets are present
-        # The deploy secrets are mapped into env here once the target exists (BL-001), and each
-        # is checked with `[ -n "$NAME" ]`; values are never printed.
+      - name: Deploy secrets and variables are present
+        # Values are never printed (SC-16); only the public URLs may appear in a message.
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          API_URL: ${{ vars.NEXT_PUBLIC_AUCTIONS_API_URL }}
+          SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
         run: |
-          echo "::error::DEPLOY_ENABLED is set but no deploy target exists yet (BL-001, #40)"
+          missing=0
+          for name in DEPLOY_HOST DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Secret $name is missing from the deploy-production environment (DV-36)"
+              missing=1
+            fi
+          done
+          if [ -z "$API_URL" ]; then
+            echo "::error::Repository variable NEXT_PUBLIC_AUCTIONS_API_URL is not set"
+            missing=1
+          fi
+          if [ -z "$SITE_URL" ]; then
+            echo "::error::Repository variable NEXT_PUBLIC_SITE_URL is not set"
+            missing=1
+          fi
+          # A bare host name or IPv4 address: it is written into an SSH config file.
+          if [ -n "$DEPLOY_HOST" ] && ! [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9.-]+$ ]]; then
+            echo "::error::DEPLOY_HOST must be a bare host name or address (no user, port or spaces)"
+            missing=1
+          fi
+          # Same shape as the runbook: https, no trailing slash, no /api.
+          if [ -n "$API_URL" ] && ! [[ "$API_URL" =~ ^https://[^/]+$ ]]; then
+            echo "::error::NEXT_PUBLIC_AUCTIONS_API_URL must be https://<api-host>, without a path or trailing slash"
+            missing=1
+          fi
+          exit "$missing"
+
+  deploy:
+    needs: preflight
+    runs-on: ubuntu-latest
+    # Deploy, health check and rollback each have their own bound below.
+    timeout-minutes: 45
+    environment:
+      name: deploy-production
+      url: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+      API_URL: ${{ vars.NEXT_PUBLIC_AUCTIONS_API_URL }}
+      SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Release SHA is a full commit SHA
+        run: |
+          if ! [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Not a full commit SHA: $RELEASE_SHA (DV-33)"
+            exit 1
+          fi
+
+      # Plain OpenSSH, no third-party action. The key and the pinned host key go to files only
+      # this user can read, removed by the last step; host keys are never learnt at deploy time
+      # (no ssh-keyscan, StrictHostKeyChecking=yes).
+      - name: Set up SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          ssh_dir="$RUNNER_TEMP/deploy-ssh"
+          umask 077
+          mkdir -p "$ssh_dir"
+          printf '%s\n' "$DEPLOY_SSH_KEY" >"$ssh_dir/id"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >"$ssh_dir/known_hosts"
+          cat >"$ssh_dir/config" <<EOF
+          Host farol
+            HostName $DEPLOY_HOST
+            User deploy
+            IdentityFile $ssh_dir/id
+            IdentitiesOnly yes
+            UserKnownHostsFile $ssh_dir/known_hosts
+            GlobalKnownHostsFile /dev/null
+            StrictHostKeyChecking yes
+            UpdateHostKeys no
+            CheckHostIP no
+            BatchMode yes
+            ConnectTimeout 20
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            LogLevel ERROR
+          EOF
+          chmod 600 "$ssh_dir/id" "$ssh_dir/known_hosts" "$ssh_dir/config"
+          # Fails on a malformed or passphrase-protected key without printing it.
+          if ! ssh-keygen -y -f "$ssh_dir/id" >/dev/null 2>&1; then
+            echo "::error::DEPLOY_SSH_KEY is not a usable private key without a passphrase"
+            exit 1
+          fi
+          if ! ssh-keygen -l -f "$ssh_dir/known_hosts" >/dev/null 2>&1; then
+            echo "::error::DEPLOY_KNOWN_HOSTS holds no valid known_hosts line"
+            exit 1
+          fi
+          echo "SSH_CONFIG=$ssh_dir/config" >>"$GITHUB_ENV"
+
+      # Runbook step 1: the running SHA, to roll back to. The server copy of release.sh is never
+      # used: the script travels on stdin with each call.
+      - name: Record the running release
+        id: prepare
+        run: |
+          previous="$(ssh -F "$SSH_CONFIG" farol bash -s -- prepare <deploy/release.sh)"
+          if [ -n "$previous" ] && ! [[ "$previous" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Unexpected running release from the server"
+            exit 1
+          fi
+          echo "Running release: ${previous:-none (first deploy)}"
+          echo "previous=$previous" >>"$GITHUB_OUTPUT"
+          scp -F "$SSH_CONFIG" -q deploy/compose.production.yml deploy/Caddyfile farol:/srv/farol/.incoming/
+
+      # Runbook steps 2 to 5 on the server. Exit code 1 means the backend was not touched, so
+      # there is nothing to roll back; any other failure (2, a dropped connection, a timeout) may
+      # have replaced it.
+      - name: Deploy ${{ github.sha }}
+        id: deploy
+        timeout-minutes: 15
+        run: |
+          rc=0
+          ssh -F "$SSH_CONFIG" farol bash -s -- deploy "$RELEASE_SHA" <deploy/release.sh || rc=$?
+          if [ "$rc" -eq 1 ]; then
+            echo "replaced=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "replaced=true" >>"$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
+
+      # AR-48 from outside, through Caddy and TLS: 200 is ok or degraded (serving), 503 is down
+      # (docs/runbooks/health-check.md). The site must answer 200 too.
+      - name: Health check
+        id: health
+        timeout-minutes: 5
+        run: bash deploy/check-health.sh
+
+      - name: Roll back to the previous release
+        id: rollback
+        if: >-
+          ${{ failure() && (steps.health.outcome == 'failure'
+          || (steps.deploy.outcome == 'failure' && steps.deploy.outputs.replaced != 'false')) }}
+        timeout-minutes: 15
+        env:
+          PREVIOUS_SHA: ${{ steps.prepare.outputs.previous }}
+        run: |
+          if [ -z "$PREVIOUS_SHA" ]; then
+            echo "::error::Release $RELEASE_SHA failed and there is no previous release to roll back to; the site may be down"
+            exit 1
+          fi
+          echo "::warning::Release $RELEASE_SHA failed; rolling back to $PREVIOUS_SHA without migrations (DV-33, AR-28)"
+          ssh -F "$SSH_CONFIG" farol bash -s -- rollback "$PREVIOUS_SHA" <deploy/release.sh
+          bash deploy/check-health.sh
+          echo "::error::Release $RELEASE_SHA failed and was rolled back to $PREVIOUS_SHA. Open an issue with what failed (runbook)"
           exit 1
+
+      - name: Remove the SSH key
+        if: ${{ always() }}
+        run: rm -rf "$RUNNER_TEMP/deploy-ssh"
