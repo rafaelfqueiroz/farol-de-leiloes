@@ -9,7 +9,7 @@ Files are `NNN-short-title.md`, numbered in order, starting from the template be
 | ADR | Title | Status |
 |---|---|---|
 | [001](001-in-house-mongodb-migrations-runner.md) | In-house MongoDB migrations runner | Accepted |
-| [002](002-hosting-and-environments.md) | Hosting, environments and backups | Proposed |
+| [002](002-hosting-and-environments.md) | Hosting, environments and backups | Accepted |
 | [003](003-reaching-caixa-from-the-vps.md) | Reaching Caixa from the production VPS | Proposed |
 
 ## Template
