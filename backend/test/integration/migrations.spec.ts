@@ -45,6 +45,8 @@ describe('Migrations (integration)', () => {
 
   beforeAll(async () => {
     connection = await createConnection(testDb.uri).asPromise();
+    // Mongoose 9 types `connection.db` as possibly undefined; after asPromise() it is set.
+    if (!connection.db) throw new Error('connection has no db');
     db = connection.db;
 
     await db.collection('auctions').insertMany([

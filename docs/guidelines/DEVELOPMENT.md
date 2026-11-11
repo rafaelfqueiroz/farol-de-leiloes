@@ -75,7 +75,7 @@ One approved choice per concern. Adding a dependency that overlaps one of these 
 ```bash
 cp backend/.env.example backend/.env           # every value is required (AR-41): the API refuses to boot otherwise; optional ones are marked
 cp frontend/.env.example frontend/.env.local
-# MongoDB 7 on localhost:27017 — a local install or `docker run -d -p 27017:27017 mongo:7`
+# MongoDB 8 on localhost:27017 — a local install or `docker run -d -p 27017:27017 mongo:8`
 npm install                                    # once, at the repository root: installs the git hooks
 (cd backend && npm ci && npm run start:dev)    # API on :3000
 (cd frontend && npm ci && npm run dev)         # web on :3001

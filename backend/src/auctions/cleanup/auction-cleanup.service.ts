@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { subDays } from 'date-fns';
 import { AuctionEntity, AuctionDocument } from '../schemas/auction.schema';
 import { StorageService } from '../../storage/storage.service';
@@ -106,7 +106,7 @@ export class AuctionCleanupService implements OnModuleInit {
   }
 
   private async processAuction(
-    auction: AuctionEntity & { _id: unknown },
+    auction: AuctionEntity & { _id: Types.ObjectId },
   ): Promise<{ removed: boolean; filesDeleted: number }> {
     let filesDeleted = 0;
 

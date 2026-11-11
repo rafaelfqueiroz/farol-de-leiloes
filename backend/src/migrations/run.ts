@@ -16,7 +16,9 @@ import { MIGRATIONS } from './registry';
 async function migrate(): Promise<void> {
   const app = await NestFactory.createApplicationContext(MigrationsModule);
   try {
+    // Mongoose 9 types `connection.db` as possibly undefined (not yet connected).
     const db = app.get<Connection>(getConnectionToken()).db;
+    if (!db) throw new Error('MongoDB connection is not established');
     await runMigrations(db, MIGRATIONS, mongoMigrationLog(db), app.get(Clock));
   } finally {
     await app.close();

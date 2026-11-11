@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { isObjectIdOrHexString, Model, mongo } from 'mongoose';
+import { AnyBulkWriteOperation, isObjectIdOrHexString, Model } from 'mongoose';
 import { subHours } from 'date-fns';
 import { AuctionEntity, AuctionDocument, Address } from './schemas/auction.schema';
 import { Auction, AuctionRecord, Phase } from './interfaces/auction.interface';
@@ -84,7 +84,7 @@ export class AuctionsService {
     const now = this.clock.now();
 
     // Step 2: Build bulk operations
-    const ops: mongo.AnyBulkWriteOperation<AuctionWrite>[] = [];
+    const ops: AnyBulkWriteOperation<AuctionWrite>[] = [];
     let skippedNoCode = 0;
     let skippedNoPhases = 0;
     let skippedSameModality = 0;

@@ -81,7 +81,7 @@ describe('UsersService.update (SC-10)', () => {
     expect(model.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: { $eq: 'u1' } },
       { $set: { name: 'Ana', phone: '11999999999', role: 'user' } },
-      { new: true },
+      { returnDocument: 'after' },
     );
   });
 
