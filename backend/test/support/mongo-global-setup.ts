@@ -39,11 +39,23 @@ export async function setup(): Promise<void> {
     throw dockerRequired(error);
   }
 
+  // Kept so a failed start says what mongod printed, not only that the health check failed.
+  const output: string[] = [];
   let container;
   try {
-    container = await new MongoDBContainer(MONGO_IMAGE).start();
+    container = await new MongoDBContainer(MONGO_IMAGE)
+      .withLogConsumer((stream) => {
+        stream.on('data', (line: Buffer | string) => {
+          output.push(String(line).trimEnd());
+          if (output.length > 40) output.shift();
+        });
+      })
+      .start();
   } catch (error) {
-    throw dockerRequired(error);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw dockerRequired(
+      new Error(`${reason}\n--- last container output ---\n${output.join('\n')}`),
+    );
   }
 
   setSharedMongo({ container, users: 1 });
