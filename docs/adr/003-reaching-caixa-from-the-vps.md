@@ -2,7 +2,7 @@
 
 **Status:** Proposed
 **Date:** 2026-11-11
-**Related:** SPEC-004 (BR-004-18, BR-004-20, DL-004-11, D-50), SC-24, SC-30, CLAUDE.md rule 5, [ADR-002](002-hosting-and-environments.md), #4, #40
+**Related:** SPEC-004 (BR-004-18, BR-004-20, DL-004-11, D-50), SC-24, SC-30, CLAUDE.md rule 5, [ADR-002](002-hosting-and-environments.md), #108, #4, #40
 
 > **Warning.** The proposed decision conflicts with SC-24, CLAUDE.md rule 5 and D-50 as they are written today: it routes Caixa traffic through a shared VPN and runs a browser that Radware does not flag as automated. Accepting this ADR means changing those rules in the same PR, and it should wait for legal advice (see Consequences).
 
@@ -55,7 +55,7 @@ The ⚠ mark means the option conflicts with SC-24, CLAUDE.md rule 5 or D-50 as 
 
 ### Experiments before Accepted
 
-Each runs from the VPS with the test image (`farol-radware-test`) and the pacing script, one experiment per day, stopping on the first challenge. The owner runs them; results are added to the Context table.
+Tracked in #108. Each runs from the VPS with the test image (`farol-radware-test`) and the pacing script, one experiment per day, stopping on the first challenge. The owner runs them; results are added to the Context table.
 
 1. **Visible Chromium without WARP.** Only possible once Azion serves the VPS directly, for example after Hostinger assigns an IPv4 from another range. It shows whether WARP is needed at all once Azion lets the VPS in. If Azion keeps blocking Hostinger, run the same 30-page test from a host Azion serves, to learn whether visible Chromium passes Radware on its own merit.
 2. **Faster pace.** 30 pages at one per 30 seconds, then 30 at one per 15 seconds, on separate days, followed by a 2-hour run at the pace chosen for production. It finds the real threshold and sets `ENRICHMENT_MIN_PAUSE_MS` with a margin.
