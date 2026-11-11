@@ -21,7 +21,7 @@ const shared = {
   execArgv: ['--disable-warning=DEP0040'],
 };
 
-// One mongo:7 container per run, shared by both projects; each spec file uses its own database
+// One mongo:8.2 container per run, shared by both projects; each spec file uses its own database
 // on it (TS-05, test/support/test-database.ts). A real database round trip (plus Nest
 // bootstrapping in beforeAll) needs more than the 5 s default; container start-up happens in
 // global setup and is not counted here.

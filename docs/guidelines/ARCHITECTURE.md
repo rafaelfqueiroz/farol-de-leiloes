@@ -15,7 +15,7 @@ Where a rule describes code that does not exist yet, the follow-up issue that bu
 |---|---|
 | Language | TypeScript, `strict` on both sides (DV-01) |
 | Backend | NestJS 12 on Express 5 · Mongoose · Passport (local + Google). Nest 12 is ESM-only; the CommonJS build loads it through Node's `require(esm)` |
-| Database | MongoDB 7 |
+| Database | MongoDB 8, on Atlas in production ([ADR-002](../adr/002-hosting-and-environments.md)). The target tier, Flex, runs 8.0 or newer and upgrades itself, so the driver stays on a version the [compatibility table](https://www.mongodb.com/docs/drivers/compatibility/) marks fully supported on both 8.0 and 9.0: today Mongoose 9 with driver 7.8 |
 | Frontend | Next.js App Router · React · MUI (DESIGN.md) · next-intl (pt-BR) |
 | Money | `Decimal128` in MongoDB, `decimal.js` in code, strings over JSON (§5) |
 | Dates | `date-fns` + `@date-fns/tz`, Brasília time (§6) |
