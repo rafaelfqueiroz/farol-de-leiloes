@@ -204,7 +204,7 @@ Spec Decision Logs record **product** decisions. ADRs record **technical** decis
 
 ## 11. Runbooks
 
-[`docs/runbooks/`](../runbooks/README.md) holds procedures for when something is going wrong: ordered steps, what **not** to do, and their own known gaps. The first is [incident-response.md](../runbooks/incident-response.md) — any unauthorised access, loss or disclosure of personal data (SC-31).
+[`docs/runbooks/`](../runbooks/README.md) holds procedures for when something is going wrong: ordered steps, what **not** to do, and their own known gaps. The first is [incident-response.md](../runbooks/incident-response.md) — any unauthorised access, loss or disclosure of personal data (SC-31). Hosting has its own: [deploy-and-rollback.md](../runbooks/deploy-and-rollback.md) and [backup-and-restore.md](../runbooks/backup-and-restore.md).
 
 ## 12. CI/CD
 
@@ -239,6 +239,8 @@ Every workflow pins each action to a full commit SHA with its version in a comme
 **Required status checks on `main`** (DV-27), by check name (the job id, or the matrix job's `name`): `backend-static`, `backend-test`, `backend-integration`, `backend-build`, `frontend-static`, `frontend-test`, `frontend-build`, `backend-image`, `frontend-image`, `audit`, `structural`, `codeql`; `e2e` joins when #3 lands. Renaming a job means updating the ruleset in the same change. Vercel's check is not required.
 
 ### Hosting today
+
+The production files are in [`deploy/`](../../deploy/): `compose.production.yml` (Caddy, frontend, backend and the `migrate` profile; only Caddy publishes ports), `Caddyfile`, and `setup-server.sh` for the one-time server setup (an `admin` user with sudo and a `deploy` user with docker access only, both key-only) and `close-ssh-login.sh` to close password and root SSH login afterwards. Runtime secrets live in `/etc/farol/*.env` on the server, outside the repository (DV-35), and the API runs with `TRUST_PROXY_HOPS=1` behind Caddy. Staging is on hold (#103). The by-hand procedure is [deploy-and-rollback.md](../runbooks/deploy-and-rollback.md).
 
 The target is a Hostinger VPS in Brazil for both applications and both environments, with MongoDB on Atlas ([ADR-002](../adr/002-hosting-and-environments.md)); it is not live yet (BL-001, [#40](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40)). Until it is, two platform integrations still run outside these workflows: **Vercel** builds a preview for each PR and deploys the frontend to its Production environment on every push to `main`, and a **Railway** integration is connected to the repository. Neither is gated by the checks above, and neither is the deploy described below; ADR-002 retires both. The deploy environment is named `deploy-production` so it stays separate from the `Production` environment Vercel reports to (GitHub environment names are case-insensitive); Railway reports to its own, `acceptable-courtesy / production`.
 

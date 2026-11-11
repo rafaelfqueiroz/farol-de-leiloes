@@ -189,6 +189,13 @@ describe('validateEnv', () => {
       expect(testEnv().LOG_LEVEL).toBe('silent');
     });
 
+    it('defaults TRUST_PROXY_HOPS to 0 and accepts only a non-negative integer (SC-04)', () => {
+      expect(testEnv().TRUST_PROXY_HOPS).toBe(0);
+      expect(testEnv({ TRUST_PROXY_HOPS: '1' }).TRUST_PROXY_HOPS).toBe(1);
+      expect(errorOf({ ...TEST_ENV, TRUST_PROXY_HOPS: '-1' })).toContain('TRUST_PROXY_HOPS:');
+      expect(errorOf({ ...TEST_ENV, TRUST_PROXY_HOPS: '1.5' })).toContain('TRUST_PROXY_HOPS:');
+    });
+
     it('leaves SENTRY_DSN optional, in production too, and refuses a malformed one', () => {
       expect(testEnv({ NODE_ENV: 'production' }).SENTRY_DSN).toBeUndefined();
       expect(testEnv({ SENTRY_DSN: 'https://key@o0.ingest.example.test/1' }).SENTRY_DSN).toBe(

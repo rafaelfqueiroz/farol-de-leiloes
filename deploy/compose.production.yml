@@ -1,0 +1,79 @@
+# Production stack on the Hostinger VPS (ADR-002, DV-33 to DV-35). Run from /srv/farol, see
+# docs/runbooks/deploy-and-rollback.md. Staging is on hold (#103) and has no service here.
+#
+# - Only Caddy publishes ports. A Docker-published port bypasses ufw, so nothing else may (ADR-002).
+# - Runtime secrets come from files outside the repository, never from the image or this file
+#   (SC-16, DV-35). The images are tagged with the commit SHA, never `latest` (DV-33).
+# - One backend instance only: the cron jobs have no lock, so two overlapping instances could send
+#   a reminder twice (ADR-002). Never scale `backend` above 1.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  caddy:
+    # Exact version, never a floating tag. Bumping it is a reviewed change.
+    image: caddy:2.11.6
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    env_file:
+      - /etc/farol/caddy.env # SITE_DOMAIN, API_DOMAIN
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates live in /data: losing it forces reissuing and can hit Let's Encrypt rate limits.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [farol]
+    mem_limit: 128m
+    logging: *logging
+    depends_on: [frontend, backend]
+
+  frontend:
+    image: ghcr.io/rafaelfqueiroz/farol-de-leiloes-frontend:${RELEASE_SHA:?set RELEASE_SHA to the commit SHA to run}
+    restart: unless-stopped
+    env_file:
+      - /etc/farol/frontend.env
+    networks: [farol]
+    mem_limit: 768m
+    logging: *logging
+
+  backend:
+    image: ghcr.io/rafaelfqueiroz/farol-de-leiloes-backend:${RELEASE_SHA:?set RELEASE_SHA to the commit SHA to run}
+    restart: unless-stopped
+    # Reaps the Chromium child processes of the scraper. The image's HEALTHCHECK (AR-48) is used.
+    init: true
+    # Docker's default /dev/shm is 64 MB and the scraper's Chromium launch
+    # (details-scraper.ts) does not pass --disable-dev-shm-usage, so pages can crash the tab.
+    shm_size: 512m
+    env_file:
+      - /etc/farol/backend.env
+    networks: [farol]
+    mem_limit: 3584m
+    logging: *logging
+
+  # One-off, gated step before the new code starts (DV-34):
+  #   docker compose -f compose.production.yml --profile migrate run --rm migrate
+  migrate:
+    profiles: [migrate]
+    image: ghcr.io/rafaelfqueiroz/farol-de-leiloes-backend:${RELEASE_SHA:?set RELEASE_SHA to the commit SHA to run}
+    command: ["node", "dist/migrations/run.js"]
+    restart: "no"
+    env_file:
+      - /etc/farol/backend.env
+    networks: [farol]
+    mem_limit: 512m
+    logging: *logging
+
+networks:
+  farol:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,8 +1,8 @@
 # ADR-002 — Hosting, environments and backups
 
-**Status:** Proposed
+**Status:** Accepted (2026-11-11)
 **Date:** 2026-11-06
-**Related:** SPEC-003 BR-003-01, BR-003-02, BR-003-04, DV-33–DV-36, AR-04, AR-28, AR-48, SC-16, SC-30, SC-32, ADR-001, #40 (BL-001)
+**Related:** SPEC-003 BR-003-01, BR-003-02, BR-003-04, DV-33–DV-36, AR-04, AR-28, AR-48, SC-16, SC-30, SC-32, ADR-001, #40 (BL-001), #103
 
 ## Context
 
@@ -54,6 +54,10 @@ Minimum hardening:
 - Only Caddy publishes ports.
 - Every container has a memory limit, so staging cannot starve production.
 
+### Domain and DNS
+
+Leaving Vercel also leaves its free `*.vercel.app` address and its nameservers. Production needs its own domain, about R$ 40/year (a third-party figure, not confirmed on Registro.br), which adds about R$ 3/month to every VPS option above. **Cloudflare DNS** hosts the records at no cost, in DNS-only mode, because Cloudflare is already a subprocessor for R2 and its proxy would see the site's traffic. Caddy obtains and renews the certificates from Let's Encrypt.
+
 ### Database
 
 MongoDB **Atlas Flex** for production, in São Paulo (`sa-east-1`), by upgrading the existing free cluster. Low traffic is expected in the first months, and Flex keeps the database and its backups off the single server. Staging uses a **free cluster in a separate Atlas project**, with its own credentials, so staging configuration cannot reach production data. The Atlas access lists allow only the server's IP address.
@@ -66,6 +70,8 @@ MongoDB **Atlas Flex** for production, in São Paulo (`sa-east-1`), by upgrading
 - **Staging:** no backups, because it holds no real data.
 
 ### Staging
+
+**On hold** until the client is in the loop (#103). The client gets a first look on production first and is asked not to enter real personal data. If real data is expected, the Flex upgrade, the restore drill, the privacy policy update and sign-in throttling (SC-04) must come first. When staging starts, it follows this design:
 
 - **Data:** no real personal data (SC-32). The client validates with fake data. Auctions are public data and are copied from production, so Caixa is not scraped twice (SC-24).
 - **Jobs:** `IMPORT_ENABLED`, `SCRAPER_ENABLED` and `REMINDERS_ENABLED` are set explicitly, off by default (AR-04).
