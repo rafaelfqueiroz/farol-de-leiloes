@@ -5,7 +5,7 @@
 #   bash setup-server.sh "<admin public key>" "<deploy public key>"
 #
 # Two users are created, both key-only (the same key may be passed twice):
-#   admin  - the owner: sudo without a password (it has no password), edits /etc/farol, runs apt.
+#   admin  - the owner: sudo without a password (it has no password), runs apt.
 #   deploy - used by the deploy job: docker group only, no sudo. Docker group membership is
 #            root-equivalent (a container can mount the host), so guard the deploy key accordingly.
 # SSH login settings are left untouched: root and password login stay open until the owner has
@@ -13,8 +13,9 @@
 # together with this script).
 #
 # The arguments are PUBLIC keys. The script is idempotent: running it again
-# changes nothing that is already in place. It holds no secret: the runtime env files in /etc/farol
-# are created empty and filled by hand (SC-16), see docs/runbooks/deploy-and-rollback.md.
+# changes nothing that is already in place. It holds no secret: the runtime env files are rendered
+# from the GitHub `deploy-production` environment and delivered to /srv/farol/env by every deploy
+# (ADR-004, SC-16), see docs/runbooks/deploy-and-rollback.md. Nobody edits them on the server.
 #
 # Docker-published ports bypass ufw (Docker writes its own iptables rules), so the firewall below
 # does not protect a container that publishes a port. That is why only Caddy publishes ports in
@@ -101,14 +102,9 @@ apt-get install -y unattended-upgrades
 echo 'APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";' >/etc/apt/apt.conf.d/20auto-upgrades
 
-echo "==> /etc/farol: runtime env files, outside the repository (SC-16)"
-install -d -m 750 -o root -g "$DEPLOY_USER" /etc/farol
-for f in backend.env frontend.env caddy.env; do
-  [[ -e "/etc/farol/$f" ]] || touch "/etc/farol/$f"
-  chown "root:$DEPLOY_USER" "/etc/farol/$f"
-  chmod 640 "/etc/farol/$f"
-done
+echo "==> /srv/farol: the release files; /srv/farol/env: the env files each deploy delivers (ADR-004)"
 install -d -m 750 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /srv/farol
+install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /srv/farol/env
 
 echo "Done. SSH login is still open: this script does not change it."
 echo "Next, from your machine, open a second session: ssh -i <admin key> $ADMIN_USER@<server>"

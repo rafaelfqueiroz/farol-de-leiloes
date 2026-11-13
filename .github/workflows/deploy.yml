@@ -2,12 +2,15 @@
 # full commit SHA (DV-33); ci.yml builds the same images on every PR without pushing.
 #
 # With the DEPLOY_ENABLED repository variable unset, `preflight` and `deploy` are skipped and the
-# run stays green (DV-36). Set, `preflight` checks the deploy secrets of the `deploy-production`
-# environment (DV-35) and `deploy` releases the commit to the VPS (ADR-002) over SSH as `deploy`,
-# automating docs/runbooks/deploy-and-rollback.md through deploy/release.sh: pull, the gated
-# migration (DV-34, a failure stops with the running version untouched), the single backend
+# run stays green (DV-36). Set, `preflight` checks the deploy secrets and the runtime configuration
+# of the `deploy-production` environment (DV-35, ADR-004) and `deploy` releases the commit to the
+# VPS (ADR-002) over SSH as `deploy`, automating docs/runbooks/deploy-and-rollback.md through
+# deploy/release.sh: the env files rendered from the environment's secrets and variables
+# (deploy/render-env.sh) installed with the compose file and Caddyfile, pull, the gated migration
+# (DV-34, a failure stops with the running version and its files untouched), the single backend
 # replaced, `GET /api/health` from the runner (AR-48), and on failure an automatic rollback to the
-# previous SHA without migrations (DV-33, AR-28), after which the job still fails.
+# previous SHA and its files without migrations (DV-33, AR-28), after which the job still fails.
+# The first deploy is a `workflow_dispatch` run on `main`.
 #
 # The workflow-level concurrency group queues runs, so two deploys never overlap.
 #
@@ -66,17 +69,80 @@ jobs:
           build-args: ${{ matrix.build-args }}
 
   # DV-36: DEPLOY_ENABLED unset → this job and `deploy` are skipped and the run stays green. Set →
-  # every deploy secret must be present, or the job fails loudly. Deploy secrets live in the
-  # `deploy-production` environment (DV-35). Only `main` deploys.
+  # every deploy secret and every required runtime value must be present, or the job fails loudly.
+  # Both live in the `deploy-production` environment (DV-35, ADR-004). Only `main` deploys.
   preflight:
     needs: images
     if: ${{ vars.DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: deploy-production
-    permissions: {}
+    permissions:
+      contents: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # ADR-004: the runtime configuration, mapped one by one from the environment's secrets
+      # (secret values) and variables (the rest). The same mapping feeds the render step of
+      # `deploy` through the YAML anchor. A name added here must also be in deploy/render-env.sh
+      # and backend/.env.example; test/structural/deploy-config.spec.ts checks all three. Only the
+      # two steps that run render-env.sh see these values, which it never prints (SC-16).
+      - name: Runtime configuration is complete
+        env: &runtime-config
+          SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
+          API_DOMAIN: ${{ vars.API_DOMAIN }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          TRUST_PROXY_HOPS: ${{ vars.TRUST_PROXY_HOPS }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_CALLBACK_URL: ${{ vars.GOOGLE_CALLBACK_URL }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_STANDARD_PRICE_ID: ${{ vars.STRIPE_STANDARD_PRICE_ID }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_SECURE: ${{ vars.SMTP_SECURE }}
+          SMTP_USER: ${{ vars.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMS_PROVIDER_API_KEY: ${{ secrets.SMS_PROVIDER_API_KEY }}
+          WHATSAPP_API_KEY: ${{ secrets.WHATSAPP_API_KEY }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
+          OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+          IMPORT_ENABLED: ${{ vars.IMPORT_ENABLED }}
+          IMPORT_ON_START_UP: ${{ vars.IMPORT_ON_START_UP }}
+          SCRAPER_ENABLED: ${{ vars.SCRAPER_ENABLED }}
+          SCRAPER_ON_START_UP: ${{ vars.SCRAPER_ON_START_UP }}
+          REMINDERS_ENABLED: ${{ vars.REMINDERS_ENABLED }}
+          CLEANUP_ON_STARTUP: ${{ vars.CLEANUP_ON_STARTUP }}
+          NEIGHBORHOODS_CACHE_ENABLED: ${{ vars.NEIGHBORHOODS_CACHE_ENABLED }}
+          NEIGHBORHOODS_CACHE_TTL: ${{ vars.NEIGHBORHOODS_CACHE_TTL }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          LOG_HASH_SECRET: ${{ secrets.LOG_HASH_SECRET }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: bash deploy/render-env.sh check
+
       - name: Deploy secrets and variables are present
+        # Runs after a failed runtime check too, so one run lists everything missing.
+        if: ${{ !cancelled() }}
         # Values are never printed (SC-16); only the public URLs may appear in a message.
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -141,6 +207,14 @@ jobs:
             exit 1
           fi
 
+      # ADR-004: caddy.env, frontend.env and backend.env, in a directory only this user can read
+      # (700, files 600), removed by the last step. Values are checked again and never printed.
+      - name: Render the runtime configuration
+        env: *runtime-config
+        run: |
+          bash deploy/render-env.sh render "$RUNNER_TEMP/farol-env"
+          echo "ENV_DIR=$RUNNER_TEMP/farol-env" >>"$GITHUB_ENV"
+
       # Plain OpenSSH, no third-party action. The key and the pinned host key go to files only
       # this user can read, removed by the last step; host keys are never learnt at deploy time
       # (no ssh-keyscan, StrictHostKeyChecking=yes).
@@ -185,7 +259,8 @@ jobs:
           echo "SSH_CONFIG=$ssh_dir/config" >>"$GITHUB_ENV"
 
       # Runbook step 1: the running SHA, to roll back to. The server copy of release.sh is never
-      # used: the script travels on stdin with each call.
+      # used: the script travels on stdin with each call. The env files travel inside the SSH
+      # connection (scp), never on a command line, into /srv/farol/.incoming/env (mode 700).
       - name: Record the running release
         id: prepare
         run: |
@@ -197,6 +272,8 @@ jobs:
           echo "Running release: ${previous:-none (first deploy)}"
           echo "previous=$previous" >>"$GITHUB_OUTPUT"
           scp -F "$SSH_CONFIG" -q deploy/compose.production.yml deploy/Caddyfile farol:/srv/farol/.incoming/
+          scp -F "$SSH_CONFIG" -q "$ENV_DIR/caddy.env" "$ENV_DIR/frontend.env" "$ENV_DIR/backend.env" \
+            farol:/srv/farol/.incoming/env/
 
       # Runbook steps 2 to 5 on the server. Exit code 1 means the backend was not touched, so
       # there is nothing to roll back; any other failure (2, a dropped connection, a timeout) may
@@ -240,6 +317,6 @@ jobs:
           echo "::error::Release $RELEASE_SHA failed and was rolled back to $PREVIOUS_SHA. Open an issue with what failed (runbook)"
           exit 1
 
-      - name: Remove the SSH key
+      - name: Remove the SSH key and the rendered configuration
         if: ${{ always() }}
-        run: rm -rf "$RUNNER_TEMP/deploy-ssh"
+        run: rm -rf "$RUNNER_TEMP/deploy-ssh" "$RUNNER_TEMP/farol-env"

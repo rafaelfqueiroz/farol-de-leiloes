@@ -1,6 +1,6 @@
 # ADR-002 — Hosting, environments and backups
 
-**Status:** Accepted (2026-11-11)
+**Status:** Accepted (2026-11-11); runtime secrets superseded by [ADR-004](004-production-configuration-from-github.md)
 **Date:** 2026-11-06
 **Related:** SPEC-003 BR-003-01, BR-003-02, BR-003-04, DV-33–DV-36, AR-04, AR-28, AR-48, SC-16, SC-30, SC-32, ADR-001, #40 (BL-001), #103
 
