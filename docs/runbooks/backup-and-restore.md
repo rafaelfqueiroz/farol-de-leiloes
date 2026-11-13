@@ -35,7 +35,7 @@ Atlas cannot snapshot on demand, so dump first.
 1. Stop the damage: if a migration or release caused it, roll back the code first ([deploy-and-rollback.md](deploy-and-rollback.md)).
 2. In Atlas, restore the most recent good snapshot **into a new temporary cluster** (or `mongorestore` a dump into one), never over production.
 3. Check the temporary cluster: collection counts against production, the latest `jobexecutions` rows, a few known documents, and the `migrations` collection.
-4. Bring back only what is needed (copy the lost documents), or, if the whole database is bad, repoint `MONGODB_URI` in `/etc/farol/backend.env` and redeploy. Tell the owner what up to 24 hours of data may be gone.
+4. Bring back only what is needed (copy the lost documents), or, if the whole database is bad, repoint production at the new cluster: change the `MONGODB_URI` secret of the `deploy-production` environment (`gh secret set MONGODB_URI --env deploy-production`) and redeploy ([deploy-and-rollback.md](deploy-and-rollback.md), Change a setting or a secret). Tell the owner what up to 24 hours of data may be gone.
 5. If personal data was lost or exposed, follow [incident-response.md](incident-response.md).
 
 ### Restore drill

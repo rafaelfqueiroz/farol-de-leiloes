@@ -1,5 +1,6 @@
 # Reverse proxy and TLS for production (ADR-002). SITE_DOMAIN and API_DOMAIN come from
-# /etc/farol/caddy.env; Caddy obtains and renews the certificates from Let's Encrypt.
+# /srv/farol/env/caddy.env, which the deploy job renders from the deploy-production environment's
+# variables (ADR-004); Caddy obtains and renews the certificates from Let's Encrypt.
 #
 # Access logs are off (Caddy's default) on purpose: URLs and client addresses must not reach logs
 # (SC-15). Do not add a `log` directive.

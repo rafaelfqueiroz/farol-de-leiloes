@@ -2,8 +2,11 @@
 # docs/runbooks/deploy-and-rollback.md. Staging is on hold (#103) and has no service here.
 #
 # - Only Caddy publishes ports. A Docker-published port bypasses ufw, so nothing else may (ADR-002).
-# - Runtime secrets come from files outside the repository, never from the image or this file
-#   (SC-16, DV-35). The images are tagged with the commit SHA, never `latest` (DV-33).
+# - Runtime configuration and secrets come from the env files in /srv/farol/env, never from the
+#   image or this file (SC-16, DV-35). The deploy job renders them from the GitHub
+#   `deploy-production` environment and replaces them on every deploy (ADR-004,
+#   deploy/render-env.sh); nobody edits them on the server. The images are tagged with the commit
+#   SHA, never `latest` (DV-33).
 # - One backend instance only: the cron jobs have no lock, so two overlapping instances could send
 #   a reminder twice (ADR-002). Never scale `backend` above 1.
 
@@ -23,7 +26,7 @@ services:
       - "443:443"
       - "443:443/udp" # HTTP/3
     env_file:
-      - /etc/farol/caddy.env # SITE_DOMAIN, API_DOMAIN
+      - ./env/caddy.env # SITE_DOMAIN, API_DOMAIN
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Certificates live in /data: losing it forces reissuing and can hit Let's Encrypt rate limits.
@@ -38,7 +41,7 @@ services:
     image: ghcr.io/rafaelfqueiroz/farol-de-leiloes-frontend:${RELEASE_SHA:?set RELEASE_SHA to the commit SHA to run}
     restart: unless-stopped
     env_file:
-      - /etc/farol/frontend.env
+      - ./env/frontend.env # BACKEND_API_URL
     networks: [farol]
     mem_limit: 768m
     logging: *logging
@@ -52,7 +55,7 @@ services:
     # (details-scraper.ts) does not pass --disable-dev-shm-usage, so pages can crash the tab.
     shm_size: 512m
     env_file:
-      - /etc/farol/backend.env
+      - ./env/backend.env
     networks: [farol]
     mem_limit: 3584m
     logging: *logging
@@ -65,7 +68,7 @@ services:
     command: ["node", "dist/migrations/run.js"]
     restart: "no"
     env_file:
-      - /etc/farol/backend.env
+      - ./env/backend.env
     networks: [farol]
     mem_limit: 512m
     logging: *logging
