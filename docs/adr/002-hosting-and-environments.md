@@ -103,7 +103,7 @@ A browser check every minute meets BR-003-02 literally, but costs about R$ 600â€
 
 ### Retiring the previous platforms
 
-The Railway integration is disconnected. Vercel keeps serving the frontend until the Hostinger production environment is live and is then disconnected, which also ends its per-PR preview deployments.
+Production has been served from the Hostinger VPS since 2026-11-14. The Vercel and Railway integrations are removed after that cutover, which also ends Vercel's per-PR preview deployments (#116).
 
 ## Consequences
 

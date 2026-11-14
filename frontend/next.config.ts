@@ -11,7 +11,6 @@ const projectRoot = import.meta.dirname;
 
 const nextConfig: NextConfig = {
   // The Docker image (frontend/Dockerfile, DEVELOPMENT §12) runs `.next/standalone/server.js`.
-  // Vercel ignores this setting and keeps its own build output.
   output: 'standalone',
   outputFileTracingRoot: projectRoot,
   turbopack: { root: projectRoot },
