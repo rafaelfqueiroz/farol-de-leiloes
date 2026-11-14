@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Box, CircularProgress, Typography, Button } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,6 +24,8 @@ interface RequireRoleProps {
 }
 
 export default function RequireRole({ children, minimumRole, featureName }: RequireRoleProps) {
+  const t = useTranslations('requireRole');
+  const tPlan = useTranslations('plan');
   const { loading, isAuthenticated, role } = useAuth();
   const router = useRouter();
 
@@ -68,8 +71,8 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
   const requiredLevel = ROLE_HIERARCHY[minimumRole];
 
   if (userLevel < requiredLevel) {
-    const planName =
-      minimumRole === 'standard' ? 'Standard' : minimumRole === 'premium' ? 'Premium' : 'Admin';
+    const planKey = minimumRole === 'standard' || minimumRole === 'premium' ? minimumRole : 'admin';
+    const planName = tPlan(`names.${planKey}`);
     return (
       <Box
         sx={(theme) => ({
@@ -83,15 +86,15 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
         <Box sx={{ textAlign: 'center', maxWidth: 400 }}>
           <LockIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
           <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>
-            Acesso restrito
+            {t('title')}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
             {featureName
-              ? `O recurso "${featureName}" requer o plano ${planName} ou superior.`
-              : `Esta pagina requer o plano ${planName} ou superior.`}
+              ? t('withFeature', { feature: featureName, plan: planName })
+              : t('withoutFeature', { plan: planName })}
           </Typography>
           <Button variant="contained" href="/plans">
-            Ver planos
+            {t('viewPlans')}
           </Button>
         </Box>
       </Box>

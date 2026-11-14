@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/app/contexts/AuthContext';
 import {
   Box,
@@ -29,6 +30,7 @@ export default function ProfilePage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const t = useTranslations('profile');
   const apiErrorMessage = useApiErrorMessage();
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -111,7 +113,7 @@ export default function ProfilePage() {
         throw await readApiError(response);
       }
 
-      setSuccess('Dados pessoais salvos com sucesso!');
+      setSuccess(t('success.personalData'));
     } catch (err: unknown) {
       setError(apiErrorMessage(err));
     } finally {
@@ -140,7 +142,7 @@ export default function ProfilePage() {
         throw await readApiError(response);
       }
 
-      setSuccess('Perfil atualizado com sucesso!');
+      setSuccess(t('success.profile'));
     } catch (err: unknown) {
       setError(apiErrorMessage(err));
     } finally {
@@ -154,12 +156,12 @@ export default function ProfilePage() {
     setSuccess('');
 
     if (newPassword !== confirmPassword) {
-      setError('As senhas não coincidem');
+      setError(t('errors.passwordMismatch'));
       return;
     }
 
     if (newPassword.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres');
+      setError(t('errors.passwordTooShort'));
       return;
     }
 
@@ -180,7 +182,7 @@ export default function ProfilePage() {
         throw await readApiError(response);
       }
 
-      setSuccess('Senha alterada com sucesso!');
+      setSuccess(t('success.passwordChanged'));
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -197,12 +199,12 @@ export default function ProfilePage() {
     setSuccess('');
 
     if (newPassword !== confirmPassword) {
-      setError('As senhas não coincidem');
+      setError(t('errors.passwordMismatch'));
       return;
     }
 
     if (newPassword.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres');
+      setError(t('errors.passwordTooShort'));
       return;
     }
 
@@ -223,7 +225,7 @@ export default function ProfilePage() {
         throw await readApiError(response);
       }
 
-      setSuccess('Senha definida com sucesso! Agora você pode entrar com email e senha.');
+      setSuccess(t('success.passwordSet'));
       setNewPassword('');
       setConfirmPassword('');
       await loadUser();
@@ -255,10 +257,10 @@ export default function ProfilePage() {
       {/* #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar */}
       <Container maxWidth="md" sx={{ pt: 4, pb: 4, flexGrow: 1 }}>
         <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
-          Meu Perfil
+          {t('title')}
         </Typography>
         <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
-          Gerencie suas informações pessoais e segurança
+          {t('subtitle')}
         </Typography>
 
         {error && (
@@ -290,13 +292,13 @@ export default function ProfilePage() {
               >
                 <PersonIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
               </Box>
-              <Typography variant="h6">Informações do Perfil</Typography>
+              <Typography variant="h6">{t('profileInfo.title')}</Typography>
             </Box>
             <Divider sx={{ mb: 2 }} />
             <form onSubmit={handleUpdateProfile}>
               <TextField
                 fullWidth
-                label="Nome"
+                label={t('profileInfo.name')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 margin="normal"
@@ -304,7 +306,7 @@ export default function ProfilePage() {
               />
               <TextField
                 fullWidth
-                label="Email"
+                label={t('profileInfo.email')}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -312,13 +314,11 @@ export default function ProfilePage() {
                 required
                 disabled={user?.providers?.includes('google')}
                 helperText={
-                  user?.providers?.includes('google')
-                    ? 'Email não pode ser alterado para contas Google'
-                    : ''
+                  user?.providers?.includes('google') ? t('profileInfo.emailLockedForGoogle') : ''
                 }
               />
               <Button type="submit" variant="contained" fullWidth disabled={loading} sx={{ mt: 2 }}>
-                {loading ? <CircularProgress size={24} /> : 'Atualizar Perfil'}
+                {loading ? <CircularProgress size={24} /> : t('profileInfo.submit')}
               </Button>
             </form>
           </CardContent>
@@ -341,29 +341,29 @@ export default function ProfilePage() {
               >
                 <BadgeIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
               </Box>
-              <Typography variant="h6">Dados Pessoais</Typography>
+              <Typography variant="h6">{t('personalData.title')}</Typography>
             </Box>
             <Divider sx={{ mb: 2 }} />
             <form onSubmit={handleSavePersonalData}>
               <TextField
                 fullWidth
-                label="Telefone"
+                label={t('personalData.phone')}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 margin="normal"
-                placeholder="(00) 00000-0000"
+                placeholder={t('personalData.phonePlaceholder')}
               />
               <TextField
                 fullWidth
-                label="CPF"
+                label={t('personalData.cpf')}
                 value={cpf}
                 onChange={(e) => setCpf(e.target.value)}
                 margin="normal"
-                placeholder="000.000.000-00"
+                placeholder={t('personalData.cpfPlaceholder')}
               />
               <TextField
                 fullWidth
-                label="Data de Nascimento"
+                label={t('personalData.dateOfBirth')}
                 type="date"
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
@@ -373,23 +373,23 @@ export default function ProfilePage() {
               <TextField
                 fullWidth
                 select
-                label="Sexo"
+                label={t('personalData.sex')}
                 value={sex}
                 onChange={(e) => setSex(e.target.value)}
                 margin="normal"
               >
-                <MenuItem value="">Selecione</MenuItem>
-                <MenuItem value="male">Masculino</MenuItem>
-                <MenuItem value="female">Feminino</MenuItem>
-                <MenuItem value="other">Outro</MenuItem>
+                <MenuItem value="">{t('personalData.sexOptions.none')}</MenuItem>
+                <MenuItem value="male">{t('personalData.sexOptions.male')}</MenuItem>
+                <MenuItem value="female">{t('personalData.sexOptions.female')}</MenuItem>
+                <MenuItem value="other">{t('personalData.sexOptions.other')}</MenuItem>
               </TextField>
 
               <Typography variant="subtitle2" sx={{ mt: 2, mb: 1, color: 'text.secondary' }}>
-                Endereço
+                {t('personalData.address')}
               </Typography>
               <TextField
                 fullWidth
-                label="Rua"
+                label={t('personalData.street')}
                 value={street}
                 onChange={(e) => setStreet(e.target.value)}
                 margin="normal"
@@ -397,27 +397,27 @@ export default function ProfilePage() {
               <Box sx={{ display: 'flex', gap: 2 }}>
                 <TextField
                   fullWidth
-                  label="Cidade"
+                  label={t('personalData.city')}
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   margin="normal"
                 />
                 <TextField
                   fullWidth
-                  label="Estado"
+                  label={t('personalData.state')}
                   value={state}
                   onChange={(e) => setState(e.target.value)}
                   margin="normal"
-                  placeholder="UF"
+                  placeholder={t('personalData.statePlaceholder')}
                 />
               </Box>
               <TextField
                 fullWidth
-                label="CEP"
+                label={t('personalData.zipCode')}
                 value={zipCode}
                 onChange={(e) => setZipCode(e.target.value)}
                 margin="normal"
-                placeholder="00000-000"
+                placeholder={t('personalData.zipCodePlaceholder')}
               />
               <Button
                 type="submit"
@@ -426,7 +426,7 @@ export default function ProfilePage() {
                 disabled={profileLoading}
                 sx={{ mt: 2 }}
               >
-                {profileLoading ? <CircularProgress size={24} /> : 'Salvar Dados Pessoais'}
+                {profileLoading ? <CircularProgress size={24} /> : t('personalData.submit')}
               </Button>
             </form>
           </CardContent>
@@ -450,13 +450,13 @@ export default function ProfilePage() {
                 >
                   <LockIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
                 </Box>
-                <Typography variant="h6">Alterar Senha</Typography>
+                <Typography variant="h6">{t('changePassword.title')}</Typography>
               </Box>
               <Divider sx={{ mb: 2 }} />
               <form onSubmit={handleChangePassword}>
                 <TextField
                   fullWidth
-                  label="Senha Atual"
+                  label={t('changePassword.current')}
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
@@ -465,7 +465,7 @@ export default function ProfilePage() {
                 />
                 <TextField
                   fullWidth
-                  label="Nova Senha"
+                  label={t('password.new')}
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -474,7 +474,7 @@ export default function ProfilePage() {
                 />
                 <TextField
                   fullWidth
-                  label="Confirmar Nova Senha"
+                  label={t('password.confirm')}
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -488,7 +488,7 @@ export default function ProfilePage() {
                   disabled={loading}
                   sx={{ mt: 2 }}
                 >
-                  {loading ? <CircularProgress size={24} /> : 'Alterar Senha'}
+                  {loading ? <CircularProgress size={24} /> : t('changePassword.submit')}
                 </Button>
               </form>
             </CardContent>
@@ -510,17 +510,16 @@ export default function ProfilePage() {
                 >
                   <LockIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
                 </Box>
-                <Typography variant="h6">Definir Senha</Typography>
+                <Typography variant="h6">{t('setPassword.title')}</Typography>
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Você entrou com o Google. Defina uma senha para também poder entrar com email e
-                senha.
+                {t('setPassword.intro')}
               </Typography>
               <Divider sx={{ mb: 2 }} />
               <form onSubmit={handleSetPassword}>
                 <TextField
                   fullWidth
-                  label="Nova Senha"
+                  label={t('password.new')}
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -529,7 +528,7 @@ export default function ProfilePage() {
                 />
                 <TextField
                   fullWidth
-                  label="Confirmar Nova Senha"
+                  label={t('password.confirm')}
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -543,7 +542,7 @@ export default function ProfilePage() {
                   disabled={loading}
                   sx={{ mt: 2 }}
                 >
-                  {loading ? <CircularProgress size={24} /> : 'Definir Senha'}
+                  {loading ? <CircularProgress size={24} /> : t('setPassword.submit')}
                 </Button>
               </form>
             </CardContent>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   IconButton,
   Dialog,
@@ -27,8 +28,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useApiErrorMessage } from '@/lib/api-error';
 import { toUtcInstant, tryParseInstant } from '@/lib/dates';
+import { formatCount } from '@/lib/numbers';
 import DateField from './DateField';
 import DateText from './patterns/DateText';
+
+const NOTE_MAX_LENGTH = 500;
 
 interface ReminderButtonProps {
   auctionCode: string;
@@ -46,6 +50,10 @@ export default function ReminderButton({
     useReminders();
   const router = useRouter();
   const apiErrorMessage = useApiErrorMessage();
+  const t = useTranslations('reminderButton');
+  // the form wording is shared with the reminders page: one wording per concept (DS-28)
+  const tr = useTranslations('reminders');
+  const tc = useTranslations('common');
 
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -58,6 +66,11 @@ export default function ReminderButton({
   const existingReminder = getReminderForAuction(auctionCode);
 
   const isPremium = role === 'standard' || role === 'premium' || role === 'admin';
+
+  const channelOptionLabel = (option: ReminderChannel) =>
+    isPremium
+      ? tr(`channel.${option}`)
+      : tr('channelRestricted', { channel: tr(`channel.${option}`) });
 
   const handleClick = () => {
     if (!isAuthenticated) {
@@ -83,7 +96,7 @@ export default function ReminderButton({
 
   const handleCreate = async () => {
     if (!scheduledAt || !tryParseInstant(scheduledAt)) {
-      setError('Selecione a data e hora do lembrete');
+      setError(tr('form.scheduledAtRequired'));
       return;
     }
 
@@ -141,17 +154,17 @@ export default function ReminderButton({
             color: 'warning.main',
           },
         }}
-        title={hasReminder ? 'Gerenciar lembrete' : 'Criar lembrete'}
+        title={hasReminder ? t('tooltip.manage') : t('tooltip.create')}
       >
         {hasReminder ? <NotificationsActiveIcon /> : <NotificationsIcon />}
       </IconButton>
 
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>{hasReminder ? 'Gerenciar Lembrete' : 'Criar Lembrete'}</DialogTitle>
+        <DialogTitle>{hasReminder ? t('dialogTitle.manage') : t('dialogTitle.create')}</DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 1 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {auctionTitle || `Leilão ${auctionCode}`}
+              {auctionTitle || tr('auctionFallbackTitle', { code: auctionCode })}
             </Typography>
 
             {error && (
@@ -163,53 +176,58 @@ export default function ReminderButton({
             {hasReminder && existingReminder ? (
               <Box sx={{ mb: 2 }}>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Lembrete agendado para <DateText value={existingReminder.scheduledAt} withTime />{' '}
-                  via {existingReminder.channel}
+                  {t.rich('scheduled', {
+                    date: () => <DateText value={existingReminder.scheduledAt} withTime />,
+                    channel: tr(`channel.${existingReminder.channel}`),
+                  })}
                 </Alert>
                 {existingReminder.description && (
                   <Typography variant="body2" color="text.secondary">
-                    Nota: {existingReminder.description}
+                    {t('note', { text: existingReminder.description })}
                   </Typography>
                 )}
               </Box>
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <FormControl fullWidth>
-                  <InputLabel id="channel-label">Canal de notificação</InputLabel>
+                  <InputLabel id="channel-label">{tr('form.channel')}</InputLabel>
                   <Select
                     labelId="channel-label"
                     value={channel}
-                    label="Canal de notificação"
+                    label={tr('form.channel')}
                     onChange={(e) => setChannel(e.target.value as ReminderChannel)}
                   >
-                    <MenuItem value="EMAIL">E-mail</MenuItem>
+                    <MenuItem value="EMAIL">{tr('channel.EMAIL')}</MenuItem>
                     <MenuItem value="SMS" disabled={!isPremium}>
-                      SMS {!isPremium && '(Standard/Premium)'}
+                      {channelOptionLabel('SMS')}
                     </MenuItem>
                     <MenuItem value="WHATSAPP" disabled={!isPremium}>
-                      WhatsApp {!isPremium && '(Standard/Premium)'}
+                      {channelOptionLabel('WHATSAPP')}
                     </MenuItem>
                   </Select>
                 </FormControl>
 
                 <DateField
                   type="datetime"
-                  label="Data e hora do lembrete"
+                  label={tr('form.scheduledAt')}
                   value={scheduledAt}
                   onChange={setScheduledAt}
                   minuteStep={10}
-                  helperText="O lembrete deve ser antes do início do leilão"
+                  helperText={tr('form.scheduledAtHelper')}
                 />
 
                 <TextField
-                  label="Nota (opcional)"
+                  label={tr('form.note')}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   multiline
                   rows={2}
                   fullWidth
-                  slotProps={{ htmlInput: { maxLength: 500 } }}
-                  helperText={`${description.length}/500 caracteres`}
+                  slotProps={{ htmlInput: { maxLength: NOTE_MAX_LENGTH } }}
+                  helperText={tr('form.noteCounter', {
+                    count: formatCount(description.length),
+                    max: formatCount(NOTE_MAX_LENGTH),
+                  })}
                 />
               </Box>
             )}
@@ -217,7 +235,7 @@ export default function ReminderButton({
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} disabled={loading}>
-            Cancelar
+            {tc('cancel')}
           </Button>
           {hasReminder ? (
             <Button
@@ -226,7 +244,7 @@ export default function ReminderButton({
               startIcon={loading ? <CircularProgress size={16} /> : <DeleteIcon />}
               disabled={loading}
             >
-              Remover Lembrete
+              {t('remove')}
             </Button>
           ) : (
             <Button
@@ -235,7 +253,7 @@ export default function ReminderButton({
               disabled={loading}
               startIcon={loading ? <CircularProgress size={16} /> : null}
             >
-              Criar Lembrete
+              {t('create')}
             </Button>
           )}
         </DialogActions>

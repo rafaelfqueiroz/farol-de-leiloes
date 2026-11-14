@@ -53,6 +53,40 @@ const warningsAsErrors = (configs) =>
       : config,
   );
 
+// DS-20: `react/jsx-no-literals` skips props (variant="h4" is not copy), so the props that carry
+// copy are listed here instead. A literal in any of them is the same violation as a literal child.
+const copyProps = [
+  'aria-label',
+  'aria-description',
+  'aria-placeholder',
+  'aria-roledescription',
+  'aria-valuetext',
+  'alt',
+  'helperText',
+  'label',
+  'placeholder',
+  'title',
+  'primary',
+  'secondary',
+].join('|');
+const noLiteralCopyInProps = [
+  {
+    selector: `JSXAttribute[name.name=/^(${copyProps})$/][value.type='Literal']`,
+    message:
+      'DS-20: user-facing text comes from the pt-BR catalogue (useTranslations), not a literal.',
+  },
+  {
+    selector: `JSXAttribute[name.name=/^(${copyProps})$/] > JSXExpressionContainer > Literal[value=/\\S/]`,
+    message:
+      'DS-20: user-facing text comes from the pt-BR catalogue (useTranslations), not a literal.',
+  },
+  {
+    selector: `JSXAttribute[name.name=/^(${copyProps})$/] > JSXExpressionContainer > TemplateLiteral`,
+    message:
+      'DS-20: user-facing text comes from the pt-BR catalogue (useTranslations), not a template literal.',
+  },
+];
+
 export default defineConfig([
   globalIgnores([
     '.next/**',
@@ -103,6 +137,7 @@ export default defineConfig([
     ignores: ['**/*.test.tsx'],
     rules: {
       'react/jsx-no-literals': ['error', { noStrings: true, ignoreProps: true }],
+      'no-restricted-syntax': ['error', ...noHardcodedStyleInSx, ...noLiteralCopyInProps],
     },
   },
   {

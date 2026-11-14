@@ -1,17 +1,17 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import InitColorSchemeScript from '@mui/material/InitColorSchemeScript';
-import { getLocale, getMessages, getTimeZone } from 'next-intl/server';
+import { getLocale, getMessages, getTimeZone, getTranslations } from 'next-intl/server';
 import { AuthProvider } from './contexts/AuthContext';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { RemindersProvider } from './contexts/RemindersContext';
 import AppThemeProvider from './theme/AppThemeProvider';
 import { inter } from './theme/fonts';
 
-export const metadata: Metadata = {
-  title: 'Farol dos Leilões',
-  description: 'Encontre imóveis em leilão da Caixa Econômica Federal',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('meta');
+  return { title: t('title'), description: t('description') };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [locale, timeZone, messages] = await Promise.all([

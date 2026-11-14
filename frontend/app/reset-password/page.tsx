@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Card,
@@ -17,6 +18,7 @@ import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function ResetPasswordRequestPage() {
   const router = useRouter();
+  const t = useTranslations('resetPassword.request');
   const apiErrorMessage = useApiErrorMessage();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -64,7 +66,7 @@ export default function ResetPasswordRequestPage() {
       <Card sx={{ maxWidth: 450, width: '100%' }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" component="h1" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
-            Redefinir Senha
+            {t('title')}
           </Typography>
 
           {error && (
@@ -76,8 +78,7 @@ export default function ResetPasswordRequestPage() {
           {success ? (
             <>
               <Alert severity="success" sx={{ mb: 2 }}>
-                Um email foi enviado com instruções para redefinir sua senha. Verifique sua caixa de
-                entrada.
+                {t('success')}
               </Alert>
               <Button
                 variant="contained"
@@ -86,18 +87,18 @@ export default function ResetPasswordRequestPage() {
                 onClick={() => router.push('/login')}
                 sx={{ mt: 2 }}
               >
-                Voltar para Login
+                {t('backToLogin')}
               </Button>
             </>
           ) : (
             <form onSubmit={handleSubmit}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Digite seu email para receber instruções de redefinição de senha.
+                {t('hint')}
               </Typography>
 
               <TextField
                 fullWidth
-                label="Email"
+                label={t('email')}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -114,7 +115,7 @@ export default function ResetPasswordRequestPage() {
                 disabled={loading}
                 sx={{ mt: 3, mb: 2 }}
               >
-                {loading ? <CircularProgress size={24} /> : 'Enviar Email'}
+                {loading ? <CircularProgress size={24} /> : t('submit')}
               </Button>
 
               <Box sx={{ textAlign: 'center', mt: 2 }}>
@@ -125,7 +126,7 @@ export default function ResetPasswordRequestPage() {
                   onClick={() => router.push('/login')}
                   sx={{ cursor: 'pointer' }}
                 >
-                  Voltar para Login
+                  {t('backToLogin')}
                 </Link>
               </Box>
             </form>

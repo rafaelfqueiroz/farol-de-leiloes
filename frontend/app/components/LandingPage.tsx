@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Container,
@@ -31,107 +32,96 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import StarIcon from '@mui/icons-material/Star';
 import LoginIcon from '@mui/icons-material/Login';
 import Logo from '@/app/components/patterns/Logo';
+import { formatMoney, formatPercent } from '@/lib/money';
+import { formatCount } from '@/lib/numbers';
 
+// DS-20: the copy lives in the `landing` catalogue under these ids; only structure stays here.
 const FEATURES = [
-  {
-    icon: <HomeWorkIcon sx={{ fontSize: 40 }} />,
-    title: 'Mais de 35 mil imóveis',
-    description:
-      'Acesse o maior catálogo de imóveis de leilão da Caixa com descontos de até 70% do valor de mercado.',
-    highlight: 'até 70% de desconto',
-  },
-  {
-    icon: <PaymentsIcon sx={{ fontSize: 40 }} />,
-    title: 'Condições de Pagamento Flexíveis',
-    description:
-      'Escolha as condições que melhor se encaixam no seu bolso: financiamento, FGTS ou pagamento à vista.',
-    highlight: 'Use seu FGTS',
-  },
-  {
-    icon: <AnalyticsIcon sx={{ fontSize: 40 }} />,
-    title: 'Análise de Risco do Imóvel',
-    description: 'Verifique a situação jurídica e ocupacional do imóvel antes de dar seu lance.',
-    highlight: 'Segurança na compra',
-  },
-  {
-    icon: <CalculateIcon sx={{ fontSize: 40 }} />,
-    title: 'Simulador de Aquisição',
-    description: 'Calcule o ROI e simule seu investimento para tomar a melhor decisão.',
-    highlight: 'Planeje seu investimento',
-  },
-  {
-    icon: <SecurityIcon sx={{ fontSize: 40 }} />,
-    title: 'Verificação de Documentação',
-    description: 'Análise completa de matrículas, certidões e situação do imóvel.',
-    highlight: 'Documentação em dia',
-  },
-  {
-    icon: <TrendingUpIcon sx={{ fontSize: 40 }} />,
-    title: 'Alertas de Oportunidades',
-    description: 'Receba notificações quando imóveis do seu interesse entrarem em leilão.',
-    highlight: 'Não perca nenhuma oferta',
-  },
-];
+  { id: 'catalogue', icon: <HomeWorkIcon sx={{ fontSize: 40 }} /> },
+  { id: 'payment', icon: <PaymentsIcon sx={{ fontSize: 40 }} /> },
+  { id: 'risk', icon: <AnalyticsIcon sx={{ fontSize: 40 }} /> },
+  { id: 'simulator', icon: <CalculateIcon sx={{ fontSize: 40 }} /> },
+  { id: 'documents', icon: <SecurityIcon sx={{ fontSize: 40 }} /> },
+  { id: 'alerts', icon: <TrendingUpIcon sx={{ fontSize: 40 }} /> },
+] as const;
 
-const PRICING_PLANS = [
+const STEPS = ['signUp', 'search', 'analyse', 'win'] as const;
+
+type PlanFeature =
+  | 'manualSearch'
+  | 'favorites'
+  | 'savedFilters'
+  | 'aiSearch'
+  | 'prioritySupport'
+  | 'customAlerts'
+  | 'advancedReports';
+
+const PRICING_PLANS: {
+  id: 'free' | 'standard' | 'premium';
+  // AR-17: an amount is a decimal string; null is a plan without a price yet
+  price: string | null;
+  features: { id: PlanFeature; included: boolean }[];
+  highlighted: boolean;
+  disabled: boolean;
+}[] = [
   {
-    name: 'Gratuito',
-    price: 'R$ 0',
-    period: '/mês',
-    description: 'Para quem está começando a explorar oportunidades',
+    id: 'free',
+    price: '0',
     features: [
-      { text: 'Busca manual por filtros', included: true },
-      { text: 'Favoritar imóveis', included: true },
-      { text: 'Filtros salvos (até 10)', included: true },
-      { text: 'Busca por IA', included: false },
-      { text: 'Suporte prioritário', included: false },
-      { text: 'Alertas personalizados', included: false },
-      { text: 'Relatórios avançados', included: false },
+      { id: 'manualSearch', included: true },
+      { id: 'favorites', included: true },
+      { id: 'savedFilters', included: true },
+      { id: 'aiSearch', included: false },
+      { id: 'prioritySupport', included: false },
+      { id: 'customAlerts', included: false },
+      { id: 'advancedReports', included: false },
     ],
-    buttonText: 'Começar Grátis',
     highlighted: false,
     disabled: false,
   },
   {
-    name: 'Standard',
-    price: 'R$ 29,90',
-    period: '/mês',
-    description: 'Ferramentas inteligentes para encontrar as melhores oportunidades',
+    id: 'standard',
+    price: '29.90',
     features: [
-      { text: 'Busca manual por filtros', included: true },
-      { text: 'Favoritar imóveis', included: true },
-      { text: 'Filtros salvos (até 10)', included: true },
-      { text: 'Busca por IA', included: true },
-      { text: 'Suporte prioritário', included: true },
-      { text: 'Alertas personalizados', included: false },
-      { text: 'Relatórios avançados', included: false },
+      { id: 'manualSearch', included: true },
+      { id: 'favorites', included: true },
+      { id: 'savedFilters', included: true },
+      { id: 'aiSearch', included: true },
+      { id: 'prioritySupport', included: true },
+      { id: 'customAlerts', included: false },
+      { id: 'advancedReports', included: false },
     ],
-    buttonText: 'Assinar Agora',
     highlighted: true,
     disabled: false,
   },
   {
-    name: 'Premium',
-    price: 'Em breve',
-    period: '',
-    description: 'Todas as ferramentas para investir com segurança',
+    id: 'premium',
+    price: null,
     features: [
-      { text: 'Busca manual por filtros', included: true },
-      { text: 'Favoritar imóveis', included: true },
-      { text: 'Filtros salvos (até 10)', included: true },
-      { text: 'Busca por IA', included: true },
-      { text: 'Suporte prioritário', included: true },
-      { text: 'Alertas personalizados', included: true },
-      { text: 'Relatórios avançados', included: true },
+      { id: 'manualSearch', included: true },
+      { id: 'favorites', included: true },
+      { id: 'savedFilters', included: true },
+      { id: 'aiSearch', included: true },
+      { id: 'prioritySupport', included: true },
+      { id: 'customAlerts', included: true },
+      { id: 'advancedReports', included: true },
     ],
-    buttonText: 'Em Breve',
     highlighted: false,
     disabled: true,
   },
 ];
 
+// The headline figures of the pitch; shown through the shared formatters (DS-29).
+const MAX_DISCOUNT = '70';
+const STATES_SERVED = 27;
+const SAVED_FILTERS_LIMIT = 10;
+
 export default function LandingPage() {
   const router = useRouter();
+  const t = useTranslations('landing');
+  const tPlan = useTranslations('plan');
+  const tCommon = useTranslations('common');
+  const discount = formatPercent(MAX_DISCOUNT, 0);
 
   const handleLogin = () => {
     router.push('/login');
@@ -200,10 +190,10 @@ export default function LandingPage() {
                 },
               }}
             >
-              Planos
+              {t('nav.plans')}
             </Button>
             <Button variant="contained" startIcon={<LoginIcon />} onClick={handleLogin}>
-              Entrar
+              {tCommon('signIn')}
             </Button>
           </Box>
         </Toolbar>
@@ -226,7 +216,7 @@ export default function LandingPage() {
               <Box sx={{ mb: 4 }}>
                 <Chip
                   icon={<GavelIcon />}
-                  label="Leilões da Caixa Econômica Federal"
+                  label={t('hero.badge')}
                   variant="outlined"
                   sx={{
                     mb: 2,
@@ -242,11 +232,15 @@ export default function LandingPage() {
                     lineHeight: 1.2,
                   }}
                 >
-                  Encontre o imóvel dos seus sonhos com até{' '}
-                  {/* DS-24: a favourable figure, not the brand colour; the words carry the meaning (DS-10) */}
-                  <Box component="span" sx={{ color: 'figure.positive' }}>
-                    70% de desconto
-                  </Box>
+                  {t.rich('hero.title', {
+                    discount,
+                    // DS-24: a favourable figure, not the brand colour; the words carry the meaning (DS-10)
+                    highlight: (chunks) => (
+                      <Box component="span" sx={{ color: 'figure.positive' }}>
+                        {chunks}
+                      </Box>
+                    ),
+                  })}
                 </Typography>
                 <Typography
                   variant="h6"
@@ -257,8 +251,7 @@ export default function LandingPage() {
                     fontSize: { xs: '1rem', md: '1.25rem' },
                   }}
                 >
-                  Mais de 35 mil imóveis disponíveis em todo o Brasil. Casas, apartamentos, terrenos
-                  e imóveis comerciais com condições especiais de pagamento.
+                  {t('hero.subtitle')}
                 </Typography>
                 <Button
                   variant="contained"
@@ -271,7 +264,7 @@ export default function LandingPage() {
                     fontWeight: 600,
                   }}
                 >
-                  Comece Agora
+                  {t('hero.cta')}
                 </Button>
               </Box>
 
@@ -279,26 +272,26 @@ export default function LandingPage() {
               <Box sx={{ display: 'flex', gap: 4, mt: 4, flexWrap: 'wrap' }}>
                 <Box>
                   <Typography variant="h4" fontWeight={700}>
-                    35k+
+                    {t('hero.stats.properties.value')}
                   </Typography>
                   <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    Imóveis disponíveis
+                    {t('hero.stats.properties.label')}
                   </Typography>
                 </Box>
                 <Box>
                   <Typography variant="h4" fontWeight={700}>
-                    27
+                    {formatCount(STATES_SERVED)}
                   </Typography>
                   <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    Estados atendidos
+                    {t('hero.stats.states.label')}
                   </Typography>
                 </Box>
                 <Box>
                   <Typography variant="h4" fontWeight={700}>
-                    70%
+                    {discount}
                   </Typography>
                   <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    Desconto máximo
+                    {t('hero.stats.discount.label')}
                   </Typography>
                 </Box>
               </Box>
@@ -337,16 +330,16 @@ export default function LandingPage() {
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
           <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: 'text.primary' }}>
-            Por que usar o Farol dos Leilões?
+            {t('features.title')}
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
-            Todas as ferramentas que você precisa para encontrar e adquirir o imóvel perfeito
+            {t('features.subtitle')}
           </Typography>
         </Box>
 
         <Grid container spacing={4}>
-          {FEATURES.map((feature, index) => (
-            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={index}>
+          {FEATURES.map((feature) => (
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={feature.id}>
               <Card
                 sx={{
                   height: '100%',
@@ -374,13 +367,13 @@ export default function LandingPage() {
                     {feature.icon}
                   </Box>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1, color: 'text.primary' }}>
-                    {feature.title}
+                    {t(`features.${feature.id}.title`)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {feature.description}
+                    {t(`features.${feature.id}.description`, { discount })}
                   </Typography>
                   <Chip
-                    label={feature.highlight}
+                    label={t(`features.${feature.id}.highlight`, { discount })}
                     size="small"
                     sx={{
                       backgroundColor: 'background.muted',
@@ -400,37 +393,16 @@ export default function LandingPage() {
         <Container maxWidth="lg">
           <Box sx={{ textAlign: 'center', mb: 6 }}>
             <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: 'text.primary' }}>
-              Como funciona?
+              {t('howItWorks.title')}
             </Typography>
             <Typography variant="h6" color="text.secondary">
-              Em 4 passos simples você encontra o imóvel ideal
+              {t('howItWorks.subtitle')}
             </Typography>
           </Box>
 
           <Grid container spacing={4}>
-            {[
-              {
-                step: '1',
-                title: 'Cadastre-se',
-                description: 'Crie sua conta gratuitamente em poucos minutos',
-              },
-              {
-                step: '2',
-                title: 'Busque',
-                description: 'Filtre por estado, cidade, preço e tipo de imóvel',
-              },
-              {
-                step: '3',
-                title: 'Analise',
-                description: 'Verifique os detalhes, fotos e situação do imóvel',
-              },
-              {
-                step: '4',
-                title: 'Arremate',
-                description: 'Participe do leilão e conquiste seu imóvel',
-              },
-            ].map((item, index) => (
-              <Grid size={{ xs: 12, sm: 6, md: 3 }} key={index}>
+            {STEPS.map((step, index) => (
+              <Grid size={{ xs: 12, sm: 6, md: 3 }} key={step}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Box
                     sx={{
@@ -448,13 +420,13 @@ export default function LandingPage() {
                       fontWeight: 700,
                     }}
                   >
-                    {item.step}
+                    {formatCount(index + 1)}
                   </Box>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1, color: 'text.primary' }}>
-                    {item.title}
+                    {t(`howItWorks.${step}.title`)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {item.description}
+                    {t(`howItWorks.${step}.description`)}
                   </Typography>
                 </Box>
               </Grid>
@@ -467,16 +439,16 @@ export default function LandingPage() {
       <Container id="planos" maxWidth="lg" sx={{ py: 8, scrollMarginTop: '80px' }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
           <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: 'text.primary' }}>
-            Escolha seu Plano
+            {t('pricing.title')}
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
-            Comece gratuitamente ou desbloqueie funcionalidades com nossos planos
+            {t('pricing.subtitle')}
           </Typography>
         </Box>
 
         <Grid container spacing={4} sx={{ justifyContent: 'center' }}>
-          {PRICING_PLANS.map((plan, index) => (
-            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={index}>
+          {PRICING_PLANS.map((plan) => (
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={plan.id}>
               <Card
                 sx={{
                   height: '100%',
@@ -499,7 +471,7 @@ export default function LandingPage() {
                   >
                     <Chip
                       icon={<StarIcon sx={{ fontSize: 16 }} />}
-                      label="Mais Popular"
+                      label={tPlan('popular')}
                       sx={{
                         backgroundColor: 'secondary.main',
                         color: 'secondary.contrastText',
@@ -511,26 +483,26 @@ export default function LandingPage() {
                 )}
                 <CardContent sx={{ p: 4 }}>
                   <Typography variant="h5" fontWeight={700} sx={{ mb: 1, color: 'text.primary' }}>
-                    {plan.name}
+                    {tPlan(`names.${plan.id}`)}
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'baseline', mb: 2 }}>
                     {/* DS-24: a price is a figure, not a link */}
                     <Typography variant="h3" fontWeight={700} sx={{ color: 'text.primary' }}>
-                      {plan.price}
+                      {plan.price === null ? tPlan('comingSoon') : formatMoney(plan.price)}
                     </Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ ml: 1 }}>
-                      {plan.period}
+                      {plan.price === null ? null : tPlan('period')}
                     </Typography>
                   </Box>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    {plan.description}
+                    {t(`pricing.${plan.id}.description`)}
                   </Typography>
 
                   <Divider sx={{ mb: 3 }} />
 
                   <List dense>
-                    {plan.features.map((feature, featureIndex) => (
-                      <ListItem key={featureIndex} sx={{ px: 0 }}>
+                    {plan.features.map((feature) => (
+                      <ListItem key={feature.id} sx={{ px: 0 }}>
                         <ListItemIcon sx={{ minWidth: 32 }}>
                           {feature.included ? (
                             <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
@@ -539,7 +511,9 @@ export default function LandingPage() {
                           )}
                         </ListItemIcon>
                         <ListItemText
-                          primary={feature.text}
+                          primary={tPlan(`features.${feature.id}`, {
+                            limit: formatCount(SAVED_FILTERS_LIMIT),
+                          })}
                           slotProps={{
                             primary: {
                               variant: 'body2',
@@ -559,7 +533,7 @@ export default function LandingPage() {
                     onClick={handleLogin}
                     sx={{ mt: 3 }}
                   >
-                    {plan.buttonText}
+                    {t(`pricing.${plan.id}.cta`)}
                   </Button>
                 </CardContent>
               </Card>
@@ -585,7 +559,7 @@ export default function LandingPage() {
         <Container maxWidth="md">
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="h3" fontWeight={700} sx={{ mb: 2 }}>
-              Pronto para encontrar seu imóvel?
+              {t('cta.title')}
             </Typography>
             <Typography
               variant="h6"
@@ -595,7 +569,7 @@ export default function LandingPage() {
                 ...theme.applyStyles('dark', { color: 'text.secondary', opacity: 1 }),
               })}
             >
-              Crie sua conta gratuitamente e descubra oportunidades incríveis em todo o Brasil
+              {t('cta.subtitle')}
             </Typography>
             <Button
               variant="contained"
@@ -628,7 +602,7 @@ export default function LandingPage() {
                 }),
               })}
             >
-              Criar Conta Grátis
+              {t('cta.button')}
             </Button>
           </Box>
         </Container>
@@ -656,7 +630,7 @@ export default function LandingPage() {
           >
             <Logo variant="lockup" size={28} />
             <Typography variant="body2" color="text.secondary">
-              © 2024 Farol dos Leilões. Todos os direitos reservados.
+              {t('footer.rights')}
             </Typography>
           </Box>
         </Container>

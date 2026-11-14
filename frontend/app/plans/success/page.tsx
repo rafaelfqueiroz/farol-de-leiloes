@@ -2,12 +2,14 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Box, Container, Typography, Button } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function PlansSuccessPage() {
   const router = useRouter();
+  const t = useTranslations('plansResult.success');
   const { refreshUser } = useAuth();
 
   useEffect(() => {
@@ -30,14 +32,13 @@ export default function PlansSuccessPage() {
       <Container maxWidth="sm" sx={{ textAlign: 'center' }}>
         <CheckCircleOutlineIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
         <Typography variant="h4" sx={{ fontWeight: 700, mb: 2 }}>
-          Assinatura realizada com sucesso!
+          {t('title')}
         </Typography>
         <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
-          Voce agora tem acesso a todos os recursos do plano Standard, incluindo a busca por IA.
-          Voce sera redirecionado automaticamente.
+          {t('description')}
         </Typography>
         <Button variant="contained" onClick={() => router.push('/search')}>
-          Ir para a busca
+          {t('goToSearch')}
         </Button>
       </Container>
     </Box>

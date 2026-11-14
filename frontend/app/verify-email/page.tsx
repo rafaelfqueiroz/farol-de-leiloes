@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Box, Card, CardContent, Typography, Button, Alert, CircularProgress } from '@mui/material';
 import EmailIcon from '@mui/icons-material/Email';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +13,8 @@ export default function VerifyEmailPage() {
   const { user, loading, isAuthenticated, emailVerified, resendVerificationEmail, logout } =
     useAuth();
   const [sending, setSending] = useState(false);
+  const t = useTranslations('verifyEmail.pending');
+  const tCommon = useTranslations('common');
   const apiErrorMessage = useApiErrorMessage();
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -80,17 +83,19 @@ export default function VerifyEmailPage() {
           <EmailIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
 
           <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
-            Verifique seu email
+            {t('title')}
           </Typography>
 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Enviamos um email de verificacao para <strong>{user?.email}</strong>. Por favor,
-            verifique sua caixa de entrada e clique no link para ativar sua conta.
+            {t.rich('description', {
+              email: user?.email ?? '',
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
           </Typography>
 
           {sent && (
             <Alert severity="success" sx={{ mb: 3 }}>
-              Email de verificacao enviado com sucesso! Verifique sua caixa de entrada.
+              {t('sent')}
             </Alert>
           )}
 
@@ -107,16 +112,15 @@ export default function VerifyEmailPage() {
             disabled={sending}
             sx={{ mb: 2, py: 1.5 }}
           >
-            {sending ? 'Enviando...' : 'Reenviar email de verificacao'}
+            {sending ? t('sending') : t('resend')}
           </Button>
 
           <Button fullWidth variant="outlined" onClick={handleLogout} sx={{ py: 1.5 }}>
-            Sair
+            {tCommon('signOut')}
           </Button>
 
           <Typography variant="caption" color="text.secondary" sx={{ mt: 3, display: 'block' }}>
-            O link de verificacao expira em 24 horas. Se nao encontrar o email, verifique sua pasta
-            de spam.
+            {t('expiry')}
           </Typography>
         </CardContent>
       </Card>

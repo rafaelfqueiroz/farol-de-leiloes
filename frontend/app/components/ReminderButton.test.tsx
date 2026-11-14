@@ -169,6 +169,13 @@ describe('ReminderButton dates (AR-23, DS-26)', () => {
     );
   });
 
+  it('names the channel of an existing reminder with the catalogue wording', async () => {
+    env.reminder = { _id: 'r1', scheduledAt: '2027-01-01T01:30:00Z', channel: 'WHATSAPP' };
+    render(<ReminderButton auctionCode="123" auctionTitle="Imóvel de teste" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Gerenciar lembrete' }));
+    expect(screen.getByText(/Lembrete agendado para/)).toHaveTextContent(/via WhatsApp$/);
+  });
+
   it.each(['light', 'dark'] as const)(
     'has an accessible open picker form in %s (TS-19)',
     async (scheme) => {

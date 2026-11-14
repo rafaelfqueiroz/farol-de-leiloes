@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Container,
@@ -55,6 +56,8 @@ interface Coupon {
 export default function AdminCouponsPage() {
   const router = useRouter();
   const { role, loading: authLoading } = useAuth();
+  const t = useTranslations('adminCoupons');
+  const tCommon = useTranslations('common');
   const apiErrorMessage = useApiErrorMessage();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [page, setPage] = useState(1);
@@ -120,7 +123,7 @@ export default function AdminCouponsPage() {
     if (discountValue === null) {
       setSnackbar({
         open: true,
-        message: 'Informe o valor do desconto em reais, com até duas casas decimais',
+        message: t('errors.invalidDiscount'),
         severity: 'error',
       });
       return;
@@ -144,7 +147,7 @@ export default function AdminCouponsPage() {
       });
 
       if (response.ok) {
-        setSnackbar({ open: true, message: 'Cupom criado com sucesso', severity: 'success' });
+        setSnackbar({ open: true, message: t('snackbar.created'), severity: 'success' });
         setDialogOpen(false);
         setNewCode('');
         setNewDiscountValue('');
@@ -170,7 +173,7 @@ export default function AdminCouponsPage() {
       });
 
       if (response.ok) {
-        setSnackbar({ open: true, message: 'Cupom invalidado', severity: 'success' });
+        setSnackbar({ open: true, message: t('snackbar.invalidated'), severity: 'success' });
         void loadCoupons();
       } else {
         throw await readApiError(response);
@@ -198,14 +201,14 @@ export default function AdminCouponsPage() {
               sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}
             >
               <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                Gerenciar Cupons
+                {t('title')}
               </Typography>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={() => setDialogOpen(true)}
               >
-                Novo Cupom
+                {t('new')}
               </Button>
             </Box>
 
@@ -213,12 +216,12 @@ export default function AdminCouponsPage() {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 700 }}>Codigo</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Desconto</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Valido ate</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Descricao</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Acoes</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.code')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.discount')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.validTo')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.status')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.description')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.actions')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -248,25 +251,30 @@ export default function AdminCouponsPage() {
                         <TableCell>
                           {!coupon.active ? (
                             <Chip
-                              label="Invalidado"
+                              label={t('status.invalidated')}
                               size="small"
                               color="error"
                               variant="outlined"
                             />
                           ) : expired ? (
                             <Chip
-                              label="Expirado"
+                              label={t('status.expired')}
                               size="small"
                               color="warning"
                               variant="outlined"
                             />
                           ) : (
-                            <Chip label="Ativo" size="small" color="success" variant="outlined" />
+                            <Chip
+                              label={t('status.active')}
+                              size="small"
+                              color="success"
+                              variant="outlined"
+                            />
                           )}
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" color="text.secondary">
-                            {coupon.description || '-'}
+                            {coupon.description || t('noDescription')}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -276,7 +284,7 @@ export default function AdminCouponsPage() {
                               color="destructive"
                               onClick={() => handleInvalidate(coupon._id)}
                             >
-                              Invalidar
+                              {t('invalidate')}
                             </Button>
                           )}
                         </TableCell>
@@ -287,7 +295,7 @@ export default function AdminCouponsPage() {
                     <TableRow>
                       <TableCell colSpan={6} align="center">
                         <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
-                          Nenhum cupom cadastrado
+                          {t('empty')}
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -312,30 +320,30 @@ export default function AdminCouponsPage() {
 
       {/* Create Coupon Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Novo Cupom</DialogTitle>
+        <DialogTitle>{t('new')}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             fullWidth
-            label="Codigo do cupom"
+            label={t('form.code')}
             value={newCode}
             onChange={(e) => setNewCode(e.target.value.toUpperCase())}
             margin="normal"
-            placeholder="EX: DESCONTO10"
+            placeholder={t('form.codePlaceholder')}
           />
           <TextField
             fullWidth
-            label="Valor do desconto (R$)"
+            label={t('form.discountValue')}
             type="number"
             value={newDiscountValue}
             onChange={(e) => setNewDiscountValue(e.target.value)}
             margin="normal"
-            placeholder="10.00"
+            placeholder={t('form.discountValuePlaceholder')}
             slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
           />
           <Box sx={{ mt: 2, mb: 1 }}>
             <DateField
-              label="Valido ate"
+              label={t('form.validTo')}
               value={newValidTo || null}
               onChange={(value) => setNewValidTo(value ?? '')}
               min={format(new TZDate(new Date(), TIME_ZONE), 'yyyy-MM-dd')}
@@ -343,7 +351,7 @@ export default function AdminCouponsPage() {
           </Box>
           <TextField
             fullWidth
-            label="Descricao (opcional)"
+            label={t('form.description')}
             value={newDescription}
             onChange={(e) => setNewDescription(e.target.value)}
             margin="normal"
@@ -353,14 +361,14 @@ export default function AdminCouponsPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)} disabled={saving}>
-            Cancelar
+            {tCommon('cancel')}
           </Button>
           <Button
             onClick={handleCreateCoupon}
             variant="contained"
             disabled={saving || !newCode.trim() || !newDiscountValue || !newValidTo}
           >
-            {saving ? <CircularProgress size={20} /> : 'Criar Cupom'}
+            {saving ? <CircularProgress size={20} /> : t('form.submit')}
           </Button>
         </DialogActions>
       </Dialog>

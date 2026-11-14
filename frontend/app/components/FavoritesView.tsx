@@ -3,18 +3,24 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Box, Pagination, Typography } from '@mui/material';
+import { useTranslations } from 'next-intl';
 import { useFavorites } from '../contexts/FavoritesContext';
 import type { Auction } from '@/lib/auction';
 import { useAuth } from '../contexts/AuthContext';
 import AuctionCard from './AuctionCard';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import { formatCount } from '@/lib/numbers';
 import { pageCount, type Paginated } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
 
 // AR-35: the favourites list is paginated; this is how many cards one page shows.
 const PAGE_SIZE = 20;
 
+// decoration, not copy (DS-20)
+const EMPTY_ICON = '💔';
+
 export default function FavoritesView() {
+  const t = useTranslations('favorites');
   const { favoriteCodes, loading: favoritesLoading, toggleFavorite } = useFavorites();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -85,12 +91,14 @@ export default function FavoritesView() {
   if (total === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 12 }}>
-        <Box sx={{ fontSize: 60, mb: 2 }}>💔</Box>
+        <Box aria-hidden sx={{ fontSize: 60, mb: 2 }}>
+          {EMPTY_ICON}
+        </Box>
         <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-          Nenhum leilão favorito
+          {t('emptyTitle')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Marque leilões como favoritos para acompanhá-los aqui
+          {t('emptyHint')}
         </Typography>
       </Box>
     );
@@ -112,11 +120,10 @@ export default function FavoritesView() {
       {/* Page Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
-          Leilões Favoritos
+          {t('title')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          {total} {total === 1 ? 'leilão marcado' : 'leilões marcados'} como{' '}
-          {total === 1 ? 'favorito' : 'favoritos'}
+          {t('summary', { count: total, formatted: formatCount(total) })}
         </Typography>
       </Box>
 

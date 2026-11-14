@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense } from 'react';
+import { useTranslations } from 'next-intl';
 import { Box, Container, CircularProgress } from '@mui/material';
 import RequireRole from '@/app/components/RequireRole';
 import RemindersPage from '@/app/components/RemindersPage';
@@ -23,8 +24,9 @@ function RemindersPageLoading() {
 }
 
 export default function Reminders() {
+  const t = useTranslations('reminders');
   return (
-    <RequireRole minimumRole="standard" featureName="Lembretes">
+    <RequireRole minimumRole="standard" featureName={t('featureName')}>
       <Suspense fallback={<RemindersPageLoading />}>
         {/* #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar */}
         <Box sx={{ pt: 2, pb: 4 }}>

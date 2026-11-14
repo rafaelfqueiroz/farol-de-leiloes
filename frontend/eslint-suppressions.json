@@ -5,25 +5,16 @@
     },
     "react-hooks/set-state-in-effect": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 12
     }
   },
   "app/(shell)/(authenticated)/plans/page.tsx": {
     "react-hooks/immutability": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 8
     }
   },
   "app/(shell)/(authenticated)/profile/page.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 12
     }
   },
   "app/(shell)/(authenticated)/search/page.tsx": {
@@ -35,9 +26,6 @@
     },
     "react-hooks/set-state-in-effect": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 2
     }
   },
   "app/(shell)/auction/[code]/AuctionDetailClient.tsx": {
@@ -46,19 +34,6 @@
     },
     "no-restricted-syntax": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 22
-    }
-  },
-  "app/(shell)/auction/[code]/not-found.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "app/auth/callback/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 2
     }
   },
   "app/components/AuctionCard.tsx": {
@@ -67,47 +42,20 @@
     },
     "no-restricted-syntax": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 9
     }
   },
   "app/components/AuctionList.tsx": {
     "no-restricted-syntax": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 11
     }
   },
   "app/components/FavoritesView.tsx": {
     "no-restricted-syntax": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 5
     }
   },
   "app/components/LandingPage.tsx": {
     "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 22
-    }
-  },
-  "app/components/ReminderButton.tsx": {
-    "react/jsx-no-literals": {
-      "count": 10
-    }
-  },
-  "app/components/RemindersPage.tsx": {
-    "react/jsx-no-literals": {
-      "count": 21
-    }
-  },
-  "app/components/RequireRole.tsx": {
-    "react/jsx-no-literals": {
       "count": 2
     }
   },
@@ -123,16 +71,10 @@
     },
     "react-hooks/set-state-in-effect": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 16
     }
   },
   "app/components/SupportPage.tsx": {
     "no-restricted-syntax": {
-      "count": 5
-    },
-    "react/jsx-no-literals": {
       "count": 5
     }
   },
@@ -162,55 +104,16 @@
   "app/login/page.tsx": {
     "@next/next/no-location-assign-relative-destination": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 5
-    }
-  },
-  "app/not-found.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "app/plans/cancel/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "app/plans/success/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "app/register/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
     }
   },
   "app/reset-password/[token]/page.tsx": {
     "jsx-a11y/no-autofocus": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 3
     }
   },
   "app/reset-password/page.tsx": {
     "jsx-a11y/no-autofocus": {
       "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 5
-    }
-  },
-  "app/verify-email/[token]/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 8
-    }
-  },
-  "app/verify-email/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 6
     }
   }
 }

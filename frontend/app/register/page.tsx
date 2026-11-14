@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Card,
@@ -17,9 +18,13 @@ import { useAuth } from '../contexts/AuthContext';
 import Logo from '@/app/components/patterns/Logo';
 import { useApiErrorMessage } from '@/lib/api-error';
 
+// The shortest password the form accepts
+const MIN_PASSWORD_LENGTH = 6;
+
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
+  const t = useTranslations('register');
   const apiErrorMessage = useApiErrorMessage();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -33,12 +38,12 @@ export default function RegisterPage() {
     setError('');
 
     if (password !== confirmPassword) {
-      setError('As senhas não coincidem');
+      setError(t('errors.passwordMismatch'));
       return;
     }
 
-    if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres');
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(t('errors.passwordTooShort', { min: MIN_PASSWORD_LENGTH }));
       return;
     }
 
@@ -73,7 +78,7 @@ export default function RegisterPage() {
               <Logo variant="lockup" size={40} />
             </Box>
             <Typography component="h1" variant="body1" color="text.secondary">
-              Crie sua conta
+              {t('subtitle')}
             </Typography>
           </Box>
 
@@ -86,7 +91,7 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit}>
             <TextField
               fullWidth
-              label="Nome"
+              label={t('name')}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -96,7 +101,7 @@ export default function RegisterPage() {
 
             <TextField
               fullWidth
-              label="Email"
+              label={t('email')}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -107,19 +112,19 @@ export default function RegisterPage() {
 
             <TextField
               fullWidth
-              label="Senha"
+              label={t('password')}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               sx={{ mb: 2 }}
               autoComplete="new-password"
-              helperText="Mínimo de 6 caracteres"
+              helperText={t('passwordHelper', { min: MIN_PASSWORD_LENGTH })}
             />
 
             <TextField
               fullWidth
-              label="Confirmar Senha"
+              label={t('confirmPassword')}
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -135,19 +140,22 @@ export default function RegisterPage() {
               disabled={loading}
               sx={{ mb: 2, py: 1.5 }}
             >
-              {loading ? 'Criando conta...' : 'Cadastrar'}
+              {loading ? t('submitting') : t('submit')}
             </Button>
 
             <Box sx={{ textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary">
-                Já tem uma conta?{' '}
-                <MuiLink
-                  component={Link}
-                  href="/login"
-                  sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}
-                >
-                  Entrar
-                </MuiLink>
+                {t.rich('hasAccount', {
+                  link: (chunks) => (
+                    <MuiLink
+                      component={Link}
+                      href="/login"
+                      sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}
+                    >
+                      {chunks}
+                    </MuiLink>
+                  ),
+                })}
               </Typography>
             </Box>
           </form>

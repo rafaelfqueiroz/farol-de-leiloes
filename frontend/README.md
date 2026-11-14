@@ -104,6 +104,9 @@ AI search: `app/api/chat/route.ts` calls the backend's `/ai/extract-params`, the
 - The frontend produces two codes itself: `UNKNOWN` and `BACKEND_UNAVAILABLE` (`FRONTEND_ERROR_CODES`). `UNAUTHENTICATED` comes from the BFF.
 - `test/structural/error-catalogue.test.ts` reads `backend/src/common/errors/codes.ts` and fails when a backend code has no `errors.<CODE>` message (AR-39).
 - Locale is pt-BR only (`i18n/config.ts`); there is no locale routing.
+- Every user-facing string comes from `messages/pt-BR.json` through `useTranslations` / `getTranslations` (DS-20, AR-52); `react/jsx-no-literals` and a copy-props selector in `eslint.config.mjs` fail the build on a literal, with no suppressions. Keys are typed (`i18n/app-config.d.ts`), so a missing key is a compile error, and tests render with `renderWithProviders`, which throws on a missing key.
+- Add a message under the area's namespace (`landing.hero.title`); words shared by several areas go in `common` or `plan`. One ICU message per sentence (`{count, plural, …}`, `t.rich` for links and bold). `test/structural/catalogue-vocabulary.test.ts` guards the one-wording-per-concept rule (DS-28).
+- Numbers and dates are rendered only through the shared formatters (DS-29): `Money` / `formatMoney`, `DateText` / `formatDate`, `formatPercent` (`lib/money.ts`), `formatArea` and `formatCount` (`lib/numbers.ts`). No inline `toLocaleString`, `Intl` or `toFixed`.
 
 ## Project structure
 

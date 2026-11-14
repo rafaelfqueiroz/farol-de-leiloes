@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Typography,
@@ -19,41 +20,18 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SendIcon from '@mui/icons-material/Send';
 import { ApiError, readApiError, useApiErrorMessage } from '@/lib/api-error';
 
-const faqItems = [
-  {
-    question: 'Como funciona o leilão de imóveis da Caixa?',
-    answer:
-      'Os leilões de imóveis da Caixa Econômica Federal são realizados para venda de imóveis retomados. Você pode participar fazendo lances online durante o período de licitação. Os imóveis podem ser adquiridos com recursos próprios, FGTS ou financiamento.',
-  },
-  {
-    question: 'Quais são os planos disponíveis?',
-    answer:
-      'Oferecemos o plano Gratuito com acesso básico à busca, o plano Standard com acesso a favoritos, lembretes e filtros salvos, e o plano Premium com todos os recursos incluindo busca por IA e alertas prioritários.',
-  },
-  {
-    question: 'Como configuro lembretes para leilões?',
-    answer:
-      'Acesse a página de detalhes do imóvel desejado e clique em "Criar Lembrete". Você pode escolher ser notificado por email. É necessário ter o plano Standard ou superior.',
-  },
-  {
-    question: 'Como funciona a busca por IA?',
-    answer:
-      'Nossa busca inteligente permite que você descreva o imóvel desejado em linguagem natural. Por exemplo: "apartamento 2 quartos em São Paulo até 200 mil". O sistema interpreta sua busca e encontra os melhores resultados.',
-  },
-  {
-    question: 'Posso cancelar minha assinatura a qualquer momento?',
-    answer:
-      'Sim, você pode cancelar sua assinatura a qualquer momento através da página de Perfil. O acesso aos recursos premium continuará até o fim do período já pago.',
-  },
-  {
-    question: 'Como entro em contato com o suporte?',
-    answer:
-      'Você pode enviar uma solicitação através do formulário abaixo. Nossa equipe responderá no email cadastrado em sua conta.',
-  },
-];
+const FAQ_KEYS = [
+  'howAuctionsWork',
+  'plans',
+  'reminders',
+  'aiSearch',
+  'cancel',
+  'contact',
+] as const;
 
 export default function SupportPage() {
   const apiErrorMessage = useApiErrorMessage();
+  const t = useTranslations('support');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -88,7 +66,7 @@ export default function SupportPage() {
 
       setSnackbar({
         open: true,
-        message: 'Solicitação de suporte enviada com sucesso!',
+        message: t('form.success'),
         severity: 'success',
       });
       setTitle('');
@@ -109,11 +87,10 @@ export default function SupportPage() {
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" fontWeight={700} gutterBottom>
-          Suporte
+          {t('title')}
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Encontre respostas para as perguntas mais frequentes ou envie uma solicitação para nossa
-          equipe.
+          {t('intro')}
         </Typography>
       </Box>
 
@@ -122,13 +99,13 @@ export default function SupportPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <HelpOutlineIcon sx={{ color: 'primary.main' }} />
           <Typography variant="h6" fontWeight={600}>
-            Perguntas frequentes
+            {t('faqHeading')}
           </Typography>
         </Box>
 
-        {faqItems.map((item, index) => (
+        {FAQ_KEYS.map((key) => (
           <Accordion
-            key={index}
+            key={key}
             sx={{
               '&:before': { display: 'none' },
               boxShadow: 'none',
@@ -141,10 +118,10 @@ export default function SupportPage() {
             }}
           >
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography fontWeight={500}>{item.question}</Typography>
+              <Typography fontWeight={500}>{t(`faq.${key}.question`)}</Typography>
             </AccordionSummary>
             <AccordionDetails>
-              <Typography color="text.secondary">{item.answer}</Typography>
+              <Typography color="text.secondary">{t(`faq.${key}.answer`)}</Typography>
             </AccordionDetails>
           </Accordion>
         ))}
@@ -163,16 +140,16 @@ export default function SupportPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
           <SendIcon sx={{ color: 'primary.main' }} />
           <Typography variant="h6" fontWeight={600}>
-            Enviar solicitação
+            {t('form.heading')}
           </Typography>
         </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Descreva seu problema ou dúvida e nossa equipe entrará em contato pelo email da sua conta.
+          {t('form.description')}
         </Typography>
 
         <Box component="form" onSubmit={handleSubmit}>
           <TextField
-            label="Título"
+            label={t('form.title')}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             fullWidth
@@ -181,7 +158,7 @@ export default function SupportPage() {
             sx={{ mb: 2 }}
           />
           <TextField
-            label="Descrição"
+            label={t('form.body')}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             fullWidth
@@ -197,7 +174,7 @@ export default function SupportPage() {
             disabled={loading || !title.trim() || !description.trim()}
             startIcon={loading ? <CircularProgress size={18} /> : <SendIcon />}
           >
-            {loading ? 'Enviando...' : 'Enviar solicitação'}
+            {loading ? t('form.submitting') : t('form.submit')}
           </Button>
         </Box>
       </Paper>
