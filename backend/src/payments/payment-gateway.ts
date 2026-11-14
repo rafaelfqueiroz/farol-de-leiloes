@@ -2,7 +2,7 @@
 // CouponsService) depend on this class only; StripePaymentGateway is the one adapter, the only
 // file that imports `stripe` (a structural test holds it to that) and the only place money
 // becomes integer centavos (AR-20). Tests use FakePaymentGateway (TS-03).
-import type { Decimal } from '../common/money/money';
+import type { Decimal } from '../common/money/money.js';
 
 export interface CreateCustomerInput {
   email: string;

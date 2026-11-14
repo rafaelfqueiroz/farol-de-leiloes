@@ -5,21 +5,21 @@
 // expected values are hand-computed (TS-04).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createConnection, type Connection, mongo, Types } from 'mongoose';
-import { toAuction } from '../../src/auctions/auction.mapper';
+import { toAuction } from '../../src/auctions/auction.mapper.js';
 import {
   conditionalUpdate,
   convertMoneyToDecimal128,
-} from '../../src/migrations/0001-money-decimal128.migration';
+} from '../../src/migrations/0001-money-decimal128.migration.js';
 import {
   PriceBoundConflictError,
   renameSavedFilterPriceBounds,
-} from '../../src/migrations/0002-saved-filter-price-bounds.migration';
-import type { Migration } from '../../src/migrations/migration';
-import { MIGRATIONS_COLLECTION, mongoMigrationLog } from '../../src/migrations/migration-log';
-import { MigrationFailedError, runMigrations } from '../../src/migrations/migration-runner';
-import { MIGRATIONS } from '../../src/migrations/registry';
-import { FakeClock } from '../fakes/fake-clock';
-import { useTestDatabase } from '../support/test-database';
+} from '../../src/migrations/0002-saved-filter-price-bounds.migration.js';
+import type { Migration } from '../../src/migrations/migration.js';
+import { MIGRATIONS_COLLECTION, mongoMigrationLog } from '../../src/migrations/migration-log.js';
+import { MigrationFailedError, runMigrations } from '../../src/migrations/migration-runner.js';
+import { MIGRATIONS } from '../../src/migrations/registry.js';
+import { FakeClock } from '../fakes/fake-clock.js';
+import { useTestDatabase } from '../support/test-database.js';
 
 const NOW = new Date('2026-11-03T12:00:00.000Z');
 const LATER = new Date('2026-11-04T12:00:00.000Z');

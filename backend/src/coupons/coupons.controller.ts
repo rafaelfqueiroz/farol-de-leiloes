@@ -7,18 +7,18 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { CouponsService } from './coupons.service';
-import { CreateCouponDto } from './dto/create-coupon.dto';
-import { ValidateCouponDto } from './dto/validate-coupon.dto';
-import { CouponResponseDto, CouponValidationResponseDto } from './dto/coupon-response.dto';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
-import { ErrorResponseDto } from '../common/errors/error-response.dto';
-import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator';
-import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
-import { mapPage, type Paginated } from '../common/pagination/paginated';
+import { CouponsService } from './coupons.service.js';
+import { CreateCouponDto } from './dto/create-coupon.dto.js';
+import { ValidateCouponDto } from './dto/validate-coupon.dto.js';
+import { CouponResponseDto, CouponValidationResponseDto } from './dto/coupon-response.dto.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
+import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
+import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
+import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator.js';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto.js';
+import { mapPage, type Paginated } from '../common/pagination/paginated.js';
 
 const ADMIN_ONLY = {
   description: 'FORBIDDEN or PLAN_NOT_ALLOWED: admins only',

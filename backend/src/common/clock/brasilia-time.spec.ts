@@ -8,7 +8,7 @@ import {
   endOfBrasiliaDay,
   isSameBrasiliaDay,
   startOfBrasiliaDay,
-} from './brasilia-time';
+} from './brasilia-time.js';
 
 const utc = (iso: string) => new Date(iso);
 

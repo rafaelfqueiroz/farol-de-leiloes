@@ -6,12 +6,12 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { getConnectionToken } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
-import { Clock } from '../common/clock/clock';
-import { errorMessage } from '../common/error-message';
-import { mongoMigrationLog } from './migration-log';
-import { MigrationFailedError, runMigrations } from './migration-runner';
-import { MigrationsModule } from './migrations.module';
-import { MIGRATIONS } from './registry';
+import { Clock } from '../common/clock/clock.js';
+import { errorMessage } from '../common/error-message.js';
+import { mongoMigrationLog } from './migration-log.js';
+import { MigrationFailedError, runMigrations } from './migration-runner.js';
+import { MigrationsModule } from './migrations.module.js';
+import { MIGRATIONS } from './registry.js';
 
 async function migrate(): Promise<void> {
   const app = await NestFactory.createApplicationContext(MigrationsModule);

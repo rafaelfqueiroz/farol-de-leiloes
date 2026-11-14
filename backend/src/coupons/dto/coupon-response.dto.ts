@@ -1,7 +1,7 @@
 // AR-36: a coupon leaves the API through these classes, each field copied explicitly.
 import { ApiProperty } from '@nestjs/swagger';
-import { Coupon } from '../interfaces/coupon.interface';
-import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto';
+import { Coupon } from '../interfaces/coupon.interface.js';
+import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto.js';
 
 export class CouponResponseDto {
   @ApiProperty({ type: String })

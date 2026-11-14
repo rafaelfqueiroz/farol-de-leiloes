@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Clock, SystemClock } from './clock/clock';
-import { JobExecution, JobExecutionSchema } from './schemas/job-execution.schema';
-import { JobExecutionService } from './services/job-execution.service';
+import { Clock, SystemClock } from './clock/clock.js';
+import { JobExecution, JobExecutionSchema } from './schemas/job-execution.schema.js';
+import { JobExecutionService } from './services/job-execution.service.js';
 
 @Module({
   imports: [MongooseModule.forFeature([{ name: JobExecution.name, schema: JobExecutionSchema }])],

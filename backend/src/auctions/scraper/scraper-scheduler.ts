@@ -8,17 +8,17 @@ import {
   AuctionDocument,
   AuctionFile,
   StoredPhase,
-} from '../schemas/auction.schema';
-import { fetchAndScrapeDetails } from './details-scraper';
-import { JobExecutionService } from '../../common/services/job-execution.service';
-import { RunMode } from '../../common/job-execution';
-import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
-import { StorageService } from '../../storage/storage.service';
-import { serverOperators } from '../../common/mongo/query-safety';
-import { Clock } from '../../common/clock/clock';
-import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time';
-import { InJobContext, runInJobContext } from '../../common/observability/job-context';
-import { jobErrorCode } from '../../common/services/job-error-code';
+} from '../schemas/auction.schema.js';
+import { fetchAndScrapeDetails } from './details-scraper.js';
+import { JobExecutionService } from '../../common/services/job-execution.service.js';
+import { RunMode } from '../../common/job-execution.js';
+import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config.js';
+import { StorageService } from '../../storage/storage.service.js';
+import { serverOperators } from '../../common/mongo/query-safety.js';
+import { Clock } from '../../common/clock/clock.js';
+import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time.js';
+import { InJobContext, runInJobContext } from '../../common/observability/job-context.js';
+import { jobErrorCode } from '../../common/services/job-error-code.js';
 
 export const DETAILS_SCRAPER_JOB = 'auction-details-scraper';
 

@@ -14,7 +14,7 @@ Where a rule describes code that does not exist yet, the follow-up issue that bu
 | Concern | Choice |
 |---|---|
 | Language | TypeScript, `strict` on both sides (DV-01) |
-| Backend | NestJS 12 on Express 5 · Mongoose · Passport (local + Google). Nest 12 is ESM-only; the CommonJS build loads it through Node's `require(esm)` |
+| Backend | NestJS 12 on Express 5 · Mongoose · Passport (local + Google). Native ESM (`"type": "module"`, NodeNext; DEVELOPMENT §1, #63), so Nest 12 and puppeteer 25, both ESM-only, load as they are |
 | Database | MongoDB 8, on Atlas in production ([ADR-002](../adr/002-hosting-and-environments.md)). The target tier, Flex, runs 8.0 or newer and upgrades itself, so the driver stays on a version the [compatibility table](https://www.mongodb.com/docs/drivers/compatibility/) marks fully supported on both 8.0 and 9.0: today Mongoose 9 with driver 7.8 |
 | Frontend | Next.js App Router · React · MUI (DESIGN.md) · next-intl (pt-BR) |
 | Money | `Decimal128` in MongoDB, `decimal.js` in code, strings over JSON (§5) |
@@ -168,7 +168,7 @@ Where it lives (#74): the business settings are `backend/src/config/business.con
 | **AR-47** | Sentry runs on backend and frontend with request bodies, headers, cookies and query strings scrubbed (`sendDefaultPii: false` plus a `beforeSend` scrubber). Sentry captures them by default, which would break SPEC-002 BR-002-28 on day one. |
 | **AR-48** | `GET /api/health` reports database reachability and the outcome and age of the last Caixa import. It is what the availability probe (SPEC-003 BR-003-02) and the deploy health check use. |
 
-Where it lives (#36): the logger options, the request and job correlation context (`@InJobContext` on every `@Cron`, enforced by `test/structural/cron-job-context.spec.ts`), the user hash and the Sentry scrubber are in `backend/src/common/observability/`; `src/instrument.ts` initialises Sentry before anything else loads. Sentry SDK v11 replaced the `sendDefaultPii` flag with `dataCollection`, which is set to collect no personal data (AR-47's intent). The health endpoint is `backend/src/health/`, its fields are explained in [the health-check runbook](../runbooks/health-check.md). Every job run, failed ones included, is recorded in `jobexecutions` with a `status` and, when failed, a stable `errorCode` (AR-03, SC-15).
+Where it lives (#36): the logger options, the request and job correlation context (`@InJobContext` on every `@Cron`, enforced by `test/structural/cron-job-context.spec.ts`), the user hash and the Sentry scrubber are in `backend/src/common/observability/`; `src/instrument.ts` initialises Sentry before anything else loads (preloaded with `node --import ./dist/instrument.js`, since the backend is native ESM; DEVELOPMENT §1). Sentry SDK v11 replaced the `sendDefaultPii` flag with `dataCollection`, which is set to collect no personal data (AR-47's intent). The health endpoint is `backend/src/health/`, its fields are explained in [the health-check runbook](../runbooks/health-check.md). Every job run, failed ones included, is recorded in `jobexecutions` with a `status` and, when failed, a stable `errorCode` (AR-03, SC-15).
 
 ## 12. Frontend structure
 

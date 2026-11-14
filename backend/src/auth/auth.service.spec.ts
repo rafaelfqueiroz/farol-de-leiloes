@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AuthService } from './auth.service';
-import { DomainError } from '../common/errors/domain-error';
-import type { EmailService } from '../email/email.service';
-import { SUBSCRIPTION_STATUSES } from '../users/subscription-status';
-import type { UserAccount } from '../users/user-account';
-import type { UsersService } from '../users/users.service';
-import { FakeEmailSender } from '../../test/fakes/fake-email-sender';
-import { FakeUsersService, type FakeAccount } from '../../test/fakes/fake-users-service';
+import { AuthService } from './auth.service.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import type { EmailService } from '../email/email.service.js';
+import { SUBSCRIPTION_STATUSES } from '../users/subscription-status.js';
+import type { UserAccount } from '../users/user-account.js';
+import type { UsersService } from '../users/users.service.js';
+import { FakeEmailSender } from '../../test/fakes/fake-email-sender.js';
+import { FakeUsersService, type FakeAccount } from '../../test/fakes/fake-users-service.js';
 
 type ServiceDeps = ConstructorParameters<typeof AuthService>;
 const ID = '64b000000000000000000001';

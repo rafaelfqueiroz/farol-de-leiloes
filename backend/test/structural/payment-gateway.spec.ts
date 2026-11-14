@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'fs';
 import { join, relative } from 'path';
 
-const SRC = join(__dirname, '..', '..', 'src');
+const SRC = join(import.meta.dirname, '..', '..', 'src');
 const ADAPTER = 'payments/adapters/stripe-payment-gateway.ts';
 
 // `from 'stripe'`, `from "stripe/…"`, `require('stripe')`, `import('stripe')`.

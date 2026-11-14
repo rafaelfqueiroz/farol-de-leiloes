@@ -2,16 +2,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
-import { Clock } from '../common/clock/clock';
-import { JobExecutionService } from '../common/services/job-execution.service';
-import type { JobOutcome } from '../common/job-execution';
-import { AUCTIONS_IMPORT_JOB } from '../auctions/importer/import-job';
+import { Clock } from '../common/clock/clock.js';
+import { JobExecutionService } from '../common/services/job-execution.service.js';
+import type { JobOutcome } from '../common/job-execution.js';
+import { AUCTIONS_IMPORT_JOB } from '../auctions/importer/import-job.js';
 import {
   assessLastImport,
   healthReport,
   type DatabaseStatus,
   type HealthReport,
-} from './domain/health-report';
+} from './domain/health-report.js';
 
 /** A probe answers within seconds: a ping slower than this counts as the database being down. */
 export const DB_PING_TIMEOUT_MS = 2000;

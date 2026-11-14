@@ -1,13 +1,13 @@
 // AR-46: the per-request correlation id (request-context.ts).
 import { describe, expect, it } from 'vitest';
 import type { IncomingHttpHeaders } from 'node:http';
-import { logContextFields } from './log-context';
+import { logContextFields } from './log-context.js';
 import {
   REQUEST_ID_HEADER,
   requestContextMiddleware,
   resolveRequestId,
   SAFE_REQUEST_ID,
-} from './request-context';
+} from './request-context.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 

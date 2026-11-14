@@ -30,6 +30,9 @@ Effort goes where a bug does real damage. In this product that is three places:
 | **Component** | jsdom, real theme, real pt-BR catalogue | Vitest + Testing Library + `vitest-axe` | next to source, `*.test.tsx` | ms |
 | **E2E** | Full stack in Compose, providers stubbed | Playwright + `@axe-core/playwright` | `frontend/e2e/` | minutes |
 | **Structural** | The repository itself (configs, tokens, versions) | Vitest (project `structural`) | `backend/test/structural/`, `frontend/test/structural/` | ms |
+| **Dist smoke** | The compiled `backend/dist/`, loaded by a plain `node` process | Vitest (project `smoke`), after `npm run build` | `backend/test/smoke/` | seconds |
+
+**Why a dist smoke test.** The backend runs as native ESM (DEVELOPMENT §1). Neither `tsc` nor Vitest loads modules the way Node does: Vitest's interop fills in a CommonJS package's namespace, so `import * as Papa from 'papaparse'` passed every spec and was undefined in production. `test/smoke/dist-import-graph.spec.ts` loads every compiled module (all but the two entry points, `main.js` and `migrations/run.js`, which start the app as they load) in a child `node` process with the fake environment of `test/support/test-env.ts`, and fails on any module Node cannot link or evaluate; `test/structural/esm-interop.spec.ts` covers namespace imports, which link even when the member they read is missing. `npm run test:smoke` builds first; CI runs it in `backend-build`.
 
 A controller's HTTP contract that needs no database — query-string parsing, the raw body of the Stripe webhook — is a unit spec next to the controller: a Nest testing module with its services stubbed, driven with `supertest` (e.g. `auctions.controller.spec.ts`). supertest binds an ephemeral loopback port in the test process, so nothing leaves the machine (TS-01, TS-07). Anything that needs MongoDB is an integration spec.
 
@@ -149,6 +152,7 @@ The module-boundary regressions in #51 measured 65.39% lines / 61.73% branches a
 | Typecheck | — (too slow per commit) | `typecheck` | `typecheck` | ✅ |
 | Unit + component tests | — | `test` | `test` | with coverage ✅ |
 | Integration + isolation | — | — (needs Docker; CI) | `test:integration`, `test:isolation` on demand, Docker running | ✅ |
+| Build + dist smoke (backend) | — | — | `test:smoke` on demand | ✅ (`backend-build`) |
 | Coverage gate | — | — | `test:cov` on demand | ✅ |
 | E2E | — | — | `test:e2e` on demand | ✅ (with #3) |
 | `npm audit` (high+) | — | — | — | ✅ |
@@ -201,5 +205,5 @@ SPEC-003 sets the budgets (BR-003-06 to BR-003-10): measured against the referen
 | E2E journeys, desktop + 360 px, with axe | ✅ |
 | Structural checks (Node pin, tokens, env example) | ✅ |
 | `npm audit` high+, CodeQL high+ | ✅ |
-| Build, both packages | ✅ |
+| Build, both packages; the backend's compiled output loads under plain Node (dist smoke) | ✅ |
 | Performance budgets | Release candidates (deferred, BL-002) |

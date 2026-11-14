@@ -20,11 +20,11 @@ import { Test } from '@nestjs/testing';
 import { DECORATORS, type OpenAPIObject } from '@nestjs/swagger';
 import { getMetadataStorage } from 'class-validator';
 import request from 'supertest';
-import { configureApp } from './app.setup';
-import { IS_PUBLIC } from './auth/decorators/public.decorator';
+import { configureApp } from './app.setup.js';
+import { IS_PUBLIC } from './auth/decorators/public.decorator.js';
 import { Reflector } from '@nestjs/core';
-import { createOpenApiDocument } from './openapi';
-import { testConfigService } from '../test/support/test-env';
+import { createOpenApiDocument } from './openapi.js';
+import { testConfigService } from '../test/support/test-env.js';
 
 type Operation = OpenAPIObject['paths'][string]['get'] & object;
 type Schema = Record<string, unknown>;
@@ -56,11 +56,13 @@ function jsonSchemaOf(response: unknown): Schema | undefined {
 }
 
 async function findControllers(): Promise<Type<unknown>[]> {
-  const files = (readdirSync(__dirname, { recursive: true }) as string[]).filter((file) =>
+  const files = (readdirSync(import.meta.dirname, { recursive: true }) as string[]).filter((file) =>
     file.endsWith('.controller.ts'),
   );
   const modules = await Promise.all(
-    files.map((file) => import(join(__dirname, file)) as Promise<Record<string, unknown>>),
+    files.map(
+      (file) => import(join(import.meta.dirname, file)) as Promise<Record<string, unknown>>,
+    ),
   );
   return modules
     .flatMap((exports) => Object.values(exports))

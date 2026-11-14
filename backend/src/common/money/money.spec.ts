@@ -1,6 +1,6 @@
 // AR-17..AR-19, TS-04, TS-09, TS-10: the money primitives, with hand-computed expectations.
 import { describe, expect, it } from 'vitest';
-import { Decimal, isMoneyString, parseMoney, toMoneyString } from './money';
+import { Decimal, isMoneyString, parseMoney, toMoneyString } from './money.js';
 
 describe('TS-10: no drift in a money path', () => {
   it('sums 10,000 × "0.1" to exactly "1000.00" (a float sum drifts)', () => {

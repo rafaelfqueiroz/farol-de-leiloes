@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as bcrypt from 'bcrypt';
-import { DomainError } from '../common/errors/domain-error';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UsersService } from './users.service';
-import { FakeClock, HOUR } from '../../test/fakes/fake-clock';
-import { serverOperators } from '../common/mongo/query-safety';
+import { DomainError } from '../common/errors/domain-error.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
+import { UsersService } from './users.service.js';
+import { FakeClock, HOUR } from '../../test/fakes/fake-clock.js';
+import { serverOperators } from '../common/mongo/query-safety.js';
 
 type ServiceDeps = ConstructorParameters<typeof UsersService>;
 

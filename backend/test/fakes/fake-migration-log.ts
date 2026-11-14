@@ -1,4 +1,4 @@
-import type { MigrationLog } from '../../src/migrations/migration-log';
+import type { MigrationLog } from '../../src/migrations/migration-log.js';
 
 /**
  * TS-03: an in-memory fake of the `MigrationLog` port. Like the MongoDB log, recording an id

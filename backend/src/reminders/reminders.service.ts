@@ -7,24 +7,24 @@ import {
   ReminderDocument,
   ReminderChannel,
   ReminderStatus,
-} from './schemas/reminder.schema';
-import { NotificationLog, NotificationLogDocument } from './schemas/notification-log.schema';
-import { AuctionsService } from '../auctions/auctions.service';
-import { UsersService } from '../users/users.service';
-import { CreateReminderDto } from './dto/create-reminder.dto';
-import { UpdateReminderDto } from './dto/update-reminder.dto';
-import { AuctionRecord } from '../auctions/interfaces/auction.interface';
-import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface';
-import { DomainError } from '../common/errors/domain-error';
-import { serverOperators } from '../common/mongo/query-safety';
-import { Clock } from '../common/clock/clock';
-import { inBrasilia } from '../common/clock/brasilia-time';
+} from './schemas/reminder.schema.js';
+import { NotificationLog, NotificationLogDocument } from './schemas/notification-log.schema.js';
+import { AuctionsService } from '../auctions/auctions.service.js';
+import { UsersService } from '../users/users.service.js';
+import { CreateReminderDto } from './dto/create-reminder.dto.js';
+import { UpdateReminderDto } from './dto/update-reminder.dto.js';
+import { AuctionRecord } from '../auctions/interfaces/auction.interface.js';
+import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { serverOperators } from '../common/mongo/query-safety.js';
+import { Clock } from '../common/clock/clock.js';
+import { inBrasilia } from '../common/clock/brasilia-time.js';
 import {
   type PageRequest,
   type Paginated,
   paginated,
   skipOf,
-} from '../common/pagination/paginated';
+} from '../common/pagination/paginated.js';
 
 // The auction fields a reminder is created against.
 type ReminderTarget = Pick<AuctionRecord, 'phases'> & { _id: Types.ObjectId };

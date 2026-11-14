@@ -1,18 +1,18 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { captureException } from '@sentry/nestjs';
-import { AuctionsService } from '../auctions.service';
-import { normalizeRows, parseCsv } from './parser';
-import { PhaseModality } from '../schemas/auction.schema';
-import type { Phase } from '../interfaces/auction.interface';
-import { JobExecutionService } from '../../common/services/job-execution.service';
-import { RunMode } from '../../common/job-execution';
-import { CsvCacheService } from './csv-cache.service';
-import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
-import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time';
-import { InJobContext, runInJobContext } from '../../common/observability/job-context';
-import { jobErrorCode } from '../../common/services/job-error-code';
-import { AUCTIONS_IMPORT_JOB } from './import-job';
+import { AuctionsService } from '../auctions.service.js';
+import { normalizeRows, parseCsv } from './parser.js';
+import { PhaseModality } from '../schemas/auction.schema.js';
+import type { Phase } from '../interfaces/auction.interface.js';
+import { JobExecutionService } from '../../common/services/job-execution.service.js';
+import { RunMode } from '../../common/job-execution.js';
+import { CsvCacheService } from './csv-cache.service.js';
+import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config.js';
+import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time.js';
+import { InJobContext, runInJobContext } from '../../common/observability/job-context.js';
+import { jobErrorCode } from '../../common/services/job-error-code.js';
+import { AUCTIONS_IMPORT_JOB } from './import-job.js';
 
 /** Delay of the optional startup import (IMPORT_ON_START_UP), so boot finishes first. */
 export const STARTUP_IMPORT_DELAY_MS = 5000;

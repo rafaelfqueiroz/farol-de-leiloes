@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
-import { DomainError } from '../common/errors/domain-error';
-import { RemindersService } from './reminders.service';
-import type { CreateReminderDto } from './dto/create-reminder.dto';
-import { FakeClock } from '../../test/fakes/fake-clock';
-import { serverOperators } from '../common/mongo/query-safety';
-import { ReminderChannel, ReminderStatus } from './schemas/reminder.schema';
+import { DomainError } from '../common/errors/domain-error.js';
+import { RemindersService } from './reminders.service.js';
+import type { CreateReminderDto } from './dto/create-reminder.dto.js';
+import { FakeClock } from '../../test/fakes/fake-clock.js';
+import { serverOperators } from '../common/mongo/query-safety.js';
+import { ReminderChannel, ReminderStatus } from './schemas/reminder.schema.js';
 
 type ServiceDeps = ConstructorParameters<typeof RemindersService>;
 

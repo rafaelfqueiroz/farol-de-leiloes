@@ -17,18 +17,18 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { FavoritesService } from './favorites.service';
-import { AddFavoriteDto } from './dto/add-favorite.dto';
-import { FavoriteCodesResponseDto } from './dto/favorite-codes-response.dto';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
-import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
-import { AuctionResponseDto } from '../auctions/dto/auction-response.dto';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
-import { ErrorResponseDto } from '../common/errors/error-response.dto';
-import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator';
-import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
-import { mapPage, type Paginated } from '../common/pagination/paginated';
+import { FavoritesService } from './favorites.service.js';
+import { AddFavoriteDto } from './dto/add-favorite.dto.js';
+import { FavoriteCodesResponseDto } from './dto/favorite-codes-response.dto.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
+import { AuctionResponseDto } from '../auctions/dto/auction-response.dto.js';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
+import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
+import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator.js';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto.js';
+import { mapPage, type Paginated } from '../common/pagination/paginated.js';
 
 @ApiTags('favorites')
 @ApiErrorResponses()

@@ -1,5 +1,5 @@
-import { Auction } from '../interfaces/auction.interface';
-import { PhaseModality } from '../schemas/auction.schema';
+import { Auction } from '../interfaces/auction.interface.js';
+import { PhaseModality } from '../schemas/auction.schema.js';
 
 /**
  * Checks if an auction is currently active (not closed) at `now`.

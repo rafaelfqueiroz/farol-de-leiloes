@@ -8,19 +8,19 @@ import { ConfigService } from '@nestjs/config';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { type Model, Types } from 'mongoose';
-import { AuctionsService } from '../../src/auctions/auctions.service';
+import { AuctionsService } from '../../src/auctions/auctions.service.js';
 import {
   AuctionEntity,
   AuctionSchema,
   PhaseModality,
-} from '../../src/auctions/schemas/auction.schema';
-import { applyMongooseDefaults } from '../../src/common/mongo/query-safety';
-import { Clock } from '../../src/common/clock/clock';
-import { FakeClock } from '../fakes/fake-clock';
-import { FavoritesService } from '../../src/favorites/favorites.service';
-import { FavoriteEntity, FavoriteSchema } from '../../src/favorites/schemas/favorite.schema';
-import { useTestDatabase } from '../support/test-database';
-import { testConfigService } from '../support/test-env';
+} from '../../src/auctions/schemas/auction.schema.js';
+import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
+import { Clock } from '../../src/common/clock/clock.js';
+import { FakeClock } from '../fakes/fake-clock.js';
+import { FavoritesService } from '../../src/favorites/favorites.service.js';
+import { FavoriteEntity, FavoriteSchema } from '../../src/favorites/schemas/favorite.schema.js';
+import { useTestDatabase } from '../support/test-database.js';
+import { testConfigService } from '../support/test-env.js';
 
 const USER_A = new Types.ObjectId('64b7f0000000000000000a01');
 const USER_B = new Types.ObjectId('64b7f0000000000000000b01');

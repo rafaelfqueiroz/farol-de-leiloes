@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
-import { ReminderChannel } from './reminder.schema';
+import { ReminderChannel } from './reminder.schema.js';
 
 @Schema({ collection: 'notificationlogs', timestamps: { createdAt: true, updatedAt: false } })
 export class NotificationLog {

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { SmsService } from './sms.service';
-import { WhatsAppService } from './whatsapp.service';
+import { SmsService } from './sms.service.js';
+import { WhatsAppService } from './whatsapp.service.js';
 
 @Module({
   imports: [ConfigModule],

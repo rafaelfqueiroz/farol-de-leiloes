@@ -1,9 +1,9 @@
 // AR-36: what the API says about an account, each field copied explicitly from the service's
 // UserProfile: the password hash, tokens and Stripe ids never reach a response.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AuthenticatedUser, AuthResult, UserProfile } from '../interfaces/auth.interface';
-import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status';
-import { SEX_VALUES } from './complete-profile.dto';
+import { AuthenticatedUser, AuthResult, UserProfile } from '../interfaces/auth.interface.js';
+import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status.js';
+import { SEX_VALUES } from './complete-profile.dto.js';
 
 export const PROVIDERS = ['local', 'google'] as const;
 export const ROLES = ['admin', 'free', 'standard', 'premium'] as const;

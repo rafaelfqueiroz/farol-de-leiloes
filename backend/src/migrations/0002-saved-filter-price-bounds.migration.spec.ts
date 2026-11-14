@@ -8,7 +8,7 @@ import {
   PriceBoundConflictError,
   renameSavedFilterPriceBounds,
   savedFilterPriceBounds,
-} from './0002-saved-filter-price-bounds.migration';
+} from './0002-saved-filter-price-bounds.migration.js';
 
 function fakeDb(conflicts: number, modified: number[]) {
   const countDocuments = vi.fn().mockResolvedValue(conflicts);

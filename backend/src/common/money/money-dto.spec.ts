@@ -4,8 +4,8 @@ import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
 import { plainToInstance } from 'class-transformer';
 import { IsOptional, validateSync } from 'class-validator';
-import { IsMoneyString, moneyToJson } from './money-dto';
-import { Decimal } from './money';
+import { IsMoneyString, moneyToJson } from './money-dto.js';
+import { Decimal } from './money.js';
 
 class PriceQuery {
   @IsOptional()

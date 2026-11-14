@@ -18,18 +18,18 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { RemindersService } from './reminders.service';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
-import { CreateReminderDto } from './dto/create-reminder.dto';
-import { UpdateReminderDto } from './dto/update-reminder.dto';
-import { ReminderResponseDto } from './dto/reminder-response.dto';
-import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
-import { ErrorResponseDto } from '../common/errors/error-response.dto';
-import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator';
-import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
-import { mapPage, type Paginated } from '../common/pagination/paginated';
+import { RemindersService } from './reminders.service.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
+import { CreateReminderDto } from './dto/create-reminder.dto.js';
+import { UpdateReminderDto } from './dto/update-reminder.dto.js';
+import { ReminderResponseDto } from './dto/reminder-response.dto.js';
+import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
+import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
+import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator.js';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto.js';
+import { mapPage, type Paginated } from '../common/pagination/paginated.js';
 
 const NOT_FOUND = { description: 'REMINDER_NOT_FOUND', type: ErrorResponseDto };
 

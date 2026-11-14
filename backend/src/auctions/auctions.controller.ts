@@ -1,18 +1,18 @@
-import { Public } from '../auth/decorators/public.decorator';
+import { Public } from '../auth/decorators/public.decorator.js';
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuctionsService } from './auctions.service';
-import { AuctionResponseDto } from './dto/auction-response.dto';
-import { ListAuctionsQueryDto, NeighborhoodsQueryDto } from './dto/auction-query.dto';
+import { AuctionsService } from './auctions.service.js';
+import { AuctionResponseDto } from './dto/auction-response.dto.js';
+import { ListAuctionsQueryDto, NeighborhoodsQueryDto } from './dto/auction-query.dto.js';
 import {
   NeighborhoodsResponseDto,
   SitemapCodesResponseDto,
-} from './dto/auction-lookup-response.dto';
-import { DomainError } from '../common/errors/domain-error';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
-import { ErrorResponseDto } from '../common/errors/error-response.dto';
-import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator';
-import { mapPage, type Paginated } from '../common/pagination/paginated';
+} from './dto/auction-lookup-response.dto.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
+import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
+import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator.js';
+import { mapPage, type Paginated } from '../common/pagination/paginated.js';
 
 @ApiTags('auctions')
 @ApiErrorResponses()

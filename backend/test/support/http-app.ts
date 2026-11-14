@@ -5,11 +5,11 @@
 import type { ExecutionContext, INestApplication, ModuleMetadata } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { configureApp } from '../../src/app.setup';
-import { IS_PUBLIC } from '../../src/auth/decorators/public.decorator';
+import { configureApp } from '../../src/app.setup.js';
+import { IS_PUBLIC } from '../../src/auth/decorators/public.decorator.js';
 import { APP_GUARD, Reflector } from '@nestjs/core';
-import type { AuthenticatedUser } from '../../src/auth/interfaces/auth.interface';
-import { testConfigService } from './test-env';
+import type { AuthenticatedUser } from '../../src/auth/interfaces/auth.interface.js';
+import { testConfigService } from './test-env.js';
 
 /** An obviously fake signed-in user (TS-27). */
 export const TEST_USER: AuthenticatedUser = {

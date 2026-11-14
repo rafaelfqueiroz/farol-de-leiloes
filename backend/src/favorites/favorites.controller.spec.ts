@@ -5,12 +5,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { FavoritesController } from './favorites.controller';
-import { FavoritesService } from './favorites.service';
-import { createHttpApp, TEST_USER } from '../../test/support/http-app';
-import { itAnswersPages } from '../../test/support/pagination-contract';
-import type { Auction } from '../auctions/interfaces/auction.interface';
-import { Decimal } from '../common/money/money';
+import { FavoritesController } from './favorites.controller.js';
+import { FavoritesService } from './favorites.service.js';
+import { createHttpApp, TEST_USER } from '../../test/support/http-app.js';
+import { itAnswersPages } from '../../test/support/pagination-contract.js';
+import type { Auction } from '../auctions/interfaces/auction.interface.js';
+import { Decimal } from '../common/money/money.js';
 
 // The modality as the JSON carries it; the enum lives in the auctions schema (AR-09).
 const ONLINE_SALES = 'ONLINE_SALES' as Auction['phases'][number]['modality'];

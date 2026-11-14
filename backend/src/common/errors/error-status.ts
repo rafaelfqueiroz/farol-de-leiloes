@@ -1,7 +1,7 @@
 // AR-38: the HTTP status of every code. A Record over ErrorCode, so a code added to the catalogue
 // without a status fails to compile.
 import { HttpStatus } from '@nestjs/common';
-import type { ErrorCode } from './codes';
+import type { ErrorCode } from './codes.js';
 
 export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   VALIDATION_FAILED: HttpStatus.BAD_REQUEST,

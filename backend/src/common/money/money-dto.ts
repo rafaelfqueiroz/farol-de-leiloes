@@ -3,7 +3,7 @@
 // turn a Decimal into a two-decimal string in their constructor (moneyToJson, AR-36).
 import { Transform, type TransformFnParams } from 'class-transformer';
 import { registerDecorator, type ValidationOptions } from 'class-validator';
-import { Decimal, isMoneyString, MONEY_PATTERN, toMoneyString } from './money';
+import { Decimal, isMoneyString, MONEY_PATTERN, toMoneyString } from './money.js';
 
 /**
  * AR-33: spread into `@ApiProperty` / `@ApiPropertyOptional` of every money field, request or

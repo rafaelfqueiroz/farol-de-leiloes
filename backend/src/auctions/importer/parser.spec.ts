@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseCsv, normalizeRows, parseCaixaMoney } from './parser';
-import { readCaixaFixture } from '../../../test/support/fixtures';
+import { parseCsv, normalizeRows, parseCaixaMoney } from './parser.js';
+import { readCaixaFixture } from '../../../test/support/fixtures.js';
 
 describe('CSV parser', () => {
   it('parses Lista_imoveis_geral.csv and returns 4 rows', () => {

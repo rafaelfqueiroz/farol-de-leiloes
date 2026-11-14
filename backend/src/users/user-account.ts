@@ -1,4 +1,4 @@
-import type { SubscriptionStatus } from './subscription-status';
+import type { SubscriptionStatus } from './subscription-status.js';
 
 export interface UserAddress {
   street?: string;

@@ -1,9 +1,9 @@
 // AR-36: an auction leaves the API through these classes only, each field copied explicitly, so
 // a field added to the stored document (storage keys, availability bookkeeping) never leaks.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Auction, Phase } from '../interfaces/auction.interface';
-import { Address, ExpenseRule, PaymentMethod, PhaseModality } from '../schemas/auction.schema';
-import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto';
+import { Auction, Phase } from '../interfaces/auction.interface.js';
+import { Address, ExpenseRule, PaymentMethod, PhaseModality } from '../schemas/auction.schema.js';
+import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto.js';
 
 export class AuctionAddressDto {
   @ApiPropertyOptional({ type: String })

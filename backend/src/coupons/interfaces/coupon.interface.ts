@@ -1,4 +1,4 @@
-import type { Decimal } from '../../common/money/money';
+import type { Decimal } from '../../common/money/money.js';
 
 export interface Coupon {
   _id: string;

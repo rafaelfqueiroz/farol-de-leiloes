@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CsvUpload, CsvUploadDocument } from './schemas/csv-upload.schema';
-import { StorageService } from '../../storage/storage.service';
-import { downloadCsvAllStates } from './downloader';
-import { errorMessage } from '../../common/error-message';
-import { Clock } from '../../common/clock/clock';
-import { isSameBrasiliaDay } from '../../common/clock/brasilia-time';
+import { CsvUpload, CsvUploadDocument } from './schemas/csv-upload.schema.js';
+import { StorageService } from '../../storage/storage.service.js';
+import { downloadCsvAllStates } from './downloader.js';
+import { errorMessage } from '../../common/error-message.js';
+import { Clock } from '../../common/clock/clock.js';
+import { isSameBrasiliaDay } from '../../common/clock/brasilia-time.js';
 
 @Injectable()
 export class CsvCacheService {

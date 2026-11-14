@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Env } from '../config/env';
-import { logSafeError } from '../common/errors/log-safe-error';
+import type { Env } from '../config/env.js';
+import { logSafeError } from '../common/errors/log-safe-error.js';
 
 export interface WhatsAppPayload {
   userName: string;

@@ -25,6 +25,7 @@ ENV NODE_ENV=production \
   PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 WORKDIR /app
 # The application files stay owned by root, so the process cannot rewrite its own code.
+# package.json carries "type": "module", without which Node would read dist/ as CommonJS.
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
@@ -35,5 +36,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/health', { signal: AbortSignal.timeout(4000) }).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 # Runtime configuration and secrets come from the host's environment, never from the image
-# (SC-16, DV-35).
-CMD ["node", "dist/main.js"]
+# (SC-16, DV-35). The backend is native ESM (#63; package.json, copied above, sets
+# "type": "module"): `--import` loads Sentry before the application's modules are, as @sentry/nestjs
+# requires under ESM (AR-47), the same as `npm start`.
+CMD ["node", "--import", "./dist/instrument.js", "dist/main.js"]

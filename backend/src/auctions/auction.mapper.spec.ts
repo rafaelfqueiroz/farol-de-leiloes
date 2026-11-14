@@ -2,9 +2,9 @@
 // Decimal128 only.
 import { describe, expect, it } from 'vitest';
 import { Types } from 'mongoose';
-import { Decimal } from '../common/money/money';
-import { fromStoredPhase, toAuction, toStoredPhase } from './auction.mapper';
-import { PaymentMethod, PhaseModality } from './schemas/auction.schema';
+import { Decimal } from '../common/money/money.js';
+import { fromStoredPhase, toAuction, toStoredPhase } from './auction.mapper.js';
+import { PaymentMethod, PhaseModality } from './schemas/auction.schema.js';
 
 const d128 = (value: string) => Types.Decimal128.fromString(value);
 const UPDATED = new Date('2026-01-15T12:00:00.000Z');

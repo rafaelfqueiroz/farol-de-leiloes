@@ -2,10 +2,10 @@
 // text, in the development simulation or on the real path. Fake values only (TS-27).
 import { Logger } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SmsService } from './sms.service';
-import { WhatsAppService } from './whatsapp.service';
+import { SmsService } from './sms.service.js';
+import { WhatsAppService } from './whatsapp.service.js';
 import type { ConfigService } from '@nestjs/config';
-import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy';
+import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy.js';
 
 const PHONE = '+5500000000000';
 const NAME = 'Fulana Ficticia';

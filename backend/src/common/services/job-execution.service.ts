@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Clock } from '../clock/clock';
-import { JobExecution, JobExecutionDocument } from '../schemas/job-execution.schema';
-import { type JobExecutionRecord, type JobOutcome, JobStatus, RunMode } from '../job-execution';
+import { Clock } from '../clock/clock.js';
+import { JobExecution, JobExecutionDocument } from '../schemas/job-execution.schema.js';
+import { type JobExecutionRecord, type JobOutcome, JobStatus, RunMode } from '../job-execution.js';
 
 @Injectable()
 export class JobExecutionService {

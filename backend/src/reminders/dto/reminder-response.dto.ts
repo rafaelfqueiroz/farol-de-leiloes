@@ -1,7 +1,7 @@
 // AR-36: a reminder leaves the API through these classes, each field copied explicitly.
 import { ApiProperty } from '@nestjs/swagger';
-import { ReminderChannel, ReminderStatus } from '../schemas/reminder.schema';
-import { PopulatedReminder, ReminderAuction } from '../interfaces/reminder.interface';
+import { ReminderChannel, ReminderStatus } from '../schemas/reminder.schema.js';
+import { PopulatedReminder, ReminderAuction } from '../interfaces/reminder.interface.js';
 
 /** The auction a reminder is about; empty values when the auction no longer exists. */
 export class ReminderAuctionDto {

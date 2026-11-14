@@ -5,17 +5,17 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Model } from 'mongoose';
-import { Clock } from '../../src/common/clock/clock';
-import { CommonModule } from '../../src/common/common.module';
+import { Clock } from '../../src/common/clock/clock.js';
+import { CommonModule } from '../../src/common/common.module.js';
 import {
   JobExecution,
   type JobExecutionDocument,
-} from '../../src/common/schemas/job-execution.schema';
-import { JobStatus, RunMode } from '../../src/common/job-execution';
-import { JobExecutionService } from '../../src/common/services/job-execution.service';
-import { aJobExecution } from '../builders/job-execution.builder';
-import { FakeClock, HOUR, MINUTE } from '../fakes/fake-clock';
-import { useTestDatabase } from '../support/test-database';
+} from '../../src/common/schemas/job-execution.schema.js';
+import { JobStatus, RunMode } from '../../src/common/job-execution.js';
+import { JobExecutionService } from '../../src/common/services/job-execution.service.js';
+import { aJobExecution } from '../builders/job-execution.builder.js';
+import { FakeClock, HOUR, MINUTE } from '../fakes/fake-clock.js';
+import { useTestDatabase } from '../support/test-database.js';
 
 const NOW = new Date('2026-01-15T12:00:00.000Z');
 const JOB = 'import-csv';

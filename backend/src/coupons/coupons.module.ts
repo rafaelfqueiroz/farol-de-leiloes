@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CouponsController } from './coupons.controller';
-import { CouponsService } from './coupons.service';
-import { CouponEntity, CouponSchema } from './schemas/coupon.schema';
-import { CommonModule } from '../common/common.module';
-import { PaymentGatewayModule } from '../payments/payment-gateway.module';
+import { CouponsController } from './coupons.controller.js';
+import { CouponsService } from './coupons.service.js';
+import { CouponEntity, CouponSchema } from './schemas/coupon.schema.js';
+import { CommonModule } from '../common/common.module.js';
+import { PaymentGatewayModule } from '../payments/payment-gateway.module.js';
 
 @Module({
   imports: [

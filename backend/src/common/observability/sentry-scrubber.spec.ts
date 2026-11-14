@@ -2,7 +2,7 @@
 // Every value below is generated and obviously fake (TS-27).
 import { describe, expect, it } from 'vitest';
 import type { Breadcrumb, ErrorEvent } from '@sentry/nestjs';
-import { scrubBreadcrumb, scrubEvent, stripQuery } from './sentry-scrubber';
+import { scrubBreadcrumb, scrubEvent, stripQuery } from './sentry-scrubber.js';
 
 const PII = {
   email: 'ana.teste@example.test',

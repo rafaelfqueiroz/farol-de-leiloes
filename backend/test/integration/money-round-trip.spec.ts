@@ -8,28 +8,28 @@ import { ConfigService } from '@nestjs/config';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { type Model, Types } from 'mongoose';
-import { AuctionsService } from '../../src/auctions/auctions.service';
+import { AuctionsService } from '../../src/auctions/auctions.service.js';
 import {
   AuctionEntity,
   AuctionSchema,
   PhaseModality,
-} from '../../src/auctions/schemas/auction.schema';
-import { Clock } from '../../src/common/clock/clock';
-import { Decimal } from '../../src/common/money/money';
-import { applyMongooseDefaults } from '../../src/common/mongo/query-safety';
-import { CouponsService } from '../../src/coupons/coupons.service';
-import { CouponEntity, CouponSchema } from '../../src/coupons/schemas/coupon.schema';
-import { PaymentGateway } from '../../src/payments/payment-gateway';
-import { SavedFiltersService } from '../../src/saved-filters/saved-filters.service';
+} from '../../src/auctions/schemas/auction.schema.js';
+import { Clock } from '../../src/common/clock/clock.js';
+import { Decimal } from '../../src/common/money/money.js';
+import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
+import { CouponsService } from '../../src/coupons/coupons.service.js';
+import { CouponEntity, CouponSchema } from '../../src/coupons/schemas/coupon.schema.js';
+import { PaymentGateway } from '../../src/payments/payment-gateway.js';
+import { SavedFiltersService } from '../../src/saved-filters/saved-filters.service.js';
 import {
   SavedFilterEntity,
   SavedFilterSchema,
-} from '../../src/saved-filters/schemas/saved-filter.schema';
-import { FakeClock } from '../fakes/fake-clock';
-import { FakePaymentGateway } from '../fakes/fake-payment-gateway';
-import { useTestDatabase } from '../support/test-database';
-import { testBusinessConfig, testConfigService } from '../support/test-env';
-import businessConfig from '../../src/config/business.config';
+} from '../../src/saved-filters/schemas/saved-filter.schema.js';
+import { FakeClock } from '../fakes/fake-clock.js';
+import { FakePaymentGateway } from '../fakes/fake-payment-gateway.js';
+import { useTestDatabase } from '../support/test-database.js';
+import { testBusinessConfig, testConfigService } from '../support/test-env.js';
+import businessConfig from '../../src/config/business.config.js';
 
 const NOW = new Date('2026-01-15T12:00:00.000Z');
 const USER = new Types.ObjectId('64b7f0000000000000000a01');

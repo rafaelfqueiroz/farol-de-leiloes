@@ -1,7 +1,7 @@
 // AR-36: a saved filter leaves the API through this class, each field copied explicitly.
 import { ApiProperty } from '@nestjs/swagger';
-import { SavedFilter } from '../interfaces/saved-filter.interface';
-import { FilterDataResponseDto } from './filter-data.dto';
+import { SavedFilter } from '../interfaces/saved-filter.interface.js';
+import { FilterDataResponseDto } from './filter-data.dto.js';
 
 export class SavedFilterResponseDto {
   @ApiProperty({ type: String })

@@ -4,6 +4,8 @@
 //   structural  — checks on the repository itself (test/structural/)
 //   integration — real MongoDB from Testcontainers (test/integration/); needs Docker (DV-17)
 //   isolation   — the owner-isolation gate (test/isolation/, TESTING §4); needs Docker
+//   smoke       — loads the compiled dist/ import graph in plain Node (test/smoke/, #63); needs
+//                 `npm run build` first, which `npm run test:smoke` does
 // Specs import `describe`, `it`, `expect` and `vi` from 'vitest' explicitly; there are no globals.
 import { defineConfig } from 'vitest/config';
 
@@ -84,6 +86,10 @@ export default defineConfig({
       {
         extends: true,
         test: { ...withMongo, name: 'isolation', include: ['test/isolation/**/*.spec.ts'] },
+      },
+      {
+        extends: true,
+        test: { ...shared, name: 'smoke', include: ['test/smoke/**/*.spec.ts'] },
       },
     ],
   },

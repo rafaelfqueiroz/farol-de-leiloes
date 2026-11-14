@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { logSafeError } from './log-safe-error';
+import { logSafeError } from './log-safe-error.js';
 
 class ProviderError extends Error {
   constructor(

@@ -4,7 +4,7 @@
 // scrubber removes the rest, as `beforeSend` and `beforeBreadcrumb` (sentry-options.ts). Pure functions over
 // Sentry's event shapes, so the scrubbing is proven by a unit test.
 import type { Breadcrumb, Event } from '@sentry/nestjs';
-import { USER_HASH_LENGTH } from './user-hash';
+import { USER_HASH_LENGTH } from './user-hash.js';
 
 const USER_HASH = new RegExp(`^[0-9a-f]{${USER_HASH_LENGTH}}$`);
 

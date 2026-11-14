@@ -17,7 +17,7 @@ Setup
 
 1. Copy `.env.example` to `.env` and fill in every value: each secret and integration variable is required, and the API refuses to boot naming any that is missing or invalid (AR-41). Optional ones are marked in the file.
 2. Install deps: `npm install`, and once at the repository root run `npm install` too to install the git hooks (husky + lint-staged)
-3. Dev run: `npm run start:dev`
+3. Dev run: `npm run start:dev` — `tsc --watch` plus `node --watch` on the compiled `dist/`; the backend is native ESM, so relative imports end in `.js` (DEVELOPMENT §1 and §6)
 4. Build: `npm run build`, then `npm start`. The deploy image is `Dockerfile` (Debian Chromium for the scraper, non-root), built and pushed to GHCR by `deploy.yml` (DEVELOPMENT §12)
 5. Before pushing: `npm run check` (typecheck + lint + format check + tests); the pre-push hook runs it when `backend/` changes (DV-37)
 
@@ -31,6 +31,7 @@ Tests (TESTING §2, §7)
 - `npm run test:cov` — the same with the V8 coverage gate (`backend/vitest.config.mts`); lcov report in `coverage/`
 - `npm run test:integration` — `test/integration/` against MongoDB from Testcontainers; needs Docker
 - `npm run test:isolation` — `test/isolation/`, the owner-isolation gate; needs Docker (empty until #2)
+- `npm run test:smoke` — builds, then loads every module of `dist/` in plain Node as native ESM, catching import interop bugs that `tsc` and Vitest cannot see (#63); the CI `backend-build` job
 - `npm run test:structural` — `test/structural/` alone: checks on the repository itself (Node pins, workflows, Dockerfiles, pre-push selection); the CI `structural` job
 - Helpers: `test/support/` (database harness, fixture paths, `silence-logger.ts`: the Nest Logger is silent in every test project; to assert on a log, `vi.spyOn(Logger.prototype, 'error')`, see TESTING.md), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`
 

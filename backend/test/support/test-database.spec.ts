@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { join } from 'path';
-import { testDatabaseName } from './test-database';
+import { testDatabaseName } from './test-database.js';
 
-const BACKEND_ROOT = join(__dirname, '..', '..');
+const BACKEND_ROOT = join(import.meta.dirname, '..', '..');
 
 describe('testDatabaseName (TS-05)', () => {
   it('derives a readable name from the spec path, without the test/ prefix and extension', () => {

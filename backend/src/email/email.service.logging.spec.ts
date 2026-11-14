@@ -1,10 +1,10 @@
 // SC-15 / AR-46: EmailService logs no address, name, token URL or support text, in the development
 // simulation (no SMTP) in every environment or when mail is sent. Fake values only (TS-27).
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EmailService } from './email.service';
-import { testConfigService } from '../../test/support/test-env';
+import { EmailService } from './email.service.js';
+import { testConfigService } from '../../test/support/test-env.js';
 import type { ConfigService } from '@nestjs/config';
-import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy';
+import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy.js';
 
 const EMAIL = 'fulana.ficticia@example.test';
 const SUPPORT = 'suporte-ficticio@example.test';

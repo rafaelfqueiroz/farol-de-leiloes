@@ -1,7 +1,7 @@
 // AR-46 / SC-15: the user appears in logs only as a keyed hash of their id.
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { hashUserId, USER_HASH_LENGTH } from './user-hash';
+import { hashUserId, USER_HASH_LENGTH } from './user-hash.js';
 
 const SECRET = 'test-log-hash-secret-not-a-real-one-000';
 const USER_ID = '64b7f0000000000000000001';

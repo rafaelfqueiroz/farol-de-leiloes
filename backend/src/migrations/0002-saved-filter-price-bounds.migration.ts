@@ -14,7 +14,7 @@
 // did when it was written (migration.ts).
 import { Logger } from '@nestjs/common';
 import type { mongo } from 'mongoose';
-import type { Migration } from './migration';
+import type { Migration } from './migration.js';
 
 const COLLECTION = 'savedfilters';
 

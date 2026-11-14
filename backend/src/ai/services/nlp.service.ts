@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { LlmAdapter } from '../adapters/llm.adapter';
-import { MAX_PAGE_SIZE } from '../../common/pagination/pagination-query.dto';
-import { Decimal, isMoneyString } from '../../common/money/money';
+import { LlmAdapter } from '../adapters/llm.adapter.js';
+import { MAX_PAGE_SIZE } from '../../common/pagination/pagination-query.dto.js';
+import { Decimal, isMoneyString } from '../../common/money/money.js';
 
 // State abbreviations mapping (full names → 2-letter codes)
 const STATE_ABBREVIATIONS: Record<string, string> = {

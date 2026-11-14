@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Env } from '../config/env';
-import { UsersService } from '../users/users.service';
-import { CouponsService } from '../coupons/coupons.service';
-import { DomainError } from '../common/errors/domain-error';
-import { logSafeError } from '../common/errors/log-safe-error';
-import { PaymentGateway, type PaymentEvent } from './payment-gateway';
+import type { Env } from '../config/env.js';
+import { UsersService } from '../users/users.service.js';
+import { CouponsService } from '../coupons/coupons.service.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { logSafeError } from '../common/errors/log-safe-error.js';
+import { PaymentGateway, type PaymentEvent } from './payment-gateway.js';
 
 @Injectable()
 export class PaymentsService {

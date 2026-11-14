@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
-const SRC = join(__dirname, '..', '..', 'src');
+const SRC = join(import.meta.dirname, '..', '..', 'src');
 
 /** The decorator stack of each method: consecutive `@Name(...)` lines above its signature. */
 function decoratorStacks(source: string): string[] {

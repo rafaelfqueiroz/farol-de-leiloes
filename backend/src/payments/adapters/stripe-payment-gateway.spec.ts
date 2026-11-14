@@ -4,9 +4,9 @@
 // signatures computed locally with Stripe's own test helper over a fake secret.
 import { describe, expect, it, vi } from 'vitest';
 import Stripe from 'stripe';
-import { Decimal } from '../../common/money/money';
-import { reaisToCentavos, StripePaymentGateway } from './stripe-payment-gateway';
-import { testConfigService, TEST_ENV } from '../../../test/support/test-env';
+import { Decimal } from '../../common/money/money.js';
+import { reaisToCentavos, StripePaymentGateway } from './stripe-payment-gateway.js';
+import { testConfigService, TEST_ENV } from '../../../test/support/test-env.js';
 
 describe('reaisToCentavos (AR-20)', () => {
   it.each([

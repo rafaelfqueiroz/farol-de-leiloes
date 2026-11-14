@@ -1,9 +1,9 @@
 import * as cheerio from 'cheerio';
 // SC-24: plain puppeteer, undisguised — no stealth plugin, no user-agent spoofing, no evasion
-// flags. Puppeteer 25 is ESM-only; this CommonJS build loads it through Node's require(esm).
+// flags. Puppeteer 25 is ESM-only, imported natively (#63).
 import puppeteer from 'puppeteer';
-import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema';
-import { brasiliaWallClockToInstant } from '../../common/clock/brasilia-time';
+import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema.js';
+import { brasiliaWallClockToInstant } from '../../common/clock/brasilia-time.js';
 
 export interface ScrapedPhaseDetails {
   paymentMethods?: PaymentMethod[];

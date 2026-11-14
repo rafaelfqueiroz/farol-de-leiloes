@@ -3,17 +3,17 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { ENV_KEYS } from '../../src/config/env.schema';
-import { validateEnv } from '../../src/config/env';
+import { ENV_KEYS } from '../../src/config/env.schema.js';
+import { validateEnv } from '../../src/config/env.js';
 import {
   exampleKeys,
   exampleValues,
   findEnvExampleProblems,
   findFilledInSecrets,
-} from './env-example-check';
+} from './env-example-check.js';
 
 describe('AR-44: backend/.env.example', () => {
-  const example = readFileSync(join(__dirname, '..', '..', '.env.example'), 'utf8');
+  const example = readFileSync(join(import.meta.dirname, '..', '..', '.env.example'), 'utf8');
 
   it('lists every schema variable, nothing else, each with a comment', () => {
     expect(findEnvExampleProblems(example, ENV_KEYS)).toEqual([]);

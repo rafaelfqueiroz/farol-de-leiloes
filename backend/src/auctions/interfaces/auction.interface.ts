@@ -1,5 +1,5 @@
 import type { Types } from 'mongoose';
-import type { Decimal } from '../../common/money/money';
+import type { Decimal } from '../../common/money/money.js';
 import {
   Address,
   AuctionFile,
@@ -7,7 +7,7 @@ import {
   PaymentMethod,
   PhaseModality,
   StoredPhase,
-} from '../schemas/auction.schema';
+} from '../schemas/auction.schema.js';
 
 /** A phase in code: money as a Decimal (AR-17). Stored as a StoredPhase. */
 export interface Phase {

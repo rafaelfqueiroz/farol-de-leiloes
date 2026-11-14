@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { SUBSCRIPTION_STATUSES, SubscriptionStatus } from '../subscription-status';
-import type { UserAccount, UserAddress } from '../user-account';
+import { SUBSCRIPTION_STATUSES, SubscriptionStatus } from '../subscription-status.js';
+import type { UserAccount, UserAddress } from '../user-account.js';
 
 export type UserDocument = UserEntity & Document;
 

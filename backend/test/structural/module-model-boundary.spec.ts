@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import * as ts from 'typescript';
 
-const SRC = join(__dirname, '..', '..', 'src');
+const SRC = join(import.meta.dirname, '..', '..', 'src');
 
 function unwrap(expression: ts.Expression): ts.Expression {
   while (

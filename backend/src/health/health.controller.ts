@@ -1,4 +1,4 @@
-import { Public } from '../auth/decorators/public.decorator';
+import { Public } from '../auth/decorators/public.decorator.js';
 import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import {
   ApiOkResponse,
@@ -7,9 +7,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
-import { HealthResponseDto } from './dto/health-response.dto';
-import { HealthService } from './health.service';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
+import { HealthResponseDto } from './dto/health-response.dto.js';
+import { HealthService } from './health.service.js';
 
 // AR-48/SC-07: explicitly public: the container HEALTHCHECK, the deploy check and the availability
 // probe (SPEC-003 BR-003-02) call it unauthenticated. 503 only when the database is unreachable;

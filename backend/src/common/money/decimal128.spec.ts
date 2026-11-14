@@ -8,8 +8,8 @@ import {
   isDecimal128,
   toDecimal128,
   toDecimal128OrNull,
-} from './decimal128';
-import { Decimal } from './money';
+} from './decimal128.js';
+import { Decimal } from './money.js';
 
 describe('toDecimal128 / fromDecimal128', () => {
   it.each([

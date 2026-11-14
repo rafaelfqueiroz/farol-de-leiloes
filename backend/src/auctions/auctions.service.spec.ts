@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
-import { serverOperators } from '../common/mongo/query-safety';
-import { DomainError } from '../common/errors/domain-error';
-import { Decimal } from '../common/money/money';
-import { AuctionsService } from './auctions.service';
-import { PhaseModality } from './schemas/auction.schema';
-import { FakeClock } from '../../test/fakes/fake-clock';
+import { serverOperators } from '../common/mongo/query-safety.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { Decimal } from '../common/money/money.js';
+import { AuctionsService } from './auctions.service.js';
+import { PhaseModality } from './schemas/auction.schema.js';
+import { FakeClock } from '../../test/fakes/fake-clock.js';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionsService>;
 

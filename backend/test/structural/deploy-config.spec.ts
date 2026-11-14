@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { ZodType } from 'zod';
-import { ENV_KEYS, LLM_PROVIDER_KEY, envSchema } from '../../src/config/env.schema';
-import { exampleKeys } from './env-example-check';
+import { ENV_KEYS, LLM_PROVIDER_KEY, envSchema } from '../../src/config/env.schema.js';
+import { exampleKeys } from './env-example-check.js';
 import {
   type RendererEntry,
   bashArray,
@@ -21,9 +21,9 @@ import {
   renderSteps,
   rendererEntries,
   runtimeConfigMapping,
-} from './deploy-config-check';
+} from './deploy-config-check.js';
 
-const root = join(__dirname, '..', '..', '..');
+const root = join(import.meta.dirname, '..', '..', '..');
 const read = (path: string): string => readFileSync(join(root, path), 'utf8');
 
 // What production requires beyond the schema's own required keys: the log hash key (the schema's

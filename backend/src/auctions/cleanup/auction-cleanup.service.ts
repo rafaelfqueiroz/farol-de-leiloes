@@ -3,13 +3,13 @@ import type { ConfigType } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { subDays } from 'date-fns';
-import { AuctionEntity, AuctionDocument } from '../schemas/auction.schema';
-import { StorageService } from '../../storage/storage.service';
-import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
-import businessConfig from '../../config/business.config';
-import { errorMessage } from '../../common/error-message';
-import { serverOperators } from '../../common/mongo/query-safety';
-import { Clock } from '../../common/clock/clock';
+import { AuctionEntity, AuctionDocument } from '../schemas/auction.schema.js';
+import { StorageService } from '../../storage/storage.service.js';
+import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config.js';
+import businessConfig from '../../config/business.config.js';
+import { errorMessage } from '../../common/error-message.js';
+import { serverOperators } from '../../common/mongo/query-safety.js';
+import { Clock } from '../../common/clock/clock.js';
 
 @Injectable()
 export class AuctionCleanupService implements OnModuleInit {

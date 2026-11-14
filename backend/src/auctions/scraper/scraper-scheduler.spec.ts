@@ -3,9 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Logger } from '@nestjs/common';
 import { captureException } from '@sentry/nestjs';
-import { logContextFields } from '../../common/observability/log-context';
-import { FakeClock } from '../../../test/fakes/fake-clock';
-import { AuctionDetailsScraper, DETAILS_SCRAPER_JOB } from './scraper-scheduler';
+import { logContextFields } from '../../common/observability/log-context.js';
+import { FakeClock } from '../../../test/fakes/fake-clock.js';
+import { AuctionDetailsScraper, DETAILS_SCRAPER_JOB } from './scraper-scheduler.js';
 
 // TS-03: the Sentry SDK has no port of ours; vi.mock observes what the job reports. Nothing is sent
 // either way (TS-07): Sentry is never initialised in tests.

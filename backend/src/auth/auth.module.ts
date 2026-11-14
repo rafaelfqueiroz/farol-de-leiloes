@@ -1,16 +1,16 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import type { AppConfigService } from '../config/env';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
-import { UsersModule } from '../users/users.module';
-import { JwtStrategy } from './strategies/jwt.strategy';
-import { GoogleStrategy } from './strategies/google.strategy';
-import { EmailModule } from '../email/email.module';
+import type { AppConfigService } from '../config/env.js';
+import { AuthController } from './auth.controller.js';
+import { AuthService } from './auth.service.js';
+import { UsersModule } from '../users/users.module.js';
+import { JwtStrategy } from './strategies/jwt.strategy.js';
+import { GoogleStrategy } from './strategies/google.strategy.js';
+import { EmailModule } from '../email/email.module.js';
 
 @Module({
   imports: [

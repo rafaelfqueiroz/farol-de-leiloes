@@ -1,5 +1,5 @@
 import { registerAs } from '@nestjs/config';
-import { validateEnv, type Env } from './env';
+import { validateEnv, type Env } from './env.js';
 
 /**
  * AR-43: the business values the specs call configurable, as typed settings with defaults.

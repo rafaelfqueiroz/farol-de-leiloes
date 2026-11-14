@@ -2,7 +2,7 @@
 // extended per endpoint with `items` typed as the endpoint's own response DTO.
 import { applyDecorators, type Type } from '@nestjs/common';
 import { ApiExtraModels, ApiOkResponse, ApiProperty, getSchemaPath } from '@nestjs/swagger';
-import { MAX_PAGE_SIZE } from './pagination-query.dto';
+import { MAX_PAGE_SIZE } from './pagination-query.dto.js';
 
 /** The envelope without its items; `ApiPaginatedResponse(Model)` adds `items: Model[]`. */
 export class PaginatedResponseDto {

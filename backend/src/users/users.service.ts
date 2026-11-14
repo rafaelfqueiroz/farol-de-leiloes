@@ -2,14 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { addHours } from 'date-fns';
-import { UserEntity, UserDocument } from './schemas/user.schema';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UserEntity, UserDocument } from './schemas/user.schema.js';
+import { CreateUserDto } from './dto/create-user.dto.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { DomainError } from '../common/errors/domain-error';
-import { serverOperators } from '../common/mongo/query-safety';
-import { Clock } from '../common/clock/clock';
+import { DomainError } from '../common/errors/domain-error.js';
+import { serverOperators } from '../common/mongo/query-safety.js';
+import { Clock } from '../common/clock/clock.js';
 
 // SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34).
 const TEXT_FIELDS = [

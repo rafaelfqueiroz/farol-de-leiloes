@@ -4,7 +4,7 @@
 // Testcontainers maps a random host port, so the developer's own MongoDB is never touched.
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import { getContainerRuntimeClient } from 'testcontainers';
-import { MONGO_IMAGE, TEST_MONGODB_URI, setSharedMongo, sharedMongo } from './mongo-container';
+import { MONGO_IMAGE, TEST_MONGODB_URI, setSharedMongo, sharedMongo } from './mongo-container.js';
 
 function dockerRequired(cause: unknown): Error {
   const reason = cause instanceof Error ? cause.message : String(cause);
@@ -65,4 +65,4 @@ export async function setup(): Promise<void> {
 
 // Vitest ignores a named `teardown` export when the module also has a default export, so both
 // hooks are named exports of this one module.
-export { default as teardown } from './mongo-global-teardown';
+export { default as teardown } from './mongo-global-teardown.js';

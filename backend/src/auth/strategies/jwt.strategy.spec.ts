@@ -1,11 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { JwtStrategy } from './jwt.strategy';
-import { logContextFields, runWithLogContext } from '../../common/observability/log-context';
-import { hashUserId } from '../../common/observability/user-hash';
-import { DomainError } from '../../common/errors/domain-error';
-import { CurrentUserResponseDto } from '../dto/auth-response.dto';
-import { spyOnLogger } from '../../../test/support/logger-spy';
+import { JwtStrategy } from './jwt.strategy.js';
+import { logContextFields, runWithLogContext } from '../../common/observability/log-context.js';
+import { hashUserId } from '../../common/observability/user-hash.js';
+import { DomainError } from '../../common/errors/domain-error.js';
+import { CurrentUserResponseDto } from '../dto/auth-response.dto.js';
+import { spyOnLogger } from '../../../test/support/logger-spy.js';
 
 afterEach(() => vi.restoreAllMocks());
 

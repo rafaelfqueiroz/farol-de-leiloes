@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
-import { AuctionRecord } from '../../auctions/interfaces/auction.interface';
-import { ReminderDocument } from '../schemas/reminder.schema';
+import { AuctionRecord } from '../../auctions/interfaces/auction.interface.js';
+import { ReminderDocument } from '../schemas/reminder.schema.js';
 
 /** The auction populated into a reminder; null when the referenced auction no longer exists. */
 export type ReminderAuction = (AuctionRecord & { _id: Types.ObjectId }) | null;

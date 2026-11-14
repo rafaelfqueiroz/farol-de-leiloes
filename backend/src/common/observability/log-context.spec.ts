@@ -5,7 +5,7 @@ import {
   logContextFields,
   runWithLogContext,
   setLogUserHash,
-} from './log-context';
+} from './log-context.js';
 
 describe('log context (AR-46)', () => {
   it('adds nothing outside a context', () => {

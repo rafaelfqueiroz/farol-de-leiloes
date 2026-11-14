@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import { type JobExecutionRecord, JobStatus, RunMode } from '../job-execution';
+import { type JobExecutionRecord, JobStatus, RunMode } from '../job-execution.js';
 
 @Schema({ collection: 'jobexecutions', timestamps: true })
 export class JobExecution implements JobExecutionRecord {

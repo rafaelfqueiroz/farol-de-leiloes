@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Env, LlmProvider } from '../../config/env';
+import type { Env, LlmProvider } from '../../config/env.js';
 
 export interface LlmConfig {
   provider: LlmProvider;

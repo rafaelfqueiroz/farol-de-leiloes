@@ -11,7 +11,7 @@ import {
   reaisFromLegacyCentavos,
   reaisFromLegacyNumber,
   savedFilterChanges,
-} from './0001-money-decimal128.migration';
+} from './0001-money-decimal128.migration.js';
 
 const d128 = (value: string) => Types.Decimal128.fromString(value);
 

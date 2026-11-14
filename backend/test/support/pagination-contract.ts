@@ -4,7 +4,7 @@
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { expect, it, type Mock } from 'vitest';
-import { type PageRequest, paginated } from '../../src/common/pagination/paginated';
+import { type PageRequest, paginated } from '../../src/common/pagination/paginated.js';
 
 export interface PaginatedEndpoint {
   app: () => INestApplication;

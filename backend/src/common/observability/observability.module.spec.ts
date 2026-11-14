@@ -1,7 +1,7 @@
 // AR-47: production without a DSN says so once, at boot.
 import { describe, expect, it, vi } from 'vitest';
-import { testConfigService } from '../../../test/support/test-env';
-import { ObservabilityModule, warnWithoutSentry } from './observability.module';
+import { testConfigService } from '../../../test/support/test-env.js';
+import { ObservabilityModule, warnWithoutSentry } from './observability.module.js';
 
 const DSN = 'https://public-key@o0.ingest.example.test/1';
 

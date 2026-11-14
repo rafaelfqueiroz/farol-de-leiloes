@@ -1,7 +1,7 @@
 // AR-47 / TS-07: Sentry is inert without a DSN and in tests, and scrubbed when it is on.
 import { describe, expect, it } from 'vitest';
-import { NO_PERSONAL_DATA, sentryOptions } from './sentry-options';
-import { scrubBreadcrumb, scrubEvent } from './sentry-scrubber';
+import { NO_PERSONAL_DATA, sentryOptions } from './sentry-options.js';
+import { scrubBreadcrumb, scrubEvent } from './sentry-scrubber.js';
 
 const DSN = 'https://public-key@o0.ingest.example.test/1';
 

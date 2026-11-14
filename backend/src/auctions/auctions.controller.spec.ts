@@ -14,13 +14,13 @@ import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { AuctionsController } from './auctions.controller';
-import { AuctionsService } from './auctions.service';
-import { configureApp } from '../app.setup';
-import { testConfigService } from '../../test/support/test-env';
-import { type PageRequest, paginated } from '../common/pagination/paginated';
-import { Decimal } from '../common/money/money';
-import { PhaseModality } from './schemas/auction.schema';
+import { AuctionsController } from './auctions.controller.js';
+import { AuctionsService } from './auctions.service.js';
+import { configureApp } from '../app.setup.js';
+import { testConfigService } from '../../test/support/test-env.js';
+import { type PageRequest, paginated } from '../common/pagination/paginated.js';
+import { Decimal } from '../common/money/money.js';
+import { PhaseModality } from './schemas/auction.schema.js';
 
 const LIST_FILTERS = ['city', 'neighborhood', 'modality'] as const;
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
-import { FavoritesService } from './favorites.service';
-import { DomainError } from '../common/errors/domain-error';
+import { FavoritesService } from './favorites.service.js';
+import { DomainError } from '../common/errors/domain-error.js';
 
 type ServiceDeps = ConstructorParameters<typeof FavoritesService>;
 

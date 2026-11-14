@@ -4,8 +4,8 @@
 import { Logger, Module, type OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
-import type { AppConfigService, Env } from '../../config/env';
-import { loggerParams } from './logger-options';
+import type { AppConfigService, Env } from '../../config/env.js';
+import { loggerParams } from './logger-options.js';
 
 @Module({
   imports: [

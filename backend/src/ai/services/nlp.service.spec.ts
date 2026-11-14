@@ -2,9 +2,9 @@
 // with AR-35 paging (page/pageSize) instead of the retired limit/offset. The LLM is a stub that
 // returns canned text; nothing leaves the process (TS-07).
 import { describe, expect, it } from 'vitest';
-import { NlpService } from './nlp.service';
-import type { LlmAdapter } from '../adapters/llm.adapter';
-import { Decimal } from '../../common/money/money';
+import { NlpService } from './nlp.service.js';
+import type { LlmAdapter } from '../adapters/llm.adapter.js';
+import { Decimal } from '../../common/money/money.js';
 
 function serviceAnswering(text: string): NlpService {
   const llm = { chat: async () => text } as unknown as LlmAdapter;

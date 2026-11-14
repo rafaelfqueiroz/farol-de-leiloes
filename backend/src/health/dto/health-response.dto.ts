@@ -1,7 +1,7 @@
 // AR-36/AR-48: the health body, mapped explicitly. Statuses, a timestamp, an age and a flag only:
 // no error detail, version or host name, since the endpoint is public.
 import { ApiProperty } from '@nestjs/swagger';
-import type { HealthReport } from '../domain/health-report';
+import type { HealthReport } from '../domain/health-report.js';
 
 export class DatabaseHealthDto {
   @ApiProperty({ enum: ['up', 'down'] })

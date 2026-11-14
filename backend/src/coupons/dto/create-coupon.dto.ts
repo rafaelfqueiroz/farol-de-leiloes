@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsDateString, IsOptional } from 'class-validator';
-import type { Decimal } from '../../common/money/money';
-import { IsMoneyString, MONEY_API_PROPERTY } from '../../common/money/money-dto';
+import type { Decimal } from '../../common/money/money.js';
+import { IsMoneyString, MONEY_API_PROPERTY } from '../../common/money/money-dto.js';
 
 export class CreateCouponDto {
   @ApiProperty({ type: String, description: 'Stored upper-cased' })

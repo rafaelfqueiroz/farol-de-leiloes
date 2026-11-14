@@ -1,16 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { FavoriteEntity, FavoriteDocument } from './schemas/favorite.schema';
-import { AuctionsService } from '../auctions/auctions.service';
-import { Auction, AuctionRecord } from '../auctions/interfaces/auction.interface';
-import { DomainError } from '../common/errors/domain-error';
+import { FavoriteEntity, FavoriteDocument } from './schemas/favorite.schema.js';
+import { AuctionsService } from '../auctions/auctions.service.js';
+import { Auction, AuctionRecord } from '../auctions/interfaces/auction.interface.js';
+import { DomainError } from '../common/errors/domain-error.js';
 import {
   type PageRequest,
   type Paginated,
   pageOfList,
   paginated,
-} from '../common/pagination/paginated';
+} from '../common/pagination/paginated.js';
 
 // `auction` once populated: the auction record, or null when the reference is stale.
 type PopulatedAuction = { auction: AuctionRecord | null };

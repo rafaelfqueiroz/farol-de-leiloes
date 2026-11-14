@@ -5,7 +5,7 @@ import { randomBytes } from 'crypto';
 import { join, relative } from 'path';
 import { createConnection } from 'mongoose';
 import { afterAll, expect } from 'vitest';
-import { TEST_MONGODB_URI } from './mongo-container';
+import { TEST_MONGODB_URI } from './mongo-container.js';
 
 export interface TestDatabase {
   /** The database name, unique to this spec file and this run. */
@@ -19,7 +19,7 @@ export interface TestDatabase {
 const MAX_NAME_BYTES = 63;
 const PREFIX = 't_';
 const SUFFIX_BYTES = 4; // 8 hex characters
-const BACKEND_ROOT = join(__dirname, '..', '..');
+const BACKEND_ROOT = join(import.meta.dirname, '..', '..');
 
 /** `test/integration/job-execution.service.spec.ts` -> `t_integration_job-execution_service_<hex>`. */
 export function testDatabaseName(testPath: string, suffix: string): string {

@@ -4,8 +4,8 @@
 // Inert — no init at all — without a DSN, and always in tests (TS-07: no test reaches a live
 // external system), whatever the environment holds.
 import type { NodeOptions } from '@sentry/nestjs';
-import type { SentryEnv } from '../../config/sentry.env';
-import { scrubBreadcrumb, scrubEvent } from './sentry-scrubber';
+import type { SentryEnv } from '../../config/sentry.env.js';
+import { scrubBreadcrumb, scrubEvent } from './sentry-scrubber.js';
 
 export const NO_PERSONAL_DATA = {
   userInfo: false,

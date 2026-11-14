@@ -3,9 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Logger } from '@nestjs/common';
 import { captureException } from '@sentry/nestjs';
-import { logContextFields } from '../../common/observability/log-context';
-import { AuctionsImporter, STARTUP_IMPORT_DELAY_MS } from './scheduler';
-import { AUCTIONS_IMPORT_JOB } from './import-job';
+import { logContextFields } from '../../common/observability/log-context.js';
+import { AuctionsImporter, STARTUP_IMPORT_DELAY_MS } from './scheduler.js';
+import { AUCTIONS_IMPORT_JOB } from './import-job.js';
 
 // TS-03: the Sentry SDK has no port of ours; vi.mock observes what the job reports. Nothing is sent
 // either way (TS-07): Sentry is never initialised in tests.

@@ -14,9 +14,9 @@ import {
 } from '@nestjs/common';
 import { captureException } from '@sentry/nestjs';
 import type { Request, Response } from 'express';
-import type { ErrorCode } from './codes';
-import { DomainError, type ErrorContext } from './domain-error';
-import { ERROR_STATUS } from './error-status';
+import type { ErrorCode } from './codes.js';
+import { DomainError, type ErrorContext } from './domain-error.js';
+import { ERROR_STATUS } from './error-status.js';
 
 export interface ErrorBody {
   code: ErrorCode;

@@ -2,8 +2,8 @@
 import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
 import { Cron } from '@nestjs/schedule';
-import { logContextFields } from './log-context';
-import { InJobContext, runInJobContext } from './job-context';
+import { logContextFields } from './log-context.js';
+import { InJobContext, runInJobContext } from './job-context.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 

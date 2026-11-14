@@ -6,7 +6,7 @@ import {
   healthReport,
   IMPORT_STALE_AFTER_HOURS,
   type ImportReport,
-} from './health-report';
+} from './health-report.js';
 
 const NOW = new Date('2026-01-15T12:00:00.000Z');
 const ok: ImportReport = {

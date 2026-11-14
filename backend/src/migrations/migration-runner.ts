@@ -2,10 +2,10 @@
 // deploy that runs it aborts and leaves the running version untouched. ADR-001.
 import { Logger } from '@nestjs/common';
 import type { mongo } from 'mongoose';
-import type { Clock } from '../common/clock/clock';
-import { errorMessage } from '../common/error-message';
-import type { Migration } from './migration';
-import type { MigrationLog } from './migration-log';
+import type { Clock } from '../common/clock/clock.js';
+import { errorMessage } from '../common/error-message.js';
+import type { Migration } from './migration.js';
+import type { MigrationLog } from './migration-log.js';
 
 /** `0001-money-decimal128`: four digits, a hyphen, a lowercase kebab-case title. */
 const MIGRATION_ID = /^\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*$/;

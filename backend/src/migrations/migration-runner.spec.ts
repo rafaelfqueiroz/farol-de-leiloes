@@ -4,11 +4,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Logger } from '@nestjs/common';
 import type { mongo } from 'mongoose';
-import { FakeClock } from '../../test/fakes/fake-clock';
-import { FakeMigrationLog } from '../../test/fakes/fake-migration-log';
-import type { Migration } from './migration';
-import { assertMigrationOrder, MigrationFailedError, runMigrations } from './migration-runner';
-import { MIGRATIONS } from './registry';
+import { FakeClock } from '../../test/fakes/fake-clock.js';
+import { FakeMigrationLog } from '../../test/fakes/fake-migration-log.js';
+import type { Migration } from './migration.js';
+import { assertMigrationOrder, MigrationFailedError, runMigrations } from './migration-runner.js';
+import { MIGRATIONS } from './registry.js';
 
 const NOW = new Date('2026-11-03T12:00:00.000Z');
 // The runner hands the database to each `up` and never touches it itself.

@@ -8,15 +8,15 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
-import { configureApp } from '../../app.setup';
-import { AuthModule } from '../auth.module';
-import { Public } from '../decorators/public.decorator';
-import { CurrentUser } from '../decorators/current-user.decorator';
-import type { AuthenticatedUser } from '../interfaces/auth.interface';
-import { JwtStrategy } from '../strategies/jwt.strategy';
-import { UsersService } from '../../users/users.service';
-import { testConfigService } from '../../../test/support/test-env';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { configureApp } from '../../app.setup.js';
+import { AuthModule } from '../auth.module.js';
+import { Public } from '../decorators/public.decorator.js';
+import { CurrentUser } from '../decorators/current-user.decorator.js';
+import type { AuthenticatedUser } from '../interfaces/auth.interface.js';
+import { JwtStrategy } from '../strategies/jwt.strategy.js';
+import { UsersService } from '../../users/users.service.js';
+import { testConfigService } from '../../../test/support/test-env.js';
+import { JwtAuthGuard } from './jwt-auth.guard.js';
 
 @Controller('guard-test')
 class DefaultProtectedController {

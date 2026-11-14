@@ -4,7 +4,7 @@
 // startup import) call runInJobContext directly.
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
-import { runWithLogContext } from './log-context';
+import { runWithLogContext } from './log-context.js';
 
 /** Runs `fn` in a fresh job log context: a new correlation id and `jobName`. */
 export function runInJobContext<T>(jobName: string, fn: () => T): T {

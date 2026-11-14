@@ -1,6 +1,6 @@
 // AR-47: the pre-boot read of NODE_ENV and SENTRY_DSN (config/sentry.env.ts).
 import { describe, expect, it } from 'vitest';
-import { parseSentryEnv, sentryEnvFromProcess } from './sentry.env';
+import { parseSentryEnv, sentryEnvFromProcess } from './sentry.env.js';
 
 const DSN = 'https://public-key@o0.ingest.example.test/1';
 
