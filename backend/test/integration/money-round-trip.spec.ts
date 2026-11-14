@@ -28,7 +28,8 @@ import {
 import { FakeClock } from '../fakes/fake-clock';
 import { FakePaymentGateway } from '../fakes/fake-payment-gateway';
 import { useTestDatabase } from '../support/test-database';
-import { testConfigService } from '../support/test-env';
+import { testBusinessConfig, testConfigService } from '../support/test-env';
+import businessConfig from '../../src/config/business.config';
 
 const NOW = new Date('2026-01-15T12:00:00.000Z');
 const USER = new Types.ObjectId('64b7f0000000000000000a01');
@@ -66,6 +67,7 @@ describe('Money round trip through MongoDB (integration)', () => {
         { provide: PaymentGateway, useValue: new FakePaymentGateway() },
         { provide: CACHE_MANAGER, useValue: {} },
         { provide: ConfigService, useValue: testConfigService() },
+        { provide: businessConfig.KEY, useValue: testBusinessConfig() },
       ],
     }).compile();
     auctions = moduleRef.get(AuctionsService);

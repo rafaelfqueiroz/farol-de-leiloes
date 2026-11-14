@@ -16,6 +16,7 @@ import { HealthModule } from './health/health.module';
 import { ObservabilityModule } from './common/observability/observability.module';
 import schedulerConfig from './config/scheduler.config';
 import r2Config from './config/r2.config';
+import businessConfig from './config/business.config';
 import { validateEnv } from './config/env';
 import { MONGOOSE_ROOT_OPTIONS } from './common/mongo/mongoose-root';
 
@@ -26,7 +27,7 @@ import { MONGOOSE_ROOT_OPTIONS } from './common/mongo/mongoose-root';
       isGlobal: true,
       cache: true,
       validate: validateEnv,
-      load: [schedulerConfig, r2Config],
+      load: [schedulerConfig, r2Config, businessConfig],
     }),
     ObservabilityModule, // AR-45: nestjs-pino, before the modules that log
     MongooseModule.forRootAsync(MONGOOSE_ROOT_OPTIONS),

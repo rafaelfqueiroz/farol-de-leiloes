@@ -39,7 +39,8 @@ import {
 import { UserEntity, UserSchema } from '../../src/users/schemas/user.schema';
 import { UsersService } from '../../src/users/users.service';
 import { useTestDatabase } from '../support/test-database';
-import { testConfigService } from '../support/test-env';
+import { testBusinessConfig, testConfigService } from '../support/test-env';
+import businessConfig from '../../src/config/business.config';
 
 const USER_A = new Types.ObjectId('64b7f0000000000000000a01');
 const USER_B = new Types.ObjectId('64b7f0000000000000000b01');
@@ -100,6 +101,7 @@ describe('SC-10: Mongo operator injection (integration)', () => {
         { provide: Clock, useValue: new FakeClock() },
         { provide: CACHE_MANAGER, useValue: {} },
         { provide: ConfigService, useValue: testConfigService() },
+        { provide: businessConfig.KEY, useValue: testBusinessConfig() },
       ],
     }).compile();
     auctions = moduleRef.get(AuctionsService);
