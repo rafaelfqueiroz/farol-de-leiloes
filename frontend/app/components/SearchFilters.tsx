@@ -447,10 +447,12 @@ export default function SearchFilters({
   // #42: the search page's filters follow the URL (Back/Forward, the AppShell links), so the form
   // follows them too instead of keeping the values it mounted with
   const initialFiltersKey = JSON.stringify(initialFilters);
-  useEffect(() => {
+  const [syncedFiltersKey, setSyncedFiltersKey] = useState(initialFiltersKey);
+  if (syncedFiltersKey !== initialFiltersKey) {
+    setSyncedFiltersKey(initialFiltersKey);
     setFilters(initialFilters);
     setPriceRange(rangeFromFilters(initialFilters.minPrice, initialFilters.maxPrice));
-  }, [initialFiltersKey]);
+  }
   const [aiSearchInput, setAiSearchInput] = useState('');
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const [availableNeighborhoods, setAvailableNeighborhoods] = useState<string[]>([]);
@@ -1153,6 +1155,7 @@ export default function SearchFilters({
         <DialogTitle>{t('saveDialog.title')}</DialogTitle>
         <DialogContent>
           <TextField
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- focus moves to the name field when this modal dialog opens (DS-21)
             autoFocus
             margin="dense"
             label={t('saveDialog.name')}

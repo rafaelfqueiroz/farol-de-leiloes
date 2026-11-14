@@ -58,6 +58,7 @@ export default function ConfirmDialog({
         <DialogContentText id={descriptionId}>{description}</DialogContentText>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus -- an alertdialog opens on its safe action, never the destructive one (DS-21) */}
         <Button variant="outlined" onClick={onClose} autoFocus>
           {cancelLabel ?? t('cancel')}
         </Button>

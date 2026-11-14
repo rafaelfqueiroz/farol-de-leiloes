@@ -25,8 +25,8 @@ import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -47,12 +47,16 @@ export default function ProfilePage() {
   const [zipCode, setZipCode] = useState('');
   const [profileLoading, setProfileLoading] = useState(false);
 
-  useEffect(() => {
+  // follow the signed-in user (it arrives, or refreshes after a save) while rendering, not in an
+  // effect, so the form never paints a stale name first
+  const [syncedUser, setSyncedUser] = useState(user);
+  if (user !== syncedUser) {
+    setSyncedUser(user);
     if (user) {
       setName(user.name || '');
       setEmail(user.email || '');
     }
-  }, [user]);
+  }
 
   // Load full profile data
   useEffect(() => {

@@ -111,7 +111,6 @@ export default function ResetPasswordPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 margin="normal"
                 required
-                autoFocus
               />
 
               <TextField
