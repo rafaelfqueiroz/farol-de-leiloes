@@ -34,8 +34,8 @@ describe('pt-BR catalogue vocabulary (DS-28)', () => {
 
   it.each(BANNED_WORDING)('never says $variant (use $use)', ({ variant }) => {
     const hits = entries
-      // "E-mail" is the allowed spelling and ICU placeholders / rich tags are not copy
-      .map(([path, text]) => [path, text.replace(/e-mail|\{[^}]*\}|<[^>]*>/gi, '')] as const)
+      // "E-mail" is the allowed spelling and ICU placeholders are not copy
+      .map(([path, text]) => [path, text.replace(/e-mail|\{[^}]*\}/gi, '')] as const)
       .filter(([, text]) => variant.test(text))
       .map(([path]) => path);
     expect(hits).toEqual([]);
