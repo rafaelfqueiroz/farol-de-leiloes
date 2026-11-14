@@ -78,6 +78,8 @@ readonly ENTRIES=(
   "CLEANUP_ON_STARTUP           variable  backend  optional"
   "NEIGHBORHOODS_CACHE_ENABLED  variable  backend  optional"
   "NEIGHBORHOODS_CACHE_TTL      variable  backend  optional"
+  "SAVED_FILTERS_MAX_PER_USER   variable  backend  optional"
+  "UNAVAILABLE_AUCTION_RETENTION_DAYS variable backend optional"
   "LOG_LEVEL                    variable  backend  optional"
   "LOG_HASH_SECRET              secret    backend  required"
   "SENTRY_DSN                   secret    backend  optional"

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
@@ -7,6 +8,7 @@ import {
   StoredFilterData,
 } from './schemas/saved-filter.schema';
 import { FilterData, SavedFilter } from './interfaces/saved-filter.interface';
+import businessConfig from '../config/business.config';
 import { DomainError } from '../common/errors/domain-error';
 import { fromDecimal128OrNull, toDecimal128 } from '../common/money/decimal128';
 import {
@@ -16,13 +18,13 @@ import {
   skipOf,
 } from '../common/pagination/paginated';
 
-const MAX_SAVED_FILTERS = 10;
-
 @Injectable()
 export class SavedFiltersService {
   constructor(
     @InjectModel(SavedFilterEntity.name)
     private readonly savedFilterRepository: Model<SavedFilterDocument>,
+    @Inject(businessConfig.KEY)
+    private readonly config: ConfigType<typeof businessConfig>,
   ) {}
 
   /** AR-35: one page of the user's saved filters, newest first (`_id` breaks createdAt ties). */
@@ -44,10 +46,11 @@ export class SavedFiltersService {
   }
 
   async create(userId: string, name: string, filters: FilterData): Promise<SavedFilter> {
-    // Check if user has reached the limit
+    // AR-43: the limit is a setting (SAVED_FILTERS_MAX_PER_USER), not a constant here.
+    const { maxPerUser } = this.config.savedFilters;
     const count = await this.savedFilterRepository.countDocuments({ userId: { $eq: userId } });
-    if (count >= MAX_SAVED_FILTERS) {
-      throw new DomainError('SAVED_FILTER_LIMIT_REACHED', { limit: MAX_SAVED_FILTERS });
+    if (count >= maxPerUser) {
+      throw new DomainError('SAVED_FILTER_LIMIT_REACHED', { limit: maxPerUser });
     }
 
     // Check for duplicate name. AR-40: the name is the user's text, so it stays out of the error.

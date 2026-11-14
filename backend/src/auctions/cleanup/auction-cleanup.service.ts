@@ -1,15 +1,15 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { subDays } from 'date-fns';
 import { AuctionEntity, AuctionDocument } from '../schemas/auction.schema';
 import { StorageService } from '../../storage/storage.service';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config';
+import businessConfig from '../../config/business.config';
 import { errorMessage } from '../../common/error-message';
 import { serverOperators } from '../../common/mongo/query-safety';
 import { Clock } from '../../common/clock/clock';
-
-const CLEANUP_THRESHOLD_DAYS = 14;
 
 @Injectable()
 export class AuctionCleanupService implements OnModuleInit {
@@ -23,6 +23,8 @@ export class AuctionCleanupService implements OnModuleInit {
     private readonly storageService: StorageService,
     @Inject(schedulerConfig.KEY)
     private readonly config: SchedulerConfig,
+    @Inject(businessConfig.KEY)
+    private readonly business: ConfigType<typeof businessConfig>,
     private readonly clock: Clock, // AR-24
   ) {}
 
@@ -41,7 +43,9 @@ export class AuctionCleanupService implements OnModuleInit {
     this.logger.log('Starting unavailable auctions cleanup');
 
     try {
-      const thresholdDate = subDays(this.clock.now(), CLEANUP_THRESHOLD_DAYS);
+      // AR-43: the retention period is a setting (UNAVAILABLE_AUCTION_RETENTION_DAYS).
+      const retentionDays = this.business.retention.unavailableAuctionDays;
+      const thresholdDate = subDays(this.clock.now(), retentionDays);
 
       const auctions = await this.auctionModel
         .find({
@@ -52,7 +56,7 @@ export class AuctionCleanupService implements OnModuleInit {
         .lean();
 
       this.logger.log(
-        `Found ${auctions.length} unavailable auctions older than ${CLEANUP_THRESHOLD_DAYS} days`,
+        `Found ${auctions.length} unavailable auctions older than ${retentionDays} days`,
       );
 
       if (auctions.length === 0) {

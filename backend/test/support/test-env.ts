@@ -4,6 +4,7 @@
 // the providers or never call them (TS-07).
 import type { ConfigService } from '@nestjs/config';
 import { validateEnv, type Env } from '../../src/config/env';
+import { businessConfigFrom, type BusinessConfig } from '../../src/config/business.config';
 
 export const TEST_ENV = {
   NODE_ENV: 'test',
@@ -48,4 +49,11 @@ export function testConfigService(
   const env = testEnv(overrides);
   const get = (key: keyof Env) => env[key];
   return { get, getOrThrow: get } as unknown as ConfigService<Env, true>;
+}
+
+/** The business settings (AR-43) of testEnv(), for `{ provide: businessConfig.KEY, useValue }`. */
+export function testBusinessConfig(
+  overrides: Record<string, string | undefined> = {},
+): BusinessConfig {
+  return businessConfigFrom(testEnv(overrides));
 }
