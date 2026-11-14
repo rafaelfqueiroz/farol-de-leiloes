@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import messages from '@/messages/pt-BR.json';
@@ -65,7 +65,7 @@ describe('SearchFilters saved filters load failure', () => {
 
 // AR-17: the slider moves JS numbers, but the filters leave the form as money strings.
 describe('SearchFilters price range', () => {
-  const search = () => screen.getByRole('button', { name: 'Buscar Imóveis' });
+  const search = () => screen.getByRole('button', { name: 'Buscar imóveis' });
 
   it('sends the price bounds as money strings', async () => {
     const onSearch = vi.fn();
@@ -122,5 +122,70 @@ describe('SearchFilters price range', () => {
     );
 
     expect(screen.getByText('R$ 50 mil - R$ 1,5 mi')).toBeInTheDocument();
+  });
+
+  it('gives each thumb a name and the full amount as its spoken value', () => {
+    render(
+      <SearchFilters
+        onSearch={vi.fn()}
+        initialFilters={{ minPrice: '50000.00', maxPrice: '1500000.00' }}
+      />,
+    );
+
+    const [min, max] = screen.getAllByRole('slider');
+    expect(min).toHaveAccessibleName(messages.searchFilters.price.minThumb);
+    expect(min).toHaveAttribute('aria-valuetext', 'R$\u00a050.000,00');
+    expect(max).toHaveAccessibleName(messages.searchFilters.price.maxThumb);
+    expect(max).toHaveAttribute('aria-valuetext', 'R$\u00a01.500.000,00');
+  });
+});
+
+describe('SearchFilters save dialog', () => {
+  const openDialog = () =>
+    userEvent.click(screen.getByRole('button', { name: /salvar filtros atuais/i }));
+
+  it('refuses a blank name with the catalogue message', async () => {
+    render(<SearchFilters onSearch={vi.fn()} />);
+
+    await openDialog();
+    await userEvent.type(screen.getByRole('textbox', { name: /nome/i }), ' {Enter}');
+
+    expect(screen.getByText(messages.searchFilters.saveDialog.nameRequired)).toBeInTheDocument();
+    expect(env.saved.saveFilter).not.toHaveBeenCalled();
+  });
+
+  it('confirms a saved filter in the snackbar', async () => {
+    env.saved.saveFilter.mockResolvedValue({});
+    render(<SearchFilters onSearch={vi.fn()} />);
+
+    await openDialog();
+    await userEvent.type(screen.getByRole('textbox', { name: /nome/i }), 'Casas');
+    await userEvent.click(screen.getByRole('button', { name: /^salvar$/i }));
+
+    expect(await screen.findByText(messages.searchFilters.snackbar.saved)).toBeInTheDocument();
+  });
+
+  it('states the limit and disables saving when ten filters exist', () => {
+    env.saved.savedFilters = Array.from({ length: 10 }, (_, i) => ({
+      _id: `f${i}`,
+      name: `Filtro ${i}`,
+      filters: {},
+    }));
+    render(<SearchFilters onSearch={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Limite de 10 filtros atingido' })).toBeDisabled();
+  });
+
+  it('removes a saved filter from its row and confirms it', async () => {
+    env.saved.savedFilters = [{ _id: 'f1', name: 'Casas', filters: {} }];
+    env.saved.deleteFilter.mockResolvedValue(true);
+    render(<SearchFilters onSearch={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole('combobox', { name: /selecione um filtro/i }));
+    const listbox = screen.getByRole('listbox');
+    await userEvent.click(within(listbox).getByRole('button', { name: 'Excluir filtro Casas' }));
+
+    expect(env.saved.deleteFilter).toHaveBeenCalledWith('f1');
+    expect(await screen.findByText(messages.searchFilters.snackbar.removed)).toBeInTheDocument();
   });
 });

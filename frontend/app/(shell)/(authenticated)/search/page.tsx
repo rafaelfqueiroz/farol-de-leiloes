@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Alert, Box, Container, Typography, CircularProgress } from '@mui/material';
 import { hasMinimumRole } from '@/app/components/RequireRole';
 import { useAuth } from '@/app/contexts/AuthContext';
@@ -71,6 +72,7 @@ function searchQuery(filters: AuctionFilters, page: number): string {
 }
 
 function SearchPageContent() {
+  const t = useTranslations('search');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { role } = useAuth();
@@ -201,10 +203,10 @@ function SearchPageContent() {
             {/* Search Header */}
             <Box sx={{ mb: 3 }}>
               <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
-                Busca de Imóveis
+                {t('title')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Encontre as melhores oportunidades de imóveis de leilões da Caixa Econômica Federal
+                {t('subtitle')}
               </Typography>
             </Box>
 

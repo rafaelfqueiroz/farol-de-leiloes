@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import AuctionDetailClient from './AuctionDetailClient';
 import { backendFetch } from '@/lib/backend';
 import { publicEnv } from '@/lib/env';
@@ -26,10 +27,12 @@ async function fetchAuction(code: string): Promise<AuctionDetail | null> {
   }
 }
 
-function formatAddress(address: AuctionDetail['address']): string {
+function formatLocation(address: AuctionDetail['address'], fallback: string): string {
   const parts = [address.neighborhood, address.city, address.state].filter(Boolean);
-  return parts.join(', ') || 'Localização não informada';
+  return parts.join(', ') || fallback;
 }
+
+type MetadataTranslator = Awaited<ReturnType<typeof getTranslations<'auctionDetail.metadata'>>>;
 
 type PageProps = {
   params: Promise<{ code: string }>;
@@ -38,23 +41,25 @@ type PageProps = {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { code } = await params;
   const auction = await fetchAuction(code);
+  const t = await getTranslations('auctionDetail.metadata');
+  const siteName = (await getTranslations('patterns.logo'))('name');
 
   if (!auction) {
     return {
-      title: 'Leilão não encontrado | Farol dos Leilões',
-      description: 'O leilão solicitado não foi encontrado.',
+      title: t('siteTitle', { title: t('notFound'), siteName }),
+      description: t('notFoundDescription'),
     };
   }
 
   const lastPhase = auction.phases[auction.phases.length - 1];
-  const locationText = formatAddress(auction.address);
+  const locationText = formatLocation(auction.address, t('location'));
   const priceText = lastPhase?.minimumPrice
-    ? `Lance mínimo: ${formatMoney(lastPhase.minimumPrice)}`
+    ? t('minimumBid', { price: formatMoney(lastPhase.minimumPrice) })
     : '';
 
-  const title = auction.title || `Imóvel em ${locationText}`;
+  const title = auction.title || t('fallbackTitle', { location: locationText });
   const description = [
-    `Imóvel em leilão em ${locationText}.`,
+    t('summary', { location: locationText }),
     priceText,
     auction.description?.slice(0, 100),
   ]
@@ -62,7 +67,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     .join(' ');
 
   return {
-    title: `${title} | Farol dos Leilões`,
+    title: t('siteTitle', { title, siteName }),
     description,
     openGraph: {
       title,
@@ -80,7 +85,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           ]
         : undefined,
       locale: 'pt_BR',
-      siteName: 'Farol dos Leilões',
+      siteName,
     },
     twitter: {
       card: 'summary_large_image',
@@ -94,14 +99,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-function generateJsonLd(auction: AuctionDetail) {
+function generateJsonLd(auction: AuctionDetail, t: MetadataTranslator) {
   const lastPhase = auction.phases[auction.phases.length - 1];
 
   return {
     '@context': 'https://schema.org',
     '@type': 'Product',
-    name: auction.title || 'Imóvel em Leilão',
-    description: auction.description || `Imóvel em leilão em ${formatAddress(auction.address)}`,
+    name: auction.title || t('fallbackName'),
+    description:
+      auction.description ||
+      t('summary', { location: formatLocation(auction.address, t('location')) }),
     image: auction.imageUrl,
     offers: {
       '@type': 'Offer',
@@ -132,7 +139,7 @@ export default async function AuctionDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const jsonLd = generateJsonLd(auction);
+  const jsonLd = generateJsonLd(auction, await getTranslations('auctionDetail.metadata'));
 
   return (
     <>

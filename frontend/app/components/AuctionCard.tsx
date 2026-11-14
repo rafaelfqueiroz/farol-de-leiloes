@@ -4,10 +4,12 @@ import { Card, CardContent, Box, Typography, Chip, IconButton } from '@mui/mater
 import HomeIcon from '@mui/icons-material/Home';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import { useTranslations } from 'next-intl';
 import ReminderButton from './ReminderButton';
 import Money from './patterns/Money';
 import DateText from './patterns/DateText';
 import type { Auction, AuctionPhase } from '@/lib/auction';
+import { instantToWallClock, parseDate, relativeParts, wallClockToCalendar } from '@/lib/dates';
 
 interface AuctionCardProps {
   auction: Auction;
@@ -15,44 +17,71 @@ interface AuctionCardProps {
   onToggleFavorite: () => void;
   detailUrl: string;
   showDate?: boolean;
+  /** The clock for the countdown chip; injectable so tests do not depend on today. */
+  now?: Date;
 }
 
-const MODALITY_LABELS: Record<string, string> = {
-  SFI_AUCTION: 'Leilão SFI',
-  OPEN_BIDDING: 'Licitação Aberta',
-  DIRECT_ONLINE_SALES: 'Venda Direta Online',
-  ONLINE_SALES: 'Venda Online',
-};
+const MODALITIES = ['SFI_AUCTION', 'OPEN_BIDDING', 'DIRECT_ONLINE_SALES', 'ONLINE_SALES'] as const;
+const PAYMENT_METHODS = ['OWN_RESOURCES', 'FGTS', 'FINANCING'] as const;
 
-function getCountdownLabel(currentPhase?: AuctionPhase): { text: string; isToday: boolean } | null {
+function isOneOf<T extends string>(list: readonly T[], value: string): value is T {
+  return (list as readonly string[]).includes(value);
+}
+
+/**
+ * DS-28: one wording for the modalidade and the payment methods, shared by the card and the
+ * detail page. A code the catalogue does not know shows as it came from Caixa.
+ */
+export function useAuctionLabels() {
+  const t = useTranslations('auctionCard');
+  return {
+    modality: (value: string) => (isOneOf(MODALITIES, value) ? t(`modality.${value}`) : value),
+    paymentMethod: (value: string) =>
+      isOneOf(PAYMENT_METHODS, value) ? t(`paymentMethod.${value}`) : value,
+  };
+}
+
+// decoration, not copy (DS-20): hidden from assistive technology
+const APPRAISAL_ICON = '💰';
+const MINIMUM_BID_ICON = '🏷️';
+const DATE_ICON = '📅';
+const PHASES_ICON = '📊';
+const OPENS_ICON = '↗';
+
+export type Countdown = { kind: 'today' } | { kind: 'tomorrow' } | { kind: 'days'; count: number };
+
+/** The Brasília calendar day (YYYY-MM-DD) an ISO instant falls on (AR-23). */
+function brasiliaDay(value: string): string {
+  return parseDate(value).kind === 'calendar'
+    ? value
+    : wallClockToCalendar(instantToWallClock(value));
+}
+
+/**
+ * Days from `now` to the nearest phase date that is today or later, counted in Brasília calendar
+ * days (AR-23) through `relativeParts`. A date that cannot be read is skipped.
+ */
+export function getCountdown(currentPhase: AuctionPhase | undefined, now: Date): Countdown | null {
   if (!currentPhase) return null;
   if (currentPhase.modality === 'DIRECT_ONLINE_SALES') return null;
 
-  const phaseDates = currentPhase.phaseDates;
-  if (!phaseDates || phaseDates.length === 0) return null;
+  let nearest: number | null = null;
+  for (const value of currentPhase.phaseDates ?? []) {
+    let parts;
+    try {
+      parts = relativeParts(brasiliaDay(value), now);
+    } catch (error: unknown) {
+      if (error instanceof RangeError) continue;
+      throw error;
+    }
+    if (parts.direction === 'past') continue;
+    if (nearest === null || parts.count < nearest) nearest = parts.count;
+  }
 
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  const futureDates = phaseDates
-    .map((d) => new Date(d))
-    .filter((d) => d >= today)
-    .sort((a, b) => a.getTime() - b.getTime());
-
-  const nearest = futureDates[0];
-  if (!nearest) return null;
-  const nearestDay = new Date(nearest.getFullYear(), nearest.getMonth(), nearest.getDate());
-  const diffMs = nearestDay.getTime() - today.getTime();
-  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return { text: 'Hoje', isToday: true };
-  if (diffDays === 1) return { text: 'Amanhã', isToday: false };
-  return { text: `${diffDays} dias`, isToday: false };
-}
-
-function formatAddress(address: Auction['address']): string {
-  const parts = [address.street, address.neighborhood, address.city, address.state].filter(Boolean);
-  return parts.join(', ') || 'Endereço não informado';
+  if (nearest === null) return null;
+  if (nearest === 0) return { kind: 'today' };
+  if (nearest === 1) return { kind: 'tomorrow' };
+  return { kind: 'days', count: nearest };
 }
 
 export default function AuctionCard({
@@ -61,9 +90,20 @@ export default function AuctionCard({
   onToggleFavorite,
   detailUrl,
   showDate = false,
+  now,
 }: AuctionCardProps) {
+  const t = useTranslations('auctionCard');
+  const labels = useAuctionLabels();
   const lastPhase = auction.phases[auction.phases.length - 1];
-  const countdown = getCountdownLabel(auction.currentPhase ?? lastPhase);
+  const countdown = getCountdown(auction.currentPhase ?? lastPhase, now ?? new Date());
+  const address = [
+    auction.address.street,
+    auction.address.neighborhood,
+    auction.address.city,
+    auction.address.state,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <Card
@@ -90,7 +130,11 @@ export default function AuctionCard({
       >
         {countdown && (
           <Chip
-            label={countdown.text}
+            label={
+              countdown.kind === 'days'
+                ? t('countdown.days', { count: countdown.count })
+                : t(`countdown.${countdown.kind}`)
+            }
             size="small"
             sx={{
               position: 'absolute',
@@ -99,15 +143,15 @@ export default function AuctionCard({
               zIndex: 1,
               fontWeight: 600,
               fontSize: '0.75rem',
-              backgroundColor: countdown.isToday ? 'success.soft' : 'background.muted',
-              color: countdown.isToday ? 'success.main' : 'text.primary',
+              backgroundColor: countdown.kind === 'today' ? 'success.soft' : 'background.muted',
+              color: countdown.kind === 'today' ? 'success.main' : 'text.primary',
             }}
           />
         )}
         {auction.imageUrl ? (
           <img
             src={auction.imageUrl}
-            alt={auction.title || 'Imóvel'}
+            alt={auction.title || t('property')}
             style={{
               width: '100%',
               height: '100%',
@@ -139,7 +183,7 @@ export default function AuctionCard({
         >
           <HomeIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7 }} />
           <Typography variant="body2" color="text.secondary">
-            Sem imagem
+            {t('noImage')}
           </Typography>
         </Box>
       </Box>
@@ -149,19 +193,15 @@ export default function AuctionCard({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
           <Box>
             <Typography variant="h6" fontWeight={600} sx={{ mb: 0.5, fontSize: '1rem' }}>
-              {auction.title || 'Imóvel sem título'}
+              {auction.title || t('untitled')}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Código: {auction.code}
+              {t('code', { code: auction.code })}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {lastPhase && (
-              <Chip
-                label={MODALITY_LABELS[lastPhase.modality] || lastPhase.modality}
-                size="small"
-                color="primary"
-              />
+              <Chip label={labels.modality(lastPhase.modality)} size="small" color="primary" />
             )}
             <IconButton
               onClick={onToggleFavorite}
@@ -172,7 +212,7 @@ export default function AuctionCard({
                   color: 'error.main',
                 },
               }}
-              title={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+              title={isFavorite ? t('favorite.remove') : t('favorite.add')}
             >
               {isFavorite ? <FavoriteIcon /> : <FavoriteBorderIcon />}
             </IconButton>
@@ -189,14 +229,14 @@ export default function AuctionCard({
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
             <HomeIcon sx={{ fontSize: 18, color: 'text.secondary', mt: 0.25 }} />
             <Typography variant="body2" color="text.primary">
-              {formatAddress(auction.address)}
+              {address || t('addressMissing')}
             </Typography>
           </Box>
 
           {auction.appraisalPrice !== null && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" color="text.secondary">
-                💰 Avaliação:
+                <span aria-hidden>{APPRAISAL_ICON}</span> {t('labelled', { label: t('appraisal') })}
               </Typography>
               <Typography variant="body2" fontWeight={600} color="text.primary">
                 <Money value={auction.appraisalPrice} />
@@ -207,7 +247,8 @@ export default function AuctionCard({
           {lastPhase?.minimumPrice != null && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" color="text.secondary">
-                🏷️ Lance mínimo:
+                <span aria-hidden>{MINIMUM_BID_ICON}</span>{' '}
+                {t('labelled', { label: t('minimumBid') })}
               </Typography>
               <Typography variant="body2" fontWeight={600} color="text.primary">
                 <Money value={lastPhase.minimumPrice} />
@@ -218,7 +259,7 @@ export default function AuctionCard({
           {showDate && lastPhase?.date && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" color="text.secondary">
-                📅 Data:
+                <span aria-hidden>{DATE_ICON}</span> {t('labelled', { label: t('date') })}
               </Typography>
               <Typography variant="body2" fontWeight={600} color="text.primary">
                 <DateText value={lastPhase.date} />
@@ -228,7 +269,8 @@ export default function AuctionCard({
 
           {auction.phases.length > 1 && (
             <Typography variant="caption" color="text.secondary">
-              📊 {auction.phases.length} fases registradas
+              <span aria-hidden>{PHASES_ICON}</span>{' '}
+              {t('phasesRegistered', { count: auction.phases.length })}
             </Typography>
           )}
         </Box>
@@ -254,8 +296,10 @@ export default function AuctionCard({
               },
             }}
           >
-            Ver detalhes completos
-            <span style={{ fontSize: '0.75rem' }}>↗</span>
+            {t('viewDetails')}
+            <span aria-hidden style={{ fontSize: '0.75rem' }}>
+              {OPENS_ICON}
+            </span>
           </Typography>
         </Box>
       </CardContent>

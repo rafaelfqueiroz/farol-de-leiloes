@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Card,
@@ -25,6 +26,8 @@ const API_URL = publicEnv.apiUrl;
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
+  const t = useTranslations('login');
+  const tCommon = useTranslations('common');
   const apiErrorMessage = useApiErrorMessage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,7 +68,7 @@ export default function LoginPage() {
               <Logo variant="lockup" size={40} />
             </Box>
             <Typography component="h1" variant="body1" color="text.secondary">
-              Entre para acessar sua conta
+              {t('subtitle')}
             </Typography>
           </Box>
 
@@ -78,7 +81,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit}>
             <TextField
               fullWidth
-              label="Email"
+              label={t('email')}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -89,7 +92,7 @@ export default function LoginPage() {
 
             <TextField
               fullWidth
-              label="Senha"
+              label={t('password')}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -105,13 +108,13 @@ export default function LoginPage() {
               disabled={loading}
               sx={{ mb: 2, py: 1.5 }}
             >
-              {loading ? 'Entrando...' : 'Entrar'}
+              {loading ? t('submitting') : tCommon('signIn')}
             </Button>
           </form>
 
           <Divider sx={{ my: 3 }}>
             <Typography variant="body2" color="text.secondary">
-              ou
+              {t('or')}
             </Typography>
           </Divider>
 
@@ -127,19 +130,22 @@ export default function LoginPage() {
               py: 1.5,
             }}
           >
-            Entrar com Google
+            {t('google')}
           </Button>
 
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              Não tem uma conta?{' '}
-              <MuiLink
-                component={Link}
-                href="/register"
-                sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}
-              >
-                Cadastre-se
-              </MuiLink>
+              {t.rich('noAccount', {
+                link: (chunks) => (
+                  <MuiLink
+                    component={Link}
+                    href="/register"
+                    sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}
+                  >
+                    {chunks}
+                  </MuiLink>
+                ),
+              })}
             </Typography>
           </Box>
         </CardContent>

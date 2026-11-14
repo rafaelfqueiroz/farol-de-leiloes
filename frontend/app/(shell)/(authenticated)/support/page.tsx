@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense } from 'react';
+import { useTranslations } from 'next-intl';
 import { Box, Container, CircularProgress } from '@mui/material';
 import RequireRole from '@/app/components/RequireRole';
 import SupportPage from '@/app/components/SupportPage';
@@ -23,8 +24,9 @@ function SupportPageLoading() {
 }
 
 export default function Support() {
+  const t = useTranslations('support');
   return (
-    <RequireRole minimumRole="free" featureName="Suporte">
+    <RequireRole minimumRole="free" featureName={t('featureName')}>
       <Suspense fallback={<SupportPageLoading />}>
         {/* #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar */}
         <Box sx={{ pt: 2, pb: 4 }}>

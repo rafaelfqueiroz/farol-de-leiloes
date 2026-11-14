@@ -136,5 +136,612 @@
     "REMINDER_CHANNEL_NOT_IN_PLAN": "Seu plano não inclui lembretes por {channel, select, sms {SMS} SMS {SMS} whatsapp {WhatsApp} WHATSAPP {WhatsApp} other {o canal escolhido}}. Escolha outro canal ou mude de plano.",
     "UNKNOWN": "Algo deu errado. Tente novamente em instantes.",
     "BACKEND_UNAVAILABLE": "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente."
+  },
+  "common": {
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "delete": "Excluir",
+    "close": "Fechar",
+    "back": "Voltar",
+    "loading": "Carregando…",
+    "tryAgain": "Tentar novamente",
+    "signIn": "Entrar",
+    "signOut": "Sair",
+    "confirm": "Confirmar",
+    "edit": "Editar",
+    "clear": "Limpar",
+    "search": "Buscar",
+    "yes": "Sim",
+    "no": "Não",
+    "notInformed": "Não informado"
+  },
+  "meta": {
+    "title": "Farol dos Leilões",
+    "description": "Encontre imóveis em leilão da Caixa Econômica Federal"
+  },
+  "landing": {
+    "nav": {
+      "plans": "Planos"
+    },
+    "hero": {
+      "badge": "Leilões da Caixa Econômica Federal",
+      "title": "Encontre o imóvel dos seus sonhos com até <highlight>{discount} de desconto</highlight>",
+      "subtitle": "Mais de 35 mil imóveis disponíveis em todo o Brasil. Casas, apartamentos, terrenos e imóveis comerciais com condições especiais de pagamento.",
+      "cta": "Comece Agora",
+      "stats": {
+        "properties": {
+          "value": "35k+",
+          "label": "Imóveis disponíveis"
+        },
+        "states": {
+          "label": "Estados atendidos"
+        },
+        "discount": {
+          "label": "Desconto máximo"
+        }
+      }
+    },
+    "features": {
+      "title": "Por que usar o Farol dos Leilões?",
+      "subtitle": "Todas as ferramentas que você precisa para encontrar e adquirir o imóvel perfeito",
+      "catalogue": {
+        "title": "Mais de 35 mil imóveis",
+        "description": "Acesse o maior catálogo de imóveis de leilão da Caixa com descontos de até {discount} do valor de mercado.",
+        "highlight": "até {discount} de desconto"
+      },
+      "payment": {
+        "title": "Condições de Pagamento Flexíveis",
+        "description": "Escolha as condições que melhor se encaixam no seu bolso: financiamento, FGTS ou pagamento à vista.",
+        "highlight": "Use seu FGTS"
+      },
+      "risk": {
+        "title": "Análise de Risco do Imóvel",
+        "description": "Verifique a situação jurídica e ocupacional do imóvel antes de dar seu lance.",
+        "highlight": "Segurança na compra"
+      },
+      "simulator": {
+        "title": "Simulador de Aquisição",
+        "description": "Calcule o ROI e simule seu investimento para tomar a melhor decisão.",
+        "highlight": "Planeje seu investimento"
+      },
+      "documents": {
+        "title": "Verificação de Documentação",
+        "description": "Análise completa de matrículas, certidões e situação do imóvel.",
+        "highlight": "Documentação em dia"
+      },
+      "alerts": {
+        "title": "Alertas de Oportunidades",
+        "description": "Receba notificações quando imóveis do seu interesse entrarem em leilão.",
+        "highlight": "Não perca nenhuma oferta"
+      }
+    },
+    "howItWorks": {
+      "title": "Como funciona?",
+      "subtitle": "Em 4 passos simples você encontra o imóvel ideal",
+      "signUp": {
+        "title": "Crie sua conta",
+        "description": "Crie sua conta gratuitamente em poucos minutos"
+      },
+      "search": {
+        "title": "Busque",
+        "description": "Filtre por estado, cidade, preço e tipo de imóvel"
+      },
+      "analyse": {
+        "title": "Analise",
+        "description": "Verifique os detalhes, fotos e situação do imóvel"
+      },
+      "win": {
+        "title": "Arremate",
+        "description": "Participe do leilão e conquiste seu imóvel"
+      }
+    },
+    "pricing": {
+      "title": "Escolha seu Plano",
+      "subtitle": "Comece gratuitamente ou desbloqueie funcionalidades com nossos planos",
+      "free": {
+        "description": "Para quem está começando a explorar oportunidades",
+        "cta": "Começar Grátis"
+      },
+      "standard": {
+        "description": "Ferramentas inteligentes para encontrar as melhores oportunidades",
+        "cta": "Assinar Agora"
+      },
+      "premium": {
+        "description": "Todas as ferramentas para investir com segurança",
+        "cta": "Em breve"
+      }
+    },
+    "cta": {
+      "title": "Pronto para encontrar seu imóvel?",
+      "subtitle": "Crie sua conta gratuitamente e descubra oportunidades incríveis em todo o Brasil",
+      "button": "Criar conta grátis"
+    },
+    "footer": {
+      "rights": "© 2024 Farol dos Leilões. Todos os direitos reservados."
+    }
+  },
+  "requireRole": {
+    "title": "Acesso restrito",
+    "withFeature": "O recurso \"{feature}\" requer o plano {plan} ou superior.",
+    "withoutFeature": "Esta página requer o plano {plan} ou superior.",
+    "viewPlans": "Ver planos"
+  },
+  "login": {
+    "subtitle": "Entre para acessar sua conta",
+    "email": "E-mail",
+    "password": "Senha",
+    "submitting": "Entrando...",
+    "or": "ou",
+    "google": "Entrar com Google",
+    "noAccount": "Não tem uma conta? <link>Criar conta</link>"
+  },
+  "register": {
+    "subtitle": "Crie sua conta",
+    "name": "Nome",
+    "email": "E-mail",
+    "password": "Senha",
+    "passwordHelper": "Mínimo de {min} caracteres",
+    "confirmPassword": "Confirmar Senha",
+    "submit": "Criar conta",
+    "submitting": "Criando conta...",
+    "hasAccount": "Já tem uma conta? <link>Entrar</link>",
+    "errors": {
+      "passwordMismatch": "As senhas não coincidem",
+      "passwordTooShort": "A senha deve ter pelo menos {min} caracteres"
+    }
+  },
+  "resetPassword": {
+    "request": {
+      "title": "Redefinir Senha",
+      "success": "Um e-mail foi enviado com instruções para redefinir sua senha. Verifique sua caixa de entrada.",
+      "hint": "Digite seu e-mail para receber instruções de redefinição de senha.",
+      "email": "E-mail",
+      "submit": "Enviar e-mail",
+      "backToLogin": "Voltar para o login"
+    },
+    "confirm": {
+      "title": "Nova Senha",
+      "success": "Senha redefinida com sucesso! Redirecionando para o login...",
+      "hint": "Digite sua nova senha.",
+      "password": "Nova Senha",
+      "confirmPassword": "Confirmar Nova Senha",
+      "submit": "Redefinir Senha",
+      "errors": {
+        "passwordMismatch": "As senhas não coincidem",
+        "passwordTooShort": "A senha deve ter pelo menos {min} caracteres"
+      }
+    }
+  },
+  "verifyEmail": {
+    "pending": {
+      "title": "Verifique seu e-mail",
+      "description": "Enviamos um e-mail de verificação para <strong>{email}</strong>. Por favor, verifique sua caixa de entrada e clique no link para ativar sua conta.",
+      "sent": "E-mail de verificação enviado com sucesso! Verifique sua caixa de entrada.",
+      "resend": "Reenviar e-mail de verificação",
+      "sending": "Enviando...",
+      "expiry": "O link de verificação expira em 24 horas. Se não encontrar o e-mail, verifique sua pasta de spam."
+    },
+    "token": {
+      "loadingTitle": "Verificando e-mail...",
+      "loadingHint": "Aguarde enquanto verificamos seu e-mail.",
+      "successTitle": "E-mail verificado!",
+      "successHint": "Seu e-mail foi verificado com sucesso. Você será redirecionado para o login.",
+      "errorTitle": "Erro na verificação",
+      "errorHint": "O link de verificação pode estar expirado ou ser inválido. Entre na sua conta para solicitar um novo e-mail de verificação.",
+      "goToLogin": "Ir para o login"
+    }
+  },
+  "authCallback": {
+    "authenticating": "Autenticando...",
+    "fallback": "Carregando..."
+  },
+  "plansResult": {
+    "cancel": {
+      "title": "Pagamento cancelado",
+      "description": "O pagamento foi cancelado. Você pode tentar novamente quando quiser.",
+      "back": "Voltar aos planos"
+    },
+    "success": {
+      "title": "Assinatura realizada com sucesso!",
+      "description": "Você agora tem acesso a todos os recursos do plano Standard, incluindo a busca por IA. Você será redirecionado automaticamente.",
+      "goToSearch": "Ir para a busca"
+    }
+  },
+  "notFound": {
+    "page": {
+      "title": "Página não encontrada",
+      "description": "O conteúdo que você procura não existe ou não está mais disponível.",
+      "action": "Buscar imóveis"
+    },
+    "auction": {
+      "title": "Imóvel indisponível",
+      "description": "Este imóvel não foi encontrado ou não está mais disponível para leilão.",
+      "action": "Buscar imóveis"
+    }
+  },
+  "auctionCard": {
+    "untitled": "Imóvel sem título",
+    "property": "Imóvel",
+    "code": "Código: {code}",
+    "noImage": "Sem imagem",
+    "addressMissing": "Endereço não informado",
+    "appraisal": "Valor de avaliação",
+    "minimumBid": "Lance mínimo",
+    "date": "Data",
+    "labelled": "{label}:",
+    "phasesRegistered": "{count, plural, =1 {# fase registrada} other {# fases registradas}}",
+    "viewDetails": "Ver detalhes completos",
+    "favorite": {
+      "add": "Adicionar aos favoritos",
+      "remove": "Remover dos favoritos"
+    },
+    "countdown": {
+      "today": "Hoje",
+      "tomorrow": "Amanhã",
+      "days": "{count, plural, =1 {# dia} other {# dias}}"
+    },
+    "modality": {
+      "SFI_AUCTION": "Leilão SFI",
+      "OPEN_BIDDING": "Licitação Aberta",
+      "DIRECT_ONLINE_SALES": "Venda Direta Online",
+      "ONLINE_SALES": "Venda Online"
+    },
+    "paymentMethod": {
+      "OWN_RESOURCES": "Recursos próprios",
+      "FGTS": "FGTS",
+      "FINANCING": "Financiamento"
+    }
+  },
+  "auctionList": {
+    "loading": "Carregando leilões…",
+    "emptyTitle": "Nenhum leilão encontrado",
+    "emptyHint": "Tente ajustar os filtros de busca",
+    "title": "Resultado da busca",
+    "results": "{count, plural, =1 {{formatted} resultado} other {{formatted} resultados}}",
+    "resultsShowing": "{count, plural, =1 {{formatted} resultado} other {{formatted} resultados}} (mostrando {shown})",
+    "perPage": "Por página",
+    "viewCards": "Visualização em cards",
+    "viewList": "Visualização em lista"
+  },
+  "favorites": {
+    "emptyTitle": "Nenhum leilão favorito",
+    "emptyHint": "Marque leilões como favoritos para acompanhá-los aqui",
+    "title": "Leilões favoritos",
+    "summary": "{count, plural, =1 {{formatted} leilão marcado como favorito} other {{formatted} leilões marcados como favoritos}}"
+  },
+  "auctionDetail": {
+    "info": "Informações do imóvel",
+    "address": "Endereço",
+    "zipcode": "CEP: {zipcode}",
+    "currentMinimumBid": "Lance mínimo atual",
+    "discount": "{percent} de desconto",
+    "auctionDates": "{count, plural, =1 {Data do leilão} other {Datas do leilão}}",
+    "nthAuctionDate": "{position}º leilão: <date></date>",
+    "paymentMethods": "Formas de pagamento aceitas",
+    "expenseRules": "Regras para pagamento das despesas",
+    "documents": {
+      "title": "Documentos disponíveis",
+      "matricula": "Matrícula do imóvel",
+      "edital": "Edital e anexos"
+    },
+    "caixaLink": "Ver detalhes completos no site da Caixa",
+    "phases": {
+      "title": "Histórico de fases",
+      "phase": "Fase",
+      "number": "#{number}",
+      "modality": "Modalidade",
+      "dates": "Data(s)",
+      "payment": "Pagamento",
+      "noPayment": "-"
+    },
+    "updatedAt": "Última atualização: <date></date>",
+    "metadata": {
+      "siteTitle": "{title} | {siteName}",
+      "notFound": "Leilão não encontrado",
+      "notFoundDescription": "O leilão solicitado não foi encontrado.",
+      "location": "Localização não informada",
+      "fallbackTitle": "Imóvel em {location}",
+      "fallbackName": "Imóvel em leilão",
+      "summary": "Imóvel em leilão em {location}.",
+      "minimumBid": "Lance mínimo: {price}"
+    }
+  },
+  "search": {
+    "title": "Busca de imóveis",
+    "subtitle": "Encontre as melhores oportunidades de imóveis de leilões da Caixa Econômica Federal"
+  },
+  "searchFilters": {
+    "toggle": {
+      "open": "Abrir filtros de busca",
+      "close": "Fechar filtros de busca"
+    },
+    "ai": {
+      "title": "Busque por IA",
+      "placeholder": "Ex: apartamento em santos até 300 mil",
+      "searching": "Buscando…",
+      "locked": {
+        "title": "Recurso disponível no plano Premium",
+        "description": "Assine o plano Premium para usar a busca por IA",
+        "action": "Assine agora"
+      }
+    },
+    "panelTitle": "Filtros de Busca",
+    "saved": {
+      "title": "Filtros Salvos",
+      "select": "Selecione um filtro",
+      "none": "Nenhum selecionado",
+      "delete": "Excluir filtro {name}",
+      "saveCurrent": "Salvar Filtros Atuais",
+      "limitReached": "Limite de {max} filtros atingido"
+    },
+    "location": {
+      "title": "Localização",
+      "state": "Estado",
+      "allStates": "Todos os estados",
+      "city": "Cidade",
+      "cityPlaceholder": "Digite para buscar cidade...",
+      "noCities": "Nenhuma cidade encontrada",
+      "neighborhood": "Bairro",
+      "neighborhoodPlaceholder": "Digite para buscar bairro...",
+      "selectCityFirst": "Selecione uma cidade primeiro",
+      "noNeighborhoods": "Nenhum bairro encontrado"
+    },
+    "modality": {
+      "title": "Modalidade do Leilão"
+    },
+    "price": {
+      "title": "Lance mínimo",
+      "range": "Faixa de lance mínimo",
+      "minThumb": "Lance mínimo, valor inicial",
+      "maxThumb": "Lance mínimo, valor final",
+      "rangeValue": "{min} - {max}"
+    },
+    "actions": {
+      "search": "Buscar imóveis",
+      "searching": "Buscando…",
+      "reset": "Limpar Filtros"
+    },
+    "saveDialog": {
+      "title": "Salvar Filtro",
+      "name": "Nome do filtro",
+      "saving": "Salvando...",
+      "nameRequired": "Digite um nome para o filtro"
+    },
+    "snackbar": {
+      "saved": "Filtro salvo com sucesso!",
+      "removed": "Filtro removido com sucesso!"
+    }
+  },
+  "reminders": {
+    "featureName": "Lembretes",
+    "title": "Meus Lembretes",
+    "subtitle": "Gerencie seus lembretes de leilões",
+    "empty": {
+      "title": "Nenhum lembrete agendado",
+      "description": "Adicione lembretes aos leilões para receber notificações antes do início",
+      "action": "Buscar leilões"
+    },
+    "auctionFallbackTitle": "Leilão {code}",
+    "locationMissing": "Localização não informada",
+    "scheduledFor": "<strong>Agendado para:</strong> <date></date>",
+    "note": "<strong>Nota:</strong> {text}",
+    "actions": {
+      "viewAuction": "Ver leilão",
+      "edit": "Editar lembrete",
+      "remove": "Remover lembrete"
+    },
+    "channel": {
+      "EMAIL": "E-mail",
+      "SMS": "SMS",
+      "WHATSAPP": "WhatsApp"
+    },
+    "channelRestricted": "{channel} (Standard/Premium)",
+    "form": {
+      "channel": "Canal de notificação",
+      "scheduledAt": "Data e hora do lembrete",
+      "scheduledAtHelper": "O lembrete deve ser antes do início do leilão",
+      "scheduledAtRequired": "Selecione a data e hora do lembrete",
+      "note": "Nota (opcional)",
+      "noteCounter": "{count}/{max} caracteres"
+    },
+    "editDialog": {
+      "title": "Editar Lembrete"
+    },
+    "deleteDialog": {
+      "title": "Remover Lembrete",
+      "confirm": "Tem certeza que deseja remover o lembrete para <strong>{auction}</strong>?",
+      "submit": "Remover"
+    }
+  },
+  "reminderButton": {
+    "tooltip": {
+      "manage": "Gerenciar lembrete",
+      "create": "Criar lembrete"
+    },
+    "dialogTitle": {
+      "manage": "Gerenciar Lembrete",
+      "create": "Criar Lembrete"
+    },
+    "scheduled": "Lembrete agendado para <date></date> via {channel}",
+    "note": "Nota: {text}",
+    "remove": "Remover Lembrete",
+    "create": "Criar Lembrete"
+  },
+  "support": {
+    "featureName": "Suporte",
+    "title": "Suporte",
+    "intro": "Encontre respostas para as perguntas mais frequentes ou envie uma solicitação para nossa equipe.",
+    "faqHeading": "Perguntas frequentes",
+    "faq": {
+      "howAuctionsWork": {
+        "question": "Como funciona o leilão de imóveis da Caixa?",
+        "answer": "Os leilões de imóveis da Caixa Econômica Federal são realizados para venda de imóveis retomados. Você pode participar fazendo lances online durante o período de licitação. Os imóveis podem ser adquiridos com recursos próprios, FGTS ou financiamento."
+      },
+      "plans": {
+        "question": "Quais são os planos disponíveis?",
+        "answer": "Oferecemos o plano Gratuito com acesso básico à busca, o plano Standard com acesso a favoritos, lembretes e filtros salvos, e o plano Premium com todos os recursos incluindo busca por IA e alertas prioritários."
+      },
+      "reminders": {
+        "question": "Como configuro lembretes para leilões?",
+        "answer": "Acesse a página de detalhes do imóvel desejado e clique em \"Criar Lembrete\". Você pode escolher ser notificado por e-mail. É necessário ter o plano Standard ou superior."
+      },
+      "aiSearch": {
+        "question": "Como funciona a busca por IA?",
+        "answer": "Nossa busca inteligente permite que você descreva o imóvel desejado em linguagem natural. Por exemplo: \"apartamento 2 quartos em São Paulo até 200 mil\". O sistema interpreta sua busca e encontra os melhores resultados."
+      },
+      "cancel": {
+        "question": "Posso cancelar minha assinatura a qualquer momento?",
+        "answer": "Sim, você pode cancelar sua assinatura a qualquer momento através da página de Perfil. O acesso aos recursos premium continuará até o fim do período já pago."
+      },
+      "contact": {
+        "question": "Como entro em contato com o suporte?",
+        "answer": "Você pode enviar uma solicitação através do formulário abaixo. Nossa equipe responderá no e-mail cadastrado em sua conta."
+      }
+    },
+    "form": {
+      "heading": "Enviar solicitação",
+      "description": "Descreva seu problema ou dúvida e nossa equipe entrará em contato pelo e-mail da sua conta.",
+      "title": "Título",
+      "body": "Descrição",
+      "submit": "Enviar solicitação",
+      "submitting": "Enviando…",
+      "success": "Solicitação de suporte enviada com sucesso!"
+    }
+  },
+  "plans": {
+    "title": "Planos",
+    "subtitle": "Escolha o plano ideal para suas necessidades",
+    "features": {
+      "includesFree": "Tudo do plano Gratuito",
+      "includesStandard": "Tudo do plano Standard"
+    },
+    "coupon": {
+      "placeholder": "Cupom de desconto",
+      "apply": "Aplicar",
+      "applied": "Cupom aplicado! Desconto de <discount></discount>"
+    },
+    "currentPlan": "Plano Atual",
+    "subscribe": "Assinar {name}",
+    "cancelSubscription": "Cancelar assinatura",
+    "cancelSuccess": "Assinatura cancelada com sucesso",
+    "cancelDialog": {
+      "body": "Tem certeza que deseja cancelar sua assinatura? Você perderá acesso aos recursos do plano Standard.",
+      "confirm": "Confirmar cancelamento"
+    }
+  },
+  "profile": {
+    "title": "Meu Perfil",
+    "subtitle": "Gerencie suas informações pessoais e segurança",
+    "success": {
+      "profile": "Perfil atualizado com sucesso!",
+      "personalData": "Dados pessoais salvos com sucesso!",
+      "passwordChanged": "Senha alterada com sucesso!",
+      "passwordSet": "Senha definida com sucesso! Agora você pode entrar com e-mail e senha."
+    },
+    "errors": {
+      "passwordMismatch": "As senhas não coincidem",
+      "passwordTooShort": "A senha deve ter pelo menos 6 caracteres"
+    },
+    "profileInfo": {
+      "title": "Informações do Perfil",
+      "name": "Nome",
+      "email": "E-mail",
+      "emailLockedForGoogle": "E-mail não pode ser alterado para contas Google",
+      "submit": "Atualizar Perfil"
+    },
+    "personalData": {
+      "title": "Dados Pessoais",
+      "phone": "Telefone",
+      "phonePlaceholder": "(00) 00000-0000",
+      "cpf": "CPF",
+      "cpfPlaceholder": "000.000.000-00",
+      "dateOfBirth": "Data de Nascimento",
+      "sex": "Sexo",
+      "sexOptions": {
+        "none": "Selecione",
+        "male": "Masculino",
+        "female": "Feminino",
+        "other": "Outro"
+      },
+      "address": "Endereço",
+      "street": "Rua",
+      "city": "Cidade",
+      "state": "Estado",
+      "statePlaceholder": "UF",
+      "zipCode": "CEP",
+      "zipCodePlaceholder": "00000-000",
+      "submit": "Salvar Dados Pessoais"
+    },
+    "password": {
+      "new": "Nova Senha",
+      "confirm": "Confirmar Nova Senha"
+    },
+    "changePassword": {
+      "title": "Alterar Senha",
+      "current": "Senha Atual",
+      "submit": "Alterar Senha"
+    },
+    "setPassword": {
+      "title": "Definir Senha",
+      "intro": "Você entrou com o Google. Defina uma senha para também poder entrar com e-mail e senha.",
+      "submit": "Definir Senha"
+    }
+  },
+  "adminCoupons": {
+    "title": "Gerenciar Cupons",
+    "new": "Novo Cupom",
+    "invalidate": "Invalidar",
+    "empty": "Nenhum cupom cadastrado",
+    "noDescription": "-",
+    "columns": {
+      "code": "Código",
+      "discount": "Desconto",
+      "validTo": "Válido até",
+      "status": "Status",
+      "description": "Descrição",
+      "actions": "Ações"
+    },
+    "status": {
+      "invalidated": "Invalidado",
+      "expired": "Expirado",
+      "active": "Ativo"
+    },
+    "form": {
+      "code": "Código do cupom",
+      "codePlaceholder": "EX: DESCONTO10",
+      "discountValue": "Valor do desconto (R$)",
+      "discountValuePlaceholder": "10.00",
+      "validTo": "Válido até",
+      "description": "Descrição (opcional)",
+      "submit": "Criar Cupom"
+    },
+    "snackbar": {
+      "created": "Cupom criado com sucesso",
+      "invalidated": "Cupom invalidado"
+    },
+    "errors": {
+      "invalidDiscount": "Informe o valor do desconto em reais, com até duas casas decimais"
+    }
+  },
+  "plan": {
+    "names": {
+      "free": "Gratuito",
+      "standard": "Standard",
+      "premium": "Premium",
+      "admin": "Admin"
+    },
+    "period": "/mês",
+    "popular": "Mais popular",
+    "comingSoon": "Em breve",
+    "features": {
+      "manualSearch": "Busca manual por filtros",
+      "favorites": "Favoritar imóveis",
+      "savedFilters": "Filtros salvos (até {limit})",
+      "reminders": "Lembretes",
+      "aiSearch": "Busca por IA",
+      "prioritySupport": "Suporte prioritário",
+      "customAlerts": "Alertas personalizados",
+      "advancedReports": "Relatórios avançados"
+    }
   }
 }

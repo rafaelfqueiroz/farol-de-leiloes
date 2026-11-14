@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Container,
@@ -34,39 +35,23 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import { useFavorites } from '@/app/contexts/FavoritesContext';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { hasMinimumRole } from '@/app/components/RequireRole';
+import { useAuctionLabels } from '@/app/components/AuctionCard';
 import Money from '@/app/components/patterns/Money';
 import DateText from '@/app/components/patterns/DateText';
 import type { AuctionDetail } from '@/lib/auction';
 import { discountPercent, formatPercent } from '@/lib/money';
 
-const MODALITY_LABELS: Record<string, string> = {
-  SFI_AUCTION: 'Leilão SFI',
-  OPEN_BIDDING: 'Licitação Aberta',
-  DIRECT_ONLINE_SALES: 'Venda Direta Online',
-  ONLINE_SALES: 'Venda Online',
-};
-
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  OWN_RESOURCES: 'Recursos Próprios',
-  FGTS: 'FGTS',
-  FINANCING: 'Financiamento',
-};
-
-const DOCUMENT_LABELS: Record<string, string> = {
-  matricula: 'Matrícula do Imóvel',
-  edital: 'Edital e Anexos',
-};
-
-function formatAddress(address: AuctionDetail['address']): string {
-  const parts = [address.street, address.neighborhood, address.city, address.state].filter(Boolean);
-  return parts.join(', ') || 'Endereço não informado';
-}
+const ADDRESS_PARTS = ['street', 'neighborhood', 'city', 'state'] as const;
 
 interface AuctionDetailClientProps {
   auction: AuctionDetail;
 }
 
 export default function AuctionDetailClient({ auction }: AuctionDetailClientProps) {
+  const t = useTranslations('auctionDetail');
+  const tCard = useTranslations('auctionCard');
+  const tCommon = useTranslations('common');
+  const labels = useAuctionLabels();
   const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { role } = useAuth();
@@ -88,6 +73,10 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
     }
   };
 
+  const address = ADDRESS_PARTS.map((part) => auction.address[part])
+    .filter(Boolean)
+    .join(', ');
+  const { updatedAt } = auction;
   const lastPhase = auction.phases[auction.phases.length - 1];
   // AR-17: Decimal arithmetic on the money strings, never JS numbers
   const discount = discountPercent(auction.appraisalPrice, lastPhase?.minimumPrice ?? null);
@@ -100,6 +89,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
           {/* Header */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
             <IconButton
+              aria-label={tCommon('back')}
               onClick={() => router.push(getReturnUrl())}
               size="large"
               sx={{
@@ -112,14 +102,17 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
             </IconButton>
             <Box sx={{ flex: 1 }}>
               <Typography variant="h4" fontWeight={600}>
-                {auction.title || 'Imóvel sem título'}
+                {auction.title || tCard('untitled')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Código: {auction.code}
+                {tCard('code', { code: auction.code })}
               </Typography>
             </Box>
             {canAccessFavorites && (
               <IconButton
+                aria-label={
+                  isFavorite(auction.code) ? tCard('favorite.remove') : tCard('favorite.add')
+                }
                 onClick={() => toggleFavorite(auction)}
                 size="large"
                 sx={{
@@ -156,7 +149,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
               {auction.imageUrl ? (
                 <img
                   src={auction.imageUrl}
-                  alt={auction.title || 'Imóvel'}
+                  alt={auction.title || tCard('property')}
                   style={{
                     width: '100%',
                     height: '100%',
@@ -188,7 +181,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
               >
                 <HomeIcon sx={{ fontSize: 60, mb: 1, opacity: 0.7 }} />
                 <Typography variant="body2" color="text.secondary">
-                  Sem imagem
+                  {tCard('noImage')}
                 </Typography>
               </Box>
             </Box>
@@ -200,15 +193,11 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}>
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="h6" fontWeight={600} gutterBottom>
-                    Informações do Imóvel
+                    {t('info')}
                   </Typography>
                 </Box>
                 {lastPhase && (
-                  <Chip
-                    label={MODALITY_LABELS[lastPhase.modality] || lastPhase.modality}
-                    color="primary"
-                    size="medium"
-                  />
+                  <Chip label={labels.modality(lastPhase.modality)} color="primary" size="medium" />
                 )}
               </Box>
 
@@ -219,12 +208,12 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                 <LocationOnIcon sx={{ color: 'primary.main', mt: 0.5 }} />
                 <Box>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Endereço
+                    {t('address')}
                   </Typography>
-                  <Typography variant="body1">{formatAddress(auction.address)}</Typography>
+                  <Typography variant="body1">{address || tCard('addressMissing')}</Typography>
                   {auction.address.zipcode && (
                     <Typography variant="body2" color="text.secondary">
-                      CEP: {auction.address.zipcode}
+                      {t('zipcode', { zipcode: auction.address.zipcode })}
                     </Typography>
                   )}
                 </Box>
@@ -244,7 +233,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                     <HomeIcon sx={{ color: 'info.main' }} />
                     <Box>
                       <Typography variant="subtitle2" color="text.secondary">
-                        Valor de Avaliação
+                        {tCard('appraisal')}
                       </Typography>
                       <Typography variant="h6" fontWeight={600} color="info.main">
                         <Money value={auction.appraisalPrice} />
@@ -258,14 +247,14 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                     <AttachMoneyIcon sx={{ color: 'success.main' }} />
                     <Box>
                       <Typography variant="subtitle2" color="text.secondary">
-                        Lance Mínimo Atual
+                        {t('currentMinimumBid')}
                       </Typography>
                       <Typography variant="h6" fontWeight={600} color="success.main">
                         <Money value={lastPhase.minimumPrice} />
                       </Typography>
                       {discount !== null && (
                         <Chip
-                          label={`${formatPercent(discount)} de desconto`}
+                          label={t('discount', { percent: formatPercent(discount) })}
                           color="success"
                           size="small"
                           sx={{ mt: 0.5 }}
@@ -280,12 +269,18 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                     <CalendarTodayIcon sx={{ color: 'warning.main' }} />
                     <Box>
                       <Typography variant="subtitle2" color="text.secondary">
-                        {lastPhase.phaseDates.length > 1 ? 'Datas do Leilão' : 'Data do Leilão'}
+                        {t('auctionDates', { count: lastPhase.phaseDates.length })}
                       </Typography>
                       {lastPhase.phaseDates.map((date, idx, dates) => (
                         <Typography key={idx} variant="body1" fontWeight={600}>
-                          {dates.length > 1 ? `${idx + 1}º Leilão: ` : ''}
-                          <DateText value={date} withTime />
+                          {dates.length > 1 ? (
+                            t.rich('nthAuctionDate', {
+                              position: idx + 1,
+                              date: () => <DateText value={date} withTime />,
+                            })
+                          ) : (
+                            <DateText value={date} withTime />
+                          )}
                         </Typography>
                       ))}
                     </Box>
@@ -301,13 +296,13 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                     <PaymentIcon sx={{ color: 'primary.main', mt: 0.5 }} />
                     <Box>
                       <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Formas de Pagamento Aceitas
+                        {t('paymentMethods')}
                       </Typography>
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                         {lastPhase.paymentMethods.map((method, idx) => (
                           <Chip
                             key={idx}
-                            label={PAYMENT_METHOD_LABELS[method] || method}
+                            label={labels.paymentMethod(method)}
                             variant="outlined"
                             color="primary"
                             size="small"
@@ -327,7 +322,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                     <ReceiptLongIcon sx={{ color: 'warning.main', mt: 0.5 }} />
                     <Box sx={{ flex: 1 }}>
                       <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Regras para Pagamento das Despesas
+                        {t('expenseRules')}
                       </Typography>
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                         {lastPhase.expenseRules.map((rule, idx) => (
@@ -357,7 +352,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                     <DescriptionIcon sx={{ color: 'text.secondary', mt: 0.5 }} />
                     <Box sx={{ flex: 1 }}>
                       <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Documentos Disponíveis
+                        {t('documents.title')}
                       </Typography>
                       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                         {auction.matriculaUrl && (
@@ -367,7 +362,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                             startIcon={<DownloadIcon />}
                             onClick={() => handleDownloadDocument('matricula')}
                           >
-                            {DOCUMENT_LABELS.matricula}
+                            {t('documents.matricula')}
                           </Button>
                         )}
                         {auction.editalUrl && (
@@ -377,7 +372,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                             startIcon={<DownloadIcon />}
                             onClick={() => handleDownloadDocument('edital')}
                           >
-                            {DOCUMENT_LABELS.edital}
+                            {t('documents.edital')}
                           </Button>
                         )}
                       </Box>
@@ -399,7 +394,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                     startIcon={<LinkIcon />}
                     fullWidth
                   >
-                    Ver detalhes completos no site da Caixa
+                    {t('caixaLink')}
                   </Button>
                 </>
               )}
@@ -411,11 +406,10 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
             <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight={600} gutterBottom>
-                  Histórico de Fases
+                  {t('phases.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  {auction.phases.length} fase{auction.phases.length !== 1 ? 's' : ''} registrada
-                  {auction.phases.length !== 1 ? 's' : ''}
+                  {tCard('phasesRegistered', { count: auction.phases.length })}
                 </Typography>
 
                 <TableContainer component={Paper} variant="outlined">
@@ -423,19 +417,19 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                     <TableHead>
                       <TableRow>
                         <TableCell>
-                          <strong>Fase</strong>
+                          <strong>{t('phases.phase')}</strong>
                         </TableCell>
                         <TableCell>
-                          <strong>Modalidade</strong>
+                          <strong>{t('phases.modality')}</strong>
                         </TableCell>
                         <TableCell align="right">
-                          <strong>Lance Mínimo</strong>
+                          <strong>{tCard('minimumBid')}</strong>
                         </TableCell>
                         <TableCell>
-                          <strong>Data(s)</strong>
+                          <strong>{t('phases.dates')}</strong>
                         </TableCell>
                         <TableCell>
-                          <strong>Pagamento</strong>
+                          <strong>{t('phases.payment')}</strong>
                         </TableCell>
                       </TableRow>
                     </TableHead>
@@ -445,10 +439,10 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                           key={index}
                           sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                         >
-                          <TableCell>#{index + 1}</TableCell>
+                          <TableCell>{t('phases.number', { number: index + 1 })}</TableCell>
                           <TableCell>
                             <Chip
-                              label={MODALITY_LABELS[phase.modality] || phase.modality}
+                              label={labels.modality(phase.modality)}
                               size="small"
                               color={index === auction.phases.length - 1 ? 'primary' : 'default'}
                             />
@@ -463,7 +457,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                                     <DateText value={d} withTime />
                                   </Box>
                                 ))
-                              : 'Não informado'}
+                              : tCommon('notInformed')}
                           </TableCell>
                           <TableCell>
                             {phase.paymentMethods && phase.paymentMethods.length > 0 ? (
@@ -471,7 +465,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                                 {phase.paymentMethods.map((method, idx) => (
                                   <Chip
                                     key={idx}
-                                    label={PAYMENT_METHOD_LABELS[method] || method}
+                                    label={labels.paymentMethod(method)}
                                     size="small"
                                     variant="outlined"
                                   />
@@ -479,7 +473,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
                               </Box>
                             ) : (
                               <Typography variant="body2" color="text.secondary">
-                                -
+                                {t('phases.noPayment')}
                               </Typography>
                             )}
                           </TableCell>
@@ -493,13 +487,15 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
           )}
 
           {/* Last Updated */}
-          {auction.updatedAt && (
+          {updatedAt && (
             <Typography
               variant="caption"
               color="text.secondary"
               sx={{ display: 'block', textAlign: 'center', mt: 3 }}
             >
-              Última atualização: <DateText value={auction.updatedAt} withTime />
+              {t.rich('updatedAt', {
+                date: () => <DateText value={updatedAt} withTime />,
+              })}
             </Typography>
           )}
         </Box>

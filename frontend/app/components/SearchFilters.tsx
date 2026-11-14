@@ -36,7 +36,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
 import type { Auction } from '@/lib/auction';
-import { formatMoneyCompact, moneyFromSlider, moneyToSlider } from '@/lib/money';
+import { formatMoney, formatMoneyCompact, moneyFromSlider, moneyToSlider } from '@/lib/money';
 import { publicEnv } from '@/lib/env';
 import { reportClientError } from '@/lib/report-client-error';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
@@ -89,12 +89,10 @@ const BRAZILIAN_STATES = [
   { code: 'TO', name: 'Tocantins' },
 ];
 
-const MODALITIES = [
-  { value: 'SFI_AUCTION', label: 'Leilão SFI' },
-  { value: 'OPEN_BIDDING', label: 'Licitação Aberta' },
-  { value: 'DIRECT_ONLINE_SALES', label: 'Venda Direta Online' },
-  { value: 'ONLINE_SALES', label: 'Venda Online' },
-];
+// The labels come from the catalogue (`auctionCard.modality.<value>`), one wording per modalidade (DS-28)
+const MODALITIES = ['SFI_AUCTION', 'OPEN_BIDDING', 'DIRECT_ONLINE_SALES', 'ONLINE_SALES'] as const;
+
+const MAX_SAVED_FILTERS = 10;
 
 // Brazilian cities organized by state (major cities)
 const CITIES_BY_STATE: Record<string, string[]> = {
@@ -407,8 +405,16 @@ const DRAWER_WIDTH = 380;
 
 type PriceRange = [min: number, max: number];
 
+// What the save dialog shows under the name field: derived at render, so the text is never held in state
+type SaveError = { kind: 'nameRequired' } | { kind: 'api'; error: unknown };
+
 function formatPriceLabel(value: number): string {
   return formatMoneyCompact(moneyFromSlider(value));
+}
+
+// The full amount for assistive technology, which has room for it (the visible labels are compact)
+function priceValueText(value: number): string {
+  return formatMoney(moneyFromSlider(value));
 }
 
 function rangeFromFilters(minPrice?: string, maxPrice?: string): PriceRange {
@@ -453,7 +459,10 @@ export default function SearchFilters({
   // Auth state for feature gating
   const { role } = useAuth();
   const apiErrorMessage = useApiErrorMessage();
-  const t = useTranslations();
+  const t = useTranslations('searchFilters');
+  const tAuction = useTranslations('auctionCard');
+  const tCommon = useTranslations('common');
+  const tLoadFailed = useTranslations('loadFailed.savedFilters');
   const canUseAISearch = role === 'admin' || role === 'premium';
   const canUseSavedFilters = role === 'admin' || role === 'premium' || role === 'standard';
 
@@ -470,10 +479,10 @@ export default function SearchFilters({
   const [selectedSavedFilterId, setSelectedSavedFilterId] = useState<string>('');
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [newFilterName, setNewFilterName] = useState('');
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<SaveError | null>(null);
   const [savingFilter, setSavingFilter] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarMessage, setSnackbarMessage] = useState<'saved' | 'removed'>('saved');
 
   // Fetch neighborhoods when city selection changes
   useEffect(() => {
@@ -637,7 +646,7 @@ export default function SearchFilters({
 
   const handleSaveFilter = async () => {
     if (!newFilterName.trim()) {
-      setSaveError('Digite um nome para o filtro');
+      setSaveError({ kind: 'nameRequired' });
       return;
     }
 
@@ -655,10 +664,10 @@ export default function SearchFilters({
 
       await saveFilter(newFilterName.trim(), filterData);
       handleCloseSaveDialog();
-      setSnackbarMessage('Filtro salvo com sucesso!');
+      setSnackbarMessage('saved');
       setSnackbarOpen(true);
     } catch (error: unknown) {
-      setSaveError(apiErrorMessage(error));
+      setSaveError({ kind: 'api', error });
     } finally {
       setSavingFilter(false);
     }
@@ -671,7 +680,7 @@ export default function SearchFilters({
       if (selectedSavedFilterId === filterId) {
         setSelectedSavedFilterId('');
       }
-      setSnackbarMessage('Filtro removido com sucesso!');
+      setSnackbarMessage('removed');
       setSnackbarOpen(true);
     }
   };
@@ -680,12 +689,33 @@ export default function SearchFilters({
     setSnackbarOpen(false);
   };
 
+  const saveErrorText = saveError
+    ? saveError.kind === 'nameRequired'
+      ? t('saveDialog.nameRequired')
+      : apiErrorMessage(saveError.error)
+    : null;
+
+  const noCitySelected = !filters.city || filters.city.length === 0;
+  const cityPlaceholder =
+    filters.city && filters.city.length > 0 ? undefined : t('location.cityPlaceholder');
+  const neighborhoodPlaceholder = noCitySelected
+    ? t('location.selectCityFirst')
+    : filters.neighborhood && filters.neighborhood.length > 0
+      ? undefined
+      : t('location.neighborhoodPlaceholder');
+  const neighborhoodNoOptions = loadingNeighborhoods
+    ? tCommon('loading')
+    : noCitySelected
+      ? t('location.selectCityFirst')
+      : t('location.noNeighborhoods');
+  const savedLimitReached = savedFilters.length >= MAX_SAVED_FILTERS;
+
   return (
     <>
       {/* Center Content - AI Search */}
       <Box sx={{ mb: 4, position: 'relative' }}>
         <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-          Busque por IA
+          {t('ai.title')}
         </Typography>
         {canUseAISearch ? (
           <TextField
@@ -693,7 +723,7 @@ export default function SearchFilters({
             value={aiSearchInput}
             onChange={(e) => setAiSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAISearch()}
-            placeholder="Ex: apartamento em santos até 300 mil"
+            placeholder={t('ai.placeholder')}
             disabled={aiSearchLoading}
             slotProps={{
               input: {
@@ -712,7 +742,7 @@ export default function SearchFilters({
                     disabled={aiSearchLoading || !aiSearchInput.trim()}
                     sx={{ ml: 1 }}
                   >
-                    {aiSearchLoading ? 'Buscando...' : 'Buscar'}
+                    {aiSearchLoading ? t('ai.searching') : tCommon('search')}
                   </Button>
                 ),
               },
@@ -734,13 +764,13 @@ export default function SearchFilters({
           >
             <LockIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7 }} />
             <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: 'text.primary' }}>
-              Recurso disponivel no plano Premium
+              {t('ai.locked.title')}
             </Typography>
             <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-              Assine o plano Premium para usar a busca por IA
+              {t('ai.locked.description')}
             </Typography>
             <Button variant="contained" href="/plans" size="small">
-              Assine agora
+              {t('ai.locked.action')}
             </Button>
           </Box>
         )}
@@ -749,6 +779,7 @@ export default function SearchFilters({
       {/* Toggle Button for Filter Panel */}
       {!drawerOpen && (
         <IconButton
+          aria-label={t('toggle.open')}
           onClick={() => setDrawerOpen(true)}
           sx={{
             position: 'fixed',
@@ -809,10 +840,11 @@ export default function SearchFilters({
             }}
           >
             <Typography variant="h6" fontWeight={600}>
-              Filtros de Busca
+              {t('panelTitle')}
             </Typography>
             <IconButton
               size="small"
+              aria-label={t('toggle.close')}
               onClick={() => setDrawerOpen(false)}
               sx={{
                 color: 'text.secondary',
@@ -833,13 +865,13 @@ export default function SearchFilters({
                   sx={{ mb: 2, fontWeight: 600 }}
                 >
                   <BookmarkIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
-                  Filtros Salvos
+                  {t('saved.title')}
                 </Typography>
 
                 {savedFiltersLoadFailed && (
                   <ErrorState
-                    title={t('loadFailed.savedFilters.title')}
-                    message={t('loadFailed.savedFilters.message')}
+                    title={tLoadFailed('title')}
+                    message={tLoadFailed('message')}
                     onRetry={() => void refreshFilters()}
                     titleComponent="h3"
                   />
@@ -848,7 +880,7 @@ export default function SearchFilters({
                 <TextField
                   select
                   fullWidth
-                  label="Selecione um filtro"
+                  label={t('saved.select')}
                   value={selectedSavedFilterId}
                   onChange={(e) => handleSelectSavedFilter(e.target.value)}
                   size="small"
@@ -856,7 +888,7 @@ export default function SearchFilters({
                   disabled={savedFiltersLoading}
                 >
                   <MenuItem value="">
-                    <em>Nenhum selecionado</em>
+                    <em>{t('saved.none')}</em>
                   </MenuItem>
                   {savedFilters.map((filter) => (
                     <MenuItem
@@ -877,6 +909,7 @@ export default function SearchFilters({
                         </Typography>
                         <IconButton
                           size="small"
+                          aria-label={t('saved.delete', { name: filter.name })}
                           onClick={(e) => handleDeleteSavedFilter(e, filter._id)}
                           sx={{ ml: 1, p: 0.5 }}
                         >
@@ -893,11 +926,11 @@ export default function SearchFilters({
                   fullWidth
                   startIcon={<SaveIcon />}
                   onClick={handleOpenSaveDialog}
-                  disabled={savedFilters.length >= 10}
+                  disabled={savedLimitReached}
                 >
-                  {savedFilters.length >= 10
-                    ? 'Limite de 10 filtros atingido'
-                    : 'Salvar Filtros Atuais'}
+                  {savedLimitReached
+                    ? t('saved.limitReached', { max: MAX_SAVED_FILTERS })
+                    : t('saved.saveCurrent')}
                 </Button>
 
                 <Divider sx={{ my: 3 }} />
@@ -907,19 +940,19 @@ export default function SearchFilters({
             {/* Location Section */}
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
-                Localização
+                {t('location.title')}
               </Typography>
 
               <TextField
                 select
                 fullWidth
-                label="Estado"
+                label={t('location.state')}
                 value={filters.state || ''}
                 onChange={(e) => handleStateChange(e.target.value)}
                 size="small"
                 sx={{ mb: 2 }}
               >
-                <MenuItem value="">Todos os estados</MenuItem>
+                <MenuItem value="">{t('location.allStates')}</MenuItem>
                 {BRAZILIAN_STATES.map((state) => (
                   <MenuItem key={state.code} value={state.code}>
                     {state.name}
@@ -936,10 +969,8 @@ export default function SearchFilters({
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    label="Cidade"
-                    placeholder={
-                      filters.city && filters.city.length > 0 ? '' : 'Digite para buscar cidade...'
-                    }
+                    label={t('location.city')}
+                    placeholder={cityPlaceholder}
                     size="small"
                   />
                 )}
@@ -953,7 +984,7 @@ export default function SearchFilters({
                   );
                 }}
                 sx={{ mb: 2 }}
-                noOptionsText="Nenhuma cidade encontrada"
+                noOptionsText={t('location.noCities')}
                 ListboxProps={{
                   style: { maxHeight: 250 },
                 }}
@@ -970,14 +1001,8 @@ export default function SearchFilters({
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    label="Bairro"
-                    placeholder={
-                      !filters.city || filters.city.length === 0
-                        ? 'Selecione uma cidade primeiro'
-                        : filters.neighborhood && filters.neighborhood.length > 0
-                          ? ''
-                          : 'Digite para buscar bairro...'
-                    }
+                    label={t('location.neighborhood')}
+                    placeholder={neighborhoodPlaceholder}
                     size="small"
                     slotProps={{
                       input: {
@@ -1003,13 +1028,7 @@ export default function SearchFilters({
                     </li>
                   );
                 }}
-                noOptionsText={
-                  loadingNeighborhoods
-                    ? 'Carregando...'
-                    : !filters.city || filters.city.length === 0
-                      ? 'Selecione uma cidade primeiro'
-                      : 'Nenhum bairro encontrado'
-                }
+                noOptionsText={neighborhoodNoOptions}
                 ListboxProps={{
                   style: { maxHeight: 250 },
                 }}
@@ -1021,7 +1040,7 @@ export default function SearchFilters({
             {/* Modality Section */}
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
-                Modalidade do Leilão
+                {t('modality.title')}
               </Typography>
 
               <Box
@@ -1033,15 +1052,17 @@ export default function SearchFilters({
                 <FormGroup>
                   {MODALITIES.map((modality) => (
                     <FormControlLabel
-                      key={modality.value}
+                      key={modality}
                       control={
                         <Checkbox
-                          checked={filters.modality?.includes(modality.value) || false}
-                          onChange={() => handleModalityChange(modality.value)}
+                          checked={filters.modality?.includes(modality) || false}
+                          onChange={() => handleModalityChange(modality)}
                           size="small"
                         />
                       }
-                      label={<Typography variant="body2">{modality.label}</Typography>}
+                      label={
+                        <Typography variant="body2">{tAuction(`modality.${modality}`)}</Typography>
+                      }
                     />
                   ))}
                 </FormGroup>
@@ -1053,16 +1074,19 @@ export default function SearchFilters({
             {/* Price Range Section */}
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
-                Preço
+                {t('price.title')}
               </Typography>
 
               <Box sx={{ px: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                   <Typography variant="body2" color="text.secondary">
-                    Faixa de preço
+                    {t('price.range')}
                   </Typography>
                   <Typography variant="body2" fontWeight={600}>
-                    {formatPriceLabel(priceRange[0])} - {formatPriceLabel(priceRange[1])}
+                    {t('price.rangeValue', {
+                      min: formatPriceLabel(priceRange[0]),
+                      max: formatPriceLabel(priceRange[1]),
+                    })}
                   </Typography>
                 </Box>
                 <Slider
@@ -1070,6 +1094,8 @@ export default function SearchFilters({
                   onChange={handlePriceChange}
                   valueLabelDisplay="auto"
                   valueLabelFormat={formatPriceLabel}
+                  getAriaLabel={(index) => t(index === 0 ? 'price.minThumb' : 'price.maxThumb')}
+                  getAriaValueText={priceValueText}
                   min={0}
                   max={PRICE_MAX}
                   step={50000}
@@ -1105,7 +1131,7 @@ export default function SearchFilters({
               disabled={isLoading}
               onClick={handleSubmit}
             >
-              {isLoading ? 'Buscando...' : 'Buscar Imóveis'}
+              {isLoading ? t('actions.searching') : t('actions.search')}
             </Button>
             <Button
               type="button"
@@ -1116,7 +1142,7 @@ export default function SearchFilters({
               disabled={isLoading}
               sx={{}}
             >
-              Limpar Filtros
+              {t('actions.reset')}
             </Button>
           </Box>
         </Box>
@@ -1124,24 +1150,24 @@ export default function SearchFilters({
 
       {/* Save Filter Dialog */}
       <Dialog open={saveDialogOpen} onClose={handleCloseSaveDialog} maxWidth="xs" fullWidth>
-        <DialogTitle>Salvar Filtro</DialogTitle>
+        <DialogTitle>{t('saveDialog.title')}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
-            label="Nome do filtro"
+            label={t('saveDialog.name')}
             fullWidth
             value={newFilterName}
             onChange={(e) => setNewFilterName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSaveFilter()}
             error={!!saveError}
-            helperText={saveError}
+            helperText={saveErrorText}
             disabled={savingFilter}
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseSaveDialog} disabled={savingFilter}>
-            Cancelar
+            {tCommon('cancel')}
           </Button>
           <Button
             onClick={handleSaveFilter}
@@ -1149,7 +1175,7 @@ export default function SearchFilters({
             disabled={savingFilter || !newFilterName.trim()}
             startIcon={savingFilter ? <CircularProgress size={16} /> : <SaveIcon />}
           >
-            {savingFilter ? 'Salvando...' : 'Salvar'}
+            {savingFilter ? t('saveDialog.saving') : tCommon('save')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1162,7 +1188,7 @@ export default function SearchFilters({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
-          {snackbarMessage}
+          {t(`snackbar.${snackbarMessage}`)}
         </Alert>
       </Snackbar>
     </>

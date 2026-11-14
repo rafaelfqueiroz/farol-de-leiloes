@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Box, Card, CardContent, Typography, Alert, CircularProgress, Button } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -10,6 +11,7 @@ import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function VerifyEmailTokenPage() {
   const router = useRouter();
+  const t = useTranslations('verifyEmail.token');
   const apiErrorMessage = useApiErrorMessage();
   const params = useParams();
   const token = params.token as string;
@@ -58,10 +60,10 @@ export default function VerifyEmailTokenPage() {
             <>
               <CircularProgress size={64} sx={{ mb: 3 }} />
               <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
-                Verificando email...
+                {t('loadingTitle')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Aguarde enquanto verificamos seu email.
+                {t('loadingHint')}
               </Typography>
             </>
           )}
@@ -70,14 +72,13 @@ export default function VerifyEmailTokenPage() {
             <>
               <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
               <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
-                Email verificado!
+                {t('successTitle')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Seu email foi verificado com sucesso. Voce sera redirecionado para a pagina de
-                login.
+                {t('successHint')}
               </Typography>
               <Button component={Link} href="/login" variant="contained" fullWidth>
-                Ir para Login
+                {t('goToLogin')}
               </Button>
             </>
           )}
@@ -86,17 +87,16 @@ export default function VerifyEmailTokenPage() {
             <>
               <ErrorIcon sx={{ fontSize: 64, color: 'error.main', mb: 2 }} />
               <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
-                Erro na verificacao
+                {t('errorTitle')}
               </Typography>
               <Alert severity="error" sx={{ mb: 3, textAlign: 'left' }}>
                 {error}
               </Alert>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                O link de verificacao pode estar expirado ou ser invalido. Faca login para solicitar
-                um novo email de verificacao.
+                {t('errorHint')}
               </Typography>
               <Button component={Link} href="/login" variant="contained" fullWidth>
-                Ir para Login
+                {t('goToLogin')}
               </Button>
             </>
           )}

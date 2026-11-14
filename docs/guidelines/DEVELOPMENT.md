@@ -1,8 +1,8 @@
 # Development Guidelines
 
-| | |
-|---|---|
-| **Status** | Draft v1.0 |
+|                    |                                                                                          |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| **Status**         | Draft v1.0                                                                               |
 | **Companion docs** | [ARCHITECTURE.md](ARCHITECTURE.md), [TESTING.md](TESTING.md), [SECURITY.md](SECURITY.md) |
 
 How to work: dependencies, code conventions, the lifecycle of a change, git and PRs, CI/CD, ADRs and the definition of done. Rules are numbered `DV-nn`.
@@ -11,64 +11,64 @@ How to work: dependencies, code conventions, the lifecycle of a change, git and 
 
 One approved choice per concern. Adding a dependency that overlaps one of these needs an ADR (§10).
 
-| Concern | Backend | Frontend |
-|---|---|---|
-| Framework | `@nestjs/*` | `next`, `react` |
-| Data access | `mongoose`, `@nestjs/mongoose` | — (never; AR-02) |
-| Decimals | `decimal.js` | `decimal.js` |
-| Dates | `date-fns`, `@date-fns/tz` | `date-fns`, `@date-fns/tz` |
-| Validation | `class-validator`, `class-transformer` (DTOs); `zod` (config) | `zod` |
-| Auth | `@nestjs/passport`, `passport-jwt`, `passport-google-oauth20`, `bcrypt` | — |
-| Rate limiting | `@nestjs/throttler` | — |
-| HTTP headers | `helmet` | `next.config.ts` headers |
-| API docs | `@nestjs/swagger` | — |
-| UI | — | `@mui/material`, `@mui/icons-material`, `@mui/x-date-pickers` |
-| i18n | — | `next-intl` |
-| Logging / errors | `nestjs-pino`, `@sentry/nestjs` | `@sentry/nextjs` |
-| Payments | `stripe` | `@stripe/stripe-js` |
-| Files | `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` (R2) | — |
-| Scraping | `puppeteer`, `cheerio` | — |
-| Tests | `vitest`, `@testcontainers/mongodb`, `supertest` | `vitest`, `@testing-library/react`, `vitest-axe`, `@playwright/test`, `@axe-core/playwright` |
-| Lint / format | `eslint`, `typescript-eslint`, `prettier` | `eslint`, `eslint-config-next`, `prettier` |
-| Git hooks | `husky`, `lint-staged` (repository root, in a minimal `package.json` that holds only the hook tooling) | |
+| Concern          | Backend                                                                                                | Frontend                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Framework        | `@nestjs/*`                                                                                            | `next`, `react`                                                                              |
+| Data access      | `mongoose`, `@nestjs/mongoose`                                                                         | — (never; AR-02)                                                                             |
+| Decimals         | `decimal.js`                                                                                           | `decimal.js`                                                                                 |
+| Dates            | `date-fns`, `@date-fns/tz`                                                                             | `date-fns`, `@date-fns/tz`                                                                   |
+| Validation       | `class-validator`, `class-transformer` (DTOs); `zod` (config)                                          | `zod`                                                                                        |
+| Auth             | `@nestjs/passport`, `passport-jwt`, `passport-google-oauth20`, `bcrypt`                                | —                                                                                            |
+| Rate limiting    | `@nestjs/throttler`                                                                                    | —                                                                                            |
+| HTTP headers     | `helmet`                                                                                               | `next.config.ts` headers                                                                     |
+| API docs         | `@nestjs/swagger`                                                                                      | —                                                                                            |
+| UI               | —                                                                                                      | `@mui/material`, `@mui/icons-material`, `@mui/x-date-pickers`                                |
+| i18n             | —                                                                                                      | `next-intl`                                                                                  |
+| Logging / errors | `nestjs-pino`, `@sentry/nestjs`                                                                        | `@sentry/nextjs`                                                                             |
+| Payments         | `stripe`                                                                                               | `@stripe/stripe-js`                                                                          |
+| Files            | `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` (R2)                                             | —                                                                                            |
+| Scraping         | `puppeteer`, `cheerio`                                                                                 | —                                                                                            |
+| Tests            | `vitest`, `@testcontainers/mongodb`, `supertest`                                                       | `vitest`, `@testing-library/react`, `vitest-axe`, `@playwright/test`, `@axe-core/playwright` |
+| Lint / format    | `eslint`, `typescript-eslint`, `prettier`                                                              | `eslint`, `eslint-config-next`, `prettier`                                                   |
+| Git hooks        | `husky`, `lint-staged` (repository root, in a minimal `package.json` that holds only the hook tooling) |                                                                                              |
 
 **Not used:** `dayjs`, `moment` (replaced by date-fns), Tailwind (DS-23), `lodash` (native equivalents), `puppeteer-extra-plugin-stealth` and any other bot-detection evasion (SC-24), an HTTP client wrapper (native `fetch`), a second ORM.
 
 ## 2. TypeScript
 
-| | |
-|---|---|
-| **DV-01** | `strict: true` on both packages, with nothing relaxed (`noImplicitAny` stays on), plus `noUncheckedIndexedAccess`, `noImplicitOverride` and `noFallthroughCasesInSwitch`. |
+|           |                                                                                                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DV-01** | `strict: true` on both packages, with nothing relaxed (`noImplicitAny` stays on), plus `noUncheckedIndexedAccess`, `noImplicitOverride` and `noFallthroughCasesInSwitch`.                                |
 | **DV-02** | `any` is banned by lint (`@typescript-eslint/no-explicit-any: error`). `unknown` plus validation is the escape hatch. A genuinely necessary `any` carries an `eslint-disable-next-line` with the reason. |
-| **DV-03** | No non-null assertions (`!`). If a value can be absent, handle the absence. |
-| **DV-04** | Inference inside functions; explicit types at boundaries — exported service methods, repository methods, `domain/` functions, controller handlers and React component props. |
+| **DV-03** | No non-null assertions (`!`). If a value can be absent, handle the absence.                                                                                                                              |
+| **DV-04** | Inference inside functions; explicit types at boundaries — exported service methods, repository methods, `domain/` functions, controller handlers and React component props.                             |
 
 ## 3. Runtime and packages
 
-| | |
-|---|---|
+|           |                                                                                                                                                                                                                                                                                                     |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **DV-05** | **Node 24 LTS, one exact version, pinned everywhere**: `.node-version` at the root and in each package, `engines.node` in both `package.json`s, the Docker images by tag, and `node-version-file` in CI. A structural test fails when any of them drifts. To upgrade, change all of them in one PR. |
-| **DV-06** | npm, one lockfile per package (`backend/`, `frontend/`), always committed. CI installs with `npm ci`. A PR that changes `package.json` without the lockfile fails CI. |
+| **DV-06** | npm, one lockfile per package (`backend/`, `frontend/`), always committed. CI installs with `npm ci`. A PR that changes `package.json` without the lockfile fails CI.                                                                                                                               |
 
 ## 4. Naming and structure
 
-| | |
-|---|---|
-| **DV-07** | Backend files are `kebab-case` with the Nest role suffix: `journey-phase.service.ts`, `create-journey.dto.ts`, `journey.schema.ts`. React components are `PascalCase.tsx`; other frontend files `kebab-case.ts`. |
-| **DV-08** | Directories are domain concepts (`journeys/`, `viability/`), lowercase with hyphens. Never `services/`, `helpers/`, `utils/` at module level. |
-| **DV-09** | Frontend imports use the `@/` alias. Backend imports stay relative inside a module; another module is reached only through its exported service (AR-09). |
-| **DV-10** | No barrel files (`index.ts` re-exports) except a module's public surface. They hide the import graph the boundary lint depends on. |
+|           |                                                                                                                                                                                                                                                                                                      |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DV-07** | Backend files are `kebab-case` with the Nest role suffix: `journey-phase.service.ts`, `create-journey.dto.ts`, `journey.schema.ts`. React components are `PascalCase.tsx`; other frontend files `kebab-case.ts`.                                                                                     |
+| **DV-08** | Directories are domain concepts (`journeys/`, `viability/`), lowercase with hyphens. Never `services/`, `helpers/`, `utils/` at module level.                                                                                                                                                        |
+| **DV-09** | Frontend imports use the `@/` alias. Backend imports stay relative inside a module; another module is reached only through its exported service (AR-09).                                                                                                                                             |
+| **DV-10** | No barrel files (`index.ts` re-exports) except a module's public surface. They hide the import graph the boundary lint depends on.                                                                                                                                                                   |
 | **DV-11** | Never `console.*` — use NestJS `Logger` (AR-45). Enforced by ESLint `no-console: error` in both packages. In the frontend, handled client errors go through `reportClientError` (`frontend/lib/report-client-error.ts`), which logs only `[where] Name: message`; it sends to Sentry once #36 lands. |
-| **DV-12** | Prettier owns formatting (2 spaces, semicolons, single quotes, trailing commas, 100 columns). Nobody formats by hand and no review comment is about formatting. |
+| **DV-12** | Prettier owns formatting (2 spaces, semicolons, single quotes, trailing commas, 100 columns). Nobody formats by hand and no review comment is about formatting.                                                                                                                                      |
 
 ## 5. Comments
 
-| | |
-|---|---|
-| **DV-13** | Comment **why**, not what. |
+|           |                                                                                                                                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DV-13** | Comment **why**, not what.                                                                                                                                                                                      |
 | **DV-14** | Code implementing a spec or guideline rule cites it: `// SPEC-012 BR-012-28: 10-day grace, then read-only`, `// AR-14: same 404 as a missing record`. This is how a reader finds the reasoning without hunting. |
-| **DV-15** | Non-obvious calculations (viability, settlement, phase averages) carry a worked example in a comment. |
-| **DV-16** | No commented-out code. No `TODO` without an issue link: `// TODO(#123): ...`. |
+| **DV-15** | Non-obvious calculations (viability, settlement, phase averages) carry a worked example in a comment.                                                                                                           |
+| **DV-16** | No commented-out code. No `TODO` without an issue link: `// TODO(#123): ...`.                                                                                                                                   |
 
 ## 6. Local setup and scripts
 
@@ -85,19 +85,19 @@ The root `package.json` holds only the hook tooling (husky + lint-staged); its `
 
 Both packages expose the same script names:
 
-| Script | Does |
-|---|---|
-| `typecheck` | `tsc --noEmit` |
-| `lint` / `lint:fix` | ESLint. The remaining legacy violations are bulk suppressions in `eslint-suppressions.json`, each owned by an issue: frontend JSX literals (#39), `px` in `sx` (#43), and the React hooks, a11y and Next rules (#52). The backend has no remaining bulk suppressions (#51, AR-09). `lint` fails on a new violation and on a suppression that no longer occurs, which `npm run lint:prune` removes |
-| `format` / `format:check` | Prettier |
-| `test` | Fast tests, no Docker. Backend: Vitest projects `unit` (specs next to their source, `domain/` included) and `structural` (`test/structural/`); frontend: Vitest |
-| `test:integration` | Backend only — `test/integration/` on a Testcontainers MongoDB (TESTING §2). **Needs Docker running**; without it, stops with "Docker is required (DV-17)" |
-| `test:isolation` | Backend only — the isolation gate, `test/isolation/` (TESTING §4), on a Testcontainers MongoDB; needs Docker running. Passes with no tests until the first isolation spec lands (#2) |
-| `test:structural` | Backend only — the `structural` project alone: checks on the repository itself (Node pinned everywhere, workflows pinned and least privilege, Dockerfiles, the pre-push selection, only the Stripe adapter importing `stripe`, no production runtime model-registry lookups across module boundaries, every `@Cron` in Brasília time, every config variable mapped to production by the deploy job); the CI `structural` job runs it |
-| `test:e2e` | Frontend only — Playwright against the Compose stack |
-| `test:cov` | `test` with the coverage gate (TESTING §7): backend `unit` + `structural` with V8 coverage, frontend Vitest with V8 coverage; lcov in `coverage/` |
-| `check` | `typecheck` + `lint` + `format:check` + `test`. **The pre-push hook runs it** in every package the push changes (DV-37). |
-| `migrate` | Backend only — applies the pending data migrations to the database `MONGODB_URI` names, from the compiled output (`node dist/migrations/run.js`, so `npm run build` first). See [Migrations](#migrations) below |
+| Script                    | Does                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `typecheck`               | `tsc --noEmit`                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `lint` / `lint:fix`       | ESLint. The remaining legacy violations are bulk suppressions in `eslint-suppressions.json`, each owned by an issue: `px` in `sx` (#43), and the React hooks, a11y and Next rules (#52). The backend has no remaining bulk suppressions (#51, AR-09). `lint` fails on a new violation and on a suppression that no longer occurs, which `npm run lint:prune` removes                                                                 |
+| `format` / `format:check` | Prettier                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `test`                    | Fast tests, no Docker. Backend: Vitest projects `unit` (specs next to their source, `domain/` included) and `structural` (`test/structural/`); frontend: Vitest                                                                                                                                                                                                                                                                      |
+| `test:integration`        | Backend only — `test/integration/` on a Testcontainers MongoDB (TESTING §2). **Needs Docker running**; without it, stops with "Docker is required (DV-17)"                                                                                                                                                                                                                                                                           |
+| `test:isolation`          | Backend only — the isolation gate, `test/isolation/` (TESTING §4), on a Testcontainers MongoDB; needs Docker running. Passes with no tests until the first isolation spec lands (#2)                                                                                                                                                                                                                                                 |
+| `test:structural`         | Backend only — the `structural` project alone: checks on the repository itself (Node pinned everywhere, workflows pinned and least privilege, Dockerfiles, the pre-push selection, only the Stripe adapter importing `stripe`, no production runtime model-registry lookups across module boundaries, every `@Cron` in Brasília time, every config variable mapped to production by the deploy job); the CI `structural` job runs it |
+| `test:e2e`                | Frontend only — Playwright against the Compose stack                                                                                                                                                                                                                                                                                                                                                                                 |
+| `test:cov`                | `test` with the coverage gate (TESTING §7): backend `unit` + `structural` with V8 coverage, frontend Vitest with V8 coverage; lcov in `coverage/`                                                                                                                                                                                                                                                                                    |
+| `check`                   | `typecheck` + `lint` + `format:check` + `test`. **The pre-push hook runs it** in every package the push changes (DV-37).                                                                                                                                                                                                                                                                                                             |
+| `migrate`                 | Backend only — applies the pending data migrations to the database `MONGODB_URI` names, from the compiled output (`node dist/migrations/run.js`, so `npm run build` first). See [Migrations](#migrations) below                                                                                                                                                                                                                      |
 
 ### Migrations
 
@@ -115,25 +115,25 @@ Backfills and data reshapes (AR-28, AR-29) are migrations in `backend/src/migrat
 
 ### Git hooks
 
-| Hook | Runs | Scope |
-|---|---|---|
-| `pre-commit` | lint-staged: `prettier --write`, `eslint --fix` (each package's own binaries and config; config in each package's `lint-staged.config.mjs`) | Staged files |
-| `pre-push` | `npm run check` | Each package each pushed ref changes, on the pushed revision (DV-37) |
+| Hook         | Runs                                                                                                                                        | Scope                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `pre-commit` | lint-staged: `prettier --write`, `eslint --fix` (each package's own binaries and config; config in each package's `lint-staged.config.mjs`) | Staged files                                                         |
+| `pre-push`   | `npm run check`                                                                                                                             | Each package each pushed ref changes, on the pushed revision (DV-37) |
 
-| | |
-|---|---|
+|           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **DV-37** | A **pre-push** hook runs `npm run check` in each package the push changes. It measures **every pushed ref** (so `git push other-branch` and `--all` are covered, whatever is checked out), against that ref's current remote revision (for a new remote branch, or a force-push over a revision not available locally, against its merge-base with `origin/main`). It checks the revision being pushed: in place when that is the checked-out HEAD and the package has no uncommitted changes, otherwise in a temporary detached worktree (full `npm ci`) that is always removed. A change under `backend/` checks the backend; a change under `frontend/` checks the frontend; a change to shared root files (`.node-version`, `docker-compose.yml`, the hook tooling) checks both; a push that touches only `docs/` or `.github/` checks neither. Integration, isolation and E2E suites stay in CI: they need Docker and are too slow for every push. A failing hook blocks the push, and the failure is fixed, never bypassed (TS-30). |
 
 The one-off formatting commit is listed in [`.git-blame-ignore-revs`](../../.git-blame-ignore-revs) (GitHub honours it; locally run `git config blame.ignoreRevsFile .git-blame-ignore-revs`). A later commit that only reformats code is added there too.
 
 ### Rules for AI coding agents
 
-| | |
-|---|---|
+|           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **DV-17** | Agents may run the package scripts above on the host: `check`, `test`, `test:integration`, `test:isolation`, `test:cov`. Databases always come from containers (Testcontainers picks random ports, so they never collide with the developer's own). `test:integration` and `test:isolation` need Docker running; when it is not, they stop with a "Docker is required (DV-17)" message — report that, never work around it by pointing a test at a local MongoDB (DV-19). |
-| **DV-18** | Agents never start the applications on the host (`start:dev`, `dev`, `start`) — the developer runs them on the fixed ports. E2E runs through `test:e2e`, which brings up its own Compose stack. |
-| **DV-19** | Agents never read, print or edit `.env` / `.env.local`, and never point a test at the developer's local database. |
-| **DV-20** | An agent's work is not done until `npm run check` passes in every package it touched (the pre-push hook enforces this, DV-37), and the docs it affects are updated in the same PR (§9). |
+| **DV-18** | Agents never start the applications on the host (`start:dev`, `dev`, `start`) — the developer runs them on the fixed ports. E2E runs through `test:e2e`, which brings up its own Compose stack.                                                                                                                                                                                                                                                                           |
+| **DV-19** | Agents never read, print or edit `.env` / `.env.local`, and never point a test at the developer's local database.                                                                                                                                                                                                                                                                                                                                                         |
+| **DV-20** | An agent's work is not done until `npm run check` passes in every package it touched (the pre-push hook enforces this, DV-37), and the docs it affects are updated in the same PR (§9).                                                                                                                                                                                                                                                                                   |
 
 ## 7. Software development lifecycle
 
@@ -150,31 +150,31 @@ PRD (wiki) ─► Spec (wiki, BR/AC/DL) ─► Issue + implementation plan (boar
 
 An issue that adds a page or changes a page's layout also needs a **page frame approved by the product owner on the issue before the branch is cut** (DS-30); the PR links it.
 
-| Stage | Owner of the truth | What changes there |
-|---|---|---|
-| Product decision | PRD `D-nn`, `Questões-em-Aberto-e-Decisões` | A new decision or an answered question |
-| Behaviour | Spec `BR-NNN-nn`, `AC`, `DL-NNN-nn` | A rule changes → the spec changes first, then the code |
-| Plan and progress | The spec's issue | Implementation plan, checklist, links to PRs |
-| Technical decision | ADR (§10) | A choice the specs did not anticipate |
-| How we build | These guidelines | Through a PR like any other change |
+| Stage              | Owner of the truth                          | What changes there                                     |
+| ------------------ | ------------------------------------------- | ------------------------------------------------------ |
+| Product decision   | PRD `D-nn`, `Questões-em-Aberto-e-Decisões` | A new decision or an answered question                 |
+| Behaviour          | Spec `BR-NNN-nn`, `AC`, `DL-NNN-nn`         | A rule changes → the spec changes first, then the code |
+| Plan and progress  | The spec's issue                            | Implementation plan, checklist, links to PRs           |
+| Technical decision | ADR (§10)                                   | A choice the specs did not anticipate                  |
+| How we build       | These guidelines                            | Through a PR like any other change                     |
 
-| | |
-|---|---|
+|           |                                                                                                                                                                                        |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **DV-21** | Code never silently disagrees with a spec. If implementation shows a rule is wrong, the spec is amended (with a Decision Log entry) in the same cycle, and the PR links the amendment. |
-| **DV-22** | Domain rules are written test-first: the test states the rule with a hand-computed expectation (TS-04), then the code makes it pass. |
-| **DV-23** | Work that is out of scope for the current PR becomes an issue on the board, not a `TODO` and not a silent expansion of the PR. |
+| **DV-22** | Domain rules are written test-first: the test states the rule with a hand-computed expectation (TS-04), then the code makes it pass.                                                   |
+| **DV-23** | Work that is out of scope for the current PR becomes an issue on the board, not a `TODO` and not a silent expansion of the PR.                                                         |
 
 ## 8. Git and pull requests
 
 **Trunk-based.** `main` is always releasable. Branches live a day or two and are squash-merged.
 
-| | |
-|---|---|
-| **DV-24** | Branch names: `feat/spec-011-office-invites`, `fix/spec-004-bom-header`, `chore/…`, `docs/…`, `refactor/…`. Include the spec id when one applies. |
-| **DV-25** | [Conventional Commits](https://www.conventionalcommits.org/): `feat(journeys): block writes on read-only offices`. The squash-merge title follows the same format. |
-| **DV-26** | The commit/PR body names the rules implemented: `Implements SPEC-002 BR-002-30.` Breaking API, schema or config changes carry `BREAKING CHANGE:` in the footer. |
+|           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DV-24** | Branch names: `feat/spec-011-office-invites`, `fix/spec-004-bom-header`, `chore/…`, `docs/…`, `refactor/…`. Include the spec id when one applies.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **DV-25** | [Conventional Commits](https://www.conventionalcommits.org/): `feat(journeys): block writes on read-only offices`. The squash-merge title follows the same format.                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **DV-26** | The commit/PR body names the rules implemented: `Implements SPEC-002 BR-002-30.` Breaking API, schema or config changes carry `BREAKING CHANGE:` in the footer.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **DV-27** | Every change goes through a PR — self-reviewed when solo. `main` is protected by a repository ruleset: PR required (0 approvals, since a solo author cannot approve their own PR), every required status check green (§12), branch up to date with `main` before merging, linear history, squash merge only, no force-push, no deletion, and no merge while CodeQL reports a new high or critical alert. The repository admin is the ruleset's only bypass actor, kept for emergencies (a broken check blocking a fix); a bypass is the exception, said in the PR, and never used by an agent. |
-| **DV-28** | Never commit `.env` files, real personal data, production exports, or anything copied from a user's account (SC-32). |
+| **DV-28** | Never commit `.env` files, real personal data, production exports, or anything copied from a user's account (SC-32).                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 **Agent merge flow.** An agent never pushes to `main` and never merges with `--admin`. It opens the PR, waits with `gh pr checks <n> --required --watch`, and when the branch is behind `main` runs `gh pr update-branch <n>` and waits for the checks again (the branch must be up to date). It merges with `gh pr merge <n> --squash` only once every required check is green and the user has approved the merge; auto-merge stays off.
 
@@ -188,19 +188,19 @@ The PR template lives at [`.github/pull_request_template.md`](../../.github/pull
 
 ## 9. Documentation
 
-| | |
-|---|---|
+|           |                                                                                                                                                                       |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **DV-29** | A PR that changes behaviour a doc describes updates that doc in the same PR: these guidelines, the package `README`s, `.env.example`, the OpenAPI decorators (AR-33). |
-| **DV-30** | The API reference is the generated OpenAPI document (AR-33); the system map is ARCHITECTURE §2 and §13. No other hand-maintained reference docs. |
+| **DV-30** | The API reference is the generated OpenAPI document (AR-33); the system map is ARCHITECTURE §2 and §13. No other hand-maintained reference docs.                      |
 
 ## 10. ADRs
 
 Spec Decision Logs record **product** decisions. ADRs record **technical** decisions the specs did not anticipate. They live in [`docs/adr/`](../adr/README.md) as `NNN-short-title.md`.
 
-| | |
-|---|---|
+|           |                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **DV-31** | Write an ADR when a choice is hard to reverse, contradicts a guideline here, adds an overlapping dependency (§1), or is one a future reader would otherwise reopen. |
-| **DV-32** | Never edit a decided ADR. Supersede it with a new one and link both ways. |
+| **DV-32** | Never edit a decided ADR. Supersede it with a new one and link both ways.                                                                                           |
 
 ## 11. Runbooks
 
@@ -214,24 +214,24 @@ Every workflow pins each action to a full commit SHA with its version in a comme
 
 ### `ci.yml` — every PR and every push to `main`
 
-| Job | Steps | Blocking |
-|---|---|---|
-| `backend-static` | `npm ci` · typecheck · lint · format check | ✅ |
-| `backend-test` | `npm run test:cov`: unit (`domain/` included) + structural, coverage gate; lcov uploaded as the `backend-coverage` artifact | ✅ |
-| `backend-integration` | `test:integration` + `test:isolation` on Testcontainers MongoDB (the runner's Docker) | ✅ |
-| `backend-build` | `npm run build` (`tsc`) | ✅ |
-| `frontend-static` | `npm ci` · typecheck · lint · format check | ✅ |
-| `frontend-test` | `npm run test:cov`: Vitest components + axe, design tokens in both schemes and their contrast (DS-05, `frontend/test/structural/`), coverage gate; `frontend-coverage` artifact | ✅ |
-| `frontend-build` | `next build` | ✅ |
-| `backend-image` · `frontend-image` | One matrix job (`images`): `docker build` of each package's Dockerfile with `push: false`, no registry login, `contents: read` only, no cache. Proves the Dockerfile, `.dockerignore` and, for the frontend, Next's standalone output build before merge; `deploy.yml` is what publishes. The frontend leg takes the `NEXT_PUBLIC_*` build arguments from the repository variables, the backend leg none | ✅ |
-| `e2e` | Compose stack (API + web + MongoDB, stubbed providers) · Playwright desktop + mobile · axe. **Arrives with #3**; until then it is neither a job nor a required check | ✅ |
-| `audit` | `npm audit --audit-level=high` in both packages (SC-19); reads the lockfiles, no install | ✅ |
-| `structural` | `npm run test:structural`: Node version pinned everywhere (DV-05) · workflows SHA-pinned, least privilege, no `pull_request_target`, `node-version-file` (SC-21) · every Dockerfile has a `.dockerignore` excluding `.env*` and a non-root final stage (SC-16) · the pre-push package selection (DV-37) · `backend/.env.example` lists exactly the config schema's variables (`src/config/env.schema.ts`), each with a comment (AR-44) · `deploy/render-env.sh` and the `runtime-config` mapping of `deploy.yml` carry every one of them but `NODE_ENV` to production, secret-looking ones from environment secrets, with the schema's production requirements (ADR-004) · only the Stripe adapter imports `stripe` (AR-10, AR-20) · production uses injected models/services rather than `db.model(...)` or `connection.model(...)` registry lookups (AR-09) · every `@Cron` sets `timeZone: BRASILIA_TIME_ZONE` (AR-25) | ✅ |
+| Job                                | Steps                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Blocking |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `backend-static`                   | `npm ci` · typecheck · lint · format check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | ✅       |
+| `backend-test`                     | `npm run test:cov`: unit (`domain/` included) + structural, coverage gate; lcov uploaded as the `backend-coverage` artifact                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | ✅       |
+| `backend-integration`              | `test:integration` + `test:isolation` on Testcontainers MongoDB (the runner's Docker)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | ✅       |
+| `backend-build`                    | `npm run build` (`tsc`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | ✅       |
+| `frontend-static`                  | `npm ci` · typecheck · lint · format check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | ✅       |
+| `frontend-test`                    | `npm run test:cov`: Vitest components + axe, design tokens in both schemes and their contrast (DS-05, `frontend/test/structural/`), coverage gate; `frontend-coverage` artifact                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | ✅       |
+| `frontend-build`                   | `next build`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | ✅       |
+| `backend-image` · `frontend-image` | One matrix job (`images`): `docker build` of each package's Dockerfile with `push: false`, no registry login, `contents: read` only, no cache. Proves the Dockerfile, `.dockerignore` and, for the frontend, Next's standalone output build before merge; `deploy.yml` is what publishes. The frontend leg takes the `NEXT_PUBLIC_*` build arguments from the repository variables, the backend leg none                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | ✅       |
+| `e2e`                              | Compose stack (API + web + MongoDB, stubbed providers) · Playwright desktop + mobile · axe. **Arrives with #3**; until then it is neither a job nor a required check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | ✅       |
+| `audit`                            | `npm audit --audit-level=high` in both packages (SC-19); reads the lockfiles, no install                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | ✅       |
+| `structural`                       | `npm run test:structural`: Node version pinned everywhere (DV-05) · workflows SHA-pinned, least privilege, no `pull_request_target`, `node-version-file` (SC-21) · every Dockerfile has a `.dockerignore` excluding `.env*` and a non-root final stage (SC-16) · the pre-push package selection (DV-37) · `backend/.env.example` lists exactly the config schema's variables (`src/config/env.schema.ts`), each with a comment (AR-44) · `deploy/render-env.sh` and the `runtime-config` mapping of `deploy.yml` carry every one of them but `NODE_ENV` to production, secret-looking ones from environment secrets, with the schema's production requirements (ADR-004) · only the Stripe adapter imports `stripe` (AR-10, AR-20) · production uses injected models/services rather than `db.model(...)` or `connection.model(...)` registry lookups (AR-09) · every `@Cron` sets `timeZone: BRASILIA_TIME_ZONE` (AR-25) | ✅       |
 
 ### `codeql.yml` — every PR, every push to `main`, weekly
 
-| Job | Steps | Blocking |
-|---|---|---|
+| Job      | Steps                                                                                                                                                             | Blocking                                                                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `codeql` | CodeQL advanced setup for JavaScript/TypeScript, `security-extended` queries, no build needed. The repository's CodeQL default setup stays off (the two conflict) | ✅ on high/critical — the ruleset's code-scanning rule blocks a merge on a new high or critical alert |
 
 `concurrency` cancels a superseded run on a PR; runs on `main` always finish. `PUPPETEER_SKIP_DOWNLOAD` is set in CI: no job drives a browser, and npm 11 skips puppeteer's install script anyway.
@@ -271,12 +271,12 @@ The images:
 - `frontend/Dockerfile` — Next.js `output: 'standalone'`, runs `node server.js` as `node` on `PORT=3001`. The `NEXT_PUBLIC_*` values are inlined at build time, so `ci.yml` and `deploy.yml` pass them, to the frontend leg only, as build arguments from the repository variables `NEXT_PUBLIC_AUCTIONS_API_URL`, `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_SENTRY_DSN` — public values only (SC-16). The backend Dockerfile declares no build arguments.
 - Each package's `.dockerignore` keeps `.env*` out of the build context; runtime configuration and secrets come from the env files the deploy job delivers, never the image (SC-16, DV-35).
 
-| | |
-|---|---|
-| **DV-33** | Images are tagged with the commit SHA. Rollback is redeploying a previous SHA, which only works because migrations are forward-only and expand/contract (AR-28). |
-| **DV-34** | Migrations (AR-29) run as a separate, gated step **before** the new code starts (`npm run migrate`, §6). A failed migration aborts the deploy and leaves the running version untouched. The deploy job in `deploy.yml` runs it; until that job is turned on (BL-001), the owner runs it by hand before deploying. |
+|           |                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DV-33** | Images are tagged with the commit SHA. Rollback is redeploying a previous SHA, which only works because migrations are forward-only and expand/contract (AR-28).                                                                                                                                                                                                                                                                         |
+| **DV-34** | Migrations (AR-29) run as a separate, gated step **before** the new code starts (`npm run migrate`, §6). A failed migration aborts the deploy and leaves the running version untouched. The deploy job in `deploy.yml` runs it; until that job is turned on (BL-001), the owner runs it by hand before deploying.                                                                                                                        |
 | **DV-35** | Deploy and runtime secrets live in the GitHub `deploy-production` environment (environment secrets, not repository secrets), and the rest of the runtime configuration in its environment variables. The deploy job delivers the runtime configuration to the host on every deploy; it is never committed, never in images, never in logs, and never edited on the host ([ADR-004](../adr/004-production-configuration-from-github.md)). |
-| **DV-36** | `DEPLOY_ENABLED` is a repository variable separate from the secrets: unset, a missing secret is expected and the deploy skips; set, a missing secret or required runtime value is a fault and `preflight` fails. |
+| **DV-36** | `DEPLOY_ENABLED` is a repository variable separate from the secrets: unset, a missing secret is expected and the deploy skips; set, a missing secret or required runtime value is a fault and `preflight` fails.                                                                                                                                                                                                                         |
 
 ### `nightly.yml`
 

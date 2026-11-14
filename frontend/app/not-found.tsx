@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Box, Container, Typography, Card, CardContent, Button } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
@@ -8,6 +9,7 @@ import AppShell from '@/app/components/patterns/AppShell';
 
 export default function NotFound() {
   const router = useRouter();
+  const t = useTranslations('notFound.page');
 
   return (
     // #42: the root not-found cannot sit in a route group, so it mounts the AppShell itself
@@ -27,14 +29,14 @@ export default function NotFound() {
             >
               <ErrorOutlineIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
               <Typography variant="h4" fontWeight={600} gutterBottom>
-                Página não encontrada
+                {t('title')}
               </Typography>
               <Typography
                 variant="body1"
                 color="text.secondary"
                 sx={{ maxWidth: 420, textAlign: 'center', mb: 4 }}
               >
-                O conteúdo que você procura não existe ou não está mais disponível.
+                {t('description')}
               </Typography>
               <Button
                 variant="contained"
@@ -42,7 +44,7 @@ export default function NotFound() {
                 startIcon={<SearchIcon />}
                 onClick={() => router.push('/search')}
               >
-                Buscar imóveis
+                {t('action')}
               </Button>
             </CardContent>
           </Card>

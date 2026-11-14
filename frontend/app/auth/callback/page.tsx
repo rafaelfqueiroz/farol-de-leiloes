@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { reportClientError } from '@/lib/report-client-error';
@@ -11,6 +12,7 @@ function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { loadUser } = useAuth();
+  const t = useTranslations('authCallback');
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -47,13 +49,15 @@ function AuthCallbackContent() {
     >
       <CircularProgress size={48} sx={{ mb: 2 }} />
       <Typography variant="body1" color="text.secondary">
-        Autenticando...
+        {t('authenticating')}
       </Typography>
     </Box>
   );
 }
 
 export default function AuthCallbackPage() {
+  const t = useTranslations('authCallback');
+
   return (
     <Suspense
       fallback={
@@ -68,7 +72,7 @@ export default function AuthCallbackPage() {
         >
           <CircularProgress size={48} sx={{ mb: 2 }} />
           <Typography variant="body1" color="text.secondary">
-            Carregando...
+            {t('fallback')}
           </Typography>
         </Box>
       }

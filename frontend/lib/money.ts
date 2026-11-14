@@ -18,7 +18,7 @@ function toDecimal(value: MoneyInput): Decimal {
 }
 
 // "1234567.5" -> "1.234.567,5"; the input is a plain fixed-point string from Decimal#toFixed.
-function groupPtBr(fixed: string): string {
+export function groupPtBr(fixed: string): string {
   const [integer = '', fraction] = fixed.split('.');
   const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return fraction === undefined ? grouped : `${grouped},${fraction}`;

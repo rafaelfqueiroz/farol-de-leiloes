@@ -47,7 +47,7 @@ describe('AdminCouponsPage coupon discount', () => {
     await screen.findByText('R$ 10,00');
 
     await userEvent.click(screen.getByRole('button', { name: /Novo Cupom/ }));
-    await userEvent.type(screen.getByLabelText(/Codigo do cupom/), 'ABC');
+    await userEvent.type(screen.getByLabelText(/Código do cupom/), 'ABC');
     await userEvent.type(screen.getByLabelText(/Valor do desconto/), '12.5');
     await userEvent.click(screen.getByRole('spinbutton', { name: 'Dia' }));
     await userEvent.keyboard('31122099');
@@ -69,7 +69,7 @@ describe('AdminCouponsPage coupon discount', () => {
     await screen.findByText('R$ 10,00');
 
     await userEvent.click(screen.getByRole('button', { name: /Novo Cupom/ }));
-    await userEvent.type(screen.getByLabelText(/Codigo do cupom/), 'ABC');
+    await userEvent.type(screen.getByLabelText(/Código do cupom/), 'ABC');
     await userEvent.type(screen.getByLabelText(/Valor do desconto/), '10.555');
     await userEvent.click(screen.getByRole('spinbutton', { name: 'Dia' }));
     await userEvent.keyboard('31122099');

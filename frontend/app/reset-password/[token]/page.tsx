@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Card,
@@ -14,8 +15,12 @@ import {
 } from '@mui/material';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
+// The shortest password the form accepts
+const MIN_PASSWORD_LENGTH = 6;
+
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const t = useTranslations('resetPassword.confirm');
   const apiErrorMessage = useApiErrorMessage();
   const params = useParams();
   const token = params.token as string;
@@ -31,12 +36,12 @@ export default function ResetPasswordPage() {
     setSuccess(false);
 
     if (password !== confirmPassword) {
-      setError('As senhas não coincidem');
+      setError(t('errors.passwordMismatch'));
       return;
     }
 
-    if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres');
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(t('errors.passwordTooShort', { min: MIN_PASSWORD_LENGTH }));
       return;
     }
 
@@ -79,7 +84,7 @@ export default function ResetPasswordPage() {
       <Card sx={{ maxWidth: 450, width: '100%' }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" component="h1" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
-            Nova Senha
+            {t('title')}
           </Typography>
 
           {error && (
@@ -90,17 +95,17 @@ export default function ResetPasswordPage() {
 
           {success ? (
             <Alert severity="success" sx={{ mb: 2 }}>
-              Senha redefinida com sucesso! Redirecionando para login...
+              {t('success')}
             </Alert>
           ) : (
             <form onSubmit={handleSubmit}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Digite sua nova senha.
+                {t('hint')}
               </Typography>
 
               <TextField
                 fullWidth
-                label="Nova Senha"
+                label={t('password')}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -111,7 +116,7 @@ export default function ResetPasswordPage() {
 
               <TextField
                 fullWidth
-                label="Confirmar Nova Senha"
+                label={t('confirmPassword')}
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -127,7 +132,7 @@ export default function ResetPasswordPage() {
                 disabled={loading}
                 sx={{ mt: 3 }}
               >
-                {loading ? <CircularProgress size={24} /> : 'Redefinir Senha'}
+                {loading ? <CircularProgress size={24} /> : t('submit')}
               </Button>
             </form>
           )}

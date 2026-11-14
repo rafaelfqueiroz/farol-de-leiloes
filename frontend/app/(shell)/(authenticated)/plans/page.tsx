@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Box,
   Container,
@@ -29,13 +30,29 @@ import LockIcon from '@mui/icons-material/Lock';
 import Money from '@/app/components/patterns/Money';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import { formatCount } from '@/lib/numbers';
+
+const SAVED_FILTERS_LIMIT = 10;
+
+type PlanId = 'free' | 'standard' | 'premium';
+
+type PlanFeature =
+  | 'manualSearch'
+  | 'includesFree'
+  | 'includesStandard'
+  | 'favorites'
+  | 'savedFilters'
+  | 'reminders'
+  | 'prioritySupport'
+  | 'aiSearch'
+  | 'customAlerts'
+  | 'advancedReports';
 
 interface Plan {
-  id: string;
-  name: string;
+  id: PlanId;
+  // AR-17: a decimal string of reais, rendered by <Money>
   price: string;
-  period: string;
-  features: string[];
+  features: PlanFeature[];
   highlighted: boolean;
   disabled?: boolean;
 }
@@ -43,37 +60,20 @@ interface Plan {
 const plans: Plan[] = [
   {
     id: 'free',
-    name: 'Gratuito',
-    price: 'R$ 0',
-    period: '/mes',
-    features: ['Busca manual por filtros'],
+    price: '0.00',
+    features: ['manualSearch'],
     highlighted: false,
   },
   {
     id: 'standard',
-    name: 'Standard',
-    price: 'R$ 49,90',
-    period: '/mes',
-    features: [
-      'Tudo do plano Gratuito',
-      'Favoritos',
-      'Filtros salvos (ate 10)',
-      'Lembretes',
-      'Suporte prioritario',
-    ],
+    price: '49.90',
+    features: ['includesFree', 'favorites', 'savedFilters', 'reminders', 'prioritySupport'],
     highlighted: true,
   },
   {
     id: 'premium',
-    name: 'Premium',
-    price: 'R$ 109,90',
-    period: '/mes',
-    features: [
-      'Tudo do plano Standard',
-      'Busca por IA',
-      'Alertas personalizados',
-      'Relatorios avancados',
-    ],
+    price: '109.90',
+    features: ['includesStandard', 'aiSearch', 'customAlerts', 'advancedReports'],
     highlighted: false,
     disabled: true,
   },
@@ -82,6 +82,9 @@ const plans: Plan[] = [
 export default function PlansPage() {
   const { role, hasSubscription } = useAuth();
   const apiErrorMessage = useApiErrorMessage();
+  const t = useTranslations('plans');
+  const tPlan = useTranslations('plan');
+  const tc = useTranslations('common');
   const [couponCode, setCouponCode] = useState('');
   const [couponValid, setCouponValid] = useState<boolean | null>(null);
   const [couponDiscount, setCouponDiscount] = useState<string | null>(null);
@@ -175,7 +178,7 @@ export default function PlansPage() {
       if (response.ok) {
         setSnackbar({
           open: true,
-          message: 'Assinatura cancelada com sucesso',
+          message: t('cancelSuccess'),
           severity: 'success',
         });
         setCancelDialogOpen(false);
@@ -204,10 +207,10 @@ export default function PlansPage() {
       {/* #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar */}
       <Container maxWidth="lg" sx={{ pt: 4, pb: 4, flexGrow: 1 }}>
         <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
-          Planos
+          {t('title')}
         </Typography>
         <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
-          Escolha o plano ideal para suas necessidades
+          {t('subtitle')}
         </Typography>
 
         <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -225,7 +228,7 @@ export default function PlansPage() {
             >
               {plan.highlighted && (
                 <Chip
-                  label="Mais popular"
+                  label={tPlan('popular')}
                   size="small"
                   icon={<StarIcon />}
                   sx={{
@@ -241,17 +244,15 @@ export default function PlansPage() {
               )}
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
-                  {plan.name}
+                  {tPlan(`names.${plan.id}`)}
                 </Typography>
                 <Box sx={{ mb: 3 }}>
                   <Typography component="span" variant="h4" sx={{ fontWeight: 700 }}>
-                    {plan.price}
+                    <Money value={plan.price} />
                   </Typography>
-                  {plan.period && (
-                    <Typography component="span" variant="body1" sx={{ color: 'text.secondary' }}>
-                      {plan.period}
-                    </Typography>
-                  )}
+                  <Typography component="span" variant="body1" sx={{ color: 'text.secondary' }}>
+                    {tPlan('period')}
+                  </Typography>
                 </Box>
 
                 <List dense sx={{ mb: 3 }}>
@@ -265,7 +266,13 @@ export default function PlansPage() {
                         )}
                       </ListItemIcon>
                       <ListItemText
-                        primary={feature}
+                        primary={
+                          feature === 'includesFree' || feature === 'includesStandard'
+                            ? t(`features.${feature}`)
+                            : tPlan(`features.${feature}`, {
+                                limit: formatCount(SAVED_FILTERS_LIMIT),
+                              })
+                        }
                         primaryTypographyProps={{ variant: 'body2' }}
                       />
                     </ListItem>
@@ -277,7 +284,7 @@ export default function PlansPage() {
                     <Box sx={{ display: 'flex', gap: 1 }}>
                       <TextField
                         size="small"
-                        placeholder="Cupom de desconto"
+                        placeholder={t('coupon.placeholder')}
                         value={couponCode}
                         onChange={(e) => {
                           setCouponCode(e.target.value.toUpperCase());
@@ -292,12 +299,14 @@ export default function PlansPage() {
                         onClick={handleValidateCoupon}
                         disabled={validatingCoupon || !couponCode.trim()}
                       >
-                        {validatingCoupon ? <CircularProgress size={20} /> : 'Aplicar'}
+                        {validatingCoupon ? <CircularProgress size={20} /> : t('coupon.apply')}
                       </Button>
                     </Box>
                     {couponValid === true && couponDiscount && (
                       <Alert severity="success" sx={{ mt: 1 }}>
-                        Cupom aplicado! Desconto de <Money value={couponDiscount} />
+                        {t.rich('coupon.applied', {
+                          discount: () => <Money value={couponDiscount} />,
+                        })}
                       </Alert>
                     )}
                   </Box>
@@ -306,7 +315,7 @@ export default function PlansPage() {
                 {currentPlanId === plan.id ? (
                   <Box>
                     <Button variant="outlined" fullWidth disabled sx={{ mb: 1 }}>
-                      Plano Atual
+                      {t('currentPlan')}
                     </Button>
                     {plan.id === 'standard' && hasSubscription && (
                       <Button
@@ -316,7 +325,7 @@ export default function PlansPage() {
                         size="small"
                         onClick={() => setCancelDialogOpen(true)}
                       >
-                        Cancelar assinatura
+                        {t('cancelSubscription')}
                       </Button>
                     )}
                   </Box>
@@ -330,11 +339,11 @@ export default function PlansPage() {
                     {loading && plan.id === 'standard' ? (
                       <CircularProgress size={24} color="inherit" />
                     ) : plan.disabled ? (
-                      'Em breve'
+                      tPlan('comingSoon')
                     ) : plan.id === 'free' ? (
-                      'Gratuito'
+                      tPlan('names.free')
                     ) : (
-                      `Assinar ${plan.name}`
+                      t('subscribe', { name: tPlan(`names.${plan.id}`) })
                     )}
                   </Button>
                 )}
@@ -345,17 +354,14 @@ export default function PlansPage() {
       </Container>
 
       <Dialog open={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)}>
-        <DialogTitle>Cancelar assinatura</DialogTitle>
+        <DialogTitle>{t('cancelSubscription')}</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            Tem certeza que deseja cancelar sua assinatura? Voce perdera acesso aos recursos do
-            plano Standard.
-          </DialogContentText>
+          <DialogContentText>{t('cancelDialog.body')}</DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCancelDialogOpen(false)}>Voltar</Button>
+          <Button onClick={() => setCancelDialogOpen(false)}>{tc('back')}</Button>
           <Button onClick={handleCancelSubscription} color="destructive" disabled={canceling}>
-            {canceling ? <CircularProgress size={20} /> : 'Confirmar cancelamento'}
+            {canceling ? <CircularProgress size={20} /> : t('cancelDialog.confirm')}
           </Button>
         </DialogActions>
       </Dialog>

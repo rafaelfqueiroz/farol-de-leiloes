@@ -36,6 +36,7 @@ import { useReminders, Reminder, ReminderChannel } from '../contexts/RemindersCo
 import { useAuth } from '../contexts/AuthContext';
 import { useApiErrorMessage } from '@/lib/api-error';
 import { toUtcInstant, tryParseInstant } from '@/lib/dates';
+import { formatCount } from '@/lib/numbers';
 import DateField from './DateField';
 import DateText from './patterns/DateText';
 
@@ -45,22 +46,17 @@ const CHANNEL_ICONS: Record<ReminderChannel, React.ReactElement> = {
   WHATSAPP: <WhatsAppIcon fontSize="small" />,
 };
 
-const CHANNEL_LABELS: Record<ReminderChannel, string> = {
-  EMAIL: 'E-mail',
-  SMS: 'SMS',
-  WHATSAPP: 'WhatsApp',
-};
+const NOTE_MAX_LENGTH = 500;
 
-function formatAddress(auction: Reminder['auction']): string {
-  const parts = [auction.city, auction.state].filter(Boolean);
-  return parts.join(', ') || 'Localização não informada';
-}
+const bold = (chunks: React.ReactNode) => <strong>{chunks}</strong>;
 
 export default function RemindersPage() {
   const router = useRouter();
   const { reminders, loading, loadFailed, deleteReminder, updateReminder, refreshReminders } =
     useReminders();
-  const t = useTranslations();
+  const t = useTranslations('reminders');
+  const tc = useTranslations('common');
+  const tLoadFailed = useTranslations('loadFailed.reminders');
   const { role } = useAuth();
   const apiErrorMessage = useApiErrorMessage();
 
@@ -74,6 +70,19 @@ export default function RemindersPage() {
   const [editChannel, setEditChannel] = useState<ReminderChannel>('EMAIL');
   const [editScheduledAt, setEditScheduledAt] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState('');
+
+  const auctionTitle = (auction: Reminder['auction']) =>
+    auction.title || t('auctionFallbackTitle', { code: auction.code });
+
+  const formatAddress = (auction: Reminder['auction']): string => {
+    const parts = [auction.city, auction.state].filter(Boolean);
+    return parts.join(', ') || t('locationMissing');
+  };
+
+  const channelOptionLabel = (channel: ReminderChannel, restricted: boolean) =>
+    restricted
+      ? t('channelRestricted', { channel: t(`channel.${channel}`) })
+      : t(`channel.${channel}`);
 
   const isPremium = role === 'standard' || role === 'premium' || role === 'admin';
 
@@ -112,7 +121,7 @@ export default function RemindersPage() {
 
   const handleSaveEdit = async () => {
     if (!selectedReminder || !editScheduledAt || !tryParseInstant(editScheduledAt)) {
-      setError('Selecione a data e hora do lembrete');
+      setError(t('form.scheduledAtRequired'));
       return;
     }
 
@@ -166,10 +175,10 @@ export default function RemindersPage() {
     return (
       <Box>
         <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
-          Meus Lembretes
+          {t('title')}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Gerencie seus lembretes de leilões
+          {t('subtitle')}
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {[1, 2, 3].map((i) => (
@@ -183,16 +192,16 @@ export default function RemindersPage() {
   return (
     <Box>
       <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
-        Meus Lembretes
+        {t('title')}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Gerencie seus lembretes de leilões
+        {t('subtitle')}
       </Typography>
 
       {loadFailed && (
         <ErrorState
-          title={t('loadFailed.reminders.title')}
-          message={t('loadFailed.reminders.message')}
+          title={tLoadFailed('title')}
+          message={tLoadFailed('message')}
           onRetry={() => void refreshReminders()}
         />
       )}
@@ -203,13 +212,13 @@ export default function RemindersPage() {
             <CardContent>
               <NotificationsIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
               <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
-                Nenhum lembrete agendado
+                {t('empty.title')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Adicione lembretes aos leilões para receber notificações antes do início
+                {t('empty.description')}
               </Typography>
               <Button variant="contained" onClick={() => router.push('/search')}>
-                Buscar leilões
+                {t('empty.action')}
               </Button>
             </CardContent>
           </Card>
@@ -222,11 +231,11 @@ export default function RemindersPage() {
                 <Box sx={{ flex: 1 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 600 }}>
-                      {reminder.auction.title || `Leilão ${reminder.auction.code}`}
+                      {auctionTitle(reminder.auction)}
                     </Typography>
                     <Chip
                       icon={CHANNEL_ICONS[reminder.channel]}
-                      label={CHANNEL_LABELS[reminder.channel]}
+                      label={t(`channel.${reminder.channel}`)}
                       size="small"
                       variant="outlined"
                     />
@@ -238,12 +247,14 @@ export default function RemindersPage() {
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                     <Typography variant="body2">
-                      <strong>Agendado para:</strong>{' '}
-                      <DateText value={reminder.scheduledAt} withTime />
+                      {t.rich('scheduledFor', {
+                        strong: bold,
+                        date: () => <DateText value={reminder.scheduledAt} withTime />,
+                      })}
                     </Typography>
                     {reminder.description && (
                       <Typography variant="body2" color="text.secondary">
-                        <strong>Nota:</strong> {reminder.description}
+                        {t.rich('note', { strong: bold, text: reminder.description })}
                       </Typography>
                     )}
                   </Box>
@@ -253,7 +264,7 @@ export default function RemindersPage() {
                   <IconButton
                     onClick={() => handleNavigateToAuction(reminder.auction.code)}
                     size="small"
-                    title="Ver leilão"
+                    title={t('actions.viewAuction')}
                     sx={{ color: 'info.main' }}
                   >
                     <OpenInNewIcon />
@@ -261,7 +272,7 @@ export default function RemindersPage() {
                   <IconButton
                     onClick={() => handleOpenEditDialog(reminder)}
                     size="small"
-                    title="Editar lembrete"
+                    title={t('actions.edit')}
                     sx={{ color: 'primary.main' }}
                   >
                     <EditIcon />
@@ -269,7 +280,7 @@ export default function RemindersPage() {
                   <IconButton
                     onClick={() => handleOpenDeleteDialog(reminder)}
                     size="small"
-                    title="Remover lembrete"
+                    title={t('actions.remove')}
                     color="destructive"
                   >
                     <DeleteIcon />
@@ -283,12 +294,12 @@ export default function RemindersPage() {
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onClose={handleCloseEditDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Editar Lembrete</DialogTitle>
+        <DialogTitle>{t('editDialog.title')}</DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 1 }}>
             {selectedReminder && (
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                {selectedReminder.auction.title || `Leilão ${selectedReminder.auction.code}`}
+                {auctionTitle(selectedReminder.auction)}
               </Typography>
             )}
 
@@ -300,48 +311,51 @@ export default function RemindersPage() {
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <FormControl fullWidth>
-                <InputLabel id="edit-channel-label">Canal de notificação</InputLabel>
+                <InputLabel id="edit-channel-label">{t('form.channel')}</InputLabel>
                 <Select
                   labelId="edit-channel-label"
                   value={editChannel}
-                  label="Canal de notificação"
+                  label={t('form.channel')}
                   onChange={(e) => setEditChannel(e.target.value as ReminderChannel)}
                 >
-                  <MenuItem value="EMAIL">E-mail</MenuItem>
+                  <MenuItem value="EMAIL">{t('channel.EMAIL')}</MenuItem>
                   <MenuItem value="SMS" disabled={!isPremium}>
-                    SMS {!isPremium && '(Standard/Premium)'}
+                    {channelOptionLabel('SMS', !isPremium)}
                   </MenuItem>
                   <MenuItem value="WHATSAPP" disabled={!isPremium}>
-                    WhatsApp {!isPremium && '(Standard/Premium)'}
+                    {channelOptionLabel('WHATSAPP', !isPremium)}
                   </MenuItem>
                 </Select>
               </FormControl>
 
               <DateField
                 type="datetime"
-                label="Data e hora do lembrete"
+                label={t('form.scheduledAt')}
                 value={editScheduledAt}
                 onChange={setEditScheduledAt}
                 minuteStep={10}
-                helperText="O lembrete deve ser antes do início do leilão"
+                helperText={t('form.scheduledAtHelper')}
               />
 
               <TextField
-                label="Nota (opcional)"
+                label={t('form.note')}
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
                 multiline
                 rows={2}
                 fullWidth
-                slotProps={{ htmlInput: { maxLength: 500 } }}
-                helperText={`${editDescription.length}/500 caracteres`}
+                slotProps={{ htmlInput: { maxLength: NOTE_MAX_LENGTH } }}
+                helperText={t('form.noteCounter', {
+                  count: formatCount(editDescription.length),
+                  max: formatCount(NOTE_MAX_LENGTH),
+                })}
               />
             </Box>
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseEditDialog} disabled={actionLoading}>
-            Cancelar
+            {tc('cancel')}
           </Button>
           <Button
             onClick={handleSaveEdit}
@@ -349,14 +363,14 @@ export default function RemindersPage() {
             disabled={actionLoading}
             startIcon={actionLoading ? <CircularProgress size={16} /> : null}
           >
-            Salvar
+            {tc('save')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={handleCloseDeleteDialog} maxWidth="xs" fullWidth>
-        <DialogTitle>Remover Lembrete</DialogTitle>
+        <DialogTitle>{t('deleteDialog.title')}</DialogTitle>
         <DialogContent>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -364,16 +378,15 @@ export default function RemindersPage() {
             </Alert>
           )}
           <Typography>
-            Tem certeza que deseja remover o lembrete para{' '}
-            <strong>
-              {selectedReminder?.auction.title || `Leilão ${selectedReminder?.auction.code}`}
-            </strong>
-            ?
+            {t.rich('deleteDialog.confirm', {
+              strong: bold,
+              auction: selectedReminder ? auctionTitle(selectedReminder.auction) : '',
+            })}
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDeleteDialog} disabled={actionLoading}>
-            Cancelar
+            {tc('cancel')}
           </Button>
           <Button
             onClick={handleConfirmDelete}
@@ -382,7 +395,7 @@ export default function RemindersPage() {
             disabled={actionLoading}
             startIcon={actionLoading ? <CircularProgress size={16} /> : <DeleteIcon />}
           >
-            Remover
+            {t('deleteDialog.submit')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -12,11 +12,18 @@ import {
   FormControl,
   InputLabel,
 } from '@mui/material';
+import { useTranslations } from 'next-intl';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import { useFavorites } from '../contexts/FavoritesContext';
 import type { Auction } from '@/lib/auction';
+import { formatCount } from '@/lib/numbers';
 import AuctionCard from './AuctionCard';
+
+// decoration, not copy (DS-20)
+const EMPTY_ICON = '🔍';
+
+const PAGE_SIZES = [10, 20, 50, 100] as const;
 
 interface AuctionListProps {
   auctions: Auction[];
@@ -37,6 +44,7 @@ export default function AuctionList({
   onPageChange,
   onPageSizeChange,
 }: AuctionListProps) {
+  const t = useTranslations('auctionList');
   const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
   const totalPages = Math.ceil(total / pageSize);
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -45,7 +53,7 @@ export default function AuctionList({
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 12 }}>
         <Typography variant="body1" color="text.secondary">
-          Carregando leilões...
+          {t('loading')}
         </Typography>
       </Box>
     );
@@ -54,12 +62,14 @@ export default function AuctionList({
   if (auctions.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 12 }}>
-        <Box sx={{ fontSize: 60, mb: 2 }}>🔍</Box>
+        <Box aria-hidden sx={{ fontSize: 60, mb: 2 }}>
+          {EMPTY_ICON}
+        </Box>
         <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-          Nenhum leilão encontrado
+          {t('emptyTitle')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Tente ajustar os filtros de busca
+          {t('emptyHint')}
         </Typography>
       </Box>
     );
@@ -71,27 +81,33 @@ export default function AuctionList({
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h5" fontWeight={600} sx={{ mb: 0.5 }}>
-            Resultado da busca
+            {t('title')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {total.toLocaleString('pt-BR')} resultado{total !== 1 ? 's' : ''}
-            {auctions.length < total && ` (mostrando ${auctions.length})`}
+            {auctions.length < total
+              ? t('resultsShowing', {
+                  count: total,
+                  formatted: formatCount(total),
+                  shown: formatCount(auctions.length),
+                })
+              : t('results', { count: total, formatted: formatCount(total) })}
           </Typography>
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel id="page-size-label">Por página</InputLabel>
+            <InputLabel id="page-size-label">{t('perPage')}</InputLabel>
             <Select
               labelId="page-size-label"
               value={pageSize}
-              label="Por página"
+              label={t('perPage')}
               onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
             >
-              <MenuItem value={10}>10</MenuItem>
-              <MenuItem value={20}>20</MenuItem>
-              <MenuItem value={50}>50</MenuItem>
-              <MenuItem value={100}>100</MenuItem>
+              {PAGE_SIZES.map((size) => (
+                <MenuItem key={size} value={size}>
+                  {formatCount(size)}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
 
@@ -101,10 +117,10 @@ export default function AuctionList({
             onChange={(_, newMode) => newMode && setViewMode(newMode)}
             size="small"
           >
-            <ToggleButton value="cards" aria-label="visualização em cards">
+            <ToggleButton value="cards" aria-label={t('viewCards')}>
               <ViewModuleIcon />
             </ToggleButton>
-            <ToggleButton value="list" aria-label="visualização em lista">
+            <ToggleButton value="list" aria-label={t('viewList')}>
               <ViewListIcon />
             </ToggleButton>
           </ToggleButtonGroup>
