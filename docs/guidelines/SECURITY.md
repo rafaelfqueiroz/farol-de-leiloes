@@ -130,7 +130,6 @@ The inventory is the source the privacy policy is written from (SPEC-010 BR-010-
 | Hostinger | Application hosting (ADR-002) | Brazil; company in Lithuania |
 | MongoDB Atlas | Database and backups (ADR-002) | São Paulo, Brazil; company in the US |
 | UptimeRobot | Availability probe; public pages only, no personal data (ADR-002) | TBD |
-| Vercel | Frontend hosting, until the cutover in ADR-002 | US |
 
 | | |
 |---|---|
