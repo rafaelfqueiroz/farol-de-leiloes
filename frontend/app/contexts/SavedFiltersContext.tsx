@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, ReactNode } from 'react';
 import { ApiError, readApiError } from '@/lib/api-error';
 import { fetchAllPages } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
@@ -34,6 +34,12 @@ interface SavedFiltersContextType {
   refreshFilters: () => Promise<void>;
 }
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('token');
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
 const SavedFiltersContext = createContext<SavedFiltersContextType | undefined>(undefined);
 
 export function SavedFiltersProvider({ children }: { children: ReactNode }) {
@@ -42,24 +48,14 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
   const [loadFailed, setLoadFailed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  useEffect(() => {
-    void loadSavedFilters();
-  }, []);
-
-  const getAuthHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    if (!token) return {};
-    return { Authorization: `Bearer ${token}` };
-  };
-
-  const checkAuthentication = (): boolean => {
+  const checkAuthentication = useCallback((): boolean => {
     const token = localStorage.getItem('token');
     const authenticated = !!token;
     setIsAuthenticated(authenticated);
     return authenticated;
-  };
+  }, []);
 
-  const loadSavedFilters = async () => {
+  const loadSavedFilters = useCallback(async () => {
     try {
       if (!checkAuthentication()) {
         setLoading(false);
@@ -83,7 +79,12 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [checkAuthentication]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the token lives in storage and the filters in the API (external systems); the first read can only happen after mount
+    void loadSavedFilters();
+  }, [loadSavedFilters]);
 
   const saveFilter = async (name: string, filters: FilterData): Promise<SavedFilter | null> => {
     if (!checkAuthentication()) {

@@ -1,45 +1,15 @@
 {
-  "app/(shell)/(authenticated)/admin/coupons/page.tsx": {
-    "jsx-a11y/no-autofocus": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "app/(shell)/(authenticated)/plans/page.tsx": {
-    "react-hooks/immutability": {
-      "count": 1
-    }
-  },
-  "app/(shell)/(authenticated)/profile/page.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
   "app/(shell)/(authenticated)/search/page.tsx": {
     "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
       "count": 1
     }
   },
   "app/(shell)/auction/[code]/AuctionDetailClient.tsx": {
-    "@next/next/no-img-element": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 1
     }
   },
   "app/components/AuctionCard.tsx": {
-    "@next/next/no-img-element": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 1
     }
@@ -60,60 +30,13 @@
     }
   },
   "app/components/SearchFilters.tsx": {
-    "jsx-a11y/no-autofocus": {
-      "count": 1
-    },
     "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
       "count": 1
     }
   },
   "app/components/SupportPage.tsx": {
     "no-restricted-syntax": {
       "count": 5
-    }
-  },
-  "app/components/patterns/AppShell.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "app/components/patterns/ConfirmDialog.tsx": {
-    "jsx-a11y/no-autofocus": {
-      "count": 1
-    }
-  },
-  "app/contexts/AuthContext.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "app/contexts/SavedFiltersContext.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
-    "react-hooks/immutability": {
-      "count": 1
-    }
-  },
-  "app/login/page.tsx": {
-    "@next/next/no-location-assign-relative-destination": {
-      "count": 1
-    }
-  },
-  "app/reset-password/[token]/page.tsx": {
-    "jsx-a11y/no-autofocus": {
-      "count": 1
-    }
-  },
-  "app/reset-password/page.tsx": {
-    "jsx-a11y/no-autofocus": {
-      "count": 1
     }
   }
 }

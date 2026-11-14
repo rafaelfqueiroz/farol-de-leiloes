@@ -123,7 +123,8 @@ export default function LoginPage() {
             variant="outlined"
             startIcon={<GoogleIcon />}
             onClick={() => {
-              window.location.href = `${API_URL}/api/auth/google`;
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- the Google sign-in starts on the API (a redirect to the provider), not on a Next page, so it needs a full-page navigation
+              window.location.assign(`${API_URL}/api/auth/google`);
             }}
             sx={{
               mb: 3,

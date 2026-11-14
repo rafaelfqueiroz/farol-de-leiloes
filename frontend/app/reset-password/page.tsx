@@ -104,7 +104,6 @@ export default function ResetPasswordRequestPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 margin="normal"
                 required
-                autoFocus
               />
 
               <Button
