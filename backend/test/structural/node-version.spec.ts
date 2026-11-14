@@ -9,9 +9,9 @@ import {
   nodeImageTags,
   versionFromImageTag,
   type PinnedVersion,
-} from './node-version-check';
+} from './node-version-check.js';
 
-const root = join(__dirname, '..', '..', '..');
+const root = join(import.meta.dirname, '..', '..', '..');
 const read = (file: string): string => readFileSync(join(root, file), 'utf8');
 const nodeVersionFile = (file: string): string => read(file).trim();
 const enginesNode = (file: string): string => {

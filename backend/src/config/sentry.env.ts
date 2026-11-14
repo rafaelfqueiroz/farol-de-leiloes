@@ -8,7 +8,7 @@
 // Never throws: an invalid value leaves Sentry inert here, and the boot-time validation of the
 // whole environment then refuses to start, naming the variable (AR-41).
 import { z } from 'zod';
-import { envSchema } from './env.schema';
+import { envSchema } from './env.schema.js';
 
 const sentryEnvSchema = z.object({
   NODE_ENV: envSchema.shape.NODE_ENV,

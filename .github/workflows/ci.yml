@@ -107,7 +107,9 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
-      - run: npm run build
+      # `npm run build`, then the dist smoke test: every compiled module loaded by plain Node as
+      # native ESM, so an interop break that tsc and Vitest cannot see fails here (#63).
+      - run: npm run test:smoke
 
   frontend-static:
     runs-on: ubuntu-latest

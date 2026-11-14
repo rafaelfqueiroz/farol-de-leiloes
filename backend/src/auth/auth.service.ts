@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../users/users.service';
-import { EmailService } from '../email/email.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { CompleteProfileDto } from './dto/complete-profile.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
-import type { UserAccount } from '../users/user-account';
-import { UserProfile, AuthResult } from './interfaces/auth.interface';
-import { DomainError } from '../common/errors/domain-error';
+import { UsersService } from '../users/users.service.js';
+import { EmailService } from '../email/email.service.js';
+import { RegisterDto } from './dto/register.dto.js';
+import { LoginDto } from './dto/login.dto.js';
+import { CompleteProfileDto } from './dto/complete-profile.dto.js';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
+import type { UserAccount } from '../users/user-account.js';
+import { UserProfile, AuthResult } from './interfaces/auth.interface.js';
+import { DomainError } from '../common/errors/domain-error.js';
 
 @Injectable()
 export class AuthService {

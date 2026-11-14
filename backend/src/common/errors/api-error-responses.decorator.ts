@@ -8,7 +8,7 @@ import {
   ApiInternalServerErrorResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { ErrorResponseDto } from './error-response.dto';
+import { ErrorResponseDto } from './error-response.dto.js';
 
 export function ApiErrorResponses() {
   return applyDecorators(

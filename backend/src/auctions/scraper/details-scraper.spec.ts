@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { scrapeAuctionDetails } from './details-scraper';
-import { readCaixaFixture } from '../../../test/support/fixtures';
-import { PaymentMethod } from '../schemas/auction.schema';
+import { scrapeAuctionDetails } from './details-scraper.js';
+import { readCaixaFixture } from '../../../test/support/fixtures.js';
+import { PaymentMethod } from '../schemas/auction.schema.js';
 
 // AR-23 / TS-11: Caixa's pages show Brasília wall-clock time, so every date is asserted as the UTC
 // instant it means (Brasília is UTC-3 since 2019, no daylight saving), whatever zone the test

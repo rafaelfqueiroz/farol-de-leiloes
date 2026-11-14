@@ -1,7 +1,7 @@
 // AR-03 / SC-15: a failed run is recorded with a stable code, never the error's message (which may
 // quote a value or a URL). A DomainError gives its catalogue code; any other error its class name
 // (`MongoServerError`, `TypeError`), kept only when it looks like one.
-import { DomainError } from '../errors/domain-error';
+import { DomainError } from '../errors/domain-error.js';
 
 export const UNKNOWN_JOB_ERROR = 'UNKNOWN_ERROR';
 

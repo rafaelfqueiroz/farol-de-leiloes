@@ -2,18 +2,18 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { AuctionsController } from './auctions.controller';
-import { AuctionsService } from './auctions.service';
-import { AuctionEntity, AuctionSchema } from './schemas/auction.schema';
-import { CsvUpload, CsvUploadSchema } from './importer/schemas/csv-upload.schema';
-import { CsvCacheService } from './importer/csv-cache.service';
-import { AuctionsImporter } from './importer/scheduler';
-import { AuctionDetailsScraper } from './scraper/scraper-scheduler';
-import { AuctionCleanupService } from './cleanup/auction-cleanup.service';
-import { CommonModule } from '../common/common.module';
-import { StorageModule } from '../storage/storage.module';
-import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
-import businessConfig from '../config/business.config';
+import { AuctionsController } from './auctions.controller.js';
+import { AuctionsService } from './auctions.service.js';
+import { AuctionEntity, AuctionSchema } from './schemas/auction.schema.js';
+import { CsvUpload, CsvUploadSchema } from './importer/schemas/csv-upload.schema.js';
+import { CsvCacheService } from './importer/csv-cache.service.js';
+import { AuctionsImporter } from './importer/scheduler.js';
+import { AuctionDetailsScraper } from './scraper/scraper-scheduler.js';
+import { AuctionCleanupService } from './cleanup/auction-cleanup.service.js';
+import { CommonModule } from '../common/common.module.js';
+import { StorageModule } from '../storage/storage.module.js';
+import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config.js';
+import businessConfig from '../config/business.config.js';
 
 @Module({
   imports: [

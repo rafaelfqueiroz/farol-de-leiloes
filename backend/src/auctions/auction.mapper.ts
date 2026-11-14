@@ -9,9 +9,9 @@
 // strict mode drops on save any field the sub-schema does not declare, `$set` casts every phase
 // field, and the enums would start being validated against documents the importer wrote years
 // ago. That is a schema change of its own, not part of #34's money contract step (AR-28).
-import { fromDecimal128OrNull, toDecimal128OrNull } from '../common/money/decimal128';
-import type { StoredPhase } from './schemas/auction.schema';
-import type { Auction, AuctionRecord, Phase } from './interfaces/auction.interface';
+import { fromDecimal128OrNull, toDecimal128OrNull } from '../common/money/decimal128.js';
+import type { StoredPhase } from './schemas/auction.schema.js';
+import type { Auction, AuctionRecord, Phase } from './interfaces/auction.interface.js';
 
 /** A stored phase in code: its price as a Decimal. */
 export function fromStoredPhase(stored: StoredPhase): Phase {

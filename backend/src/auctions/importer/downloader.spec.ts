@@ -2,9 +2,9 @@ import { describe, expect, it, type Mock, vi } from 'vitest';
 import * as fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { downloadCsvAllStates } from './downloader';
-import { parseCsv } from './parser';
-import { caixaFixturePath } from '../../../test/support/fixtures';
+import { downloadCsvAllStates } from './downloader.js';
+import { parseCsv } from './parser.js';
+import { caixaFixturePath } from '../../../test/support/fixtures.js';
 
 // TS-07 / TS-28: the downloader never reaches the live Caixa site in tests.
 // `child_process.exec` is the only I/O boundary of the downloader (it shells out to

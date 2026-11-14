@@ -8,39 +8,39 @@ import { ConfigService } from '@nestjs/config';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { type Model, Types } from 'mongoose';
-import { AuctionsService } from '../../src/auctions/auctions.service';
+import { AuctionsService } from '../../src/auctions/auctions.service.js';
 import {
   AuctionEntity,
   AuctionSchema,
   PhaseModality,
-} from '../../src/auctions/schemas/auction.schema';
-import { applyMongooseDefaults } from '../../src/common/mongo/query-safety';
-import { Clock } from '../../src/common/clock/clock';
-import { Decimal } from '../../src/common/money/money';
-import { FakeClock } from '../fakes/fake-clock';
-import { FavoritesService } from '../../src/favorites/favorites.service';
-import { FavoriteEntity, FavoriteSchema } from '../../src/favorites/schemas/favorite.schema';
-import { RemindersService } from '../../src/reminders/reminders.service';
+} from '../../src/auctions/schemas/auction.schema.js';
+import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
+import { Clock } from '../../src/common/clock/clock.js';
+import { Decimal } from '../../src/common/money/money.js';
+import { FakeClock } from '../fakes/fake-clock.js';
+import { FavoritesService } from '../../src/favorites/favorites.service.js';
+import { FavoriteEntity, FavoriteSchema } from '../../src/favorites/schemas/favorite.schema.js';
+import { RemindersService } from '../../src/reminders/reminders.service.js';
 import {
   ReminderChannel,
   ReminderEntity,
   ReminderSchema,
   ReminderStatus,
-} from '../../src/reminders/schemas/reminder.schema';
+} from '../../src/reminders/schemas/reminder.schema.js';
 import {
   NotificationLog,
   NotificationLogSchema,
-} from '../../src/reminders/schemas/notification-log.schema';
-import { SavedFiltersService } from '../../src/saved-filters/saved-filters.service';
+} from '../../src/reminders/schemas/notification-log.schema.js';
+import { SavedFiltersService } from '../../src/saved-filters/saved-filters.service.js';
 import {
   SavedFilterEntity,
   SavedFilterSchema,
-} from '../../src/saved-filters/schemas/saved-filter.schema';
-import { UserEntity, UserSchema } from '../../src/users/schemas/user.schema';
-import { UsersService } from '../../src/users/users.service';
-import { useTestDatabase } from '../support/test-database';
-import { testBusinessConfig, testConfigService } from '../support/test-env';
-import businessConfig from '../../src/config/business.config';
+} from '../../src/saved-filters/schemas/saved-filter.schema.js';
+import { UserEntity, UserSchema } from '../../src/users/schemas/user.schema.js';
+import { UsersService } from '../../src/users/users.service.js';
+import { useTestDatabase } from '../support/test-database.js';
+import { testBusinessConfig, testConfigService } from '../support/test-env.js';
+import businessConfig from '../../src/config/business.config.js';
 
 const USER_A = new Types.ObjectId('64b7f0000000000000000a01');
 const USER_B = new Types.ObjectId('64b7f0000000000000000b01');

@@ -1,4 +1,4 @@
-import { Public } from '../auth/decorators/public.decorator';
+import { Public } from '../auth/decorators/public.decorator.js';
 import {
   Controller,
   Post,
@@ -19,19 +19,19 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { PaymentsService } from './payments.service';
-import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
-import { DomainError } from '../common/errors/domain-error';
-import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
-import { MessageResponseDto } from '../common/dto/message-response.dto';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
+import { PaymentsService } from './payments.service.js';
+import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { MessageResponseDto } from '../common/dto/message-response.dto.js';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
 import {
   CheckoutSessionResponseDto,
   SubscriptionStatusResponseDto,
   WebhookAckResponseDto,
-} from './dto/payments-response.dto';
+} from './dto/payments-response.dto.js';
 
 @ApiTags('payments')
 @ApiErrorResponses()

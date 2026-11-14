@@ -5,24 +5,24 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { AnyBulkWriteOperation, isObjectIdOrHexString, Model } from 'mongoose';
 import { subHours } from 'date-fns';
-import { AuctionEntity, AuctionDocument, Address } from './schemas/auction.schema';
-import { Auction, AuctionRecord, Phase } from './interfaces/auction.interface';
-import { toAuction, toStoredPhase } from './auction.mapper';
-import { isAuctionActive } from './utils/auction-filters';
-import { fetchAndCheckAvailability } from './scraper/details-scraper';
-import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
-import { errorMessage } from '../common/error-message';
-import { DomainError } from '../common/errors/domain-error';
-import { decimalFilter, serverOperators } from '../common/mongo/query-safety';
-import { Clock } from '../common/clock/clock';
-import type { Decimal } from '../common/money/money';
-import { toDecimal128OrNull } from '../common/money/decimal128';
+import { AuctionEntity, AuctionDocument, Address } from './schemas/auction.schema.js';
+import { Auction, AuctionRecord, Phase } from './interfaces/auction.interface.js';
+import { toAuction, toStoredPhase } from './auction.mapper.js';
+import { isAuctionActive } from './utils/auction-filters.js';
+import { fetchAndCheckAvailability } from './scraper/details-scraper.js';
+import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config.js';
+import { errorMessage } from '../common/error-message.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { decimalFilter, serverOperators } from '../common/mongo/query-safety.js';
+import { Clock } from '../common/clock/clock.js';
+import type { Decimal } from '../common/money/money.js';
+import { toDecimal128OrNull } from '../common/money/decimal128.js';
 import {
   type PageRequest,
   type Paginated,
   paginated,
   skipOf,
-} from '../common/pagination/paginated';
+} from '../common/pagination/paginated.js';
 
 export interface AuctionUpsert {
   code?: string;

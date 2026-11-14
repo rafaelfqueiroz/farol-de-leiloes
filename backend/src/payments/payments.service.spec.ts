@@ -1,11 +1,11 @@
 // AR-10 / TS-03: PaymentsService against FakePaymentGateway — the provider is a port, so the
 // service is tested in its own vocabulary, with no Stripe types and no network (TS-07).
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PaymentsService } from './payments.service';
-import { DomainError } from '../common/errors/domain-error';
-import { FakePaymentGateway } from '../../test/fakes/fake-payment-gateway';
-import { testConfigService, TEST_ENV } from '../../test/support/test-env';
-import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy';
+import { PaymentsService } from './payments.service.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { FakePaymentGateway } from '../../test/fakes/fake-payment-gateway.js';
+import { testConfigService, TEST_ENV } from '../../test/support/test-env.js';
+import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy.js';
 
 type ServiceDeps = ConstructorParameters<typeof PaymentsService>;
 

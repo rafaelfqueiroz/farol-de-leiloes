@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsDateString, MaxLength, IsString } from 'class-validator';
-import { ReminderChannel } from '../schemas/reminder.schema';
+import { ReminderChannel } from '../schemas/reminder.schema.js';
 
 export class UpdateReminderDto {
   @ApiPropertyOptional({ enum: ReminderChannel, enumName: 'ReminderChannel' })

@@ -1,4 +1,4 @@
-import { Public } from './decorators/public.decorator';
+import { Public } from './decorators/public.decorator.js';
 import {
   Controller,
   Post,
@@ -19,29 +19,29 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { RequestResetPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
-import { SetPasswordDto } from './dto/set-password.dto';
-import { VerifyEmailDto } from './dto/verify-email.dto';
-import { CompleteProfileDto } from './dto/complete-profile.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
-import { ChangePasswordDto } from './dto/change-password.dto';
+import { AuthService } from './auth.service.js';
+import { RegisterDto } from './dto/register.dto.js';
+import { LoginDto } from './dto/login.dto.js';
+import { RequestResetPasswordDto, ResetPasswordDto } from './dto/reset-password.dto.js';
+import { SetPasswordDto } from './dto/set-password.dto.js';
+import { VerifyEmailDto } from './dto/verify-email.dto.js';
+import { CompleteProfileDto } from './dto/complete-profile.dto.js';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
+import { ChangePasswordDto } from './dto/change-password.dto.js';
 import {
   AuthResponseDto,
   CurrentUserResponseDto,
   UserProfileResponseDto,
   VerificationStatusResponseDto,
-} from './dto/auth-response.dto';
-import { ApiJwtAuth } from './decorators/api-jwt-auth.decorator';
-import { MessageResponseDto } from '../common/dto/message-response.dto';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
-import { GoogleAuthGuard } from './guards/google-auth.guard';
-import { CurrentUser } from './decorators/current-user.decorator';
-import { AuthenticatedUser } from './interfaces/auth.interface';
+} from './dto/auth-response.dto.js';
+import { ApiJwtAuth } from './decorators/api-jwt-auth.decorator.js';
+import { MessageResponseDto } from '../common/dto/message-response.dto.js';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
+import { GoogleAuthGuard } from './guards/google-auth.guard.js';
+import { CurrentUser } from './decorators/current-user.decorator.js';
+import { AuthenticatedUser } from './interfaces/auth.interface.js';
 import { Request, Response } from 'express';
-import type { Env } from '../config/env';
+import type { Env } from '../config/env.js';
 
 // GoogleStrategy.validate hands the signed-in user to passport, which sets it on the request.
 type GoogleCallbackRequest = Request & { user: Parameters<AuthService['googleLogin']>[0] };

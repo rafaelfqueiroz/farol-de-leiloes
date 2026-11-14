@@ -19,11 +19,11 @@ import { Test } from '@nestjs/testing';
 import { Type } from 'class-transformer';
 import { IsInt, IsString, ValidateNested } from 'class-validator';
 import request from 'supertest';
-import { configureApp } from '../../app.setup';
-import { testConfigService } from '../../../test/support/test-env';
-import { ERROR_CODES, type ErrorCode } from './codes';
-import { DomainError } from './domain-error';
-import { ERROR_STATUS } from './error-status';
+import { configureApp } from '../../app.setup.js';
+import { testConfigService } from '../../../test/support/test-env.js';
+import { ERROR_CODES, type ErrorCode } from './codes.js';
+import { DomainError } from './domain-error.js';
+import { ERROR_STATUS } from './error-status.js';
 
 // TS-03: the Sentry SDK has no port of ours (the filter calls it directly, ARCHITECTURE §9), so
 // it is replaced with vi.mock to observe what the filter reports; nothing is sent either way

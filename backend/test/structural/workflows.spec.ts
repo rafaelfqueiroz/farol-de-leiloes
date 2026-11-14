@@ -11,9 +11,9 @@ import {
   findNodeVersionProblems,
   findUnpinnedActions,
   findWorkflowProblems,
-} from './workflow-check';
+} from './workflow-check.js';
 
-const root = join(__dirname, '..', '..', '..');
+const root = join(import.meta.dirname, '..', '..', '..');
 const workflowsDir = join(root, '.github', 'workflows');
 const workflows = readdirSync(workflowsDir).filter((name) => /\.ya?ml$/.test(name));
 

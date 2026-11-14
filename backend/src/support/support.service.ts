@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EmailService } from '../email/email.service';
-import { CreateSupportRequestDto } from './dto/create-support-request.dto';
+import { EmailService } from '../email/email.service.js';
+import { CreateSupportRequestDto } from './dto/create-support-request.dto.js';
 
 @Injectable()
 export class SupportService {

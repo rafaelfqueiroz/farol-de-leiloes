@@ -3,9 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Model } from 'mongoose';
-import { AuthService } from '../../src/auth/auth.service';
-import { UserEntity, UserSchema, type UserDocument } from '../../src/users/schemas/user.schema';
-import { useTestDatabase } from '../support/test-database';
+import { AuthService } from '../../src/auth/auth.service.js';
+import { UserEntity, UserSchema, type UserDocument } from '../../src/users/schemas/user.schema.js';
+import { useTestDatabase } from '../support/test-database.js';
 
 type AuthDeps = ConstructorParameters<typeof AuthService>;
 const CREATED = new Date('2026-01-01T12:00:00.000Z');

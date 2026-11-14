@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Profile } from 'passport-google-oauth20';
-import { GoogleStrategy } from './google.strategy';
-import { DomainError } from '../../common/errors/domain-error';
+import { GoogleStrategy } from './google.strategy.js';
+import { DomainError } from '../../common/errors/domain-error.js';
 
 describe('GoogleStrategy.validate', () => {
   function build() {

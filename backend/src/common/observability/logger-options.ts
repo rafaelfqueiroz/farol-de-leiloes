@@ -8,8 +8,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Params } from 'nestjs-pino';
 import { stdTimeFunctions, type LevelWithSilent, type LogFn, type Logger } from 'pino';
-import { logContextFields } from './log-context';
-import { resolveRequestId } from './request-context';
+import { logContextFields } from './log-context.js';
+import { resolveRequestId } from './request-context.js';
 
 export const HEALTH_PATH = '/api/health';
 

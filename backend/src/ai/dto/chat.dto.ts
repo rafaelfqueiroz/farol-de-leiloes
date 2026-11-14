@@ -1,8 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsString } from 'class-validator';
-import type { AuctionQueryParams } from '../services/nlp.service';
-import { MAX_PAGE_SIZE } from '../../common/pagination/pagination-query.dto';
-import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto';
+import type { AuctionQueryParams } from '../services/nlp.service.js';
+import { MAX_PAGE_SIZE } from '../../common/pagination/pagination-query.dto.js';
+import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto.js';
 
 export class ChatRequestDto {
   @ApiProperty({ type: String, description: 'The search, in the user own words (pt-BR)' })

@@ -3,11 +3,11 @@
 import { afterAll, beforeAll, describe, vi } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { RemindersController } from './reminders.controller';
-import { RemindersService } from './reminders.service';
-import { ReminderChannel, ReminderStatus } from './schemas/reminder.schema';
-import { createHttpApp } from '../../test/support/http-app';
-import { itAnswersPages } from '../../test/support/pagination-contract';
+import { RemindersController } from './reminders.controller.js';
+import { RemindersService } from './reminders.service.js';
+import { ReminderChannel, ReminderStatus } from './schemas/reminder.schema.js';
+import { createHttpApp } from '../../test/support/http-app.js';
+import { itAnswersPages } from '../../test/support/pagination-contract.js';
 
 const REMINDER_ID = new Types.ObjectId('64b7f00000000000000000bb');
 const AUCTION_ID = new Types.ObjectId('64b7f00000000000000000cc');

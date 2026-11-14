@@ -5,15 +5,15 @@ import { Test } from '@nestjs/testing';
 import { Request } from 'express';
 import Stripe from 'stripe';
 import request from 'supertest';
-import { PaymentsController } from './payments.controller';
-import { PaymentsService } from './payments.service';
-import { UsersService } from '../users/users.service';
-import { CouponsService } from '../coupons/coupons.service';
-import { PaymentGateway } from './payment-gateway';
-import { StripePaymentGateway } from './adapters/stripe-payment-gateway';
-import { DomainError } from '../common/errors/domain-error';
-import { configureApp } from '../app.setup';
-import { testConfigService, TEST_ENV } from '../../test/support/test-env';
+import { PaymentsController } from './payments.controller.js';
+import { PaymentsService } from './payments.service.js';
+import { UsersService } from '../users/users.service.js';
+import { CouponsService } from '../coupons/coupons.service.js';
+import { PaymentGateway } from './payment-gateway.js';
+import { StripePaymentGateway } from './adapters/stripe-payment-gateway.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { configureApp } from '../app.setup.js';
+import { testConfigService, TEST_ENV } from '../../test/support/test-env.js';
 
 describe('Stripe webhook', () => {
   it('rejects a request without a raw body as an invalid signature (DV-03)', async () => {

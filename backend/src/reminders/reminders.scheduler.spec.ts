@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy';
-import { RemindersScheduler } from './reminders.scheduler';
-import { ReminderChannel } from './schemas/reminder.schema';
-import { PopulatedReminder } from './interfaces/reminder.interface';
+import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy.js';
+import { RemindersScheduler } from './reminders.scheduler.js';
+import { ReminderChannel } from './schemas/reminder.schema.js';
+import { PopulatedReminder } from './interfaces/reminder.interface.js';
 
 type SchedulerDeps = ConstructorParameters<typeof RemindersScheduler>;
 

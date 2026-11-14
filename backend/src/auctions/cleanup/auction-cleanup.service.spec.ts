@@ -1,8 +1,8 @@
 import { subDays } from 'date-fns';
 import { describe, expect, it, type Mock, vi } from 'vitest';
-import { AuctionCleanupService } from './auction-cleanup.service';
-import { FakeClock } from '../../../test/fakes/fake-clock';
-import { testBusinessConfig } from '../../../test/support/test-env';
+import { AuctionCleanupService } from './auction-cleanup.service.js';
+import { FakeClock } from '../../../test/fakes/fake-clock.js';
+import { testBusinessConfig } from '../../../test/support/test-env.js';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionCleanupService>;
 type CleanupTarget = Parameters<AuctionCleanupService['processAuction']>[0];

@@ -1,5 +1,5 @@
-import type { SubscriptionStatus } from '../../users/subscription-status';
-import type { UserAddress } from '../../users/user-account';
+import type { SubscriptionStatus } from '../../users/subscription-status.js';
+import type { UserAddress } from '../../users/user-account.js';
 
 export interface UserProfile {
   _id: string;

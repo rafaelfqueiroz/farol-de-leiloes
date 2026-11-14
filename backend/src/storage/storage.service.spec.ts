@@ -5,8 +5,8 @@
 // stubbed so no upload leaves the process.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { S3Client } from '@aws-sdk/client-s3';
-import { CAIXA_USER_AGENT } from '../common/caixa-user-agent';
-import { StorageService } from './storage.service';
+import { CAIXA_USER_AGENT } from '../common/caixa-user-agent.js';
+import { StorageService } from './storage.service.js';
 
 // Fake credentials: the S3 client is built but never sends (`send` is stubbed below).
 const config = {

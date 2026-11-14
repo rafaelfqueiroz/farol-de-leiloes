@@ -2,8 +2,8 @@
 // (MigrationsModule), so both reach the database the validated environment names (AR-41).
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import type { MongooseModuleAsyncOptions } from '@nestjs/mongoose';
-import type { AppConfigService } from '../../config/env';
-import { applyMongooseDefaults } from './query-safety';
+import type { AppConfigService } from '../../config/env.js';
+import { applyMongooseDefaults } from './query-safety.js';
 
 export const MONGOOSE_ROOT_OPTIONS: MongooseModuleAsyncOptions = {
   imports: [ConfigModule],

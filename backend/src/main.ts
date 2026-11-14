@@ -1,15 +1,18 @@
-// AR-47: Sentry first, before any module it instruments is loaded.
-import './instrument';
+// AR-47: Sentry first, before any module it instruments is loaded. Under native ESM every static
+// import below is loaded before this file's body runs, so `npm start`, `start:dev` and the image
+// preload it with `node --import ./dist/instrument.js` (#63); this import keeps a plain
+// `node dist/main.js` initialising Sentry too, just without the module hooks.
+import './instrument.js';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Logger as PinoLogger } from 'nestjs-pino';
-import { AppModule } from './app.module';
-import { configureApp } from './app.setup';
-import { jobErrorCode } from './common/services/job-error-code';
-import { stackFrames } from './common/observability/logger-options';
-import type { AppConfigService } from './config/env';
+import { AppModule } from './app.module.js';
+import { configureApp } from './app.setup.js';
+import { jobErrorCode } from './common/services/job-error-code.js';
+import { stackFrames } from './common/observability/logger-options.js';
+import type { AppConfigService } from './config/env.js';
 
 async function bootstrap() {
   // rawBody: the Stripe webhook verifies its signature over the exact bytes received.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SystemClock } from './clock';
+import { SystemClock } from './clock.js';
 
 describe('SystemClock (AR-24)', () => {
   it('returns the current time', () => {

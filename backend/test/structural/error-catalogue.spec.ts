@@ -4,9 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { ERROR_CODES } from '../../src/common/errors/codes';
+import { ERROR_CODES } from '../../src/common/errors/codes.js';
 
-const MESSAGES = join(__dirname, '..', '..', '..', 'frontend', 'messages', 'pt-BR.json');
+const MESSAGES = join(import.meta.dirname, '..', '..', '..', 'frontend', 'messages', 'pt-BR.json');
 
 describe('AR-39: error codes have a pt-BR message', () => {
   const messages = JSON.parse(readFileSync(MESSAGES, 'utf8')) as { errors: Record<string, string> };

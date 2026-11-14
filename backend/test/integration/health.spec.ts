@@ -8,18 +8,18 @@ import { getConnectionToken, getModelToken, MongooseModule } from '@nestjs/mongo
 import { Test } from '@nestjs/testing';
 import type { Connection, Model } from 'mongoose';
 import request from 'supertest';
-import { configureApp } from '../../src/app.setup';
-import { AUCTIONS_IMPORT_JOB } from '../../src/auctions/importer/import-job';
-import { Clock } from '../../src/common/clock/clock';
+import { configureApp } from '../../src/app.setup.js';
+import { AUCTIONS_IMPORT_JOB } from '../../src/auctions/importer/import-job.js';
+import { Clock } from '../../src/common/clock/clock.js';
 import {
   JobExecution,
   type JobExecutionDocument,
-} from '../../src/common/schemas/job-execution.schema';
-import { HealthModule } from '../../src/health/health.module';
-import { aJobExecution } from '../builders/job-execution.builder';
-import { FakeClock } from '../fakes/fake-clock';
-import { testConfigService } from '../support/test-env';
-import { useTestDatabase } from '../support/test-database';
+} from '../../src/common/schemas/job-execution.schema.js';
+import { HealthModule } from '../../src/health/health.module.js';
+import { aJobExecution } from '../builders/job-execution.builder.js';
+import { FakeClock } from '../fakes/fake-clock.js';
+import { testConfigService } from '../support/test-env.js';
+import { useTestDatabase } from '../support/test-database.js';
 
 const NOW = new Date('2026-01-15T12:00:00.000Z');
 

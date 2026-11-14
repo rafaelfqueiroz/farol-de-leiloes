@@ -3,9 +3,9 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
-import { findDockerImageProblems, finalStageUser, ignoresEnvFiles } from './docker-image-check';
+import { findDockerImageProblems, finalStageUser, ignoresEnvFiles } from './docker-image-check.js';
 
-const root = join(__dirname, '..', '..', '..');
+const root = join(import.meta.dirname, '..', '..', '..');
 
 function dockerfiles(): string[] {
   return ['.', 'backend', 'frontend'].flatMap((dir) =>

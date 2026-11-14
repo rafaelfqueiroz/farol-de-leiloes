@@ -1,12 +1,12 @@
 // AR-41: the environment is validated at boot. Missing secrets stop it, flags parse as written,
 // tunables default, and the error names variables without ever echoing a value (SC-16).
 import { describe, expect, it } from 'vitest';
-import { TEST_ENV, testEnv } from '../../test/support/test-env';
-import { validateEnv } from './env';
-import { ENV_KEYS } from './env.schema';
-import { r2ConfigFrom } from './r2.config';
-import { schedulerConfigFrom } from './scheduler.config';
-import { businessConfigFrom } from './business.config';
+import { TEST_ENV, testEnv } from '../../test/support/test-env.js';
+import { validateEnv } from './env.js';
+import { ENV_KEYS } from './env.schema.js';
+import { r2ConfigFrom } from './r2.config.js';
+import { schedulerConfigFrom } from './scheduler.config.js';
+import { businessConfigFrom } from './business.config.js';
 
 function errorOf(raw: Record<string, string | undefined>): string {
   try {

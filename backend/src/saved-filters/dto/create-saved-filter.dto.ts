@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsNotEmpty, IsObject, IsString, MaxLength, ValidateNested } from 'class-validator';
-import { FilterDataDto } from './filter-data.dto';
+import { FilterDataDto } from './filter-data.dto.js';
 
 export class CreateSavedFilterDto {
   @ApiProperty({ type: String, maxLength: 100, description: 'Unique among the user filters' })

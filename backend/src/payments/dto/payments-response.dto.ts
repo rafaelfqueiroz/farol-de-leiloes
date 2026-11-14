@@ -1,7 +1,7 @@
 // AR-36: the payment endpoints' responses, each field copied explicitly.
 import { ApiProperty } from '@nestjs/swagger';
 
-import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status';
+import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status.js';
 
 export { SUBSCRIPTION_STATUSES };
 

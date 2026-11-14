@@ -2,21 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { isValid, parseISO } from 'date-fns';
-import { CouponEntity, CouponDocument } from './schemas/coupon.schema';
-import { CreateCouponDto } from './dto/create-coupon.dto';
-import { Coupon } from './interfaces/coupon.interface';
-import { DomainError } from '../common/errors/domain-error';
-import { Clock } from '../common/clock/clock';
-import { endOfBrasiliaDay, inBrasilia, startOfBrasiliaDay } from '../common/clock/brasilia-time';
-import { fromDecimal128, toDecimal128 } from '../common/money/decimal128';
-import { PaymentGateway } from '../payments/payment-gateway';
-import { logSafeError } from '../common/errors/log-safe-error';
+import { CouponEntity, CouponDocument } from './schemas/coupon.schema.js';
+import { CreateCouponDto } from './dto/create-coupon.dto.js';
+import { Coupon } from './interfaces/coupon.interface.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { Clock } from '../common/clock/clock.js';
+import { endOfBrasiliaDay, inBrasilia, startOfBrasiliaDay } from '../common/clock/brasilia-time.js';
+import { fromDecimal128, toDecimal128 } from '../common/money/decimal128.js';
+import { PaymentGateway } from '../payments/payment-gateway.js';
+import { logSafeError } from '../common/errors/log-safe-error.js';
 import {
   type PageRequest,
   type Paginated,
   paginated,
   skipOf,
-} from '../common/pagination/paginated';
+} from '../common/pagination/paginated.js';
 
 const BARE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 

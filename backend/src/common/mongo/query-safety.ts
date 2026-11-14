@@ -1,7 +1,7 @@
 import mongoose, { type Types } from 'mongoose';
-import { DomainError } from '../errors/domain-error';
-import { toDecimal128 } from '../money/decimal128';
-import { Decimal } from '../money/money';
+import { DomainError } from '../errors/domain-error.js';
+import { toDecimal128 } from '../money/decimal128.js';
+import { Decimal } from '../money/money.js';
 
 /**
  * SC-10: request values never become MongoDB operators. With `sanitizeFilter` on, Mongoose wraps

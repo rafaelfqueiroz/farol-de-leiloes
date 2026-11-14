@@ -4,7 +4,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const CAIXA_FIXTURES = join(__dirname, '..', 'fixtures', 'caixa');
+const CAIXA_FIXTURES = join(import.meta.dirname, '..', 'fixtures', 'caixa');
 
 /** Absolute path of a captured Caixa fixture, e.g. `caixaFixturePath('sfi-auction.html')`. */
 export function caixaFixturePath(name: string): string {

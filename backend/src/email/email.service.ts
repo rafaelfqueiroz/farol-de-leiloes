@@ -1,15 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Env } from '../config/env';
+import type { Env } from '../config/env.js';
 import * as nodemailer from 'nodemailer';
 import {
   getVerificationEmailTemplate,
   getPasswordResetEmailTemplate,
-} from './templates/verification.template';
+} from './templates/verification.template.js';
 import {
   getAuctionReminderEmailTemplate,
   ReminderEmailPayload,
-} from '../reminders/templates/reminder.template';
+} from '../reminders/templates/reminder.template.js';
 
 // SC-15 / SC-16 / AR-46: no recipient address, name, message content or token link is logged,
 // including when SMTP is unavailable in development.

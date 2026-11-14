@@ -6,17 +6,17 @@ import {
   SavedFilterEntity,
   SavedFilterDocument,
   StoredFilterData,
-} from './schemas/saved-filter.schema';
-import { FilterData, SavedFilter } from './interfaces/saved-filter.interface';
-import businessConfig from '../config/business.config';
-import { DomainError } from '../common/errors/domain-error';
-import { fromDecimal128OrNull, toDecimal128 } from '../common/money/decimal128';
+} from './schemas/saved-filter.schema.js';
+import { FilterData, SavedFilter } from './interfaces/saved-filter.interface.js';
+import businessConfig from '../config/business.config.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { fromDecimal128OrNull, toDecimal128 } from '../common/money/decimal128.js';
 import {
   type PageRequest,
   type Paginated,
   paginated,
   skipOf,
-} from '../common/pagination/paginated';
+} from '../common/pagination/paginated.js';
 
 @Injectable()
 export class SavedFiltersService {

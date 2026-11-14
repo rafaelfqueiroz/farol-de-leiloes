@@ -3,12 +3,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { CouponsController } from './coupons.controller';
-import { CouponsService } from './coupons.service';
-import type { Coupon } from './interfaces/coupon.interface';
-import { Decimal } from '../common/money/money';
-import { createHttpApp, TEST_USER } from '../../test/support/http-app';
-import { itAnswersPages } from '../../test/support/pagination-contract';
+import { CouponsController } from './coupons.controller.js';
+import { CouponsService } from './coupons.service.js';
+import type { Coupon } from './interfaces/coupon.interface.js';
+import { Decimal } from '../common/money/money.js';
+import { createHttpApp, TEST_USER } from '../../test/support/http-app.js';
+import { itAnswersPages } from '../../test/support/pagination-contract.js';
 
 const COUPON: Coupon = {
   _id: '64b7f00000000000000000dd',

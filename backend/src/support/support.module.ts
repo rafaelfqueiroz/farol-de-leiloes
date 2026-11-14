@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { SupportController } from './support.controller';
-import { SupportService } from './support.service';
-import { EmailModule } from '../email/email.module';
+import { SupportController } from './support.controller.js';
+import { SupportService } from './support.service.js';
+import { EmailModule } from '../email/email.module.js';
 
 @Module({
   imports: [EmailModule],

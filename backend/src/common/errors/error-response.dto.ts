@@ -1,7 +1,7 @@
 // AR-33/AR-38: the documented shape of every error response, `{ code, context }`.
 import { ApiProperty } from '@nestjs/swagger';
-import { ERROR_CODES, type ErrorCode } from './codes';
-import type { ErrorContext } from './domain-error';
+import { ERROR_CODES, type ErrorCode } from './codes.js';
+import type { ErrorContext } from './domain-error.js';
 
 export class ErrorResponseDto {
   @ApiProperty({

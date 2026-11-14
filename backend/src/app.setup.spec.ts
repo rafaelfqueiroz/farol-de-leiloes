@@ -2,7 +2,7 @@
 import { Controller, Get, Req, type INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { createHttpApp } from '../test/support/http-app';
+import { createHttpApp } from '../test/support/http-app.js';
 
 @Controller('security-test')
 class SecurityTestController {

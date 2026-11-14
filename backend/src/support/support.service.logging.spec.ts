@@ -1,7 +1,7 @@
 // SC-15 / AR-46: a support request is logged without the sender or any of its content.
 import { afterEach, describe, it, vi } from 'vitest';
-import { SupportService } from './support.service';
-import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy';
+import { SupportService } from './support.service.js';
+import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy.js';
 
 afterEach(() => vi.restoreAllMocks());
 

@@ -1,6 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { errorMessage } from '../../common/error-message';
+import { errorMessage } from '../../common/error-message.js';
 
 const execAsync = promisify(exec);
 

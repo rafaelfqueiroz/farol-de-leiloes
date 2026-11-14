@@ -1,5 +1,7 @@
-import * as Papa from 'papaparse';
-import { Decimal } from '../../common/money/money';
+// #63: the default import. papaparse is a UMD bundle whose exports Node's CommonJS interop cannot
+// see, so under native ESM its namespace holds only `default` and `Papa.parse` would be undefined.
+import Papa from 'papaparse';
+import { Decimal } from '../../common/money/money.js';
 
 export interface ParsedAuctionRow {
   [key: string]: string;

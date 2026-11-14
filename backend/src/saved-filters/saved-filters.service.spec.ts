@@ -1,8 +1,8 @@
 // The saved-filter plan limit is a typed setting (AR-43), not a constant in the service. The model
 // is stubbed: what is under test is which number the service compares the count against.
 import { describe, expect, it, vi } from 'vitest';
-import { SavedFiltersService } from './saved-filters.service';
-import { testBusinessConfig } from '../../test/support/test-env';
+import { SavedFiltersService } from './saved-filters.service.js';
+import { testBusinessConfig } from '../../test/support/test-env.js';
 
 type ServiceDeps = ConstructorParameters<typeof SavedFiltersService>;
 

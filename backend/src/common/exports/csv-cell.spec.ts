@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { neutralizeCsvCell } from './csv-cell';
+import { neutralizeCsvCell } from './csv-cell.js';
 
 describe('neutralizeCsvCell (SC-12)', () => {
   it.each([

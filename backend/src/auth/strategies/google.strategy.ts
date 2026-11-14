@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Profile, Strategy, VerifyCallback } from 'passport-google-oauth20';
-import { UsersService } from '../../users/users.service';
-import type { Env } from '../../config/env';
-import { DomainError } from '../../common/errors/domain-error';
+import { UsersService } from '../../users/users.service.js';
+import type { Env } from '../../config/env.js';
+import { DomainError } from '../../common/errors/domain-error.js';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {

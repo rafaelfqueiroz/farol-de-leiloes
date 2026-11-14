@@ -4,8 +4,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import type { Env } from '../../config/env';
-import { Decimal } from '../../common/money/money';
+import type { Env } from '../../config/env.js';
+import { Decimal } from '../../common/money/money.js';
 import {
   type CreateCustomerInput,
   type CreateFixedDiscountInput,
@@ -13,7 +13,7 @@ import {
   type FixedDiscount,
   PaymentGateway,
   type PaymentEvent,
-} from '../payment-gateway';
+} from '../payment-gateway.js';
 
 /**
  * AR-20: reais → Stripe's integer centavos, exactly. A fraction of a centavo cannot be charged,

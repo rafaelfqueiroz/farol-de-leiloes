@@ -1,20 +1,20 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { RemindersService } from './reminders.service';
-import { UsersService } from '../users/users.service';
-import { EmailService } from '../email/email.service';
-import { SmsService } from '../notifications/sms.service';
-import { WhatsAppService } from '../notifications/whatsapp.service';
-import { JobExecutionService } from '../common/services/job-execution.service';
-import { RunMode } from '../common/job-execution';
-import { ReminderChannel } from './schemas/reminder.schema';
-import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface';
-import { ReminderEmailPayload } from './templates/reminder.template';
-import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
-import { logSafeError } from '../common/errors/log-safe-error';
-import { jobErrorCode } from '../common/services/job-error-code';
-import { BRASILIA_TIME_ZONE } from '../common/clock/brasilia-time';
-import { InJobContext } from '../common/observability/job-context';
+import { RemindersService } from './reminders.service.js';
+import { UsersService } from '../users/users.service.js';
+import { EmailService } from '../email/email.service.js';
+import { SmsService } from '../notifications/sms.service.js';
+import { WhatsAppService } from '../notifications/whatsapp.service.js';
+import { JobExecutionService } from '../common/services/job-execution.service.js';
+import { RunMode } from '../common/job-execution.js';
+import { ReminderChannel } from './schemas/reminder.schema.js';
+import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface.js';
+import { ReminderEmailPayload } from './templates/reminder.template.js';
+import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config.js';
+import { logSafeError } from '../common/errors/log-safe-error.js';
+import { jobErrorCode } from '../common/services/job-error-code.js';
+import { BRASILIA_TIME_ZONE } from '../common/clock/brasilia-time.js';
+import { InJobContext } from '../common/observability/job-context.js';
 
 export const REMINDERS_JOB = 'reminders-processor';
 

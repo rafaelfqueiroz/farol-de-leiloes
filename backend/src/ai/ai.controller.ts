@@ -1,9 +1,9 @@
-import { Public } from '../auth/decorators/public.decorator';
+import { Public } from '../auth/decorators/public.decorator.js';
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { NlpService } from './services/nlp.service';
-import { ChatRequestDto, ChatResponseDto } from './dto/chat.dto';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
+import { NlpService } from './services/nlp.service.js';
+import { ChatRequestDto, ChatResponseDto } from './dto/chat.dto.js';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
 
 @ApiTags('ai')
 @ApiErrorResponses()

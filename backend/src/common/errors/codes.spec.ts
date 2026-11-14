@@ -3,8 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { ERROR_CODES } from './codes';
-import { ERROR_STATUS } from './error-status';
+import { ERROR_CODES } from './codes.js';
+import { ERROR_STATUS } from './error-status.js';
 
 describe('ERROR_CODES', () => {
   it('are UPPER_SNAKE_CASE', () => {
@@ -21,7 +21,7 @@ describe('ERROR_CODES', () => {
   });
 
   it('read back from the file text exactly as the frontend catalogue test reads them', () => {
-    const text = readFileSync(join(__dirname, 'codes.ts'), 'utf8');
+    const text = readFileSync(join(import.meta.dirname, 'codes.ts'), 'utf8');
     expect(text).not.toMatch(/^import /m);
     const literals = [...text.matchAll(/'([A-Z][A-Z0-9_]*)'/g)].map((match) => match[1]);
     expect(literals).toEqual([...ERROR_CODES]);

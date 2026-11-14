@@ -1,4 +1,4 @@
-import type { Decimal } from '../../common/money/money';
+import type { Decimal } from '../../common/money/money.js';
 
 /** A saved filter's criteria in code: the price bounds are reais as Decimal (AR-17). */
 export interface FilterData {

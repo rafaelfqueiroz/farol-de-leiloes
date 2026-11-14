@@ -1,7 +1,7 @@
 // AR-17: in MongoDB money is a Decimal128; in code a Decimal. These two functions are the only
 // crossing between them, so no amount passes through a JS `number` on the way in or out.
 import { Types } from 'mongoose';
-import { Decimal } from './money';
+import { Decimal } from './money.js';
 
 /**
  * Decimal → Decimal128 at full precision: `toFixed()` without arguments writes every digit in

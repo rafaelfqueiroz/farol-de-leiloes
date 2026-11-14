@@ -1,5 +1,5 @@
 import { registerAs } from '@nestjs/config';
-import { validateEnv, type Env } from './env';
+import { validateEnv, type Env } from './env.js';
 
 export interface R2Config {
   accountId: string;

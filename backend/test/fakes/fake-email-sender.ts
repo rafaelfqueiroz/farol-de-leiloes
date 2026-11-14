@@ -1,4 +1,4 @@
-import type { EmailService } from '../../src/email/email.service';
+import type { EmailService } from '../../src/email/email.service.js';
 
 type Args<K extends keyof EmailService> = Parameters<EmailService[K]>;
 

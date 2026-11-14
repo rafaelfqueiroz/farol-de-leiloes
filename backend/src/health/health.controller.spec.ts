@@ -5,10 +5,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import request from 'supertest';
-import { createHttpApp } from '../../test/support/http-app';
-import type { HealthReport } from './domain/health-report';
-import { HealthController } from './health.controller';
-import { HealthService } from './health.service';
+import { createHttpApp } from '../../test/support/http-app.js';
+import type { HealthReport } from './domain/health-report.js';
+import { HealthController } from './health.controller.js';
+import { HealthService } from './health.service.js';
 
 const OK: HealthReport = {
   status: 'ok',

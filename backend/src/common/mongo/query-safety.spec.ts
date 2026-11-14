@@ -1,8 +1,8 @@
 import mongoose, { Types } from 'mongoose';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { applyMongooseDefaults, decimalFilter, serverOperators } from './query-safety';
-import { DomainError } from '../errors/domain-error';
-import { Decimal } from '../money/money';
+import { applyMongooseDefaults, decimalFilter, serverOperators } from './query-safety.js';
+import { DomainError } from '../errors/domain-error.js';
+import { Decimal } from '../money/money.js';
 
 describe('applyMongooseDefaults', () => {
   afterEach(() => {

@@ -1,10 +1,10 @@
 // AR-41/AR-42: the boot-time validation that ConfigModule runs (`validate: validateEnv`), and the
 // typed view of the result everywhere else.
 import type { ConfigService } from '@nestjs/config';
-import { envSchema, type Env } from './env.schema';
+import { envSchema, type Env } from './env.schema.js';
 
 // Other modules import from here: AR-09's lint reads any `*.schema` path as a Mongoose schema.
-export type { Env, LlmProvider } from './env.schema';
+export type { Env, LlmProvider } from './env.schema.js';
 
 /**
  * The typed ConfigService: `config.get('PORT', { infer: true })` is a number, never undefined.

@@ -5,7 +5,7 @@ import {
   type FixedDiscount,
   PaymentGateway,
   type PaymentEvent,
-} from '../../src/payments/payment-gateway';
+} from '../../src/payments/payment-gateway.js';
 
 /**
  * TS-03 / TS-07: a hand-written fake of the PaymentGateway port. It records what services asked

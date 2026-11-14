@@ -9,10 +9,10 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
 import request from 'supertest';
-import { configureApp } from '../../app.setup';
-import { testConfigService } from '../../../test/support/test-env';
-import { runInJobContext } from './job-context';
-import { setLogUserHash } from './log-context';
+import { configureApp } from '../../app.setup.js';
+import { testConfigService } from '../../../test/support/test-env.js';
+import { runInJobContext } from './job-context.js';
+import { setLogUserHash } from './log-context.js';
 import {
   loggerParams,
   logMethod,
@@ -23,8 +23,8 @@ import {
   serializeRequest,
   serializeResponse,
   stackFrames,
-} from './logger-options';
-import { hashUserId } from './user-hash';
+} from './logger-options.js';
+import { hashUserId } from './user-hash.js';
 
 // Fake personal data that must never reach a log line (TS-27).
 const EMAIL = 'ana.teste@example.test';

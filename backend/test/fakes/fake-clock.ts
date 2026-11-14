@@ -1,4 +1,4 @@
-import { Clock } from '../../src/common/clock/clock';
+import { Clock } from '../../src/common/clock/clock.js';
 
 /** 2026-01-15T12:00:00Z — an arbitrary fixed instant, so no test depends on the day it runs. */
 export const DEFAULT_FAKE_NOW = new Date('2026-01-15T12:00:00.000Z');

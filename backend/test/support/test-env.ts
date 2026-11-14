@@ -3,8 +3,8 @@
 // here instead of a .env file (DV-19). None of these values reaches a real service: specs replace
 // the providers or never call them (TS-07).
 import type { ConfigService } from '@nestjs/config';
-import { validateEnv, type Env } from '../../src/config/env';
-import { businessConfigFrom, type BusinessConfig } from '../../src/config/business.config';
+import { validateEnv, type Env } from '../../src/config/env.js';
+import { businessConfigFrom, type BusinessConfig } from '../../src/config/business.config.js';
 
 export const TEST_ENV = {
   NODE_ENV: 'test',

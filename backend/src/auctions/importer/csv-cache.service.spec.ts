@@ -1,8 +1,8 @@
 // AR-23 / AR-24 / TS-11: the cached Caixa list is "today's" by the Brasília calendar and the
 // injected clock — not the UTC date, which rolls over at 21:00 in Brasília.
 import { describe, expect, it, vi } from 'vitest';
-import { CsvCacheService } from './csv-cache.service';
-import { FakeClock } from '../../../test/fakes/fake-clock';
+import { CsvCacheService } from './csv-cache.service.js';
+import { FakeClock } from '../../../test/fakes/fake-clock.js';
 
 type ServiceDeps = ConstructorParameters<typeof CsvCacheService>;
 

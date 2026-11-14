@@ -1,12 +1,12 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { SupportService } from './support.service';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
-import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
-import { CreateSupportRequestDto } from './dto/create-support-request.dto';
-import { MessageResponseDto } from '../common/dto/message-response.dto';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
+import { SupportService } from './support.service.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
+import { CreateSupportRequestDto } from './dto/create-support-request.dto.js';
+import { MessageResponseDto } from '../common/dto/message-response.dto.js';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
 
 @ApiTags('support')
 @ApiErrorResponses()

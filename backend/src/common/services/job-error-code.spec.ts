@@ -1,7 +1,7 @@
 // AR-03 / SC-15: a failed run's stable code (job-error-code.ts).
 import { describe, expect, it } from 'vitest';
-import { DomainError } from '../errors/domain-error';
-import { jobErrorCode, UNKNOWN_JOB_ERROR } from './job-error-code';
+import { DomainError } from '../errors/domain-error.js';
+import { jobErrorCode, UNKNOWN_JOB_ERROR } from './job-error-code.js';
 
 class MongoServerError extends Error {
   override name = 'MongoServerError';

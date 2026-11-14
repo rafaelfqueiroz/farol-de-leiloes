@@ -7,10 +7,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, type TransformFnParams } from 'class-transformer';
 import { ArrayNotEmpty, IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import type { Decimal } from '../../common/money/money';
-import { IsMoneyString, MONEY_API_PROPERTY } from '../../common/money/money-dto';
-import { PaginationQueryDto } from '../../common/pagination/pagination-query.dto';
-import { PhaseModality } from '../schemas/auction.schema';
+import type { Decimal } from '../../common/money/money.js';
+import { IsMoneyString, MONEY_API_PROPERTY } from '../../common/money/money-dto.js';
+import { PaginationQueryDto } from '../../common/pagination/pagination-query.dto.js';
+import { PhaseModality } from '../schemas/auction.schema.js';
 
 const LIST_DESCRIPTION =
   'Several values: repeat the key (?k=A&k=B) or separate with commas (?k=A,B)';

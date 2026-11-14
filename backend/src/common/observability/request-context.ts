@@ -4,7 +4,7 @@
 // in the response header and opens the request's log context (log-context.ts).
 import { randomUUID } from 'node:crypto';
 import type { IncomingHttpHeaders } from 'node:http';
-import { runWithLogContext } from './log-context';
+import { runWithLogContext } from './log-context.js';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
 

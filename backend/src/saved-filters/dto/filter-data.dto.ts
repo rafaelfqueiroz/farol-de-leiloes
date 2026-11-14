@@ -3,9 +3,9 @@
 // response, each field copied explicitly (AR-36). Money is a string over JSON both ways (AR-17).
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsArray, IsOptional, IsString } from 'class-validator';
-import type { Decimal } from '../../common/money/money';
-import { IsMoneyString, MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto';
-import { FilterData } from '../interfaces/saved-filter.interface';
+import type { Decimal } from '../../common/money/money.js';
+import { IsMoneyString, MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto.js';
+import { FilterData } from '../interfaces/saved-filter.interface.js';
 
 export class FilterDataDto {
   @ApiPropertyOptional({ type: String, description: 'UF, e.g. SP' })

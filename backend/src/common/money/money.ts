@@ -1,6 +1,8 @@
 // AR-17..AR-19: money is never a JS `number`. In code it is a `Decimal` from this module — a
 // decimal.js constructor configured once, so every amount in the backend rounds the same way.
-import DecimalJs from 'decimal.js';
+// The named export, not the default: decimal.js ships one CommonJS-flavoured .d.ts for both its
+// builds, so under NodeNext resolution the default import types as the module object (#63).
+import { Decimal as DecimalJs } from 'decimal.js';
 
 /**
  * The backend's Decimal: 34 significant digits, the most a MongoDB Decimal128 holds, so an

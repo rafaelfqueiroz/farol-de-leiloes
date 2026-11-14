@@ -5,8 +5,8 @@
 // The CaixaSource port arrives with SPEC-004 (#4); this spec then moves to a hand-written fake.
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import puppeteer from 'puppeteer';
-import { fetchAndCheckAvailability } from './details-scraper';
-import { readCaixaFixture } from '../../../test/support/fixtures';
+import { fetchAndCheckAvailability } from './details-scraper.js';
+import { readCaixaFixture } from '../../../test/support/fixtures.js';
 
 vi.mock('puppeteer', () => ({
   default: { launch: vi.fn() },

@@ -1,6 +1,6 @@
-import { DomainError } from '../../src/common/errors/domain-error';
-import type { UserAccount } from '../../src/users/user-account';
-import type { UsersService } from '../../src/users/users.service';
+import { DomainError } from '../../src/common/errors/domain-error.js';
+import type { UserAccount } from '../../src/users/user-account.js';
+import type { UsersService } from '../../src/users/users.service.js';
 
 /** An account as the fake stores it: the public contract plus the secrets the real document holds. */
 export type FakeAccount = UserAccount & { password?: string };

@@ -3,12 +3,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { SavedFiltersController } from './saved-filters.controller';
-import { SavedFiltersService } from './saved-filters.service';
-import { createHttpApp, TEST_USER } from '../../test/support/http-app';
-import { itAnswersPages } from '../../test/support/pagination-contract';
-import type { SavedFilter } from './interfaces/saved-filter.interface';
-import { Decimal } from '../common/money/money';
+import { SavedFiltersController } from './saved-filters.controller.js';
+import { SavedFiltersService } from './saved-filters.service.js';
+import { createHttpApp, TEST_USER } from '../../test/support/http-app.js';
+import { itAnswersPages } from '../../test/support/pagination-contract.js';
+import type { SavedFilter } from './interfaces/saved-filter.interface.js';
+import { Decimal } from '../common/money/money.js';
 
 const FILTER: SavedFilter = {
   _id: '64b7f00000000000000000aa',

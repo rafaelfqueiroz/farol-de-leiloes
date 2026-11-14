@@ -1,5 +1,5 @@
-import { type JobExecutionRecord, JobStatus, RunMode } from '../../src/common/job-execution';
-import { DEFAULT_FAKE_NOW } from '../fakes/fake-clock';
+import { type JobExecutionRecord, JobStatus, RunMode } from '../../src/common/job-execution.js';
+import { DEFAULT_FAKE_NOW } from '../fakes/fake-clock.js';
 
 /**
  * TS-29: builds a `JobExecutionRecord` with sensible defaults so a test states only what it cares

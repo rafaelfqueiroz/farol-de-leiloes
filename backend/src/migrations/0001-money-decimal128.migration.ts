@@ -15,9 +15,9 @@
 // it did when it was written, whatever the models become (migration.ts).
 import { Logger } from '@nestjs/common';
 import { type mongo, Types } from 'mongoose';
-import { toDecimal128 } from '../common/money/decimal128';
-import { Decimal } from '../common/money/money';
-import type { Migration } from './migration';
+import { toDecimal128 } from '../common/money/decimal128.js';
+import { Decimal } from '../common/money/money.js';
+import type { Migration } from './migration.js';
 
 /**
  * The BSON number types a legacy amount may have. Never the `'number'` alias: it also matches

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
-const SRC = join(__dirname, '..', '..', 'src');
+const SRC = join(import.meta.dirname, '..', '..', 'src');
 
 /** Each `@Cron(...)` call of a source, as written (up to its closing parenthesis). */
 function cronDecorators(source: string): string[] {

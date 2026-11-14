@@ -16,17 +16,17 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { SavedFiltersService } from './saved-filters.service';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator';
-import { AuthenticatedUser } from '../auth/interfaces/auth.interface';
-import { SavedFilterResponseDto } from './dto/saved-filter-response.dto';
-import { CreateSavedFilterDto } from './dto/create-saved-filter.dto';
-import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator';
-import { ErrorResponseDto } from '../common/errors/error-response.dto';
-import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator';
-import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
-import { mapPage, type Paginated } from '../common/pagination/paginated';
+import { SavedFiltersService } from './saved-filters.service.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
+import { SavedFilterResponseDto } from './dto/saved-filter-response.dto.js';
+import { CreateSavedFilterDto } from './dto/create-saved-filter.dto.js';
+import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
+import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
+import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator.js';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto.js';
+import { mapPage, type Paginated } from '../common/pagination/paginated.js';
 
 @ApiTags('saved-filters')
 @ApiErrorResponses()

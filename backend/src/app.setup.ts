@@ -3,11 +3,11 @@
 import { type INestApplication, ValidationPipe, type ValidationError } from '@nestjs/common';
 import helmet from 'helmet';
 import { ConfigService } from '@nestjs/config';
-import { ApiExceptionFilter } from './common/errors/api-exception.filter';
-import { DomainError } from './common/errors/domain-error';
-import { requestContextMiddleware } from './common/observability/request-context';
-import type { AppConfigService } from './config/env';
-import { serveOpenApiDocs } from './openapi';
+import { ApiExceptionFilter } from './common/errors/api-exception.filter.js';
+import { DomainError } from './common/errors/domain-error.js';
+import { requestContextMiddleware } from './common/observability/request-context.js';
+import type { AppConfigService } from './config/env.js';
+import { serveOpenApiDocs } from './openapi.js';
 
 export function configureApp(app: INestApplication): void {
   const config = app.get<AppConfigService>(ConfigService);

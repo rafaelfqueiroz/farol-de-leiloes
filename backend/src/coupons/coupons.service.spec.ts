@@ -3,13 +3,13 @@
 // "today" is today in Brasília (AR-23, TS-11).
 import { describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
-import { CouponsService } from './coupons.service';
-import type { CreateCouponDto } from './dto/create-coupon.dto';
-import { DomainError } from '../common/errors/domain-error';
-import { Decimal } from '../common/money/money';
-import { FakeClock } from '../../test/fakes/fake-clock';
-import { FakePaymentGateway } from '../../test/fakes/fake-payment-gateway';
-import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy';
+import { CouponsService } from './coupons.service.js';
+import type { CreateCouponDto } from './dto/create-coupon.dto.js';
+import { DomainError } from '../common/errors/domain-error.js';
+import { Decimal } from '../common/money/money.js';
+import { FakeClock } from '../../test/fakes/fake-clock.js';
+import { FakePaymentGateway } from '../../test/fakes/fake-payment-gateway.js';
+import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy.js';
 
 type ServiceDeps = ConstructorParameters<typeof CouponsService>;
 

@@ -3,7 +3,7 @@
 // and served at /api/docs outside production only, so production does not publish its surface.
 import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, type OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
-import { BEARER_AUTH } from './auth/decorators/api-jwt-auth.decorator';
+import { BEARER_AUTH } from './auth/decorators/api-jwt-auth.decorator.js';
 
 /** Served under the global prefix: the UI at /api/docs, the JSON at /api/docs-json. */
 export const OPENAPI_PATH = 'api/docs';

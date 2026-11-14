@@ -9,7 +9,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-const root = join(__dirname, '..', '..', '..');
+const root = join(import.meta.dirname, '..', '..', '..');
 
 function select(files: string[]): string[] {
   const result = spawnSync(

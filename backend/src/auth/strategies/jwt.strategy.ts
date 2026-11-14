@@ -2,12 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import type { Env } from '../../config/env';
-import { UsersService } from '../../users/users.service';
-import { AuthenticatedUser, JwtPayload } from '../interfaces/auth.interface';
-import { DomainError } from '../../common/errors/domain-error';
-import { setLogUserHash } from '../../common/observability/log-context';
-import { hashUserId } from '../../common/observability/user-hash';
+import type { Env } from '../../config/env.js';
+import { UsersService } from '../../users/users.service.js';
+import { AuthenticatedUser, JwtPayload } from '../interfaces/auth.interface.js';
+import { DomainError } from '../../common/errors/domain-error.js';
+import { setLogUserHash } from '../../common/observability/log-context.js';
+import { hashUserId } from '../../common/observability/user-hash.js';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

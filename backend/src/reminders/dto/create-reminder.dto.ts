@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsEnum, IsOptional, IsDateString, MaxLength } from 'class-validator';
-import { ReminderChannel } from '../schemas/reminder.schema';
+import { ReminderChannel } from '../schemas/reminder.schema.js';
 
 export class CreateReminderDto {
   @ApiProperty({ type: String, description: 'Id of the auction (its `_id`)' })

@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { FavoritesController } from './favorites.controller';
-import { FavoritesService } from './favorites.service';
-import { FavoriteEntity, FavoriteSchema } from './schemas/favorite.schema';
-import { AuctionsModule } from '../auctions/auctions.module';
+import { FavoritesController } from './favorites.controller.js';
+import { FavoritesService } from './favorites.service.js';
+import { FavoriteEntity, FavoriteSchema } from './schemas/favorite.schema.js';
+import { AuctionsModule } from '../auctions/auctions.module.js';
 
 @Module({
   imports: [

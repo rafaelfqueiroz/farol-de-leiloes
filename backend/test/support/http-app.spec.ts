@@ -2,10 +2,10 @@
 import { Controller, Get, type INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { Public } from '../../src/auth/decorators/public.decorator';
-import { CurrentUser } from '../../src/auth/decorators/current-user.decorator';
-import type { AuthenticatedUser } from '../../src/auth/interfaces/auth.interface';
-import { createHttpApp, TEST_USER } from './http-app';
+import { Public } from '../../src/auth/decorators/public.decorator.js';
+import { CurrentUser } from '../../src/auth/decorators/current-user.decorator.js';
+import type { AuthenticatedUser } from '../../src/auth/interfaces/auth.interface.js';
+import { createHttpApp, TEST_USER } from './http-app.js';
 
 @Controller('test-auth')
 class MixedController {
