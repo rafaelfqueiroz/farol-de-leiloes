@@ -110,6 +110,13 @@ export const envSchema = z
     // Milliseconds; 600000 = 10 minutes.
     NEIGHBORHOODS_CACHE_TTL: positiveInt.default(600_000),
 
+    // Business settings (AR-43): product decisions that change without a code change. The
+    // defaults are the values the code carried as constants before (#74).
+    // How many saved filters one user may keep (SPEC-007; the per-plan number is open, Q-15).
+    SAVED_FILTERS_MAX_PER_USER: positiveInt.default(10),
+    // Days an unavailable auction is kept before the cleanup job removes it and its files.
+    UNAVAILABLE_AUCTION_RETENTION_DAYS: positiveInt.default(14),
+
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
     // AR-46: the HMAC key of the hashed user id in log lines. Required in production (superRefine

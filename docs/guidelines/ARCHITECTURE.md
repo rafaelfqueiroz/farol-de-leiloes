@@ -157,6 +157,8 @@ SPEC-003 BR-003-23 to BR-003-28 put every date the product shows, accepts or sch
 | **AR-43** | Business settings the specs call configurable (retention periods, Caixa request budget, plan limits, calculator defaults) are typed settings with defaults, not constants scattered in code (SPEC-010 BR-010-24). |
 | **AR-44** | Every variable is listed in the package's `.env.example` with a comment. Adding a variable without updating it fails review. |
 
+Where it lives (#74): the business settings are `backend/src/config/business.config.ts` (`BusinessConfig`, injected with `@Inject(businessConfig.KEY)` and registered per module with `ConfigModule.forFeature`). Today they are the saved filters a user may keep (`SAVED_FILTERS_MAX_PER_USER`, default 10; the per-plan number is still open in SPEC-007 / Q-15) and the days an unavailable auction is kept before the cleanup job removes it (`UNAVAILABLE_AUCTION_RETENTION_DAYS`, default 14). A new configurable business value is added there and to `.env.example` and the deploy-production configuration (ADR-004), never as a constant in a service. Specs build the object with `testBusinessConfig()` (`backend/test/support/test-env.ts`) and override a value as an environment string, so a test cites the setting and not the literal.
+
 ## 11. Observability
 
 | | |

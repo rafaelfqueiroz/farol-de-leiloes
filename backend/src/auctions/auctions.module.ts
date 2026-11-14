@@ -13,6 +13,7 @@ import { AuctionCleanupService } from './cleanup/auction-cleanup.service';
 import { CommonModule } from '../common/common.module';
 import { StorageModule } from '../storage/storage.module';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
+import businessConfig from '../config/business.config';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config';
       { name: CsvUpload.name, schema: CsvUploadSchema },
     ]),
     ConfigModule.forFeature(schedulerConfig),
+    ConfigModule.forFeature(businessConfig),
     CacheModule.registerAsync({
       imports: [ConfigModule.forFeature(schedulerConfig)],
       inject: [ConfigService],
