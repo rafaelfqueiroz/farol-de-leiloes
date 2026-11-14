@@ -6,6 +6,7 @@ import { validateEnv } from './env';
 import { ENV_KEYS } from './env.schema';
 import { r2ConfigFrom } from './r2.config';
 import { schedulerConfigFrom } from './scheduler.config';
+import { businessConfigFrom } from './business.config';
 
 function errorOf(raw: Record<string, string | undefined>): string {
   try {
@@ -91,6 +92,24 @@ describe('validateEnv', () => {
       CLEANUP_ON_STARTUP: false,
       NEIGHBORHOODS_CACHE_ENABLED: false,
       NEIGHBORHOODS_CACHE_TTL: 600_000,
+      SAVED_FILTERS_MAX_PER_USER: 10,
+      UNAVAILABLE_AUCTION_RETENTION_DAYS: 14,
+    });
+  });
+
+  describe('business settings (AR-43)', () => {
+    it.each(['SAVED_FILTERS_MAX_PER_USER', 'UNAVAILABLE_AUCTION_RETENTION_DAYS'])(
+      '%s is a positive integer',
+      (key) => {
+        expect(testEnv({ [key]: '25' })[key as 'SAVED_FILTERS_MAX_PER_USER']).toBe(25);
+        for (const bad of ['0', '-1', '1.5', 'many']) {
+          expect(errorOf({ ...TEST_ENV, [key]: bad })).toContain(`${key}:`);
+        }
+      },
+    );
+
+    it('treats an empty value as unset and takes the default', () => {
+      expect(testEnv({ SAVED_FILTERS_MAX_PER_USER: '' }).SAVED_FILTERS_MAX_PER_USER).toBe(10);
     });
   });
 
@@ -226,6 +245,18 @@ describe('namespaced configs built from the validated environment', () => {
       reminders: { enabled: true },
       cleanup: { onStartup: false },
     });
+  });
+
+  it('maps the business settings (AR-43)', () => {
+    expect(businessConfigFrom(testEnv())).toEqual({
+      savedFilters: { maxPerUser: 10 },
+      retention: { unavailableAuctionDays: 14 },
+    });
+    expect(
+      businessConfigFrom(
+        testEnv({ SAVED_FILTERS_MAX_PER_USER: '3', UNAVAILABLE_AUCTION_RETENTION_DAYS: '60' }),
+      ),
+    ).toEqual({ savedFilters: { maxPerUser: 3 }, retention: { unavailableAuctionDays: 60 } });
   });
 
   it('maps the R2 settings', () => {

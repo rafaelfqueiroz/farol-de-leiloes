@@ -1,6 +1,8 @@
+import { subDays } from 'date-fns';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { AuctionCleanupService } from './auction-cleanup.service';
 import { FakeClock } from '../../../test/fakes/fake-clock';
+import { testBusinessConfig } from '../../../test/support/test-env';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionCleanupService>;
 type CleanupTarget = Parameters<AuctionCleanupService['processAuction']>[0];
@@ -20,6 +22,7 @@ describe('AuctionCleanupService.processAuction', () => {
       auctionModel as unknown as ServiceDeps[0],
       storage as unknown as ServiceDeps[1],
       {} as ServiceDeps[2],
+      testBusinessConfig(),
       new FakeClock(),
     );
     // processAuction is private; bracket access keeps its signature type-checked.
@@ -71,5 +74,35 @@ describe('AuctionCleanupService.processAuction', () => {
       filesDeleted: 0,
     });
     expect(auctionModel.deleteOne).toHaveBeenCalled();
+  });
+});
+
+describe('AuctionCleanupService retention period (AR-43)', () => {
+  type Query = { updatedAt: { $lte: Date } };
+
+  /** Runs one cleanup pass with the given setting and returns the query it sent to the model. */
+  async function queryFor(overrides: Record<string, string | undefined>): Promise<Query> {
+    const clock = new FakeClock();
+    const find = vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([]) });
+    const cleanup = new AuctionCleanupService(
+      { find } as unknown as ServiceDeps[0],
+      {} as ServiceDeps[1],
+      {} as ServiceDeps[2],
+      testBusinessConfig(overrides),
+      clock,
+    );
+    await cleanup['runCleanup']();
+    expect(find).toHaveBeenCalledOnce();
+    return find.mock.calls[0]?.[0] as Query;
+  }
+
+  it('selects auctions unavailable for longer than the default 14 days', async () => {
+    const query = await queryFor({});
+    expect(query.updatedAt.$lte).toEqual(subDays(new FakeClock().now(), 14));
+  });
+
+  it('follows UNAVAILABLE_AUCTION_RETENTION_DAYS with no code change', async () => {
+    const query = await queryFor({ UNAVAILABLE_AUCTION_RETENTION_DAYS: '30' });
+    expect(query.updatedAt.$lte).toEqual(subDays(new FakeClock().now(), 30));
   });
 });
