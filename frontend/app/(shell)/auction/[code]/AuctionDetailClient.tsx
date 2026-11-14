@@ -147,6 +147,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
               }}
             >
               {auction.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- Caixa-hosted photos on hosts we do not control: next/image would route them through our optimizer (SC-24) and needs every host allow-listed
                 <img
                   src={auction.imageUrl}
                   alt={auction.title || tCard('property')}

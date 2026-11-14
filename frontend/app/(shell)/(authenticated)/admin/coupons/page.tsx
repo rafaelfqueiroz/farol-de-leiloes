@@ -112,6 +112,7 @@ export default function AdminCouponsPage() {
       return;
     }
     if (!authLoading && role === 'admin') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the page from the API (an external system); loadCoupons writes state only once the request settles
       void loadCoupons();
     }
   }, [authLoading, role, router, loadCoupons]);
@@ -323,6 +324,7 @@ export default function AdminCouponsPage() {
         <DialogTitle>{t('new')}</DialogTitle>
         <DialogContent>
           <TextField
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- focus moves to the first field when this modal dialog opens (DS-21)
             autoFocus
             fullWidth
             label={t('form.code')}

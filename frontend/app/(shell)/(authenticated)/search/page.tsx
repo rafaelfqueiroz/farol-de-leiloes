@@ -144,6 +144,7 @@ function SearchPageContent() {
     ownNavigation.current = null;
     const filters = filtersFromQuery(searchParams);
     const pageNum = Number(searchParams.get('page')) || 1;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the URL is the external source of truth; this mirrors it into the form and starts the search it asks for
     setCurrentFilters(filters);
     setCurrentPage(pageNum);
     if (hasFilters(filters) || searchParams.has('page') || ownSearch) {
@@ -154,6 +155,7 @@ function SearchPageContent() {
       setSearchError(null);
       setSearchLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per URL change on purpose: searchParams is covered by queryKey, and performSearch (re-created each render) must not retrigger the search
   }, [queryKey, activeView]);
 
   // state → URL; the effect above then runs the search

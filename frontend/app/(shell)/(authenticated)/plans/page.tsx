@@ -155,7 +155,7 @@ export default function PlansPage() {
 
       if (response.ok) {
         const data = await response.json();
-        window.location.href = data.url;
+        window.location.assign(data.url);
       } else {
         throw await readApiError(response);
       }

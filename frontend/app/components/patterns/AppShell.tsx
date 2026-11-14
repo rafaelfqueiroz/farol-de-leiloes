@@ -513,6 +513,7 @@ export default function AppShell({ children }: AppShellProps) {
 
   // read after mount: storage does not exist during server rendering
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reading it during render would differ from the server markup and break hydration
     setRailPinned(readRailPinned());
   }, []);
 

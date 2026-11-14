@@ -79,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Load user on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the session lives in storage and the API (external systems); the first read can only happen after mount
     void loadUser();
   }, [loadUser]);
 
