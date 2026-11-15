@@ -17,7 +17,7 @@ export class InMemoryMaintenanceStore extends MaintenanceStore {
     this.sequence += 1;
     const stored: MaintenanceRecord = {
       ...record,
-      id: `64b7f000000000000000${String(this.sequence).padStart(4, '0')}`,
+      id: `64b7f0000000000000ee${String(this.sequence).padStart(4, '0')}`,
       createdAt: record.announcedAt,
     };
     this.records.push(stored);

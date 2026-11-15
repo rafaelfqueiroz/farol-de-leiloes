@@ -68,8 +68,9 @@ export class MaintenanceService {
       createdBy: adminId,
     });
     this.cache = null;
-    // SC-15: ids only; the text is admin-written but is not logged.
-    this.logger.log(`Maintenance window ${record.id} announced by admin ${adminId}`);
+    // AR-46 / SC-15: the window id only. The operator is the request's hashed `userHash` in the
+    // log context, never a raw account id inside the message; the text is not logged either.
+    this.logger.log(`Maintenance window ${record.id} announced`);
     return record;
   }
 

@@ -103,13 +103,26 @@ describe('MaintenanceService', () => {
       ).resolves.toBeDefined();
     });
 
-    it('SC-15: logs the ids but never the message', async () => {
+    it('AR-46 / SC-15: logs the window id only, never the admin account id or the message', async () => {
       const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
-      await service.create(window(72, 2, 'Texto do aviso'), ADMIN_ID);
+      const created = await service.create(window(72, 2, 'Texto do aviso'), ADMIN_ID);
       expect(log).toHaveBeenCalledTimes(1);
       const line = String(log.mock.calls[0]?.[0]);
-      expect(line).toContain(ADMIN_ID);
+      expect(line).toContain(created.id);
       expect(line).not.toContain('Texto do aviso');
+      // Absent from every argument of every log call, whatever the level.
+      for (const level of ['log', 'warn', 'error', 'debug', 'verbose'] as const) {
+        const spy = level === 'log' ? log : vi.spyOn(Logger.prototype, level);
+        expect(JSON.stringify(spy.mock.calls)).not.toContain(ADMIN_ID);
+      }
+    });
+
+    it('AR-46 / SC-15: logs the window id only when a window is removed', async () => {
+      const created = await service.create(window(72), ADMIN_ID);
+      const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+      await service.remove(created.id);
+      expect(JSON.stringify(log.mock.calls)).toContain(created.id);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(ADMIN_ID);
     });
   });
 
@@ -129,8 +142,8 @@ describe('MaintenanceService', () => {
 
       expect(upcoming.map((w) => w.id)).toEqual([
         'in-progress',
-        '64b7f0000000000000000003',
-        '64b7f0000000000000000001',
+        '64b7f0000000000000ee0003',
+        '64b7f0000000000000ee0001',
       ]);
     });
 
