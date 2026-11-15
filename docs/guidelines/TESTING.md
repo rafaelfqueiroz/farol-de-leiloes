@@ -119,7 +119,7 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | Frontend overall | **80% lines and branches** | ✅ |
 | Isolation — every owned collection | **100%** (TS-14, from #2) | ✅ |
 
-80% is the target. The legacy code was far below it when the gate was introduced, so each package commits a **floor** at the coverage measured then (rounded down): `coverage.thresholds` in `backend/vitest.config.mts` and in `frontend/vitest.config.ts`. The floor only goes up — a PR that raises coverage raises it — until it reaches 80%; #57 tracks the ratchet. `npm run test:cov` enforces it (backend: Vitest with V8 coverage over the `unit` and `structural` projects; frontend: Vitest with V8 coverage) and writes an lcov report to `coverage/`.
+80% is the target, and both packages gate on it: `coverage.thresholds` in `backend/vitest.config.mts` and in `frontend/vitest.config.ts` set 80% lines and 80% branches, and a PR that drops either below fails `test:cov`. `npm run test:cov` enforces it (backend: Vitest with V8 coverage over the `unit` and `structural` projects; frontend: Vitest with V8 coverage) and writes an lcov report to `coverage/`.
 
 The frontend reached the 80% target in #57 (measured 95.6% lines / 91.6% branches, from 65.5% / 66.4%): its `coverage.thresholds` are 80 lines and 80 branches, with no floor left to ratchet. The thin BFF route handlers under `app/api/` are covered together by one table-driven spec (`app/api/bff-routes.test.ts`): method, path, body and `Authorization` forwarding, `401 UNAUTHENTICATED` without a call to the backend, and the error pass-through (AR-38).
 
@@ -199,7 +199,7 @@ SPEC-003 sets the budgets (BR-003-06 to BR-003-10): measured against the referen
 | Unit, service and component tests | ✅ |
 | Integration tests on real MongoDB | ✅ |
 | **Isolation tests, every owned collection** | ✅ |
-| Coverage: 100% branch on critical modules, 80% overall (temporary floors until then, #57) | ✅ |
+| Coverage: 100% branch on critical modules, 80% overall | ✅ |
 | E2E journeys, desktop + 360 px, with axe | ✅ |
 | Structural checks (Node pin, tokens, env example) | ✅ |
 | `npm audit` high+, CodeQL high+ | ✅ |
