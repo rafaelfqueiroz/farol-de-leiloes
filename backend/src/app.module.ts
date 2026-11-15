@@ -13,6 +13,7 @@ import { RemindersModule } from './reminders/reminders.module.js';
 import { AiModule } from './ai/ai.module.js';
 import { SupportModule } from './support/support.module.js';
 import { HealthModule } from './health/health.module.js';
+import { MaintenanceModule } from './maintenance/maintenance.module.js';
 import { ObservabilityModule } from './common/observability/observability.module.js';
 import schedulerConfig from './config/scheduler.config.js';
 import r2Config from './config/r2.config.js';
@@ -43,6 +44,7 @@ import { MONGOOSE_ROOT_OPTIONS } from './common/mongo/mongoose-root.js';
     AiModule,
     SupportModule,
     HealthModule,
+    MaintenanceModule,
   ],
 })
 export class AppModule {}

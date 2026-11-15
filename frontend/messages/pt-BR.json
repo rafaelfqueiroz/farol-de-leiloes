@@ -112,6 +112,7 @@
     "SAVED_FILTER_NOT_FOUND": "Este filtro salvo não existe mais.",
     "COUPON_NOT_FOUND": "Não encontramos este cupom.",
     "SUBSCRIPTION_NOT_FOUND": "Você não tem uma assinatura ativa.",
+    "MAINTENANCE_WINDOW_NOT_FOUND": "Esta manutenção programada não existe mais.",
     "INVALID_CREDENTIALS": "E-mail ou senha incorretos. Confira os dados e tente novamente.",
     "CURRENT_PASSWORD_INCORRECT": "A senha atual está incorreta. Confira e tente novamente.",
     "PASSWORD_ALREADY_SET": "Esta conta já tem uma senha. Use a opção de alterar senha.",
@@ -137,6 +138,7 @@
     "EMAIL_VERIFICATION_REQUIRED": "Confirme seu e-mail para continuar.",
     "PHONE_REQUIRED": "Cadastre um telefone no perfil para receber lembretes por {channel, select, sms {SMS} SMS {SMS} whatsapp {WhatsApp} WHATSAPP {WhatsApp} other {o canal escolhido}}.",
     "REMINDER_CHANNEL_NOT_IN_PLAN": "Seu plano não inclui lembretes por {channel, select, sms {SMS} SMS {SMS} whatsapp {WhatsApp} WHATSAPP {WhatsApp} other {o canal escolhido}}. Escolha outro canal ou mude de plano.",
+    "MAINTENANCE_WINDOW_ALREADY_STARTED": "Esta manutenção já começou e não pode mais ser removida.",
     "UNKNOWN": "Algo deu errado. Tente novamente em instantes.",
     "BACKEND_UNAVAILABLE": "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente."
   },

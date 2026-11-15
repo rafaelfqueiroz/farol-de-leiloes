@@ -18,6 +18,7 @@ export const ERROR_CODES = [
   'SAVED_FILTER_NOT_FOUND',
   'COUPON_NOT_FOUND',
   'SUBSCRIPTION_NOT_FOUND',
+  'MAINTENANCE_WINDOW_NOT_FOUND',
   // Accounts and sign-in
   'INVALID_CREDENTIALS',
   'CURRENT_PASSWORD_INCORRECT',
@@ -47,6 +48,8 @@ export const ERROR_CODES = [
   'EMAIL_VERIFICATION_REQUIRED',
   'PHONE_REQUIRED',
   'REMINDER_CHANNEL_NOT_IN_PLAN',
+  // Maintenance windows
+  'MAINTENANCE_WINDOW_ALREADY_STARTED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
