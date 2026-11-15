@@ -194,7 +194,7 @@ describe('AdminCouponsPage paging', () => {
     const user = userEvent.setup();
     listAnswer = (page) =>
       page === 3
-        ? { status: 200, body: { items: [], total: 41, page: 3, pageSize: 20 } }
+        ? { status: 200, body: { items: [], total: 40, page: 3, pageSize: 20 } }
         : { status: 200, body: { items: [coupon(`p${page}`)], total: 41, page, pageSize: 20 } };
     render(<AdminCouponsPage />);
     await screen.findByText('CUPOMp1');
@@ -203,13 +203,16 @@ describe('AdminCouponsPage paging', () => {
       within(screen.getByRole('navigation')).getByRole('button', { name: /page 3/i }),
     );
 
-    // 41 coupons at 20 a page are 3 pages: the empty page 3 is retried as the page that exists
-    await waitFor(() =>
-      expect(
-        fetchMock.mock.calls.filter(([url]) => url === '/api/coupons?page=3&pageSize=20'),
-      ).not.toHaveLength(0),
-    );
-    expect(await screen.findByText('CUPOMp1')).toBeVisible();
+    // The list showed 41 coupons (3 pages) when page 3 was picked; by then it shrank to 40, so
+    // page 3 is empty and the last page that exists is 2. A fallback that does not change the page
+    // would leave page 1 on screen and never ask for page 2 (TS-25).
+    expect(await screen.findByText('CUPOMp2')).toBeVisible();
+    const urls = fetchMock.mock.calls.map(([url]) => url);
+    expect(urls).toEqual([
+      '/api/coupons?page=1&pageSize=20',
+      '/api/coupons?page=3&pageSize=20',
+      '/api/coupons?page=2&pageSize=20',
+    ]);
   });
 });
 
