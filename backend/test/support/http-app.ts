@@ -14,6 +14,7 @@ import { testConfigService } from './test-env.js';
 /** An obviously fake signed-in user (TS-27). */
 export const TEST_USER: AuthenticatedUser = {
   userId: '64b7f0000000000000000001',
+  sessionId: 'test-session-id',
   email: 'ana.teste@example.test',
   name: 'Ana Teste',
   emailVerified: true,

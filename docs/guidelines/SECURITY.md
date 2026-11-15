@@ -25,8 +25,8 @@ The specs say **what** must hold; this document says **how the code makes it hol
 |---|---|
 | **SC-01** | Passwords are hashed with `bcrypt`, cost ≥ 10, never logged, emailed or returned (SPEC-001 BR-001-12). Length 8–128, no composition rules (BR-001-13). |
 | **SC-02** | **The session token lives only in an `httpOnly`, `Secure`, `SameSite=Lax` cookie** set by the server. Never `localStorage`, `sessionStorage`, a URL or a JS-readable cookie. State-changing requests rely on `SameSite` plus an `Origin` check; a cross-site form cannot act. |
-| **SC-03** | A valid signature is not enough: every authenticated request checks the account's current status (deactivated, closed) and current memberships (SPEC-001 BR-001-16, SPEC-002 BR-002-15). Sign-out and password change invalidate existing sessions through a per-account session version. |
-| **SC-04** | Sign-in, sign-up, password reset and confirmation resend are throttled with `@nestjs/throttler`, per email and per origin, at the limits SPEC-001 BR-001-15 sets. |
+| **SC-03** | A valid signature is not enough: every authenticated request checks the account's current status (deactivated, closed) and current memberships (SPEC-001 BR-001-16, SPEC-002 BR-002-15). The session is a server-side record keyed by the token's `jti` (`sessions`, 7 days): sign-out revokes it, a password change revokes the account's other sessions and a reset revokes all of them (BR-001-18, BR-001-19). |
+| **SC-04** | Sign-in, sign-up, password reset and confirmation resend are throttled. Sign-in failures are counted per email and per origin in `loginAttempts` at the limits SPEC-001 BR-001-15 sets (10 in 15 minutes, then 15 minutes of refusal, `TOO_MANY_ATTEMPTS`); sign-up, recovery request, reset and resend carry a coarse per-origin `@nestjs/throttler` limit (`TOO_MANY_REQUESTS`). |
 | **SC-05** | Responses never reveal whether an email has an account: same message and same timing on sign-in failure and reset request (BR-001-14). |
 | **SC-06** | One-time tokens (email confirmation, password reset, invitation) are ≥ 32 random bytes from `crypto.randomBytes`, stored **hashed**, single-use, and expire (1 hour unless a spec says otherwise). |
 
@@ -106,6 +106,9 @@ The inventory is the source the privacy policy is written from (SPEC-010 BR-010-
 | Billing records, Stripe customer id | `users`, Stripe | Subscriptions | Contract; tax legal obligation — art. 7º V, II | Tax period (Q-21) |
 | Support requests | support | Support (SPEC-009) | Contract — art. 7º V | Lawyer-set |
 | Admin access log | access log | Accountability for support grants (BR-002-27) | Legitimate interest / accountability — art. 7º IX | Lawyer-set (BR-010-23) |
+| Sessions (ids and instants only) | `sessions` | Revocable 7-day sign-in (BR-001-18) | Contract — art. 7º V | Expires 7 days after sign-in (TTL index) |
+| Confirmation, recovery and email-change token hashes (no plain token, no email) | `accountTokens` | One-time account links (BR-001-05, BR-001-22) | Contract — art. 7º V | Expires with the link (24 h or 1 h, TTL index); deleted on use or replacement |
+| Failed sign-in counters keyed by normalised email or IP address | `loginAttempts` | Brute-force throttling (BR-001-15, SC-04) | Legitimate interest, security — art. 7º IX | At most 30 minutes (15-minute window plus 15-minute ban, TTL index); an email key is cleared on success; never logged |
 | Caixa listings | `auctions` | Search | Public data, not personal | — |
 
 | | |
@@ -151,8 +154,6 @@ Code that predates these guidelines and breaks them. Each has a follow-up issue;
 | Rule | Where | Today |
 |---|---|---|
 | SC-02 | `frontend/app/contexts/AuthContext.tsx` | JWT in `localStorage` |
-| SC-03 | `backend/src/auth/` | 7-day JWT with no per-request status/version check |
-| SC-04 | `backend/src/auth/` | No throttling |
 | SC-24 | `backend/src/auctions/importer/downloader.ts` (#4) | Spoofed browser User-Agent on the list download through curl. The stealth plugin is gone (#61); the image and matrícula copies to R2 now send the honest `CAIXA_USER_AGENT` (#65) |
 | AR-11–AR-16 | all user-data modules | No `ownerType`/`ownerId`, no scoped repositories, no isolation tests |
 | AR-45 / DV-11 | 75 call sites | `console.*` |

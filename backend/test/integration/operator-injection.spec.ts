@@ -388,14 +388,14 @@ describe('SC-10: Mongo operator injection (integration)', () => {
         name: 'Ana Souza',
         $unset: { email: '' },
         $set: { role: 'admin' },
-        emailVerificationToken: 'planted',
+        status: 'closed',
       } as unknown as Parameters<UsersService['update']>[1];
       const updated = await users.update(id, hostile);
 
       expect(updated.name).toBe('Ana Souza');
       expect(updated.email).toBe('ana.teste@example.test');
       expect(updated.role).toBe('free');
-      expect(updated.emailVerificationToken).toBeUndefined();
+      expect(updated.status).toBe('active');
     });
 
     it('update ignores a field whose value is an object instead of text', async () => {
@@ -409,11 +409,12 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       expect(updated.phone).toBeUndefined();
     });
 
-    it('update keeps hashing a new password and clears the status with an explicit null', async () => {
+    it('update clears the status with an explicit null, and password changes go through changePassword', async () => {
       const user = await users.findByEmail('ana.teste@example.test');
       const id = user?._id.toString() ?? '';
 
-      await users.update(id, { password: 'outra-senha-de-teste', subscriptionStatus: null });
+      await users.update(id, { subscriptionStatus: null });
+      await users.changePassword(id, 'outra-senha-de-teste');
 
       await expect(
         users.validatePassword('ana.teste@example.test', 'outra-senha-de-teste'),

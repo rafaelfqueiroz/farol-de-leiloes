@@ -55,7 +55,7 @@ describe('ResetPasswordPage', () => {
     const user = userEvent.setup();
     render(<ResetPasswordPage />);
 
-    await user.type(screen.getByLabelText(/^nova senha/i), 'secret1');
+    await user.type(screen.getByLabelText(/^nova senha/i), 'secret-one');
     await user.type(screen.getByLabelText(/confirmar nova senha/i), 'secret2');
     await user.click(screen.getByRole('button', { name: t.submit }));
 
@@ -71,8 +71,8 @@ describe('ResetPasswordPage', () => {
     const user = userEvent.setup();
     render(<ResetPasswordPage />);
 
-    await user.type(screen.getByLabelText(/^nova senha/i), 'secret1');
-    await user.type(screen.getByLabelText(/confirmar nova senha/i), 'secret1');
+    await user.type(screen.getByLabelText(/^nova senha/i), 'secret-one');
+    await user.type(screen.getByLabelText(/confirmar nova senha/i), 'secret-one');
     await user.click(screen.getByRole('button', { name: t.submit }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(t.success));
@@ -86,18 +86,18 @@ describe('ResetPasswordPage', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('refuses a password shorter than six characters without calling the API', async () => {
-    await fillAndSubmit('12345', '12345');
+  it('refuses a password shorter than eight characters without calling the API', async () => {
+    await fillAndSubmit('1234567', '1234567');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'A senha deve ter pelo menos 6 caracteres',
+      'A senha deve ter pelo menos 8 caracteres',
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('accepts a password of exactly six characters', async () => {
+  it('accepts a password of exactly eight characters', async () => {
     answer(200, {});
-    await fillAndSubmit('123456', '123456');
+    await fillAndSubmit('12345678', '12345678');
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

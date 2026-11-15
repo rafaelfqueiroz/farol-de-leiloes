@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service.js';
 import { EmailService } from '../email/email.service.js';
@@ -7,71 +7,93 @@ import { LoginDto } from './dto/login.dto.js';
 import { CompleteProfileDto } from './dto/complete-profile.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import type { UserAccount } from '../users/user-account.js';
-import { UserProfile, AuthResult } from './interfaces/auth.interface.js';
+import { UserProfile, AuthResult, JwtPayload } from './interfaces/auth.interface.js';
 import { DomainError } from '../common/errors/domain-error.js';
+import { normalizeEmail } from '../common/normalize-email.js';
+import { AccountTokenService } from './tokens/account-token.service.js';
+import { SessionsService } from './sessions/sessions.service.js';
+import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
     private emailService: EmailService,
+    private accountTokens: AccountTokenService,
+    private sessions: SessionsService,
+    private loginAttempts: LoginAttemptsService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResult> {
-    const user = await this.usersService.create({
-      ...registerDto,
-      providers: ['local'],
+    // BR-001-31: only email, name and password cross into the account; acceptTerms is checked by
+    // the DTO (BR-001-02) and is not an account attribute.
+    const user = await this.usersService.createLocalAccount({
+      email: registerDto.email,
+      name: registerDto.name,
+      password: registerDto.password,
     });
 
-    // Generate and send verification email
-    const verificationToken = await this.usersService.setEmailVerificationToken(
-      user._id.toString(),
-    );
-    await this.emailService.sendVerificationEmail(user.email, verificationToken, user.name);
-
-    const accessToken = this.generateToken(user);
-    return {
-      accessToken,
-      user: this.toUserProfile(user),
-    };
+    await this.sendConfirmationEmail(user);
+    return this.startSession(user);
   }
 
-  async login(loginDto: LoginDto): Promise<AuthResult> {
-    const user = await this.usersService.validatePassword(loginDto.email, loginDto.password);
+  async login(loginDto: LoginDto, ip: string): Promise<AuthResult> {
+    const email = normalizeEmail(loginDto.email);
+    // BR-001-15: a banned email or origin is refused before the password is looked at.
+    await this.loginAttempts.assertAllowed(email, ip);
 
+    const user = await this.usersService.validatePassword(email, loginDto.password);
     if (!user) {
+      // BR-001-14: unknown email, wrong password and an inactive account are one answer, and all
+      // of them count towards the throttle.
+      await this.loginAttempts.recordFailure(email, ip);
       throw new DomainError('INVALID_CREDENTIALS');
     }
 
-    const accessToken = this.generateToken(user);
-    return {
-      accessToken,
-      user: this.toUserProfile(user),
-    };
+    await this.loginAttempts.recordSuccess(email);
+    return this.startSession(user);
   }
 
   async googleLogin(user: UserAccount): Promise<AuthResult> {
-    const accessToken = this.generateToken(user);
-    return {
-      accessToken,
-      user: this.toUserProfile(user),
-    };
+    return this.startSession(user);
+  }
+
+  /** BR-001-18: sign-out ends this session on the server, so a copy of the token stops working. */
+  async logout(sessionId: string): Promise<void> {
+    await this.sessions.revoke(sessionId);
   }
 
   async requestPasswordReset(email: string): Promise<void> {
     const user = await this.usersService.findByEmail(email);
-    if (!user) {
-      // Don't reveal if email exists
-      return;
-    }
+    // BR-001-21: the same visible response whether or not an account exists, and no email unless
+    // one does. A deactivated or closed account is treated as absent (BR-001-16).
+    if (!user || (user.status ?? 'active') !== 'active') return;
 
-    const token = await this.usersService.setResetPasswordToken(email);
-    await this.emailService.sendPasswordResetEmail(email, token, user.name);
+    // BR-001-24: works for Google-only accounts too. BR-001-22: the new token replaces older ones.
+    const token = await this.accountTokens.issue(user._id.toString(), 'password_reset');
+    // Not awaited: the delay of a real send would tell a known address from an unknown one
+    // (SC-05). A failure is logged by kind only (SC-15).
+    void this.deliver('Password reset email', () =>
+      this.emailService.sendPasswordResetEmail(user.email, token, user.name),
+    );
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    await this.usersService.resetPassword(token, newPassword);
+    // BR-001-22: single use, 1 hour; unknown, used and expired are the same answer.
+    const record = await this.accountTokens.consume(token, 'password_reset');
+    if (!record) {
+      throw new DomainError('INVALID_RESET_TOKEN');
+    }
+
+    // BR-001-24: finishing recovery adds email-and-password sign-in to a Google-only account.
+    await this.usersService.setPassword(record.userId, newPassword);
+    // BR-001-22: a successful reset kills every outstanding recovery link.
+    await this.accountTokens.revokeUnused(record.userId, 'password_reset');
+    // BR-001-19: and every session; the reset does not sign anyone in.
+    await this.sessions.revokeAllForUser(record.userId);
   }
 
   async updateProfile(userId: string, updateData: UpdateProfileDto): Promise<UserProfile> {
@@ -94,6 +116,7 @@ export class AuthService {
 
   async changePassword(
     userId: string,
+    sessionId: string,
     currentPassword: string,
     newPassword: string,
   ): Promise<void> {
@@ -111,7 +134,9 @@ export class AuthService {
       throw new DomainError('CURRENT_PASSWORD_INCORRECT');
     }
 
-    await this.usersService.update(userId, { password: newPassword });
+    await this.usersService.changePassword(userId, newPassword);
+    // BR-001-19: every other session ends; the one that changed the password stays.
+    await this.sessions.revokeAllForUser(userId, sessionId);
   }
 
   async setPassword(userId: string, newPassword: string): Promise<void> {
@@ -127,17 +152,51 @@ export class AuthService {
     await this.usersService.setPassword(userId, newPassword);
   }
 
-  private generateToken(user: UserAccount): string {
-    const payload = {
-      email: user.email,
-      sub: typeof user._id === 'string' ? user._id : user._id.toHexString(),
-      name: user.name,
+  /**
+   * BR-001-17/18: opens a server-side session and signs a token that only points at it. The token
+   * carries `sub` and `jti`; no email, name, role or plan (those are read per request).
+   */
+  private async startSession(user: UserAccount): Promise<AuthResult> {
+    const userId = typeof user._id === 'string' ? user._id : user._id.toHexString();
+    const jti = await this.sessions.create(userId);
+    const payload: JwtPayload = { sub: userId, jti };
+    return {
+      accessToken: this.jwtService.sign(payload),
+      user: this.toUserProfile(user),
     };
-    return this.jwtService.sign(payload);
+  }
+
+  /** BR-001-05, BR-001-23: a fresh 24-hour link replaces any earlier one. */
+  private async sendConfirmationEmail(user: UserAccount): Promise<void> {
+    const userId = typeof user._id === 'string' ? user._id : user._id.toHexString();
+    const token = await this.accountTokens.issue(userId, 'email_confirmation');
+    await this.deliver('Verification email', () =>
+      this.emailService.sendVerificationEmail(user.email, token, user.name),
+    );
+  }
+
+  /**
+   * An account stays usable when the mail provider is down: the person can ask for another link
+   * (BR-001-06). SC-15: the log line names the kind of mail and the error class, never the
+   * address, the link or the provider's message (which can quote the recipient).
+   */
+  private async deliver(kind: string, send: () => Promise<void>): Promise<void> {
+    try {
+      await send();
+    } catch (error) {
+      this.logger.warn(
+        `${kind} could not be sent (${error instanceof Error ? error.name : 'error'})`,
+      );
+    }
   }
 
   async verifyEmail(token: string): Promise<void> {
-    await this.usersService.verifyEmail(token);
+    // BR-001-05: single use, 24 hours; unknown, used, expired and replaced links answer alike.
+    const record = await this.accountTokens.consume(token, 'email_confirmation');
+    if (!record) {
+      throw new DomainError('INVALID_VERIFICATION_TOKEN');
+    }
+    await this.usersService.markEmailVerified(record.userId);
   }
 
   async resendVerification(userId: string): Promise<void> {
@@ -154,8 +213,8 @@ export class AuthService {
       throw new DomainError('EMAIL_ALREADY_VERIFIED');
     }
 
-    const token = await this.usersService.setEmailVerificationToken(userId);
-    await this.emailService.sendVerificationEmail(user.email, token, user.name);
+    // BR-001-05/06: a new link makes the earlier unused ones stop working.
+    await this.sendConfirmationEmail(user);
   }
 
   async getVerificationStatus(

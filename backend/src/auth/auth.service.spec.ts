@@ -7,8 +7,38 @@ import type { UserAccount } from '../users/user-account.js';
 import type { UsersService } from '../users/users.service.js';
 import { FakeEmailSender } from '../../test/fakes/fake-email-sender.js';
 import { FakeUsersService, type FakeAccount } from '../../test/fakes/fake-users-service.js';
+import { FakeClock, HOUR, MINUTE } from '../../test/fakes/fake-clock.js';
+import {
+  FakeAccountTokenRepository,
+  FakeLoginAttemptsRepository,
+  FakeSessionsRepository,
+} from '../../test/fakes/fake-auth-repositories.js';
+import { spyOnLogger } from '../../test/support/logger-spy.js';
+import type { AccountTokenRepository } from './tokens/account-token.repository.js';
+import type { SessionsRepository } from './sessions/sessions.repository.js';
+import type { LoginAttemptsRepository } from './login-attempts/login-attempts.repository.js';
+import { AccountTokenService } from './tokens/account-token.service.js';
+import { SessionsService } from './sessions/sessions.service.js';
+import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
 
 type ServiceDeps = ConstructorParameters<typeof AuthService>;
+
+/** The real auth services over in-memory repositories and a fake clock (TS-03, TS-06). */
+function wire(users: UsersService, email: EmailService, sign: (payload: never) => string) {
+  const clock = new FakeClock();
+  const tokenRepo = new FakeAccountTokenRepository();
+  const sessionRepo = new FakeSessionsRepository();
+  const attemptRepo = new FakeLoginAttemptsRepository();
+  const service = new AuthService(
+    users,
+    { sign } as unknown as ServiceDeps[1],
+    email,
+    new AccountTokenService(tokenRepo as unknown as AccountTokenRepository, clock),
+    new SessionsService(sessionRepo as unknown as SessionsRepository, clock),
+    new LoginAttemptsService(attemptRepo as unknown as LoginAttemptsRepository, clock),
+  );
+  return { service, clock, tokenRepo, sessionRepo, attemptRepo };
+}
 const ID = '64b000000000000000000001';
 const CREATED = new Date('2026-01-01T12:00:00.000Z');
 const UPDATED = new Date('2026-01-02T12:00:00.000Z');
@@ -17,14 +47,8 @@ const UPDATED = new Date('2026-01-02T12:00:00.000Z');
 describe('AuthService account contract (AR-09)', () => {
   function build() {
     const sign = vi.fn().mockReturnValue('signed-token');
-    return {
-      service: new AuthService(
-        {} as ServiceDeps[0],
-        { sign } as unknown as ServiceDeps[1],
-        {} as ServiceDeps[2],
-      ),
-      sign,
-    };
+    const { service } = wire({} as UsersService, {} as EmailService, sign);
+    return { service, sign };
   }
 
   function account(overrides: Partial<UserAccount> = {}): UserAccount {
@@ -44,11 +68,9 @@ describe('AuthService account contract (AR-09)', () => {
 
     const result = await service.googleLogin(account());
 
-    expect(sign).toHaveBeenCalledWith({
-      email: 'account@example.test',
-      sub: ID,
-      name: 'Test Account',
-    });
+    // BR-001-17: the token carries the account and the session, nothing else.
+    expect(sign).toHaveBeenCalledWith({ sub: ID, jti: expect.any(String) as string });
+    expect(Object.keys(sign.mock.calls[0]?.[0] as object).sort()).toEqual(['jti', 'sub']);
     expect(result).toEqual({
       accessToken: 'signed-token',
       user: {
@@ -76,11 +98,7 @@ describe('AuthService account contract (AR-09)', () => {
     const result = await service.googleLogin(account({ _id: { toHexString: () => ID } }));
 
     expect(result.user._id).toBe(ID);
-    expect(sign).toHaveBeenCalledWith({
-      email: 'account@example.test',
-      sub: ID,
-      name: 'Test Account',
-    });
+    expect(sign).toHaveBeenCalledWith({ sub: ID, jti: expect.any(String) as string });
   });
 
   it('preserves populated profile fields and omits credential fields', async () => {
@@ -96,7 +114,7 @@ describe('AuthService account contract (AR-09)', () => {
       sex: 'other',
       address: { street: 'Test Street', city: 'Test City', state: 'SP', zipCode: '00000000' },
     };
-    const user = { ...account(profile), password: 'fake-hash', resetPasswordToken: 'fake-token' };
+    const user = { ...account(profile), password: 'fake-hash' };
 
     const result = await service.googleLogin(user);
 
@@ -109,17 +127,12 @@ describe('AuthService account contract (AR-09)', () => {
       ...profile,
     });
     expect(result.user).not.toHaveProperty('password');
-    expect(result.user).not.toHaveProperty('resetPasswordToken');
   });
 });
 
 // toUserProfile is private; every public method that returns a profile goes through it.
 describe('AuthService.toUserProfile mapping (AR-09, SC-15)', () => {
-  const service = new AuthService(
-    {} as ServiceDeps[0],
-    { sign: vi.fn() } as unknown as ServiceDeps[1],
-    {} as ServiceDeps[2],
-  );
+  const { service } = wire({} as UsersService, {} as EmailService, vi.fn());
 
   function account(overrides: Partial<UserAccount> = {}): UserAccount {
     return {
@@ -163,8 +176,6 @@ describe('AuthService.toUserProfile mapping (AR-09, SC-15)', () => {
       googleId: 'fake-google-id',
       stripeCustomerId: 'cus_fake',
       stripeSubscriptionId: 'sub_fake',
-      emailVerificationToken: 'fake-token',
-      resetPasswordToken: 'fake-token',
       __v: 3,
     };
 
@@ -225,16 +236,14 @@ describe('AuthService.toUserProfile mapping (AR-09, SC-15)', () => {
 });
 
 describe('AuthService with fake collaborators', () => {
+  const IP = '203.0.113.7';
+
   function build() {
     const users = new FakeUsersService();
     const email = new FakeEmailSender();
-    const sign = vi.fn((payload: { sub: string }) => `token-for-${payload.sub}`);
-    const service = new AuthService(
-      users as unknown as UsersService,
-      { sign } as unknown as ServiceDeps[1],
-      email as unknown as EmailService,
-    );
-    return { service, users, email, sign };
+    const sign = vi.fn((payload: { sub: string; jti: string }) => `token-for-${payload.sub}`);
+    const wired = wire(users as unknown as UsersService, email as unknown as EmailService, sign);
+    return { ...wired, users, email, sign };
   }
 
   function localAccount(overrides: Partial<FakeAccount> = {}): FakeAccount {
@@ -264,25 +273,29 @@ describe('AuthService with fake collaborators', () => {
     expect((error as DomainError).code).toBe(code);
   }
 
-  describe('register', () => {
-    it('creates a local account, sends the verification email and returns token and profile', async () => {
-      const { service, users, email } = build();
+  const registration = {
+    email: 'new@example.test',
+    password: 'a-password',
+    name: 'New User',
+    acceptTerms: true,
+  } as const;
 
-      const result = await service.register({
-        email: 'new@example.test',
-        password: 'a-password',
-        name: 'New User',
-      });
+  describe('register', () => {
+    it('creates a local account, sends the confirmation email and opens a session', async () => {
+      const { service, users, email, sessionRepo } = build();
+
+      const result = await service.register(registration);
 
       // The fake assigns ids sequentially; the first account gets ID.
       expect(users.accounts.get(ID)?.providers).toEqual(['local']);
-      expect(email.verificationEmails).toEqual([
-        {
-          email: 'new@example.test',
-          token: `verification-token-for-${ID}`,
-          name: 'New User',
-        },
-      ]);
+      expect(email.verificationEmails).toHaveLength(1);
+      expect(email.verificationEmails[0]).toMatchObject({
+        email: 'new@example.test',
+        name: 'New User',
+      });
+      // BR-001-23: 32 random bytes, hex.
+      expect(email.verificationEmails[0]?.token).toMatch(/^[0-9a-f]{64}$/);
+      expect(sessionRepo.stored).toHaveLength(1);
       expect(result.accessToken).toBe(`token-for-${ID}`);
       expect(result.user).toMatchObject({
         email: 'new@example.test',
@@ -295,68 +308,161 @@ describe('AuthService with fake collaborators', () => {
       expect(result.user).not.toHaveProperty('password');
     });
 
-    it('propagates EMAIL_ALREADY_REGISTERED without sending an email', async () => {
+    it('BR-001-01: a second sign-up with the same email in another case is refused', async () => {
       const { service, users, email } = build();
       users.seed(localAccount());
 
       await expectDomainError(
-        service.register({ email: 'local@example.test', password: 'x', name: 'Dup' }),
+        service.register({ ...registration, email: '  Local@Example.test ' }),
         'EMAIL_ALREADY_REGISTERED',
       );
       expect(email.verificationEmails).toEqual([]);
     });
+
+    it('BR-001-06: the account still opens when the mail provider fails, and the log names no address or link', async () => {
+      const { service, email } = build();
+      const logged = spyOnLogger();
+      email.sendVerificationEmail = async (address: string, token: string) => {
+        throw new Error(`SMTP refused ${address} for ${token}`);
+      };
+
+      const result = await service.register(registration);
+
+      expect(result.accessToken).toBe(`token-for-${ID}`);
+      const text = logged.loggedText();
+      expect(text).toContain('Verification email could not be sent');
+      expect(text).not.toContain('new@example.test');
+      expect(text).not.toContain('SMTP refused');
+    });
   });
 
   describe('login', () => {
-    it('signs a token with email, sub and name and returns the profile', async () => {
-      const { service, users, sign } = build();
+    it('opens a session, signs sub and jti only and clears the email counter', async () => {
+      const { service, users, sign, attemptRepo, sessionRepo } = build();
       users.seed(localAccount({ subscriptionStatus: 'active' }));
 
-      const result = await service.login({
-        email: 'local@example.test',
-        password: 'correct-password',
-      });
+      const result = await service.login(
+        { email: 'LOCAL@example.test', password: 'correct-password' },
+        IP,
+      );
 
-      expect(sign).toHaveBeenCalledWith({
-        email: 'local@example.test',
-        sub: ID,
-        name: 'Local User',
-      });
+      expect(sign).toHaveBeenCalledWith({ sub: ID, jti: sessionRepo.stored[0]?.id });
       expect(result.accessToken).toBe(`token-for-${ID}`);
       expect(result.user.subscriptionStatus).toBe('active');
       expect(result.user).not.toHaveProperty('password');
+      // BR-001-15: success clears the email key and leaves the origin's.
+      expect(attemptRepo.cleared).toEqual(['email:local@example.test']);
     });
 
     it.each([
       ['wrong password', 'local@example.test', 'wrong-password'],
       ['unknown email', 'nobody@example.test', 'correct-password'],
-    ])('rejects %s with INVALID_CREDENTIALS and signs nothing', async (_label, mail, password) => {
-      const { service, users, sign } = build();
-      users.seed(localAccount());
+    ])(
+      'BR-001-14: %s is INVALID_CREDENTIALS, signs nothing and counts a failure for email and IP',
+      async (_label, mail, password) => {
+        const { service, users, sign, attemptRepo } = build();
+        users.seed(localAccount());
 
-      await expectDomainError(service.login({ email: mail, password }), 'INVALID_CREDENTIALS');
-      expect(sign).not.toHaveBeenCalled();
+        await expectDomainError(
+          service.login({ email: mail, password }, IP),
+          'INVALID_CREDENTIALS',
+        );
+
+        expect(sign).not.toHaveBeenCalled();
+        expect([...attemptRepo.failures.keys()].sort()).toEqual([`email:${mail}`, `ip:${IP}`]);
+      },
+    );
+
+    it('BR-001-16: a deactivated account gets the same INVALID_CREDENTIALS and counts a failure', async () => {
+      const { service, users, attemptRepo } = build();
+      users.seed(localAccount({ status: 'deactivated' }));
+
+      await expectDomainError(
+        service.login({ email: 'local@example.test', password: 'correct-password' }, IP),
+        'INVALID_CREDENTIALS',
+      );
+      expect(attemptRepo.failures.get('email:local@example.test')).toBe(1);
+    });
+
+    it.each([
+      ['email', 'email:local@example.test'],
+      ['IP', `ip:${IP}`],
+    ])(
+      'BR-001-15: a banned %s is refused with TOO_MANY_ATTEMPTS even with the correct password',
+      async (_label, key) => {
+        const { service, users, attemptRepo, sessionRepo } = build();
+        users.seed(localAccount());
+        attemptRepo.block(key);
+
+        await expectDomainError(
+          service.login({ email: 'local@example.test', password: 'correct-password' }, IP),
+          'TOO_MANY_ATTEMPTS',
+        );
+        expect(sessionRepo.stored).toEqual([]);
+      },
+    );
+  });
+
+  describe('logout', () => {
+    it('BR-001-18: revokes the session on the server', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount());
+      await service.login({ email: 'local@example.test', password: 'correct-password' }, IP);
+      const jti = sessionRepo.stored[0]?.id ?? '';
+
+      await service.logout(jti);
+
+      expect(sessionRepo.stored[0]?.revokedAt).toBeInstanceOf(Date);
     });
   });
 
   describe('verifyEmail and resendVerification', () => {
-    it('verifyEmail hands the token to the users service', async () => {
-      const { service, users } = build();
+    async function confirmationFor(ctx: ReturnType<typeof build>) {
+      await ctx.service.resendVerification(ID);
+      return ctx.email.verificationEmails.slice(-1)[0]?.token ?? '';
+    }
 
-      await service.verifyEmail('some-token');
+    it('BR-001-05: a confirmation link confirms the address once', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      const token = await confirmationFor(ctx);
 
-      expect(users.verifiedTokens).toEqual(['some-token']);
+      await ctx.service.verifyEmail(token);
+
+      expect(ctx.users.accounts.get(ID)?.emailVerified).toBe(true);
+      await expectDomainError(ctx.service.verifyEmail(token), 'INVALID_VERIFICATION_TOKEN');
     });
 
-    it('resendVerification sends a new verification email to an unverified local account', async () => {
-      const { service, users, email } = build();
-      users.seed(localAccount());
+    it('BR-001-05: a link is refused 24 hours and 1 minute after it was issued, and works just inside', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      const late = await confirmationFor(ctx);
+      ctx.clock.advance(24 * HOUR + MINUTE);
+      await expectDomainError(ctx.service.verifyEmail(late), 'INVALID_VERIFICATION_TOKEN');
 
-      await service.resendVerification(ID);
+      const inside = await confirmationFor(ctx);
+      ctx.clock.advance(24 * HOUR - MINUTE);
+      await expect(ctx.service.verifyEmail(inside)).resolves.toBeUndefined();
+    });
 
-      expect(email.verificationEmails).toEqual([
-        { email: 'local@example.test', token: `verification-token-for-${ID}`, name: 'Local User' },
-      ]);
+    it('BR-001-05: a new link makes the earlier one stop working', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      const first = await confirmationFor(ctx);
+      const second = await confirmationFor(ctx);
+
+      await expectDomainError(ctx.service.verifyEmail(first), 'INVALID_VERIFICATION_TOKEN');
+      await expect(ctx.service.verifyEmail(second)).resolves.toBeUndefined();
+    });
+
+    it('a token of another purpose is not a confirmation link', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      await ctx.service.requestPasswordReset('local@example.test');
+      await Promise.resolve();
+      const resetToken = ctx.email.passwordResetEmails[0]?.token ?? '';
+
+      await expectDomainError(ctx.service.verifyEmail(resetToken), 'INVALID_VERIFICATION_TOKEN');
     });
 
     it.each([
@@ -397,34 +503,125 @@ describe('AuthService with fake collaborators', () => {
   });
 
   describe('password reset', () => {
-    it('sends the reset email for a known address', async () => {
-      const { service, users, email } = build();
-      users.seed(localAccount());
+    async function requestToken(ctx: ReturnType<typeof build>, address = 'local@example.test') {
+      await ctx.service.requestPasswordReset(address);
+      await Promise.resolve(); // the mail is sent without being awaited (SC-05)
+      return ctx.email.passwordResetEmails.slice(-1)[0]?.token ?? '';
+    }
 
-      await service.requestPasswordReset('local@example.test');
+    it('BR-001-21: sends the reset email for a known address', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
 
-      expect(email.passwordResetEmails).toEqual([
-        {
-          email: 'local@example.test',
-          token: 'reset-token-for-local@example.test',
-          name: 'Local User',
-        },
-      ]);
+      const token = await requestToken(ctx);
+
+      expect(ctx.email.passwordResetEmails).toHaveLength(1);
+      expect(ctx.email.passwordResetEmails[0]).toMatchObject({
+        email: 'local@example.test',
+        name: 'Local User',
+      });
+      expect(token).toMatch(/^[0-9a-f]{64}$/);
     });
 
-    it('resolves silently and sends nothing for an unknown address (no account enumeration)', async () => {
+    it('BR-001-21: resolves silently and sends nothing for an unknown address', async () => {
       const { service, email } = build();
 
       await expect(service.requestPasswordReset('nobody@example.test')).resolves.toBeUndefined();
       expect(email.passwordResetEmails).toEqual([]);
     });
 
-    it('resetPassword hands token and new password to the users service', async () => {
-      const { service, users } = build();
+    it('BR-001-16: sends nothing for a deactivated account, answering the same', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount({ status: 'closed' }));
 
-      await service.resetPassword('reset-token', 'new-password');
+      await expect(ctx.service.requestPasswordReset('local@example.test')).resolves.toBeUndefined();
+      expect(ctx.email.passwordResetEmails).toEqual([]);
+    });
 
-      expect(users.resetCalls).toEqual([{ token: 'reset-token', newPassword: 'new-password' }]);
+    it('BR-001-24: works for a Google-only account and adds email-and-password sign-in', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount({ providers: ['google'], password: undefined }));
+      const token = await requestToken(ctx);
+
+      await ctx.service.resetPassword(token, 'new-password');
+
+      expect(ctx.users.accounts.get(ID)).toMatchObject({
+        password: 'new-password',
+        providers: ['google', 'local'],
+      });
+    });
+
+    it('BR-001-22: a recovery link works once', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      const token = await requestToken(ctx);
+
+      await ctx.service.resetPassword(token, 'new-password');
+
+      await expectDomainError(
+        ctx.service.resetPassword(token, 'other-password'),
+        'INVALID_RESET_TOKEN',
+      );
+      expect(ctx.users.accounts.get(ID)?.password).toBe('new-password');
+    });
+
+    it('BR-001-22: a recovery link is refused 61 minutes after issue and works at 59', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      const stale = await requestToken(ctx);
+      ctx.clock.advance(61 * MINUTE);
+      await expectDomainError(
+        ctx.service.resetPassword(stale, 'new-password'),
+        'INVALID_RESET_TOKEN',
+      );
+
+      const fresh = await requestToken(ctx);
+      ctx.clock.advance(59 * MINUTE);
+      await expect(ctx.service.resetPassword(fresh, 'new-password')).resolves.toBeUndefined();
+    });
+
+    it('BR-001-22: of two requested links only the newest works', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      const first = await requestToken(ctx);
+      const second = await requestToken(ctx);
+
+      await expectDomainError(
+        ctx.service.resetPassword(first, 'new-password'),
+        'INVALID_RESET_TOKEN',
+      );
+      await expect(ctx.service.resetPassword(second, 'new-password')).resolves.toBeUndefined();
+    });
+
+    it('BR-001-19: a reset ends every session of the account and signs nobody in', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      await ctx.service.login({ email: 'local@example.test', password: 'correct-password' }, IP);
+      await ctx.service.login({ email: 'local@example.test', password: 'correct-password' }, IP);
+      const token = await requestToken(ctx);
+      const before = ctx.sessionRepo.stored.length;
+
+      const result: unknown = await ctx.service.resetPassword(token, 'new-password');
+
+      expect(result).toBeUndefined();
+      expect(ctx.sessionRepo.stored).toHaveLength(before);
+      expect(ctx.sessionRepo.stored.every((s) => s.revokedAt)).toBe(true);
+    });
+
+    it('BR-001-22: a mail failure is swallowed and logged without the address', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      const logged = spyOnLogger();
+      ctx.email.sendPasswordResetEmail = async () => {
+        throw new Error('SMTP refused local@example.test');
+      };
+
+      await expect(ctx.service.requestPasswordReset('local@example.test')).resolves.toBeUndefined();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(logged.loggedText()).toContain('Password reset email could not be sent');
+      expect(logged.loggedText()).not.toContain('local@example.test');
     });
   });
 
@@ -468,9 +665,23 @@ describe('AuthService with fake collaborators', () => {
       const { service, users } = build();
       users.seed(localAccount());
 
-      await service.changePassword(ID, 'correct-password', 'new-password');
+      await service.changePassword(ID, 'current-session', 'correct-password', 'new-password');
 
       expect(users.accounts.get(ID)?.password).toBe('new-password');
+    });
+
+    it('BR-001-19: ends every other session and keeps the current one', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount());
+      const credentials = { email: 'local@example.test', password: 'correct-password' };
+      await service.login(credentials, IP);
+      await service.login(credentials, IP);
+      const [current, other] = sessionRepo.stored;
+
+      await service.changePassword(ID, current?.id ?? '', 'correct-password', 'new-password');
+
+      expect(current?.revokedAt).toBeUndefined();
+      expect(other?.revokedAt).toBeInstanceOf(Date);
     });
 
     it.each([
@@ -484,18 +695,20 @@ describe('AuthService with fake collaborators', () => {
       const { service, users } = build();
       if (seeded) users.seed(seeded);
 
-      await expectDomainError(service.changePassword(ID, 'x', 'new-password'), code);
+      await expectDomainError(service.changePassword(ID, 's', 'x', 'new-password'), code);
     });
 
-    it('refuses a wrong current password and leaves the password unchanged', async () => {
-      const { service, users } = build();
+    it('BR-001-28: refuses a wrong current password and leaves everything unchanged', async () => {
+      const { service, users, sessionRepo } = build();
       users.seed(localAccount());
+      await service.login({ email: 'local@example.test', password: 'correct-password' }, IP);
 
       await expectDomainError(
-        service.changePassword(ID, 'wrong-password', 'new-password'),
+        service.changePassword(ID, 's', 'wrong-password', 'new-password'),
         'CURRENT_PASSWORD_INCORRECT',
       );
       expect(users.accounts.get(ID)?.password).toBe('correct-password');
+      expect(sessionRepo.stored.every((s) => !s.revokedAt)).toBe(true);
     });
   });
 

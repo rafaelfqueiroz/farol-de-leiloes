@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { EmailField } from './normalize-email.decorator.js';
+import { NewPasswordField } from './new-password.decorator.js';
 
 export class RequestResetPasswordDto {
-  @ApiProperty({ type: String, format: 'email' })
-  @IsEmail()
-  @IsNotEmpty()
+  @EmailField()
   email!: string;
 }
 
@@ -12,11 +12,9 @@ export class ResetPasswordDto {
   @ApiProperty({ type: String, description: 'Token from the reset email' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(256)
   token!: string;
 
-  @ApiProperty({ type: String, format: 'password', minLength: 6 })
-  @IsString()
-  @MinLength(6)
-  @IsNotEmpty()
+  @NewPasswordField()
   newPassword!: string;
 }

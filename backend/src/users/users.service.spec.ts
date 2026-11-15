@@ -3,8 +3,6 @@ import * as bcrypt from 'bcrypt';
 import { DomainError } from '../common/errors/domain-error.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UsersService } from './users.service.js';
-import { FakeClock, HOUR } from '../../test/fakes/fake-clock.js';
-import { serverOperators } from '../common/mongo/query-safety.js';
 
 type ServiceDeps = ConstructorParameters<typeof UsersService>;
 
@@ -21,7 +19,7 @@ function build(found: unknown = null) {
     .fn()
     .mockReturnValue({ select: vi.fn().mockReturnValue({ exec: selectExec }) });
   const model = { findOne, findOneAndUpdate };
-  const service = new UsersService(model as unknown as ServiceDeps[0], new FakeClock());
+  const service = new UsersService(model as unknown as ServiceDeps[0]);
   return { service, model, selectExec };
 }
 
@@ -34,10 +32,10 @@ function setOf(model: ReturnType<typeof build>['model']): Record<string, unknown
 describe('UsersService finders (SC-10)', () => {
   const operator = { $ne: null } as unknown as string;
 
-  it('findByEmail compares the lower-cased e-mail by equality', async () => {
+  it('BR-001-01: findByEmail compares the trimmed, lower-cased e-mail by equality', async () => {
     const { service, model } = build();
 
-    await service.findByEmail('Ana@Example.com');
+    await service.findByEmail(' Ana@Example.com ');
     expect(model.findOne).toHaveBeenCalledWith({ email: { $eq: 'ana@example.com' } });
   });
 
@@ -101,24 +99,21 @@ describe('UsersService.update (SC-10)', () => {
     expect(setOf(model)).toEqual({ name: 'Ana' });
   });
 
-  it('ignores an empty password and still lets other empty strings through', async () => {
+  it('BR-001-31: update no longer carries a password, so it cannot reach the hash', async () => {
     const { service, model } = build();
 
-    await service.update('u1', { password: '', name: '' } as UpdateUserDto);
+    await service.update('u1', { password: 'secret-123', name: '' } as unknown as UpdateUserDto);
 
     expect(bcrypt.hash).not.toHaveBeenCalled();
     expect(setOf(model)).toEqual({ name: '' });
   });
 
-  it('hashes the password without mutating the DTO', async () => {
+  it('BR-001-01: an email written through update is trimmed and lower-cased', async () => {
     const { service, model } = build();
-    const dto = { password: 'secret-123' } as UpdateUserDto;
 
-    await service.update('u1', dto);
+    await service.update('u1', { email: ' Ana@Example.TEST ' } as UpdateUserDto);
 
-    expect(bcrypt.hash).toHaveBeenCalledWith('secret-123', 10);
-    expect(setOf(model)).toEqual({ password: 'hashed:secret-123' });
-    expect(dto.password).toBe('secret-123');
+    expect(setOf(model)).toEqual({ email: 'ana@example.test' });
   });
 
   it('keeps an explicit null subscriptionStatus and a string one, and drops other types', async () => {
@@ -187,54 +182,5 @@ describe('UsersService.update (SC-10)', () => {
     await expect(service.update('u1', { name: 'Ana' } as UpdateUserDto)).rejects.toEqual(
       new DomainError('USER_NOT_FOUND'),
     );
-  });
-});
-
-// AR-24 / TS-06: token lifetimes are measured from the injected clock, so expiry is testable.
-describe('UsersService token expiry (AR-24)', () => {
-  const NOW = new Date('2026-01-31T23:30:00.000Z');
-
-  function buildTokens(user: unknown) {
-    const model = {
-      findOne: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(user) }),
-      findById: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(user) }),
-      findByIdAndUpdate: vi.fn().mockResolvedValue({}),
-      find: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue([]) }),
-    };
-    const service = new UsersService(model as unknown as ServiceDeps[0], new FakeClock(NOW));
-    return { service, model };
-  }
-
-  it('a reset-password token expires one hour after it is issued', async () => {
-    const { service, model } = buildTokens({ _id: 'u1' });
-
-    await service.setResetPasswordToken('ana@example.test');
-
-    expect(model.findByIdAndUpdate).toHaveBeenCalledWith('u1', {
-      resetPasswordToken: expect.any(String),
-      resetPasswordExpires: new Date(NOW.getTime() + HOUR), // 2026-02-01T00:30Z
-    });
-  });
-
-  it('an e-mail verification token expires 24 hours after it is issued', async () => {
-    const { service, model } = buildTokens({ _id: 'u1' });
-
-    await service.setEmailVerificationToken('u1');
-
-    expect(model.findByIdAndUpdate).toHaveBeenCalledWith('u1', {
-      emailVerificationToken: expect.any(String),
-      emailVerificationExpires: new Date('2026-02-01T23:30:00.000Z'),
-    });
-  });
-
-  it('looks for unexpired tokens against the clock', async () => {
-    const { service, model } = buildTokens(null);
-
-    await expect(service.resetPassword('t', 'new-password')).rejects.toEqual(
-      new DomainError('INVALID_RESET_TOKEN'),
-    );
-    expect(model.find).toHaveBeenCalledWith({
-      resetPasswordExpires: serverOperators({ $gt: NOW }),
-    });
   });
 });

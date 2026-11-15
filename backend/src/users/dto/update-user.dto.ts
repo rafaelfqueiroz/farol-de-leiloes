@@ -2,7 +2,6 @@ import {
   IsEmail,
   IsOptional,
   IsString,
-  MinLength,
   IsArray,
   IsEnum,
   IsDateString,
@@ -28,6 +27,8 @@ class AddressDto {
   zipCode?: string;
 }
 
+// BR-001-31: no `password` here; passwords change only through UsersService.setPassword /
+// changePassword (BR-001-31). BR-001-29 narrows the rest in the profile work.
 export class UpdateUserDto {
   @IsEmail()
   @IsOptional()
@@ -36,11 +37,6 @@ export class UpdateUserDto {
   @IsString()
   @IsOptional()
   name?: string;
-
-  @IsString()
-  @MinLength(6)
-  @IsOptional()
-  password?: string;
 
   @IsArray()
   @IsEnum(['local', 'google'], { each: true })

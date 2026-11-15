@@ -38,7 +38,7 @@ describe('RegisterPage', () => {
   });
 
   it('refuses passwords that differ', async () => {
-    await fill('secret1', 'secret2');
+    await fill('secret-one', 'secret-two');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('As senhas não coincidem');
     expect(env.register).not.toHaveBeenCalled();
@@ -48,14 +48,14 @@ describe('RegisterPage', () => {
     await fill('abc', 'abc');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'A senha deve ter pelo menos 6 caracteres',
+      'A senha deve ter pelo menos 8 caracteres',
     );
     expect(env.register).not.toHaveBeenCalled();
   });
 
   it('asks the person to verify the e-mail after signing up', async () => {
     env.register.mockResolvedValue(undefined);
-    await fill('secret1', 'secret1');
+    await fill('secret-one', 'secret-one');
 
     expect(env.push).toHaveBeenCalledWith('/verify-email');
   });

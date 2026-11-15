@@ -160,6 +160,7 @@ describe('assertMigrationOrder', () => {
     expect(MIGRATIONS.map((m) => m.id)).toEqual([
       '0001-money-decimal128',
       '0002-saved-filter-price-bounds',
+      '0003-account-tokens',
     ]);
   });
 });

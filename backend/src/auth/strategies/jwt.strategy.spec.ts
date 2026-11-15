@@ -11,17 +11,19 @@ afterEach(() => vi.restoreAllMocks());
 
 // Issue #75: the frontend derives hasSubscription from subscriptionStatus on /auth/me.
 describe('JwtStrategy.validate', () => {
-  function build(user: unknown, logHashSecret?: string) {
+  function build(user: unknown, logHashSecret?: string, sessionActive = true) {
     const usersService = { findById: vi.fn().mockResolvedValue(user) };
+    const sessions = { isActive: vi.fn().mockResolvedValue(sessionActive) };
     // Built without the passport constructor, which needs a real secret and Nest wiring.
     const strategy: JwtStrategy = Object.assign(Object.create(JwtStrategy.prototype), {
       usersService,
+      sessions,
       logger: { warn: vi.fn() },
       logHashSecret,
     });
     return strategy;
   }
-  const payload = { sub: 'u1', email: 'ana.teste@example.test', name: 'Ana Teste' };
+  const payload = { sub: 'u1', jti: 'session-1' };
   const base = { emailVerified: true, providers: ['local'], role: 'standard' };
 
   it('carries the stored subscriptionStatus onto the authenticated user', async () => {
@@ -37,6 +39,52 @@ describe('JwtStrategy.validate', () => {
   ])('yields a null subscriptionStatus when it is %s', async (_label, stored) => {
     const strategy = build({ ...base, subscriptionStatus: stored });
     await expect(strategy.validate(payload)).resolves.toMatchObject({ subscriptionStatus: null });
+  });
+
+  it('BR-001-17: role and plan come from the database, the token carries neither', async () => {
+    const user = await build({
+      ...base,
+      email: 'ana.teste@example.test',
+      name: 'Ana Teste',
+      subscriptionStatus: 'active',
+    }).validate(payload);
+    expect(user).toMatchObject({
+      userId: 'u1',
+      sessionId: 'session-1',
+      email: 'ana.teste@example.test',
+      name: 'Ana Teste',
+      role: 'standard',
+    });
+  });
+
+  it("BR-001-18: refuses a token whose session is revoked, expired or not this account's", async () => {
+    const strategy = build({ ...base }, undefined, false);
+    await expect(strategy.validate(payload)).rejects.toEqual(new DomainError('UNAUTHENTICATED'));
+  });
+
+  it.each([
+    ['without a jti', { sub: 'u1' }],
+    ['with an empty jti', { sub: 'u1', jti: '' }],
+    ['with a non-string jti', { sub: 'u1', jti: 7 }],
+  ])('BR-001-17: refuses a token %s (issued before sessions)', async (_label, claims) => {
+    await expect(build({ ...base }).validate(claims as never)).rejects.toEqual(
+      new DomainError('UNAUTHENTICATED'),
+    );
+  });
+
+  it.each(['deactivated', 'closed'])(
+    'BR-001-16: refuses a session of a %s account on its next request',
+    async (status) => {
+      await expect(build({ ...base, status }).validate(payload)).rejects.toEqual(
+        new DomainError('UNAUTHENTICATED'),
+      );
+    },
+  );
+
+  it('treats an account with no status as active (AR-28)', async () => {
+    await expect(build({ ...base, status: undefined }).validate(payload)).resolves.toMatchObject({
+      userId: 'u1',
+    });
   });
 
   it('refuses a token for an account that no longer exists', async () => {

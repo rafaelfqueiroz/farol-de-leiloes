@@ -1,7 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { SUBSCRIPTION_STATUSES, SubscriptionStatus } from '../subscription-status.js';
-import type { UserAccount, UserAddress } from '../user-account.js';
+import {
+  ACCOUNT_STATUSES,
+  type AccountStatus,
+  type UserAccount,
+  type UserAddress,
+} from '../user-account.js';
 
 export type UserDocument = UserEntity & Document;
 
@@ -28,20 +33,18 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: [String], required: true, enum: ['local', 'google'], default: ['local'] })
   providers!: string[];
 
-  @Prop({ required: false })
-  resetPasswordToken?: string;
-
-  @Prop({ required: false })
-  resetPasswordExpires?: Date;
-
   @Prop({ required: false, default: false })
   emailVerified!: boolean;
 
-  @Prop({ required: false })
-  emailVerificationToken?: string;
+  // BR-001-26: the address waiting for confirmation (written by the email-change flow, PR2).
+  @Prop({ type: String, required: false })
+  pendingEmail?: string;
 
-  @Prop({ required: false })
-  emailVerificationExpires?: Date;
+  // BR-001-16: a deactivated or closed account cannot sign in and its sessions are refused. Written
+  // only by named internal methods (SPEC-009 / SPEC-010), never from a request (BR-001-30). A
+  // document without it is active (AR-28: readers accept both shapes; migration 0003 backfills).
+  @Prop({ type: String, required: true, enum: ACCOUNT_STATUSES, default: 'active' })
+  status!: AccountStatus;
 
   // Role-based access control
   @Prop({ required: true, enum: ['admin', 'free', 'standard', 'premium'], default: 'free' })
