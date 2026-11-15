@@ -22,14 +22,21 @@ afterEach(() => {
 const answer = (status: number, body: unknown = {}) =>
   fetchMock.mockResolvedValue({ ok: status < 400, status, json: async () => body });
 
+// One paste instead of a keystroke per character: MUI re-renders on every key, and typing ~50
+// characters took longer than the 5 s test timeout on a loaded CI runner.
+async function enter(user: ReturnType<typeof userEvent.setup>, field: HTMLElement, text: string) {
+  await user.click(field);
+  await user.paste(text);
+}
+
 async function fillForm(
   title = 'Erro ao favoritar',
   body = 'Não consigo favoritar nenhum imóvel.',
 ) {
   const user = userEvent.setup();
   render(<SupportPage />);
-  await user.type(screen.getByLabelText(/^Título/), title);
-  await user.type(screen.getByLabelText(/^Descrição/), body);
+  await enter(user, screen.getByLabelText(/^Título/), title);
+  await enter(user, screen.getByLabelText(/^Descrição/), body);
   return user;
 }
 
@@ -77,9 +84,9 @@ describe('SupportPage', () => {
     const submit = screen.getByRole('button', { name: 'Enviar solicitação' });
     expect(submit).toBeDisabled();
 
-    await user.type(screen.getByLabelText(/^Título/), 'Erro ao favoritar');
+    await enter(user, screen.getByLabelText(/^Título/), 'Erro ao favoritar');
     expect(submit).toBeDisabled();
-    await user.type(screen.getByLabelText(/^Descrição/), 'Não consigo favoritar nenhum imóvel.');
+    await enter(user, screen.getByLabelText(/^Descrição/), 'Não consigo favoritar nenhum imóvel.');
 
     expect(submit).toBeEnabled();
   });
@@ -88,8 +95,8 @@ describe('SupportPage', () => {
     const user = userEvent.setup();
     render(<SupportPage />);
 
-    await user.type(screen.getByLabelText(/^Título/), '   ');
-    await user.type(screen.getByLabelText(/^Descrição/), '          ');
+    await enter(user, screen.getByLabelText(/^Título/), '   ');
+    await enter(user, screen.getByLabelText(/^Descrição/), '          ');
 
     expect(screen.getByRole('button', { name: 'Enviar solicitação' })).toBeDisabled();
   });
