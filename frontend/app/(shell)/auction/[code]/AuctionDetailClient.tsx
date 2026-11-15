@@ -415,7 +415,15 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
               {tCard('phasesRegistered', { count: auction.phases.length })}
             </Typography>
 
-            <TableContainer component={Paper} variant="outlined">
+            <TableContainer
+              component={Paper}
+              variant="outlined"
+              // BR-003-16, WCAG 2.1.1: a table that scrolls sideways at 360 px (DS-13) is
+              // scrolled by keyboard only if its container is focusable, so it is a named region.
+              tabIndex={0}
+              role="region"
+              aria-label={t('phases.title')}
+            >
               <Table>
                 <TableHead>
                   <TableRow>

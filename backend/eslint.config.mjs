@@ -97,7 +97,7 @@ const ambientClockSyntax = [
 
 export default defineConfig(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'data/**'],
+    ignores: ['dist/**', 'dist-e2e/**', 'node_modules/**', 'coverage/**', 'data/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

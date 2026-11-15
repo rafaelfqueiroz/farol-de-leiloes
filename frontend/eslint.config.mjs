@@ -132,6 +132,12 @@ export default defineConfig([
     rules: { 'no-restricted-properties': 'off' },
   },
   {
+    // The E2E harness configures the test run, not the app (AR-42 is about the app's config):
+    // it reads its own E2E_* variables and CI (DV-18, playwright.config.ts).
+    files: ['e2e/**/*.ts', 'playwright.config.ts'],
+    rules: { 'no-restricted-properties': 'off' },
+  },
+  {
     // DS-20: user-facing strings come from the next-intl pt-BR catalogue, not JSX literals.
     files: ['app/**/*.tsx'],
     ignores: ['**/*.test.tsx'],

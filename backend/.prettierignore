@@ -1,6 +1,7 @@
 # Generated and installed
 node_modules/
 dist/
+dist-e2e/
 coverage/
 package-lock.json
 *.tsbuildinfo

@@ -110,6 +110,24 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | **TS-22** | No E2E test depends on a live external provider (TS-07). The Compose E2E stack wires the backend to fake adapters. |
 | **TS-23** | Every journey runs on a desktop viewport and a **360 px** phone viewport (SPEC-003 BR-003-12), and runs axe on each page it visits (BR-003-14, BR-003-17). |
 
+### The E2E stack and suite (#3)
+
+`npm run test:e2e` (in `frontend/`) runs Playwright on the host against a Compose stack it brings up and tears down itself (`frontend/e2e/global-setup.ts`, DV-18); it needs Docker running, and on Rancher Desktop the same `DOCKER_HOST` as §2. Nothing starts on the developer's ports or touches their database (DV-19).
+
+| Part | Where | What |
+|---|---|---|
+| Stack | `frontend/e2e/compose.e2e.yml` | `mongo-e2e` (`mongo:8.2`, tmpfs, no published port) · `seed` · `backend` on `127.0.0.1:38100` · `frontend` (the production image) on `127.0.0.1:38101`. Every value is a fake test value in the file itself; there is no env file |
+| Fake providers (TS-22) | `backend/test/e2e-stack/main.ts`, built only by `backend/e2e.Dockerfile` | The production `AppModule` compiled with `@nestjs/testing` overrides: the Caixa importer and scraper are inert (no `@Cron`, nothing at start-up), Stripe is `FakePaymentGateway`, email is `E2eEmailSender` (recorded, never sent); the LLM points at a closed loopback port and reminders are off. Google sign-in is not stubbed yet (no journey follows it; SPEC-001's will). The file lives under `test/`, needs a dev dependency and refuses `NODE_ENV=production`, so it can never be in the production image |
+| Seed | `backend/scripts/seed-reference-workload.ts` | The reference workload (SPEC-003 BR-003-08, §10), 2 000 generated auctions by default plus the fixtures, and the seeded accounts |
+| Specs | `frontend/e2e/*.spec.ts` | `accessibility.spec.ts`: axe (`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`) on every route of `e2e/support/routes.ts`, light and dark. `narrow-viewport.spec.ts`: no horizontal page scroll (`scrollWidth <= innerWidth`, BR-003-12). `brasilia-time.spec.ts`: the property page of an auction published for 26/01/2026 10h00 shows `26/01/2026 10:00` (BR-003-23) |
+| Projects | `frontend/playwright.config.ts` | `desktop` (1280 px) and `phone-360` run the per-route specs; `tz-manaus` and `tz-lisbon` (`timezoneId`) run the time-zone spec |
+
+**Signing in.** Signed-in routes use the seeded accounts (`backend/scripts/reference-workload/accounts.ts`, repeated in `frontend/e2e/support/accounts.ts`): a verified premium investor and an admin, test values that exist only in the stack's database (TS-27). The suite signs in through `POST /api/auth/login`, as the app does, rather than through the form; the form is the SPEC-001 journey's.
+
+**Every route.** A new page adds itself to `frontend/e2e/support/routes.ts` in its own PR. A route that fails axe is fixed, or its failure gets an issue (DV-23) and an entry in `KNOWN_FAILURES` of `accessibility.spec.ts`, which marks that case `test.fixme` with the issue number; the rules are never relaxed. Open today: #139 (`/` and `/plans`, light). The "(horário de Brasília)" marker case of `brasilia-time.spec.ts` is `test.fixme` until #3's marker change lands.
+
+**Knobs.** `E2E_KEEP_STACK=1` leaves the stack up after the run, `E2E_REUSE_STACK=1` runs against a stack already up, `E2E_SEED_AUCTIONS` sets the catalog size (`full` for the full catalog), `E2E_WEB_PORT` / `E2E_API_PORT` move the ports. Specs are `*.spec.ts` under `e2e/`, which Vitest never collects (its projects take `*.test.ts[x]`). CI runs the same command in the `e2e` job and uploads the HTML report, traces and screenshots when it fails.
+
 ## 7. Coverage gates
 
 | Scope | Threshold | Blocking |
@@ -152,11 +170,11 @@ The module-boundary regressions in #51 measured 65.39% lines / 61.73% branches a
 | Integration + isolation | — | — (needs Docker; CI) | `test:integration`, `test:isolation` on demand, Docker running | ✅ |
 | Build + dist smoke (backend) | — | — | `test:smoke` on demand | ✅ (`backend-build`) |
 | Coverage gate | — | — | `test:cov` on demand | ✅ |
-| E2E | — | — | `test:e2e` on demand | ✅ (with #3) |
+| E2E | — | — | `test:e2e` on demand, Docker running | ✅ (`e2e`; required once added to the ruleset) |
 | `npm audit` (high+) | — | — | — | ✅ |
 | CodeQL | — | — | — | ✅ |
 
-The pre-push hook runs `npm run check` in each package the push changes and blocks the push if it fails (DEVELOPMENT DV-37). CI always runs everything, whichever packages changed (DEVELOPMENT §12, `.github/workflows/ci.yml` and `codeql.yml`); its jobs are the required status checks on `main` (DV-27). The E2E row joins CI with #3.
+The pre-push hook runs `npm run check` in each package the push changes and blocks the push if it fails (DEVELOPMENT DV-37). CI always runs everything, whichever packages changed (DEVELOPMENT §12, `.github/workflows/ci.yml` and `codeql.yml`); its jobs are the required status checks on `main` (DV-27). The `e2e` job runs on every PR and push since #3; it becomes a required check when the owner adds it to the `main` ruleset (DEVELOPMENT §12).
 
 ESLint rules that carry weight (beyond the recommended sets):
 
@@ -179,7 +197,7 @@ ESLint rules that carry weight (beyond the recommended sets):
 
 ## 10. Performance
 
-SPEC-003 sets the budgets (BR-003-06 to BR-003-10): measured against the reference workload on every **release candidate**, and a missed budget blocks the release unless a waiver is recorded. The harness — reference workload seeding plus Lighthouse/Playwright timing on the 4G profile — is deferred with the deploy target (BL-002). Until then, the cheap structural check stays in the PR suite: list endpoints are paginated (AR-35) and every list query uses an index (an `explain()` assertion in integration tests for the main search).
+SPEC-003 sets the budgets (BR-003-06 to BR-003-10): measured against the reference workload on every **release candidate**, and a missed budget blocks the release unless a waiver is recorded. The **reference workload** exists for the catalog part (#3): `backend/scripts/seed-reference-workload.ts` writes a deterministic catalog the size of the full Caixa catalog for all states (`FULL_CATALOG_SIZE`, 35 000 auctions over the 27 states, weighted like the Caixa list, through the application's schemas and their indexes) plus the seeded accounts, and refuses any database but the E2E stack's unless its host is named in `SEED_ALLOW_HOSTS` (Atlas never; DV-19). The office and investor part (100 in-progress and 500 closed journeys, 20 journeys across 3 offices) is a marked extension point in `reference-workload/seed.ts`, filled as SPEC-011 (#11), SPEC-016 (#16) and SPEC-021 (#21) land. To bring the stack up on the full catalog and leave it running for a measurement: `E2E_SEED_AUCTIONS=full E2E_KEEP_STACK=1 npx playwright test e2e/brasilia-time.spec.ts` in `frontend/` (the web app is then on `http://localhost:38101`; `docker compose -f e2e/compose.e2e.yml down --volumes` removes it). The timing harness — Lighthouse/Playwright on the 4G profile — is the next part of #3. Until then, the cheap structural check stays in the PR suite: list endpoints are paginated (AR-35) and every list query uses an index (an `explain()` assertion in integration tests for the main search).
 
 ## 11. What is not tested
 
