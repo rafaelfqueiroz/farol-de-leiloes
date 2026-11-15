@@ -45,19 +45,14 @@ export default defineConfig({
       exclude: ['src/**/*.spec.ts', 'src/main.ts', 'src/instrument.ts', 'src/migrations/run.ts'],
       reporter: ['text-summary', 'text', 'lcov'],
       thresholds: {
-        // A floor at the coverage measured when the gate was introduced (rounded down), not the
-        // target: TESTING §7 sets 80% lines and branches. The floor is ratcheted up toward 80%
-        // and tracked in #57; it never goes down. Re-baselined in #62: V8 coverage measures the
-        // source, where Jest/ts-jest also counted the helpers tsc emits for decorators, so the
-        // numbers moved without any code losing a test.
-        // Raised in #35 by the HTTP and OpenAPI contract specs (measured 40.0% / 30.2%), then by
-        // the unit specs of the SC-10 query guards (measured 44.0% / 36.2%), then in #34 by the
-        // money, Clock and payment-port specs (measured 53.7% / 50.0%), then in #36 by the
-        // observability, health and job-outcome specs (measured 60.2% / 57.0%).
-        // Raised in #51 by the module-boundary regressions (measured 65.39% / 61.73%).
-        // PR #98 review regressions raised it again (measured 66.20% / 62.62%).
-        lines: 66,
-        branches: 62,
+        // TESTING §7: the target, 80% lines and branches, now the floor itself. It started at the
+        // coverage measured when the gate was introduced and was ratcheted up by #35, #34, #36,
+        // #51 and #98; #57 raised it to the target (measured 91.86% / 87.01%). It never goes
+        // down. Re-baselined in #62: V8 coverage measures the source, where Jest/ts-jest also
+        // counted the helpers tsc emits for decorators, so the numbers moved without any code
+        // losing a test.
+        lines: 80,
+        branches: 80,
         // TS-24 / AR-06: `domain/` holds the critical modules, gated at 100% branch coverage.
         // The glob is static: Vitest ignores a threshold glob that matches no file, so the gate
         // is inert until the first src/<module>/domain/ file lands and applies the moment it
