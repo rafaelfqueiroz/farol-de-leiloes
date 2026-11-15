@@ -17,12 +17,27 @@ describe('PlansPage', () => {
 
   it('takes the plan copy from the catalogue', () => {
     render(<PlansPage />);
-    expect(screen.getByRole('heading', { name: 'Planos' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Planos' })).toBeInTheDocument();
     expect(screen.getByText('Filtros salvos (até 10)')).toBeInTheDocument();
     expect(screen.getByText('Mais popular')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Assinar Standard' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Em breve' })).toBeDisabled();
     expect(screen.getAllByText('/mês')).toHaveLength(3);
+  });
+
+  it('has one h1 and the plan names as h2 (DS-15)', () => {
+    render(<PlansPage />);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(
+      screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual(['Gratuito', 'Standard', 'Premium']);
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+  });
+
+  it('offers the coupon field below the plans while Standard is not the current plan', () => {
+    render(<PlansPage />);
+    expect(screen.getByPlaceholderText('Cupom de desconto')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aplicar' })).toBeInTheDocument();
   });
 
   it('has no accessibility violations', async () => {

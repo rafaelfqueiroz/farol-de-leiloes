@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
   Box,
-  Container,
   Typography,
   Button,
   TextField,
@@ -32,6 +31,8 @@ import { format } from 'date-fns';
 import DateField from '@/app/components/DateField';
 import DateText from '@/app/components/patterns/DateText';
 import Money from '@/app/components/patterns/Money';
+import PageHeader from '@/app/components/patterns/PageHeader';
+import PageShell from '@/app/components/patterns/PageShell';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { TIME_ZONE } from '@/i18n/config';
 import { parseMoneyInput } from '@/lib/money';
@@ -41,6 +42,9 @@ import { reportClientError } from '@/lib/report-client-error';
 
 // AR-35: the coupons list is paginated; this is how many rows one page shows.
 const PAGE_SIZE = 20;
+
+// DS-11: a table header is the subtitle2 variant, not a bolder body2
+const headCellSx = { typography: 'subtitle2' } as const;
 
 interface Coupon {
   _id: string;
@@ -190,20 +194,12 @@ export default function AdminCouponsPage() {
 
   return (
     <>
-      {/* #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar */}
-      <Container maxWidth="lg" sx={{ pt: 4, pb: 4, flexGrow: 1 }}>
-        {authLoading || loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <>
-            <Box
-              sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}
-            >
-              <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                {t('title')}
-              </Typography>
+      {/* DS-14: the shell owns <main>; a list page uses the app width */}
+      <PageShell width="app">
+        <PageHeader
+          title={t('title')}
+          actions={
+            authLoading || loading ? undefined : (
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -211,18 +207,25 @@ export default function AdminCouponsPage() {
               >
                 {t('new')}
               </Button>
-            </Box>
-
+            )
+          }
+        />
+        {authLoading || loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <>
             <TableContainer component={Paper} variant="outlined">
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.code')}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.discount')}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.validTo')}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.status')}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.description')}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{t('columns.actions')}</TableCell>
+                    <TableCell sx={headCellSx}>{t('columns.code')}</TableCell>
+                    <TableCell sx={headCellSx}>{t('columns.discount')}</TableCell>
+                    <TableCell sx={headCellSx}>{t('columns.validTo')}</TableCell>
+                    <TableCell sx={headCellSx}>{t('columns.status')}</TableCell>
+                    <TableCell sx={headCellSx}>{t('columns.description')}</TableCell>
+                    <TableCell sx={headCellSx}>{t('columns.actions')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -233,10 +236,11 @@ export default function AdminCouponsPage() {
                       <TableRow key={coupon._id} sx={{ opacity: inactive ? 0.5 : 1 }}>
                         <TableCell>
                           <Typography
-                            variant="body2"
+                            variant="subtitle2"
+                            component="span"
                             sx={{
-                              fontWeight: 700,
-                              fontFamily: 'monospace',
+                              // DS-12: Inter's tabular numerals stand in for the old monospace code
+                              fontVariantNumeric: 'tabular-nums',
                               textDecoration: inactive ? 'line-through' : 'none',
                             }}
                           >
@@ -306,7 +310,7 @@ export default function AdminCouponsPage() {
             </TableContainer>
 
             {total > PAGE_SIZE && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                 <Pagination
                   count={pageCount(total, PAGE_SIZE)}
                   page={page}
@@ -317,7 +321,7 @@ export default function AdminCouponsPage() {
             )}
           </>
         )}
-      </Container>
+      </PageShell>
 
       {/* Create Coupon Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>

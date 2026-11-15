@@ -15,13 +15,12 @@ import {
 import { useTranslations } from 'next-intl';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import SearchOutlined from '@mui/icons-material/SearchOutlined';
 import { useFavorites } from '../contexts/FavoritesContext';
 import type { Auction } from '@/lib/auction';
 import { formatCount } from '@/lib/numbers';
 import AuctionCard from './AuctionCard';
-
-// decoration, not copy (DS-20)
-const EMPTY_ICON = '🔍';
+import EmptyState from './patterns/EmptyState';
 
 const PAGE_SIZES = [10, 20, 50, 100] as const;
 
@@ -61,17 +60,7 @@ export default function AuctionList({
 
   if (auctions.length === 0) {
     return (
-      <Box sx={{ textAlign: 'center', py: 12 }}>
-        <Box aria-hidden sx={{ fontSize: 60, mb: 2 }}>
-          {EMPTY_ICON}
-        </Box>
-        <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-          {t('emptyTitle')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {t('emptyHint')}
-        </Typography>
-      </Box>
+      <EmptyState icon={SearchOutlined} title={t('emptyTitle')} description={t('emptyHint')} />
     );
   }
 
@@ -80,7 +69,7 @@ export default function AuctionList({
       {/* Results Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={600} sx={{ mb: 0.5 }}>
+          <Typography variant="h3" component="h2" sx={{ mb: 0.5 }}>
             {t('title')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -95,7 +84,7 @@ export default function AuctionList({
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <FormControl size="small" sx={{ minWidth: 120 }}>
+          <FormControl size="small" sx={{ minWidth: (theme) => theme.spacing(15) }}>
             <InputLabel id="page-size-label">{t('perPage')}</InputLabel>
             <Select
               labelId="page-size-label"
@@ -129,12 +118,12 @@ export default function AuctionList({
 
       {/* Auction Cards/List */}
       <Box
-        sx={{
+        sx={(theme) => ({
           display: 'grid',
           gap: 2,
           gridTemplateColumns:
-            viewMode === 'cards' ? 'repeat(auto-fill, minmax(350px, 1fr))' : '1fr',
-        }}
+            viewMode === 'cards' ? `repeat(auto-fill, minmax(${theme.spacing(44)}, 1fr))` : '1fr',
+        })}
       >
         {auctions.map((auction) => (
           <AuctionCard

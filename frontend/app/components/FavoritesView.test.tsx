@@ -127,7 +127,54 @@ describe('FavoritesView', () => {
     answers = [{ status: 200, body: { items: [], total: 0, page: 1, pageSize: 20 } }];
     render(<FavoritesView />);
 
-    expect(await screen.findByText('Nenhum leilão favorito')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Leilões favoritos' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Nenhum leilão marcado como favorito')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Nenhum leilão favorito' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Buscar imóveis' })).toHaveAttribute('href', '/search');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('has one h1 with the total when there are favourites, and no <main> of its own', async () => {
+    answers = [{ status: 200, body: { items: auctions(0, 3), total: 3, page: 1, pageSize: 20 } }];
+    render(<FavoritesView />);
+
+    await screen.findByText('leilão A0');
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Leilões favoritos' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+  });
+
+  it('keeps the h1 while the first page loads', () => {
+    answers = [{ status: 200, body: { items: auctions(0, 1), total: 1, page: 1, pageSize: 20 } }];
+    render(<FavoritesView />);
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Leilões favoritos' }),
+    ).toBeInTheDocument();
+  });
+
+  it('loads the list again from the retry of the error state', async () => {
+    const user = userEvent.setup();
+    answers = [
+      { status: 500, body: { code: 'INTERNAL_ERROR' } },
+      { status: 200, body: { items: auctions(0, 2), total: 2, page: 1, pageSize: 20 } },
+    ];
+    render(<FavoritesView />);
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Leilões favoritos' }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+
+    expect(await screen.findByText('leilão A0')).toBeInTheDocument();
+    expect(urls).toHaveLength(2);
   });
 
   it('shows the message of the error code when the list fails (AR-39)', async () => {

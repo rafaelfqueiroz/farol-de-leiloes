@@ -715,8 +715,8 @@ export default function SearchFilters({
   return (
     <>
       {/* Center Content - AI Search */}
-      <Box sx={{ mb: 4, position: 'relative' }}>
-        <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+      <Box sx={{ position: 'relative' }}>
+        <Typography variant="h5" component="h2" sx={{ mb: 2 }}>
           {t('ai.title')}
         </Typography>
         {canUseAISearch ? (
@@ -764,8 +764,8 @@ export default function SearchFilters({
               backgroundColor: 'background.muted',
             }}
           >
-            <LockIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7 }} />
-            <Typography variant="body1" sx={{ mb: 1, fontWeight: 600, color: 'text.primary' }}>
+            <LockIcon sx={(theme) => ({ fontSize: theme.spacing(6), mb: 1, opacity: 0.7 })} />
+            <Typography variant="subtitle1" component="p" sx={{ mb: 1, color: 'text.primary' }}>
               {t('ai.locked.title')}
             </Typography>
             <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
@@ -790,7 +790,8 @@ export default function SearchFilters({
             transform: 'translateY(-50%)',
             backgroundColor: 'primary.main',
             color: 'primary.contrastText',
-            borderRadius: '8px 0 0 8px',
+            borderTopLeftRadius: 1,
+            borderBottomLeftRadius: 1,
             '&:hover': {
               backgroundColor: 'primary.dark',
             },
@@ -841,7 +842,7 @@ export default function SearchFilters({
               alignItems: 'center',
             }}
           >
-            <Typography variant="h6" fontWeight={600}>
+            <Typography variant="h6" component="h2">
               {t('panelTitle')}
             </Typography>
             <IconButton
@@ -861,12 +862,8 @@ export default function SearchFilters({
             {/* Saved Filters Section - Only shown for Standard+ users */}
             {isAuthenticated && canUseSavedFilters && (
               <Box sx={{ mb: 3 }}>
-                <Typography
-                  variant="subtitle2"
-                  color="primary.main"
-                  sx={{ mb: 2, fontWeight: 600 }}
-                >
-                  <BookmarkIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
+                <Typography variant="h6" component="h3" color="primary.main" sx={{ mb: 2 }}>
+                  <BookmarkIcon fontSize="inherit" sx={{ mr: 0.5, verticalAlign: 'text-bottom' }} />
                   {t('saved.title')}
                 </Typography>
 
@@ -941,7 +938,7 @@ export default function SearchFilters({
 
             {/* Location Section */}
             <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
+              <Typography variant="h6" component="h3" color="primary.main" sx={{ mb: 2 }}>
                 {t('location.title')}
               </Typography>
 
@@ -1041,7 +1038,7 @@ export default function SearchFilters({
 
             {/* Modality Section */}
             <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
+              <Typography variant="h6" component="h3" color="primary.main" sx={{ mb: 2 }}>
                 {t('modality.title')}
               </Typography>
 
@@ -1075,7 +1072,7 @@ export default function SearchFilters({
 
             {/* Price Range Section */}
             <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle2" color="primary.main" sx={{ mb: 2, fontWeight: 600 }}>
+              <Typography variant="h6" component="h3" color="primary.main" sx={{ mb: 2 }}>
                 {t('price.title')}
               </Typography>
 
@@ -1084,7 +1081,7 @@ export default function SearchFilters({
                   <Typography variant="body2" color="text.secondary">
                     {t('price.range')}
                   </Typography>
-                  <Typography variant="body2" fontWeight={600}>
+                  <Typography variant="subtitle2" component="p">
                     {t('price.rangeValue', {
                       min: formatPriceLabel(priceRange[0]),
                       max: formatPriceLabel(priceRange[1]),
@@ -1102,11 +1099,9 @@ export default function SearchFilters({
                   max={PRICE_MAX}
                   step={50000}
                   marks={PRICE_MARKS}
-                  sx={{
-                    '& .MuiSlider-markLabel': {
-                      fontSize: '0.65rem',
-                    },
-                  }}
+                  sx={(theme) => ({
+                    '& .MuiSlider-markLabel': { ...theme.typography.caption },
+                  })}
                 />
               </Box>
             </Box>

@@ -1,7 +1,8 @@
 'use client';
 
-import { Card, CardContent, Box, Typography, Chip, IconButton } from '@mui/material';
+import { Card, CardContent, Box, Link, Typography, Chip, IconButton } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
+import OpenInNewOutlined from '@mui/icons-material/OpenInNewOutlined';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import { useTranslations } from 'next-intl';
@@ -46,7 +47,6 @@ const APPRAISAL_ICON = '💰';
 const MINIMUM_BID_ICON = '🏷️';
 const DATE_ICON = '📅';
 const PHASES_ICON = '📊';
-const OPENS_ICON = '↗';
 
 export type Countdown = { kind: 'today' } | { kind: 'tomorrow' } | { kind: 'days'; count: number };
 
@@ -107,13 +107,13 @@ export default function AuctionCard({
 
   return (
     <Card
-      sx={{
+      sx={(theme) => ({
         transition: 'all 0.3s',
         '&:hover': {
           boxShadow: 4,
-          transform: 'translateY(-2px)',
+          transform: `translateY(${theme.spacing(-0.25)})`,
         },
-      }}
+      })}
     >
       {/* Property Image */}
       <Box
@@ -141,8 +141,6 @@ export default function AuctionCard({
               top: 8,
               left: 8,
               zIndex: 1,
-              fontWeight: 600,
-              fontSize: '0.75rem',
               backgroundColor: countdown.kind === 'today' ? 'success.soft' : 'background.muted',
               color: countdown.kind === 'today' ? 'success.main' : 'text.primary',
             }}
@@ -182,7 +180,7 @@ export default function AuctionCard({
             inset: 0,
           }}
         >
-          <HomeIcon sx={{ fontSize: 48, mb: 1, opacity: 0.7 }} />
+          <HomeIcon fontSize="large" sx={{ mb: 1, opacity: 0.7 }} />
           <Typography variant="body2" color="text.secondary">
             {t('noImage')}
           </Typography>
@@ -193,7 +191,7 @@ export default function AuctionCard({
         {/* Header with Title, Modality and Actions */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
           <Box>
-            <Typography variant="h6" fontWeight={600} sx={{ mb: 0.5, fontSize: '1rem' }}>
+            <Typography variant="h5" component="h3" sx={{ mb: 0.5 }}>
               {auction.title || t('untitled')}
             </Typography>
             <Typography variant="caption" color="text.secondary">
@@ -228,7 +226,7 @@ export default function AuctionCard({
         {/* Property Details */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-            <HomeIcon sx={{ fontSize: 18, color: 'text.secondary', mt: 0.25 }} />
+            <HomeIcon fontSize="small" sx={{ color: 'text.secondary', mt: 0.25 }} />
             <Typography variant="body2" color="text.primary">
               {address || t('addressMissing')}
             </Typography>
@@ -239,19 +237,19 @@ export default function AuctionCard({
               <Typography variant="body2" color="text.secondary">
                 <span aria-hidden>{APPRAISAL_ICON}</span> {t('labelled', { label: t('appraisal') })}
               </Typography>
-              <Typography variant="body2" fontWeight={600} color="text.primary">
+              <Typography variant="subtitle2" component="p" color="text.primary">
                 <Money value={auction.appraisalPrice} />
               </Typography>
             </Box>
           )}
 
           {lastPhase?.minimumPrice != null && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2" color="text.secondary">
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 <span aria-hidden>{MINIMUM_BID_ICON}</span>{' '}
                 {t('labelled', { label: t('minimumBid') })}
               </Typography>
-              <Typography variant="body2" fontWeight={600} color="text.primary">
+              <Typography variant="metric" component="p" color="text.primary">
                 <Money value={lastPhase.minimumPrice} />
               </Typography>
             </Box>
@@ -262,7 +260,7 @@ export default function AuctionCard({
               <Typography variant="body2" color="text.secondary">
                 <span aria-hidden>{DATE_ICON}</span> {t('labelled', { label: t('date') })}
               </Typography>
-              <Typography variant="body2" fontWeight={600} color="text.primary">
+              <Typography variant="subtitle2" component="p" color="text.primary">
                 <DateText value={lastPhase.date} />
               </Typography>
             </Box>
@@ -278,30 +276,17 @@ export default function AuctionCard({
 
         {/* Details Link */}
         <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
-          <Typography
-            component="a"
+          <Link
             href={detailUrl}
             target="_blank"
             rel="noopener noreferrer"
-            variant="body2"
-            fontWeight={500}
-            sx={{
-              color: 'primary.main',
-              textDecoration: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 0.5,
-              '&:hover': {
-                color: 'primary.dark',
-                textDecoration: 'underline',
-              },
-            }}
+            variant="subtitle2"
+            underline="hover"
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
           >
             {t('viewDetails')}
-            <span aria-hidden style={{ fontSize: '0.75rem' }}>
-              {OPENS_ICON}
-            </span>
-          </Typography>
+            <OpenInNewOutlined aria-hidden fontSize="inherit" />
+          </Link>
         </Box>
       </CardContent>
     </Card>

@@ -2,50 +2,36 @@
 
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Box, Container, Typography, Card, CardContent, Button } from '@mui/material';
+import { Button } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import HomeWorkIcon from '@mui/icons-material/HomeWork';
+import HomeWorkOutlined from '@mui/icons-material/HomeWorkOutlined';
+import EmptyState from '@/app/components/patterns/EmptyState';
+import PageShell from '@/app/components/patterns/PageShell';
 
 export default function AuctionNotFound() {
   const router = useRouter();
   const t = useTranslations('notFound.auction');
 
   return (
-    // #42: rendered inside the (shell) layout, so the AppShell (guest or signed in) frames it
-    <Box sx={{ pt: 2, pb: 4 }}>
-      <Container maxWidth="xl">
-        <Card>
-          <CardContent
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              py: 10,
-            }}
+    // #42: rendered inside the (shell) layout, so the AppShell (guest or signed in) frames it.
+    // DS-15: a full-page state has no PageHeader, so its title is the page's h1
+    <PageShell width="reading">
+      <EmptyState
+        icon={HomeWorkOutlined}
+        title={t('title')}
+        description={t('description')}
+        titleComponent="h1"
+        actions={
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<SearchIcon />}
+            onClick={() => router.push('/search')}
           >
-            <HomeWorkIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h4" fontWeight={600} gutterBottom>
-              {t('title')}
-            </Typography>
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              sx={{ maxWidth: 420, textAlign: 'center', mb: 4 }}
-            >
-              {t('description')}
-            </Typography>
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={<SearchIcon />}
-              onClick={() => router.push('/search')}
-            >
-              {t('action')}
-            </Button>
-          </CardContent>
-        </Card>
-      </Container>
-    </Box>
+            {t('action')}
+          </Button>
+        }
+      />
+    </PageShell>
   );
 }

@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { LoadingScreen } from '@/app/components/patterns/PublicScreens';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { reportClientError } from '@/lib/report-client-error';
 
@@ -37,46 +37,14 @@ function AuthCallbackContent() {
     }
   }, [searchParams, router, loadUser]);
 
-  return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <CircularProgress size={48} sx={{ mb: 2 }} />
-      <Typography variant="body1" color="text.secondary">
-        {t('authenticating')}
-      </Typography>
-    </Box>
-  );
+  return <LoadingScreen title={t('authenticating')} />;
 }
 
 export default function AuthCallbackPage() {
   const t = useTranslations('authCallback');
 
   return (
-    <Suspense
-      fallback={
-        <Box
-          sx={{
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <CircularProgress size={48} sx={{ mb: 2 }} />
-          <Typography variant="body1" color="text.secondary">
-            {t('fallback')}
-          </Typography>
-        </Box>
-      }
-    >
+    <Suspense fallback={<LoadingScreen title={t('fallback')} />}>
       <AuthCallbackContent />
     </Suspense>
   );

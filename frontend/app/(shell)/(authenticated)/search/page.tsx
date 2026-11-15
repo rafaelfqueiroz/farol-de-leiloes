@@ -3,13 +3,15 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Alert, Box, Container, Typography, CircularProgress } from '@mui/material';
+import { Alert, Box, CircularProgress } from '@mui/material';
 import { hasMinimumRole } from '@/app/components/RequireRole';
 import { useAuth } from '@/app/contexts/AuthContext';
 import SearchFilters, { AuctionFilters } from '@/app/components/SearchFilters';
 import AuctionList from '@/app/components/AuctionList';
 import FavoritesView from '@/app/components/FavoritesView';
 import { SavedFiltersProvider } from '@/app/contexts/SavedFiltersContext';
+import PageHeader from '@/app/components/patterns/PageHeader';
+import PageShell from '@/app/components/patterns/PageShell';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 import type { Auction } from '@/lib/auction';
@@ -190,27 +192,19 @@ function SearchPageContent() {
   };
 
   return (
-    // #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar
+    // #42: the AppShell owns the top bar, navigation and <main>. The filter drawer is fixed to the
+    // right (380 px, 47.5 spacing units) and in the search view the content always keeps that
+    // much clear on the right, open or closed.
     <Box
-      sx={{
-        pt: 2,
-        pb: 4,
-        pr: activeView === 'search' ? '380px' : 0,
+      sx={(theme) => ({
+        pr: activeView === 'search' ? theme.spacing(47.5) : 0,
         transition: 'padding-right 0.3s',
-      }}
+      })}
     >
-      <Container maxWidth="xl">
+      <PageShell>
         {activeView === 'search' && (
           <>
-            {/* Search Header */}
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
-                {t('title')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {t('subtitle')}
-              </Typography>
-            </Box>
+            <PageHeader title={t('title')} summary={t('subtitle')} />
 
             {/* Main Search Layout */}
             <Box sx={{ display: 'flex', gap: 3, position: 'relative' }}>
@@ -235,27 +229,21 @@ function SearchPageContent() {
 
         {activeView === 'favorites' && canAccessFavorites && <FavoritesView />}
 
-        {searchError && activeView === 'search' && (
-          <Alert severity="error" sx={{ mt: 4 }}>
-            {searchError}
-          </Alert>
-        )}
+        {searchError && activeView === 'search' && <Alert severity="error">{searchError}</Alert>}
 
         {/* Search Results */}
         {searchResults && activeView === 'search' && (
-          <Box sx={{ mt: 4 }}>
-            <AuctionList
-              auctions={searchResults.items}
-              total={searchResults.total}
-              isLoading={searchLoading}
-              page={currentPage}
-              pageSize={pageSize}
-              onPageChange={handlePageChange}
-              onPageSizeChange={handlePageSizeChange}
-            />
-          </Box>
+          <AuctionList
+            auctions={searchResults.items}
+            total={searchResults.total}
+            isLoading={searchLoading}
+            page={currentPage}
+            pageSize={pageSize}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
         )}
-      </Container>
+      </PageShell>
     </Box>
   );
 }

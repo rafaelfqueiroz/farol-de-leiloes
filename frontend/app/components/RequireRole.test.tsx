@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { renderWithProviders as render } from '@/test/render';
+import { axe, renderWithProviders as render } from '@/test/render';
 import RequireRole from './RequireRole';
 
 const auth = vi.hoisted(() => ({
@@ -11,20 +11,23 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => auth.state }));
 
 describe('RequireRole', () => {
-  it('names the feature and the plan it needs', () => {
+  it('names the feature and the plan it needs', async () => {
     auth.state = { loading: false, isAuthenticated: true, role: 'free' };
-    render(
+    const { container } = render(
       <RequireRole minimumRole="standard" featureName="Busca por IA">
         <p>conteúdo</p>
       </RequireRole>,
     );
 
-    expect(screen.getByText('Acesso restrito')).toBeInTheDocument();
+    // DS-15: the full-page state is the page's one h1
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Acesso restrito' })).toBeInTheDocument();
     expect(
       screen.getByText('O recurso "Busca por IA" requer o plano Standard ou superior.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver planos' })).toHaveAttribute('href', '/plans');
     expect(screen.queryByText('conteúdo')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it('names only the plan when there is no feature name', () => {

@@ -18,6 +18,8 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SendIcon from '@mui/icons-material/Send';
+import PageHeader from '@/app/components/patterns/PageHeader';
+import PageShell from '@/app/components/patterns/PageShell';
 import { ApiError, readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 const FAQ_KEYS = [
@@ -83,101 +85,93 @@ export default function SupportPage() {
   };
 
   return (
-    <Box>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" fontWeight={700} gutterBottom>
-          {t('title')}
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          {t('intro')}
-        </Typography>
-      </Box>
+    <>
+      {/* DS-14: the shell owns <main>; this is a reading page (text and a form) */}
+      <PageShell width="reading">
+        <PageHeader title={t('title')} summary={t('intro')} />
 
-      {/* FAQ Section */}
-      <Box sx={{ mb: 5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <HelpOutlineIcon sx={{ color: 'primary.main' }} />
-          <Typography variant="h6" fontWeight={600}>
-            {t('faqHeading')}
+        {/* FAQ Section */}
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <HelpOutlineIcon sx={{ color: 'text.secondary' }} />
+            <Typography variant="h3" component="h2">
+              {t('faqHeading')}
+            </Typography>
+          </Box>
+
+          {FAQ_KEYS.map((key) => (
+            <Accordion
+              key={key}
+              sx={(theme) => ({
+                '&:before': { display: 'none' },
+                boxShadow: 'none',
+                border: 1,
+                borderColor: 'divider',
+                mb: 1,
+                borderRadius: `${theme.shape.panelRadius}px !important`,
+              })}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="subtitle1" component="span">
+                  {t(`faq.${key}.question`)}
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {t(`faq.${key}.answer`)}
+                </Typography>
+              </AccordionDetails>
+            </Accordion>
+          ))}
+        </Box>
+
+        {/* Support Form */}
+        <Paper
+          variant="outlined"
+          sx={(theme) => ({ p: 3, borderRadius: `${theme.shape.panelRadius}px` })}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <SendIcon sx={{ color: 'text.secondary' }} />
+            <Typography variant="h3" component="h2">
+              {t('form.heading')}
+            </Typography>
+          </Box>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+            {t('form.description')}
           </Typography>
-        </Box>
 
-        {FAQ_KEYS.map((key) => (
-          <Accordion
-            key={key}
-            sx={{
-              '&:before': { display: 'none' },
-              boxShadow: 'none',
-              border: '1px solid',
-              borderColor: 'divider',
-              mb: 1,
-              borderRadius: '8px !important',
-              '&:first-of-type': { borderRadius: '8px !important' },
-              '&:last-of-type': { borderRadius: '8px !important' },
-            }}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography fontWeight={500}>{t(`faq.${key}.question`)}</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Typography color="text.secondary">{t(`faq.${key}.answer`)}</Typography>
-            </AccordionDetails>
-          </Accordion>
-        ))}
-      </Box>
-
-      {/* Support Form */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: 3,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 2,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-          <SendIcon sx={{ color: 'primary.main' }} />
-          <Typography variant="h6" fontWeight={600}>
-            {t('form.heading')}
-          </Typography>
-        </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {t('form.description')}
-        </Typography>
-
-        <Box component="form" onSubmit={handleSubmit}>
-          <TextField
-            label={t('form.title')}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            fullWidth
-            required
-            inputProps={{ minLength: 3, maxLength: 200 }}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            label={t('form.body')}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            fullWidth
-            required
-            multiline
-            rows={4}
-            inputProps={{ minLength: 10, maxLength: 2000 }}
-            sx={{ mb: 3 }}
-          />
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={loading || !title.trim() || !description.trim()}
-            startIcon={loading ? <CircularProgress size={18} /> : <SendIcon />}
-          >
-            {loading ? t('form.submitting') : t('form.submit')}
-          </Button>
-        </Box>
-      </Paper>
+          <Box component="form" onSubmit={handleSubmit}>
+            <TextField
+              label={t('form.title')}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              fullWidth
+              required
+              inputProps={{ minLength: 3, maxLength: 200 }}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              label={t('form.body')}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              fullWidth
+              required
+              multiline
+              rows={4}
+              inputProps={{ minLength: 10, maxLength: 2000 }}
+              sx={{ mb: 3 }}
+            />
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={loading || !title.trim() || !description.trim()}
+              startIcon={loading ? <CircularProgress size={18} /> : <SendIcon />}
+            >
+              {loading ? t('form.submitting') : t('form.submit')}
+            </Button>
+          </Box>
+        </Paper>
+      </PageShell>
 
       {/* Snackbar */}
       <Snackbar
@@ -194,6 +188,6 @@ export default function SupportPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 }

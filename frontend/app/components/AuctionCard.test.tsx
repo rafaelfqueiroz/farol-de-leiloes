@@ -49,6 +49,12 @@ describe('AuctionCard', () => {
     },
   );
 
+  it('titles the card with an h3, below the h2 of the results (DS-15)', () => {
+    renderCard(auction);
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Casa em Palmas' })).toBeInTheDocument();
+  });
+
   it('hides an amount Caixa did not publish instead of showing R$ 0,00', () => {
     renderCard({
       ...auction,

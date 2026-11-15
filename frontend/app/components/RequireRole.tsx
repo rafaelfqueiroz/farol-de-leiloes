@@ -3,9 +3,11 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Box, CircularProgress, Typography, Button } from '@mui/material';
-import LockIcon from '@mui/icons-material/Lock';
+import { Box, CircularProgress, Button } from '@mui/material';
+import LockOutlined from '@mui/icons-material/LockOutlined';
 import { useAuth } from '../contexts/AuthContext';
+import EmptyState from '@/app/components/patterns/EmptyState';
+import PageShell from '@/app/components/patterns/PageShell';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 
 export type UserRole = 'free' | 'standard' | 'premium' | 'admin';
@@ -74,30 +76,24 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
     const planKey = minimumRole === 'standard' || minimumRole === 'premium' ? minimumRole : 'admin';
     const planName = tPlan(`names.${planKey}`);
     return (
-      <Box
-        sx={(theme) => ({
-          // #42: fills the AppShell content area, not the whole viewport
-          ...shellContentMinHeight(theme),
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        })}
-      >
-        <Box sx={{ textAlign: 'center', maxWidth: 400 }}>
-          <LockIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
-          <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>
-            {t('title')}
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            {featureName
+      // DS-15: a full-page state has no PageHeader, so its title is the page's h1
+      <PageShell width="reading">
+        <EmptyState
+          icon={LockOutlined}
+          title={t('title')}
+          description={
+            featureName
               ? t('withFeature', { feature: featureName, plan: planName })
-              : t('withoutFeature', { plan: planName })}
-          </Typography>
-          <Button variant="contained" href="/plans">
-            {t('viewPlans')}
-          </Button>
-        </Box>
-      </Box>
+              : t('withoutFeature', { plan: planName })
+          }
+          titleComponent="h1"
+          actions={
+            <Button variant="contained" href="/plans">
+              {t('viewPlans')}
+            </Button>
+          }
+        />
+      </PageShell>
     );
   }
 

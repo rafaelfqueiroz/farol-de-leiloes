@@ -150,6 +150,14 @@ describe('search page — URL-driven state', () => {
     expect(pending).toHaveLength(1);
   });
 
+  it('has the page h1 and no <main> of its own: the shell owns the landmark (DS-15, DS-21)', () => {
+    render(<SearchPage />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Busca de imóveis' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+  });
+
   it('shows the search view to a role without favourites', () => {
     env.role = 'free';
     env.search = 'view=favorites';

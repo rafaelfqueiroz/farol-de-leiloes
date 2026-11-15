@@ -1,7 +1,8 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithProviders as render } from '@/test/render';
+import messages from '@/messages/pt-BR.json';
+import { axe, renderWithProviders as render } from '@/test/render';
 import RegisterPage from './page';
 
 const env = vi.hoisted(() => ({ register: vi.fn(), push: vi.fn() }));
@@ -25,6 +26,17 @@ async function fill(password: string, confirmation: string) {
 }
 
 describe('RegisterPage', () => {
+  it('has one h1 "Criar conta" inside a main, with the old subtitle as its summary', async () => {
+    const { container } = render(<RegisterPage />);
+
+    expect(screen.getByRole('main')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Criar conta' })).toBeInTheDocument();
+    expect(screen.getByText(messages.register.subtitle)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', '/login');
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it('refuses passwords that differ', async () => {
     await fill('secret1', 'secret2');
 
