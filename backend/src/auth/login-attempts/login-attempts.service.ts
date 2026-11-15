@@ -2,9 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { Clock } from '../../common/clock/clock.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import { normalizeEmail } from '../../common/normalize-email.js';
-import { LoginAttemptsRepository } from './login-attempts.repository.js';
+import { LoginAttemptsRepository, type ReservedAttempt } from './login-attempts.repository.js';
+import { normalizeOrigin } from './origin-key.js';
 
-/** BR-001-15: 10 failures within 15 minutes, then 15 minutes of refusal. */
+/** BR-001-15: 10 attempts within 15 minutes, then 15 minutes of refusal. */
 export const LOGIN_ATTEMPT_RULE = {
   limit: 10,
   windowMs: 15 * 60 * 1000,
@@ -12,11 +13,18 @@ export const LOGIN_ATTEMPT_RULE = {
 } as const;
 
 const emailKey = (email: string) => `email:${normalizeEmail(email)}`;
-const ipKey = (ip: string) => `ip:${ip}`;
+const ipKey = (ip: string) => `ip:${normalizeOrigin(ip)}`;
 
 /**
- * Failed-sign-in throttle (BR-001-15, SC-04, DL-001-08): per email and per origin, expiring on its
- * own, never locking the account.
+ * Sign-in throttle (BR-001-15, SC-04, DL-001-08): per email and per origin, expiring on its own,
+ * never locking the account.
+ *
+ * Every attempt is counted when it starts (`reserve`), before the password is compared, in one
+ * atomic step per key. That is what stops parallel guesses: they are numbered 1..N by the
+ * database, and only the first ten are allowed on to the (slow) comparison. A failed password
+ * simply keeps the count it reserved. The 10th attempt may still succeed; the 11th within the
+ * window is refused even with the right password, and the ban then runs 15 minutes from that
+ * refusal.
  */
 @Injectable()
 export class LoginAttemptsService {
@@ -25,23 +33,28 @@ export class LoginAttemptsService {
     private readonly clock: Clock, // AR-24
   ) {}
 
-  /** Refuses with TOO_MANY_ATTEMPTS while the email or the origin is banned, password aside. */
-  async assertAllowed(email: string, ip: string): Promise<void> {
-    if (await this.attempts.isBlocked([emailKey(email), ipKey(ip)], this.clock.now())) {
+  /** Counts the attempt; throws TOO_MANY_ATTEMPTS when the email or the origin is over the limit. */
+  async reserve(email: string, ip: string): Promise<void> {
+    const now = this.clock.now();
+    // The email first: an attempt refused for the email is not charged to the origin, so locking
+    // a victim's email cannot also run up the victim's own origin.
+    if (isRefused(await this.attempts.reserve(emailKey(email), now, LOGIN_ATTEMPT_RULE), now)) {
+      throw new DomainError('TOO_MANY_ATTEMPTS');
+    }
+    if (isRefused(await this.attempts.reserve(ipKey(ip), now, LOGIN_ATTEMPT_RULE), now)) {
       throw new DomainError('TOO_MANY_ATTEMPTS');
     }
   }
 
-  async recordFailure(email: string, ip: string): Promise<void> {
-    const now = this.clock.now();
-    await Promise.all([
-      this.attempts.recordFailure(emailKey(email), now, LOGIN_ATTEMPT_RULE),
-      this.attempts.recordFailure(ipKey(ip), now, LOGIN_ATTEMPT_RULE),
-    ]);
+  /**
+   * A successful sign-in clears the email's counter and gives back the origin's reserved count,
+   * so successes never build towards a ban (BR-001-15).
+   */
+  async recordSuccess(email: string, ip: string): Promise<void> {
+    await Promise.all([this.attempts.clear(emailKey(email)), this.attempts.release(ipKey(ip))]);
   }
+}
 
-  /** Success clears the email's counter only: the origin's failures stay (BR-001-15). */
-  async recordSuccess(email: string): Promise<void> {
-    await this.attempts.clear(emailKey(email));
-  }
+function isRefused(reserved: ReservedAttempt, now: Date): boolean {
+  return reserved.blockedUntil !== undefined && reserved.blockedUntil > now;
 }

@@ -274,12 +274,20 @@ export class UsersService {
     return this.dummyHash;
   }
 
-  /** BR-001-05: a spent confirmation link confirms the address. */
-  async markEmailVerified(userId: string): Promise<void> {
+  /**
+   * BR-001-05: a spent confirmation link confirms the address it was sent to, and only while that
+   * is still the account's address. The comparison is part of the update, so an email changed
+   * between the check and the write cannot be confirmed by a link mailed to the old one.
+   * Returns whether the account was confirmed.
+   */
+  async confirmEmail(userId: string, email: string): Promise<boolean> {
     const result = await this.userRepository
-      .updateOne({ _id: { $eq: userId } }, { $set: { emailVerified: true } })
+      .updateOne(
+        { _id: { $eq: userId }, email: { $eq: normalizeEmail(email) } },
+        { $set: { emailVerified: true } },
+      )
       .exec();
-    if (result.matchedCount === 0) throw new DomainError('USER_NOT_FOUND');
+    return result.matchedCount > 0;
   }
 
   async isEmailVerified(userId: string): Promise<boolean> {

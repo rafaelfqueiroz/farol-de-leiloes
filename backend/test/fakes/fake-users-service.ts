@@ -19,7 +19,7 @@ interface UsersPort {
   setPassword(...args: Args<'setPassword'>): Promise<FakeAccount>;
   createLocalAccount(...args: Args<'createLocalAccount'>): Promise<FakeAccount>;
   changePassword(...args: Args<'changePassword'>): Promise<FakeAccount>;
-  markEmailVerified(...args: Args<'markEmailVerified'>): Promise<void>;
+  confirmEmail(...args: Args<'confirmEmail'>): Promise<boolean>;
 }
 
 /**
@@ -100,10 +100,11 @@ export class FakeUsersService implements UsersPort {
     return account;
   }
 
-  async markEmailVerified(userId: string): Promise<void> {
+  async confirmEmail(userId: string, email: string): Promise<boolean> {
     const account = this.accounts.get(userId);
-    if (!account) throw new DomainError('USER_NOT_FOUND');
+    if (account?.email !== normalizeEmail(email)) return false;
     account.emailVerified = true;
+    return true;
   }
 }
 

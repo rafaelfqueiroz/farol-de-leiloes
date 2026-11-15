@@ -10,6 +10,7 @@ import type { SessionsRepository } from '../../src/auth/sessions/sessions.reposi
 type Port<T> = { [K in keyof T]: T[K] };
 
 interface StoredToken {
+  seq: number;
   userId: string;
   purpose: AccountTokenPurpose;
   tokenHash: string;
@@ -20,6 +21,7 @@ interface StoredToken {
 
 export class FakeAccountTokenRepository implements Port<AccountTokenRepository> {
   readonly stored: StoredToken[] = [];
+  private nextSeq = 1;
 
   async deleteUnused(userId: string, purpose: AccountTokenPurpose): Promise<void> {
     const keep = this.stored.filter(
@@ -29,7 +31,16 @@ export class FakeAccountTokenRepository implements Port<AccountTokenRepository> 
   }
 
   async insert(token: Parameters<AccountTokenRepository['insert']>[0]): Promise<void> {
-    this.stored.push({ ...token });
+    this.stored.push({ ...token, seq: this.nextSeq++ });
+  }
+
+  async deleteAllButNewestUnused(userId: string, purpose: AccountTokenPurpose): Promise<void> {
+    const unused = this.stored.filter(
+      (t) => t.userId === userId && t.purpose === purpose && !t.usedAt,
+    );
+    const newest = Math.max(...unused.map((t) => t.seq));
+    const keep = this.stored.filter((t) => !unused.includes(t) || t.seq === newest);
+    this.stored.splice(0, this.stored.length, ...keep);
   }
 
   async consume(tokenHash: string, purpose: AccountTokenPurpose, now: Date) {
@@ -78,28 +89,32 @@ export class FakeSessionsRepository implements Port<SessionsRepository> {
 }
 
 /**
- * Counts failures per key and answers `isBlocked` for keys a test blocked by hand: the window and
+ * Counts reservations per key and refuses the keys a test blocked by hand: the window, count and
  * ban arithmetic is the repository's pipeline, covered against MongoDB, not re-implemented here.
  */
 export class FakeLoginAttemptsRepository implements Port<LoginAttemptsRepository> {
-  readonly failures = new Map<string, number>();
+  readonly reserved = new Map<string, number>();
   readonly cleared: string[] = [];
+  readonly released: string[] = [];
   private readonly blocked = new Set<string>();
 
   block(key: string): void {
     this.blocked.add(key);
   }
 
-  async isBlocked(keys: string[]): Promise<boolean> {
-    return keys.some((key) => this.blocked.has(key));
-  }
-
-  async recordFailure(key: string): Promise<void> {
-    this.failures.set(key, (this.failures.get(key) ?? 0) + 1);
+  async reserve(key: string, now: Date) {
+    this.reserved.set(key, (this.reserved.get(key) ?? 0) + 1);
+    const count = this.reserved.get(key) ?? 0;
+    return this.blocked.has(key) ? { count, blockedUntil: new Date(now.getTime() + 1) } : { count };
   }
 
   async clear(key: string): Promise<void> {
     this.cleared.push(key);
-    this.failures.delete(key);
+    this.reserved.delete(key);
+  }
+
+  async release(key: string): Promise<void> {
+    this.released.push(key);
+    this.reserved.set(key, Math.max(0, (this.reserved.get(key) ?? 0) - 1));
   }
 }

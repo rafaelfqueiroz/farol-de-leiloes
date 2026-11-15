@@ -10,10 +10,11 @@ import { JwtService } from '@nestjs/jwt';
 import { getConnectionToken, getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
-import type { Connection, Model } from 'mongoose';
+import { Types, type Connection, type Model } from 'mongoose';
 import request from 'supertest';
 import { configureApp } from '../../src/app.setup.js';
 import { AuthModule } from '../../src/auth/auth.module.js';
+import { AuthService } from '../../src/auth/auth.service.js';
 import { AccountTokenService } from '../../src/auth/tokens/account-token.service.js';
 import { Clock } from '../../src/common/clock/clock.js';
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
@@ -38,6 +39,7 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
   let users: Model<UserDocument>;
   let connection: Connection;
   let tokens: AccountTokenService;
+  let authService: AuthService;
   let counter = 0;
 
   const server = () => app.getHttpServer() as Parameters<typeof request>[0];
@@ -74,8 +76,14 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
   const lastConfirmation = () => mailbox.verificationEmails.slice(-1)[0]?.token ?? '';
   const lastRecovery = () => mailbox.passwordResetEmails.slice(-1)[0]?.token ?? '';
 
-  function requestRecovery(email: string) {
-    return request(server()).post('/api/auth/reset-password-request').send({ email });
+  /** The mail work of a recovery request is detached from the response (SC-05): wait for it. */
+  async function requestRecovery(email: string) {
+    const response = await request(server())
+      .post('/api/auth/reset-password-request')
+      .send({ email })
+      .expect(200);
+    await authService.flushDeliveries();
+    return response;
   }
 
   beforeAll(async () => {
@@ -99,10 +107,13 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       .compile();
     app = moduleRef.createNestApplication();
     configureApp(app);
-    await app.init();
+    // Listening once (loopback, ephemeral port) keeps supertest from adding listeners to the server
+    // on every one of the parallel requests below.
+    await app.listen(0, '127.0.0.1');
     users = moduleRef.get(getModelToken(UserEntity.name));
     connection = moduleRef.get(getConnectionToken());
     tokens = moduleRef.get(AccountTokenService);
+    authService = moduleRef.get(AuthService);
     await connection.syncIndexes();
   });
 
@@ -248,10 +259,38 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       await confirm(newer).expect(200);
     });
 
+    it('a link only confirms the address it was mailed to: after the email changed it is refused', async () => {
+      const original = freshEmail('first');
+      const changed = freshEmail('second');
+      const { accessToken } = await signUp(original);
+      const oldLink = lastConfirmation();
+      await request(server())
+        .patch('/api/auth/profile')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ email: changed })
+        .expect(200);
+
+      const refused = await confirm(oldLink).expect(400);
+
+      expect(refused.body.code).toBe('INVALID_VERIFICATION_TOKEN');
+      expect(await users.findOne({ email: changed }).lean()).toMatchObject({
+        emailVerified: false,
+      });
+
+      // A link requested for the new address confirms it.
+      await request(server())
+        .post('/api/auth/resend-verification')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      expect(mailbox.verificationEmails.slice(-1)[0]?.email).toBe(changed);
+      await confirm(lastConfirmation()).expect(200);
+      expect(await users.findOne({ email: changed }).lean()).toMatchObject({ emailVerified: true });
+    });
+
     it('a recovery token is not a confirmation link', async () => {
       const email = freshEmail('purpose');
       await signUp(email);
-      await requestRecovery(email).expect(200);
+      await requestRecovery(email);
 
       await confirm(lastRecovery()).expect(400);
     });
@@ -278,9 +317,9 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       await signUp(known);
       const before = mailbox.passwordResetEmails.length;
 
-      const forKnown = await requestRecovery(known).expect(200);
+      const forKnown = await requestRecovery(known);
       expect(mailbox.passwordResetEmails).toHaveLength(before + 1);
-      const forUnknown = await requestRecovery(freshEmail('nobody')).expect(200);
+      const forUnknown = await requestRecovery(freshEmail('nobody'));
 
       expect(forUnknown.body).toEqual(forKnown.body);
       expect(forUnknown.status).toBe(forKnown.status);
@@ -351,7 +390,7 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
         providers: ['google'],
         emailVerified: true,
       });
-      await requestRecovery(email).expect(200);
+      await requestRecovery(email);
 
       await reset(lastRecovery(), OTHER_PASSWORD).expect(200);
 
@@ -375,7 +414,7 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       await users.updateOne({ email }, { $set: { status: 'deactivated' } });
       const before = mailbox.passwordResetEmails.length;
 
-      await requestRecovery(email).expect(200);
+      await requestRecovery(email);
 
       expect(mailbox.passwordResetEmails).toHaveLength(before);
     });
@@ -612,30 +651,134 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       });
     });
 
-    it('BR-001-15: concurrent failures are all counted (the update is atomic)', async () => {
+    it('BR-001-15: of 25 parallel wrong guesses exactly 10 reach the password check, the rest are refused', async () => {
       const email = freshEmail('parallel');
       await signUp(email);
       const origin = '203.0.113.70';
 
-      await Promise.all(
-        Array.from({ length: 8 }, () => signIn(email, 'wrong password', origin).expect(401)),
+      const statuses = await Promise.all(
+        Array.from({ length: 25 }, () =>
+          signIn(email, 'wrong password', origin).then((response) => response.status),
+        ),
       );
 
+      // The attempt is counted atomically before bcrypt: numbers 1..10 are compared (401), the
+      // 11th to 25th are refused without a comparison (429).
+      expect(statuses.filter((status) => status === 401)).toHaveLength(10);
+      expect(statuses.filter((status) => status === 429)).toHaveLength(15);
       expect(await collection('loginAttempts').findOne({ key: `email:${email}` })).toMatchObject({
-        count: 8,
+        count: 11,
       });
     });
 
-    it('BR-001-15: the ban is exactly 15 minutes from the 10th failure', async () => {
+    it('BR-001-15: the 10th attempt with the right password succeeds; the 11th is refused', async () => {
+      const email = freshEmail('tenth');
+      await signUp(email);
+      for (let i = 0; i < 9; i += 1) {
+        await signIn(email, 'wrong password', `192.0.2.${i + 1}`).expect(401);
+      }
+
+      await signIn(email, PASSWORD, '192.0.2.150').expect(200); // the 10th
+
+      // Success cleared the email counter, so this is a fresh count for the email...
+      await signIn(email, PASSWORD, '192.0.2.151').expect(200);
+      // ...while the ban of an origin that made 10 wrong guesses starts at its 11th attempt.
+      const origin = '203.0.113.80';
+      for (let i = 0; i < 10; i += 1) {
+        await signIn(freshEmail('guess'), 'wrong password', origin).expect(401);
+      }
+      await signIn(email, PASSWORD, origin).expect(429);
+    });
+
+    it('BR-001-15: the ban runs 15 minutes from the refusal that triggered it, and hammering does not extend it', async () => {
       const email = freshEmail('exact');
       await signUp(email);
       for (let i = 0; i < 10; i += 1) {
         await signIn(email, 'wrong password', `192.0.2.${i + 1}`).expect(401);
       }
-      const row = await collection('loginAttempts').findOne({ key: `email:${email}` });
+      const before = await collection('loginAttempts').findOne({ key: `email:${email}` });
+      expect(before).toMatchObject({ count: 10 });
+      expect(before).not.toHaveProperty('blockedUntil');
 
-      expect(row?.count).toBe(10);
-      expect((row?.blockedUntil as Date).getTime()).toBe(clock.now().getTime() + 15 * MINUTE);
+      clock.advance(5 * MINUTE);
+      const refusedAt = clock.now().getTime();
+      await signIn(email, PASSWORD, '192.0.2.160').expect(429);
+      const row = await collection('loginAttempts').findOne({ key: `email:${email}` });
+      expect((row?.blockedUntil as Date).getTime()).toBe(refusedAt + 15 * MINUTE);
+
+      clock.advance(10 * MINUTE);
+      await signIn(email, PASSWORD, '192.0.2.161').expect(429); // still inside the ban
+      const after = await collection('loginAttempts').findOne({ key: `email:${email}` });
+      expect(after?.blockedUntil).toEqual(row?.blockedUntil);
+      expect(after?.count).toBe(11); // refused attempts are not counted
+
+      clock.advance(5 * MINUTE + MINUTE);
+      await signIn(email, PASSWORD, '192.0.2.162').expect(200);
+    });
+
+    it.each([
+      ['an IPv4 address and its IPv4-mapped form', '203.0.113.90', '::ffff:203.0.113.90'],
+      ['two addresses of one IPv6 /64', '2001:db8:1:2::1', '2001:db8:1:2:ffff:ffff:ffff:ffff'],
+    ])('SC-04: %s are one origin', async (_label, first, second) => {
+      const victim = freshEmail('bucket');
+      await signUp(victim);
+      for (let i = 0; i < 10; i += 1) {
+        await signIn(freshEmail('guess'), 'wrong password', i % 2 === 0 ? first : second).expect(
+          401,
+        );
+      }
+
+      await signIn(victim, PASSWORD, second).expect(429);
+      await signIn(victim, PASSWORD, first).expect(429);
+    });
+
+    it('SC-04: an address in another IPv6 /64 is a different origin', async () => {
+      const victim = freshEmail('other64');
+      await signUp(victim);
+      for (let i = 0; i < 10; i += 1) {
+        await signIn(freshEmail('guess'), 'wrong password', '2001:db8:7:8::1').expect(401);
+      }
+
+      await signIn(victim, PASSWORD, '2001:db8:7:9::1').expect(200);
+    });
+  });
+
+  describe('change-password throttle (SC-04, BR-001-15)', () => {
+    const changePassword = (token: string, currentPassword: string, ip: string) =>
+      request(server())
+        .post('/api/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Forwarded-For', ip)
+        .send({ currentPassword, newPassword: OTHER_PASSWORD });
+
+    it('guessing the current password is counted like sign-in: 10 wrong, then even the right one is refused', async () => {
+      const email = freshEmail('cpguess');
+      const { accessToken } = await signUp(email);
+      for (let i = 0; i < 10; i += 1) {
+        const wrong = await changePassword(accessToken, 'wrong password', '198.51.100.201').expect(
+          400,
+        );
+        expect(wrong.body.code).toBe('CURRENT_PASSWORD_INCORRECT');
+      }
+
+      const refused = await changePassword(accessToken, PASSWORD, '198.51.100.201').expect(429);
+
+      expect(refused.body).toEqual({ code: 'TOO_MANY_ATTEMPTS', context: {} });
+      await signIn(email, PASSWORD, '198.51.100.202').expect(429); // the same email counter
+    });
+
+    it('a successful change clears the email counter and gives back the origin reservation', async () => {
+      const email = freshEmail('cpok');
+      const { accessToken } = await signUp(email);
+      const origin = '198.51.100.203';
+      await changePassword(accessToken, 'wrong password', origin).expect(400);
+
+      await changePassword(accessToken, PASSWORD, origin).expect(200);
+
+      expect(await collection('loginAttempts').countDocuments({ key: `email:${email}` })).toBe(0);
+      expect(await collection('loginAttempts').findOne({ key: `ip:${origin}` })).toMatchObject({
+        count: 1,
+      });
     });
   });
 
@@ -673,6 +816,28 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       await expect(tokens.consume(second, 'email_change')).resolves.toMatchObject({
         newEmail: 'newer@example.test',
       });
+    });
+
+    it('concurrent issuers leave exactly one valid link', async () => {
+      const user = '64b00000000000000000000a';
+
+      const issued = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          tokens.issue(user, 'email_confirmation', { newEmail: 'a@example.test' }),
+        ),
+      );
+
+      expect(
+        await collection('accountTokens').countDocuments({
+          userId: new Types.ObjectId(user),
+          purpose: 'email_confirmation',
+          usedAt: null,
+        }),
+      ).toBe(1);
+      const results = await Promise.all(
+        issued.map((plain) => tokens.consume(plain, 'email_confirmation')),
+      );
+      expect(results.filter((result) => result !== null)).toHaveLength(1);
     });
 
     it('declares TTL indexes on sessions, accountTokens and loginAttempts, and a unique token hash', async () => {

@@ -350,15 +350,17 @@ describe('AuthService with fake collaborators', () => {
       expect(result.accessToken).toBe(`token-for-${ID}`);
       expect(result.user.subscriptionStatus).toBe('active');
       expect(result.user).not.toHaveProperty('password');
-      // BR-001-15: success clears the email key and leaves the origin's.
+      // BR-001-15: the attempt was reserved first; success clears the email key and gives back
+      // the origin's reserved count.
       expect(attemptRepo.cleared).toEqual(['email:local@example.test']);
+      expect(attemptRepo.released).toEqual([`ip:${IP}`]);
     });
 
     it.each([
       ['wrong password', 'local@example.test', 'wrong-password'],
       ['unknown email', 'nobody@example.test', 'correct-password'],
     ])(
-      'BR-001-14: %s is INVALID_CREDENTIALS, signs nothing and counts a failure for email and IP',
+      'BR-001-14: %s is INVALID_CREDENTIALS, signs nothing and keeps the count it reserved for email and IP',
       async (_label, mail, password) => {
         const { service, users, sign, attemptRepo } = build();
         users.seed(localAccount());
@@ -369,11 +371,13 @@ describe('AuthService with fake collaborators', () => {
         );
 
         expect(sign).not.toHaveBeenCalled();
-        expect([...attemptRepo.failures.keys()].sort()).toEqual([`email:${mail}`, `ip:${IP}`]);
+        expect([...attemptRepo.reserved.keys()].sort()).toEqual([`email:${mail}`, `ip:${IP}`]);
+        expect(attemptRepo.cleared).toEqual([]);
+        expect(attemptRepo.released).toEqual([]);
       },
     );
 
-    it('BR-001-16: a deactivated account gets the same INVALID_CREDENTIALS and counts a failure', async () => {
+    it('BR-001-16: a deactivated account gets the same INVALID_CREDENTIALS and keeps the reserved count', async () => {
       const { service, users, attemptRepo } = build();
       users.seed(localAccount({ status: 'deactivated' }));
 
@@ -381,7 +385,7 @@ describe('AuthService with fake collaborators', () => {
         service.login({ email: 'local@example.test', password: 'correct-password' }, IP),
         'INVALID_CREDENTIALS',
       );
-      expect(attemptRepo.failures.get('email:local@example.test')).toBe(1);
+      expect(attemptRepo.reserved.get('email:local@example.test')).toBe(1);
     });
 
     it.each([
@@ -401,6 +405,22 @@ describe('AuthService with fake collaborators', () => {
         expect(sessionRepo.stored).toEqual([]);
       },
     );
+
+    it('BR-001-15: a refused attempt never reaches the password check', async () => {
+      const { service, users, attemptRepo } = build();
+      users.seed(localAccount());
+      attemptRepo.block('email:local@example.test');
+      const compared = vi.spyOn(users, 'validatePassword');
+
+      await expectDomainError(
+        service.login({ email: 'local@example.test', password: 'correct-password' }, IP),
+        'TOO_MANY_ATTEMPTS',
+      );
+
+      expect(compared).not.toHaveBeenCalled();
+      // The origin is not charged for an attempt refused on the email.
+      expect(attemptRepo.reserved.has(`ip:${IP}`)).toBe(false);
+    });
   });
 
   describe('logout', () => {
@@ -455,11 +475,33 @@ describe('AuthService with fake collaborators', () => {
       await expect(ctx.service.verifyEmail(second)).resolves.toBeUndefined();
     });
 
+    it('a link only confirms the address it was mailed to: after the email changed it is refused', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      const token = await confirmationFor(ctx);
+      await ctx.users.update(ID, { email: 'changed@example.test' });
+
+      await expectDomainError(ctx.service.verifyEmail(token), 'INVALID_VERIFICATION_TOKEN');
+
+      expect(ctx.users.accounts.get(ID)?.emailVerified).toBe(false);
+    });
+
+    it('the link is bound to the address, so a link for the new address confirms it', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount());
+      await ctx.users.update(ID, { email: 'changed@example.test' });
+      const token = await confirmationFor(ctx);
+
+      await expect(ctx.service.verifyEmail(token)).resolves.toBeUndefined();
+
+      expect(ctx.users.accounts.get(ID)?.emailVerified).toBe(true);
+    });
+
     it('a token of another purpose is not a confirmation link', async () => {
       const ctx = build();
       ctx.users.seed(localAccount());
       await ctx.service.requestPasswordReset('local@example.test');
-      await Promise.resolve();
+      await ctx.service.flushDeliveries();
       const resetToken = ctx.email.passwordResetEmails[0]?.token ?? '';
 
       await expectDomainError(ctx.service.verifyEmail(resetToken), 'INVALID_VERIFICATION_TOKEN');
@@ -505,7 +547,7 @@ describe('AuthService with fake collaborators', () => {
   describe('password reset', () => {
     async function requestToken(ctx: ReturnType<typeof build>, address = 'local@example.test') {
       await ctx.service.requestPasswordReset(address);
-      await Promise.resolve(); // the mail is sent without being awaited (SC-05)
+      await ctx.service.flushDeliveries(); // the work is detached from the request (SC-05)
       return ctx.email.passwordResetEmails.slice(-1)[0]?.token ?? '';
     }
 
@@ -617,8 +659,7 @@ describe('AuthService with fake collaborators', () => {
       };
 
       await expect(ctx.service.requestPasswordReset('local@example.test')).resolves.toBeUndefined();
-      await Promise.resolve();
-      await Promise.resolve();
+      await ctx.service.flushDeliveries();
 
       expect(logged.loggedText()).toContain('Password reset email could not be sent');
       expect(logged.loggedText()).not.toContain('local@example.test');
@@ -665,7 +706,7 @@ describe('AuthService with fake collaborators', () => {
       const { service, users } = build();
       users.seed(localAccount());
 
-      await service.changePassword(ID, 'current-session', 'correct-password', 'new-password');
+      await service.changePassword(ID, 'current-session', 'correct-password', 'new-password', IP);
 
       expect(users.accounts.get(ID)?.password).toBe('new-password');
     });
@@ -678,7 +719,7 @@ describe('AuthService with fake collaborators', () => {
       await service.login(credentials, IP);
       const [current, other] = sessionRepo.stored;
 
-      await service.changePassword(ID, current?.id ?? '', 'correct-password', 'new-password');
+      await service.changePassword(ID, current?.id ?? '', 'correct-password', 'new-password', IP);
 
       expect(current?.revokedAt).toBeUndefined();
       expect(other?.revokedAt).toBeInstanceOf(Date);
@@ -695,7 +736,7 @@ describe('AuthService with fake collaborators', () => {
       const { service, users } = build();
       if (seeded) users.seed(seeded);
 
-      await expectDomainError(service.changePassword(ID, 's', 'x', 'new-password'), code);
+      await expectDomainError(service.changePassword(ID, 's', 'x', 'new-password', IP), code);
     });
 
     it('BR-001-28: refuses a wrong current password and leaves everything unchanged', async () => {
@@ -704,11 +745,43 @@ describe('AuthService with fake collaborators', () => {
       await service.login({ email: 'local@example.test', password: 'correct-password' }, IP);
 
       await expectDomainError(
-        service.changePassword(ID, 's', 'wrong-password', 'new-password'),
+        service.changePassword(ID, 's', 'wrong-password', 'new-password', IP),
         'CURRENT_PASSWORD_INCORRECT',
       );
       expect(users.accounts.get(ID)?.password).toBe('correct-password');
       expect(sessionRepo.stored.every((s) => !s.revokedAt)).toBe(true);
+    });
+  });
+
+  describe('changePassword throttle (SC-04, BR-001-15)', () => {
+    it('reserves an attempt first; a wrong current password keeps it, a right one gives it back', async () => {
+      const { service, users, attemptRepo } = build();
+      users.seed(localAccount());
+
+      await expectDomainError(
+        service.changePassword(ID, 's', 'wrong-password', 'new-password', IP),
+        'CURRENT_PASSWORD_INCORRECT',
+      );
+      expect(attemptRepo.reserved.get('email:local@example.test')).toBe(1);
+
+      await service.changePassword(ID, 's', 'correct-password', 'new-password', IP);
+      expect(attemptRepo.cleared).toEqual(['email:local@example.test']);
+      expect(attemptRepo.released).toEqual([`ip:${IP}`]);
+    });
+
+    it('is refused with TOO_MANY_ATTEMPTS before the password is compared, and changes nothing', async () => {
+      const { service, users, attemptRepo } = build();
+      users.seed(localAccount());
+      attemptRepo.block(`ip:${IP}`);
+      const compared = vi.spyOn(users, 'validatePassword');
+
+      await expectDomainError(
+        service.changePassword(ID, 's', 'correct-password', 'new-password', IP),
+        'TOO_MANY_ATTEMPTS',
+      );
+
+      expect(compared).not.toHaveBeenCalled();
+      expect(users.accounts.get(ID)?.password).toBe('correct-password');
     });
   });
 

@@ -298,21 +298,19 @@ describe('UsersService.createLocalAccount (BR-001-01, BR-001-03, BR-001-31)', ()
   });
 });
 
-describe('UsersService.markEmailVerified and isEmailVerified', () => {
-  it('confirms the address of the user', async () => {
+describe('UsersService.confirmEmail and isEmailVerified', () => {
+  it('confirms the address only while it is still the account email (matched in the update)', async () => {
     const { Model } = aModel();
-    await aService(Model).markEmailVerified('u1');
+    await expect(aService(Model).confirmEmail('u1', ' Ana@Example.TEST ')).resolves.toBe(true);
     expect(Model.updateOne).toHaveBeenCalledWith(
-      { _id: { $eq: 'u1' } },
+      { _id: { $eq: 'u1' }, email: { $eq: 'ana@example.test' } },
       { $set: { emailVerified: true } },
     );
   });
 
-  it('reports USER_NOT_FOUND when nobody matched', async () => {
+  it('answers false when no account has that id and email any more', async () => {
     const { Model } = aModel({ updateOne: { matchedCount: 0 } });
-    await expect(aService(Model).markEmailVerified('u1')).rejects.toEqual(
-      new DomainError('USER_NOT_FOUND'),
-    );
+    await expect(aService(Model).confirmEmail('u1', 'ana@example.test')).resolves.toBe(false);
   });
 
   it('isEmailVerified is true for a verified user and false for an unverified or unknown one', async () => {

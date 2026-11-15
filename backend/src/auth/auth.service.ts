@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { type BeforeApplicationShutdown, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service.js';
 import { EmailService } from '../email/email.service.js';
@@ -15,8 +15,10 @@ import { SessionsService } from './sessions/sessions.service.js';
 import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
 
 @Injectable()
-export class AuthService {
+export class AuthService implements BeforeApplicationShutdown {
   private readonly logger = new Logger(AuthService.name);
+  /** Mail work started without being awaited (see `detach`). */
+  private readonly inFlight = new Set<Promise<void>>();
 
   constructor(
     private usersService: UsersService,
@@ -42,18 +44,19 @@ export class AuthService {
 
   async login(loginDto: LoginDto, ip: string): Promise<AuthResult> {
     const email = normalizeEmail(loginDto.email);
-    // BR-001-15: a banned email or origin is refused before the password is looked at.
-    await this.loginAttempts.assertAllowed(email, ip);
+    // BR-001-15: the attempt is counted, atomically, before the password is looked at, so parallel
+    // guesses cannot all reach the comparison; over the limit it is refused even with the right
+    // password.
+    await this.loginAttempts.reserve(email, ip);
 
     const user = await this.usersService.validatePassword(email, loginDto.password);
     if (!user) {
-      // BR-001-14: unknown email, wrong password and an inactive account are one answer, and all
-      // of them count towards the throttle.
-      await this.loginAttempts.recordFailure(email, ip);
+      // BR-001-14: unknown email, wrong password and an inactive account are one answer. The
+      // count the attempt reserved stays: nothing more to record.
       throw new DomainError('INVALID_CREDENTIALS');
     }
 
-    await this.loginAttempts.recordSuccess(email);
+    await this.loginAttempts.recordSuccess(email, ip);
     return this.startSession(user);
   }
 
@@ -72,13 +75,14 @@ export class AuthService {
     // one does. A deactivated or closed account is treated as absent (BR-001-16).
     if (!user || (user.status ?? 'active') !== 'active') return;
 
-    // BR-001-24: works for Google-only accounts too. BR-001-22: the new token replaces older ones.
-    const token = await this.accountTokens.issue(user._id.toString(), 'password_reset');
-    // Not awaited: the delay of a real send would tell a known address from an unknown one
-    // (SC-05). A failure is logged by kind only (SC-15).
-    void this.deliver('Password reset email', () =>
-      this.emailService.sendPasswordResetEmail(user.email, token, user.name),
-    );
+    // Everything after the lookup runs detached: the token's writes and the real send would
+    // otherwise tell a known address from an unknown one by their delay (SC-05). A failure is
+    // logged by kind only (SC-15). BR-001-24: works for Google-only accounts too. BR-001-22: the
+    // new token replaces older ones.
+    this.detach('Password reset email', async () => {
+      const token = await this.accountTokens.issue(user._id.toString(), 'password_reset');
+      await this.emailService.sendPasswordResetEmail(user.email, token, user.name);
+    });
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
@@ -119,6 +123,7 @@ export class AuthService {
     sessionId: string,
     currentPassword: string,
     newPassword: string,
+    ip: string,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) {
@@ -129,10 +134,15 @@ export class AuthService {
       throw new DomainError('OAUTH_ACCOUNT_HAS_NO_PASSWORD');
     }
 
+    // SC-04: a stolen session must not be able to guess the current password at bcrypt speed, so
+    // this check shares sign-in's counters: the attempt is reserved first, a wrong password keeps
+    // it, a right one gives it back.
+    await this.loginAttempts.reserve(user.email, ip);
     const validPassword = await this.usersService.validatePassword(user.email, currentPassword);
     if (!validPassword) {
       throw new DomainError('CURRENT_PASSWORD_INCORRECT');
     }
+    await this.loginAttempts.recordSuccess(user.email, ip);
 
     await this.usersService.changePassword(userId, newPassword);
     // BR-001-19: every other session ends; the one that changed the password stays.
@@ -169,10 +179,33 @@ export class AuthService {
   /** BR-001-05, BR-001-23: a fresh 24-hour link replaces any earlier one. */
   private async sendConfirmationEmail(user: UserAccount): Promise<void> {
     const userId = typeof user._id === 'string' ? user._id : user._id.toHexString();
-    const token = await this.accountTokens.issue(userId, 'email_confirmation');
+    // Bound to the address it goes to: see verifyEmail.
+    const token = await this.accountTokens.issue(userId, 'email_confirmation', {
+      newEmail: user.email,
+    });
     await this.deliver('Verification email', () =>
       this.emailService.sendVerificationEmail(user.email, token, user.name),
     );
+  }
+
+  /**
+   * Runs mail work (token writes and the send) without making the request wait for it, so the
+   * answer to a recovery request takes the same time for every address (SC-05). It is tracked, so
+   * shutdown and tests can wait for it with `flushDeliveries`.
+   */
+  private detach(kind: string, task: () => Promise<void>): void {
+    const run = this.deliver(kind, task);
+    this.inFlight.add(run);
+    void run.finally(() => this.inFlight.delete(run));
+  }
+
+  /** Resolves once the mail work started so far has finished; it never rejects (see `deliver`). */
+  async flushDeliveries(): Promise<void> {
+    await Promise.all([...this.inFlight]);
+  }
+
+  async beforeApplicationShutdown(): Promise<void> {
+    await this.flushDeliveries(); // do not drop a recovery mail that is on its way out
   }
 
   /**
@@ -196,7 +229,14 @@ export class AuthService {
     if (!record) {
       throw new DomainError('INVALID_VERIFICATION_TOKEN');
     }
-    await this.usersService.markEmailVerified(record.userId);
+    // The link confirms the address it was mailed to, only while that is still the account's
+    // address; a changed email leaves the account unconfirmed (BR-001-04, BR-001-26).
+    if (
+      !record.newEmail ||
+      !(await this.usersService.confirmEmail(record.userId, record.newEmail))
+    ) {
+      throw new DomainError('INVALID_VERIFICATION_TOKEN');
+    }
   }
 
   async resendVerification(userId: string): Promise<void> {

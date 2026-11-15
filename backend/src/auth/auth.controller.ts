@@ -178,22 +178,31 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @UseGuards(ThrottlerGuard) // SC-04
   @HttpCode(HttpStatus.OK)
   @ApiJwtAuth()
   @ApiOperation({
     summary: 'Change the password of a local account',
-    description: 'Ends every other session of the account (BR-001-19).',
+    description:
+      'Ends every other session of the account (BR-001-19). The current-password check counts ' +
+      'like a sign-in attempt: TOO_MANY_ATTEMPTS (429) past 10 in 15 minutes (BR-001-15, SC-04).',
   })
   @ApiOkResponse({ type: MessageResponseDto })
+  @ApiTooManyRequestsResponse({
+    description: 'TOO_MANY_ATTEMPTS or TOO_MANY_REQUESTS',
+    type: ErrorResponseDto,
+  })
   async changePassword(
     @CurrentUser() user: AuthenticatedUser,
     @Body() passwordData: ChangePasswordDto,
+    @Ip() ip: string,
   ): Promise<MessageResponseDto> {
     await this.authService.changePassword(
       user.userId,
       user.sessionId,
       passwordData.currentPassword,
       passwordData.newPassword,
+      ip ?? 'unknown',
     );
     return new MessageResponseDto('Password changed successfully');
   }

@@ -27,14 +27,17 @@ export class AccountTokenService {
 
   /**
    * Issues a token for the user and returns the plain value, once. Earlier unused tokens of the
-   * same user and purpose stop working (BR-001-05, BR-001-22).
+   * same user and purpose stop working (BR-001-05, BR-001-22), also when two requests issue at the
+   * same moment: exactly one link stays valid.
+   *
+   * `newEmail` binds the token to an address: the address a confirmation was sent to
+   * (`email_confirmation`), or the one an `email_change` moves to.
    */
   async issue(
     userId: string,
     purpose: AccountTokenPurpose,
     options: { newEmail?: string } = {},
   ): Promise<string> {
-    await this.tokens.deleteUnused(userId, purpose);
     // BR-001-23: 256 bits from a CSPRNG.
     const plain = randomBytes(ACCOUNT_TOKEN_BYTES).toString('hex');
     await this.tokens.insert({
@@ -44,6 +47,7 @@ export class AccountTokenService {
       expiresAt: new Date(this.clock.now().getTime() + ACCOUNT_TOKEN_TTL_MS[purpose]),
       ...(options.newEmail === undefined ? {} : { newEmail: options.newEmail }),
     });
+    await this.tokens.deleteAllButNewestUnused(userId, purpose);
     return plain;
   }
 

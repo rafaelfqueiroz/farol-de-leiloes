@@ -18,7 +18,10 @@ export class AccountTokenEntity {
   @Prop({ type: String, required: true, unique: true })
   tokenHash!: string;
 
-  /** `email_change` only (BR-001-26): the address waiting for confirmation. */
+  /**
+   * The address the token is bound to: the one a confirmation link was mailed to
+   * (`email_confirmation`), or the one waiting for confirmation (`email_change`, BR-001-26).
+   */
   @Prop({ type: String, required: false })
   newEmail?: string;
 

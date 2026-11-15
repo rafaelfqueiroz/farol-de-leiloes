@@ -34,6 +34,24 @@ export class AccountTokenRepository {
       .exec();
   }
 
+  /**
+   * Leaves only the newest unused token (highest `_id`) of the user and purpose. Run after an
+   * insert, from every issuer: whichever cleanup runs last has seen every insert acknowledged
+   * before it, so concurrent issuers always end with exactly one valid link (BR-001-05,
+   * BR-001-22). Deleting "everything but mine" instead would let two issuers delete each other's
+   * token and leave none.
+   */
+  async deleteAllButNewestUnused(userId: string, purpose: AccountTokenPurpose): Promise<void> {
+    const filter = {
+      userId: { $eq: new Types.ObjectId(userId) },
+      purpose: { $eq: purpose },
+      usedAt: null,
+    };
+    const newest = await this.model.findOne(filter).sort({ _id: -1 }).select('_id').lean().exec();
+    if (!newest) return;
+    await this.model.deleteMany({ ...filter, _id: serverOperators({ $lt: newest._id }) }).exec();
+  }
+
   async insert(token: NewAccountToken): Promise<void> {
     await this.model.create({ ...token, userId: new Types.ObjectId(token.userId) });
   }
