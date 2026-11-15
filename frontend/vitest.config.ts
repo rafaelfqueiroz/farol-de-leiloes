@@ -48,10 +48,9 @@ export default defineConfig({
       exclude: ['**/*.test.{ts,tsx}', '**/*.d.ts'],
       reporter: ['text-summary', 'text', 'lcov'],
       thresholds: {
-        // TESTING §7: floor rounded down from measured coverage; #37 security regressions.
-        // The target remains 80% lines and branches (#57); the floor never goes down.
-        lines: 57,
-        branches: 54,
+        // TESTING §7: the 80% target (#57), reached; the threshold never goes down.
+        lines: 80,
+        branches: 80,
       },
     },
   },
