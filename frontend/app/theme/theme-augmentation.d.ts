@@ -76,11 +76,13 @@ declare module '@mui/material/styles' {
   }
 
   interface TypographyVariants {
+    display: CSSProperties;
     metric: CSSProperties;
     wordmark: CSSProperties;
   }
 
   interface TypographyVariantsOptions {
+    display?: CSSProperties;
     metric?: CSSProperties;
     wordmark?: CSSProperties;
   }
@@ -112,6 +114,7 @@ declare module '@mui/material/styles' {
 
 declare module '@mui/material/Typography' {
   interface TypographyPropsVariantOverrides {
+    display: true;
     metric: true;
     wordmark: true;
   }

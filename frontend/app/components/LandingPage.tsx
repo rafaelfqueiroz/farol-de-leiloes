@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import type { Theme } from '@mui/material/styles';
 import {
   Box,
   Container,
@@ -35,14 +36,17 @@ import Logo from '@/app/components/patterns/Logo';
 import { formatMoney, formatPercent } from '@/lib/money';
 import { formatCount } from '@/lib/numbers';
 
+// DS-01: a size is a multiple of the theme's spacing unit, never a pixel literal.
+const space = (units: number) => (theme: Theme) => theme.spacing(units);
+
 // DS-20: the copy lives in the `landing` catalogue under these ids; only structure stays here.
 const FEATURES = [
-  { id: 'catalogue', icon: <HomeWorkIcon sx={{ fontSize: 40 }} /> },
-  { id: 'payment', icon: <PaymentsIcon sx={{ fontSize: 40 }} /> },
-  { id: 'risk', icon: <AnalyticsIcon sx={{ fontSize: 40 }} /> },
-  { id: 'simulator', icon: <CalculateIcon sx={{ fontSize: 40 }} /> },
-  { id: 'documents', icon: <SecurityIcon sx={{ fontSize: 40 }} /> },
-  { id: 'alerts', icon: <TrendingUpIcon sx={{ fontSize: 40 }} /> },
+  { id: 'catalogue', icon: <HomeWorkIcon sx={{ fontSize: space(5) }} /> },
+  { id: 'payment', icon: <PaymentsIcon sx={{ fontSize: space(5) }} /> },
+  { id: 'risk', icon: <AnalyticsIcon sx={{ fontSize: space(5) }} /> },
+  { id: 'simulator', icon: <CalculateIcon sx={{ fontSize: space(5) }} /> },
+  { id: 'documents', icon: <SecurityIcon sx={{ fontSize: space(5) }} /> },
+  { id: 'alerts', icon: <TrendingUpIcon sx={{ fontSize: space(5) }} /> },
 ] as const;
 
 const STEPS = ['signUp', 'search', 'analyse', 'win'] as const;
@@ -155,7 +159,7 @@ export default function LandingPage() {
               shows. display:none keeps exactly one accessible name exposed at a time. */}
           <ButtonBase
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            sx={{ minWidth: 44, minHeight: 44, borderRadius: 1 }}
+            sx={{ minWidth: space(5.5), minHeight: space(5.5), borderRadius: 1 }}
           >
             <Box sx={{ display: { xs: 'flex', sm: 'none' } }}>
               <Logo variant="mark" size={32} />
@@ -173,10 +177,10 @@ export default function LandingPage() {
                 '&::after': {
                   content: '""',
                   position: 'absolute',
-                  bottom: 6,
-                  left: 8,
-                  right: 8,
-                  height: (theme) => theme.spacing(0.25),
+                  bottom: space(0.75),
+                  left: space(1),
+                  right: space(1),
+                  height: space(0.25),
                   backgroundColor: 'currentColor',
                   transform: 'scaleX(0)',
                   transformOrigin: 'left',
@@ -223,15 +227,8 @@ export default function LandingPage() {
                     '& .MuiChip-icon': { color: 'text.secondary' },
                   }}
                 />
-                <Typography
-                  variant="h2"
-                  sx={{
-                    fontWeight: 700,
-                    fontSize: { xs: '2rem', md: '3rem' },
-                    mb: 2,
-                    lineHeight: 1.2,
-                  }}
-                >
+                {/* DS-15: the page's only h1; `display` is the one size above h1 (DS-11) */}
+                <Typography variant="display" component="h1" sx={{ mb: 2, textWrap: 'balance' }}>
                   {t.rich('hero.title', {
                     discount,
                     // DS-24: a favourable figure, not the brand colour; the words carry the meaning (DS-10)
@@ -242,28 +239,10 @@ export default function LandingPage() {
                     ),
                   })}
                 </Typography>
-                <Typography
-                  variant="h6"
-                  sx={{
-                    fontWeight: 400,
-                    opacity: 0.9,
-                    mb: 4,
-                    fontSize: { xs: '1rem', md: '1.25rem' },
-                  }}
-                >
+                <Typography variant="subtitle1" component="p" color="text.secondary" sx={{ mb: 4 }}>
                   {t('hero.subtitle')}
                 </Typography>
-                <Button
-                  variant="contained"
-                  size="large"
-                  onClick={handleLogin}
-                  sx={{
-                    px: 4,
-                    py: 1.5,
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                  }}
-                >
+                <Button variant="contained" size="large" onClick={handleLogin} sx={{ px: 4 }}>
                   {t('hero.cta')}
                 </Button>
               </Box>
@@ -271,26 +250,26 @@ export default function LandingPage() {
               {/* Stats */}
               <Box sx={{ display: 'flex', gap: 4, mt: 4, flexWrap: 'wrap' }}>
                 <Box>
-                  <Typography variant="h4" fontWeight={700}>
+                  <Typography variant="metric" component="p">
                     {t('hero.stats.properties.value')}
                   </Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                  <Typography variant="body2" color="text.secondary">
                     {t('hero.stats.properties.label')}
                   </Typography>
                 </Box>
                 <Box>
-                  <Typography variant="h4" fontWeight={700}>
+                  <Typography variant="metric" component="p">
                     {formatCount(STATES_SERVED)}
                   </Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                  <Typography variant="body2" color="text.secondary">
                     {t('hero.stats.states.label')}
                   </Typography>
                 </Box>
                 <Box>
-                  <Typography variant="h4" fontWeight={700}>
+                  <Typography variant="metric" component="p">
                     {discount}
                   </Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                  <Typography variant="body2" color="text.secondary">
                     {t('hero.stats.discount.label')}
                   </Typography>
                 </Box>
@@ -301,7 +280,7 @@ export default function LandingPage() {
               <Box
                 sx={{
                   position: 'relative',
-                  height: 400,
+                  height: space(50),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -309,8 +288,8 @@ export default function LandingPage() {
               >
                 <Box
                   sx={{
-                    width: 300,
-                    height: 300,
+                    width: space(37.5),
+                    height: space(37.5),
                     borderRadius: '50%',
                     backgroundColor: 'background.paper',
                     display: 'flex',
@@ -318,7 +297,7 @@ export default function LandingPage() {
                     justifyContent: 'center',
                   }}
                 >
-                  <HomeWorkIcon sx={{ fontSize: 150, color: 'primary.main' }} />
+                  <HomeWorkIcon sx={{ fontSize: space(19), color: 'primary.main' }} />
                 </Box>
               </Box>
             </Grid>
@@ -329,10 +308,15 @@ export default function LandingPage() {
       {/* Features Section */}
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
-          <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: 'text.primary' }}>
+          <Typography variant="h2" sx={{ mb: 2 }}>
             {t('features.title')}
           </Typography>
-          <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
+          <Typography
+            variant="subtitle1"
+            component="p"
+            color="text.secondary"
+            sx={{ maxWidth: space(75), mx: 'auto' }}
+          >
             {t('features.subtitle')}
           </Typography>
         </Box>
@@ -345,7 +329,7 @@ export default function LandingPage() {
                   height: '100%',
                   transition: 'transform 0.2s, box-shadow 0.2s',
                   '&:hover': {
-                    transform: 'translateY(-4px)',
+                    transform: (theme) => `translateY(${theme.spacing(-0.5)})`,
                     boxShadow: 4,
                   },
                 }}
@@ -353,8 +337,8 @@ export default function LandingPage() {
                 <CardContent sx={{ p: 3 }}>
                   <Box
                     sx={{
-                      width: 64,
-                      height: 64,
+                      width: space(8),
+                      height: space(8),
                       borderRadius: 2,
                       backgroundColor: 'primary.main',
                       color: 'primary.contrastText',
@@ -366,7 +350,7 @@ export default function LandingPage() {
                   >
                     {feature.icon}
                   </Box>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1, color: 'text.primary' }}>
+                  <Typography variant="h5" component="h3" sx={{ mb: 1 }}>
                     {t(`features.${feature.id}.title`)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -375,11 +359,7 @@ export default function LandingPage() {
                   <Chip
                     label={t(`features.${feature.id}.highlight`, { discount })}
                     size="small"
-                    sx={{
-                      backgroundColor: 'background.muted',
-                      color: 'text.primary',
-                      fontWeight: 500,
-                    }}
+                    sx={{ backgroundColor: 'background.muted', color: 'text.primary' }}
                   />
                 </CardContent>
               </Card>
@@ -392,10 +372,10 @@ export default function LandingPage() {
       <Box sx={{ backgroundColor: 'primary.soft', py: 8 }}>
         <Container maxWidth="lg">
           <Box sx={{ textAlign: 'center', mb: 6 }}>
-            <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: 'text.primary' }}>
+            <Typography variant="h2" sx={{ mb: 2 }}>
               {t('howItWorks.title')}
             </Typography>
-            <Typography variant="h6" color="text.secondary">
+            <Typography variant="subtitle1" component="p" color="text.secondary">
               {t('howItWorks.subtitle')}
             </Typography>
           </Box>
@@ -406,8 +386,8 @@ export default function LandingPage() {
                 <Box sx={{ textAlign: 'center' }}>
                   <Box
                     sx={{
-                      width: 60,
-                      height: 60,
+                      width: space(7.5),
+                      height: space(7.5),
                       borderRadius: '50%',
                       backgroundColor: 'primary.main',
                       color: 'primary.contrastText',
@@ -416,13 +396,12 @@ export default function LandingPage() {
                       justifyContent: 'center',
                       mx: 'auto',
                       mb: 2,
-                      fontSize: '1.5rem',
-                      fontWeight: 700,
+                      typography: 'h3',
                     }}
                   >
                     {formatCount(index + 1)}
                   </Box>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1, color: 'text.primary' }}>
+                  <Typography variant="h5" component="h3" sx={{ mb: 1 }}>
                     {t(`howItWorks.${step}.title`)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -436,12 +415,17 @@ export default function LandingPage() {
       </Box>
 
       {/* Pricing Section */}
-      <Container id="planos" maxWidth="lg" sx={{ py: 8, scrollMarginTop: '80px' }}>
+      <Container id="planos" maxWidth="lg" sx={{ py: 8, scrollMarginTop: space(10) }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
-          <Typography variant="h3" fontWeight={700} sx={{ mb: 2, color: 'text.primary' }}>
+          <Typography variant="h2" sx={{ mb: 2 }}>
             {t('pricing.title')}
           </Typography>
-          <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
+          <Typography
+            variant="subtitle1"
+            component="p"
+            color="text.secondary"
+            sx={{ maxWidth: space(75), mx: 'auto' }}
+          >
             {t('pricing.subtitle')}
           </Typography>
         </Box>
@@ -464,30 +448,29 @@ export default function LandingPage() {
                   <Box
                     sx={{
                       position: 'absolute',
-                      top: -12,
+                      top: space(-1.5),
                       left: '50%',
                       transform: 'translateX(-50%)',
                     }}
                   >
                     <Chip
-                      icon={<StarIcon sx={{ fontSize: 16 }} />}
+                      icon={<StarIcon />}
                       label={tPlan('popular')}
                       sx={{
                         backgroundColor: 'secondary.main',
                         color: 'secondary.contrastText',
-                        fontWeight: 600,
                         '& .MuiChip-icon': { color: 'secondary.contrastText' },
                       }}
                     />
                   </Box>
                 )}
                 <CardContent sx={{ p: 4 }}>
-                  <Typography variant="h5" fontWeight={700} sx={{ mb: 1, color: 'text.primary' }}>
+                  <Typography variant="h4" component="h3" sx={{ mb: 1 }}>
                     {tPlan(`names.${plan.id}`)}
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'baseline', mb: 2 }}>
                     {/* DS-24: a price is a figure, not a link */}
-                    <Typography variant="h3" fontWeight={700} sx={{ color: 'text.primary' }}>
+                    <Typography variant="metric" component="p">
                       {plan.price === null ? tPlan('comingSoon') : formatMoney(plan.price)}
                     </Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ ml: 1 }}>
@@ -503,11 +486,11 @@ export default function LandingPage() {
                   <List dense>
                     {plan.features.map((feature) => (
                       <ListItem key={feature.id} sx={{ px: 0 }}>
-                        <ListItemIcon sx={{ minWidth: 32 }}>
+                        <ListItemIcon sx={{ minWidth: space(4) }}>
                           {feature.included ? (
-                            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                            <CheckCircleIcon fontSize="small" sx={{ color: 'success.main' }} />
                           ) : (
-                            <CancelIcon sx={{ fontSize: 20 }} />
+                            <CancelIcon fontSize="small" />
                           )}
                         </ListItemIcon>
                         <ListItemText
@@ -558,11 +541,12 @@ export default function LandingPage() {
       >
         <Container maxWidth="md">
           <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="h3" fontWeight={700} sx={{ mb: 2 }}>
+            <Typography variant="h2" sx={{ mb: 2 }}>
               {t('cta.title')}
             </Typography>
             <Typography
-              variant="h6"
+              variant="subtitle1"
+              component="p"
               sx={(theme) => ({
                 mb: 4,
                 opacity: 0.9,
@@ -580,9 +564,6 @@ export default function LandingPage() {
                 backgroundColor: 'primary.contrastText',
                 color: 'primary.main',
                 px: 6,
-                py: 1.5,
-                fontSize: '1.1rem',
-                fontWeight: 600,
                 border: 1,
                 borderColor: 'transparent',
                 '&:hover': {
