@@ -36,7 +36,19 @@ beforeEach(() => {
   setAuth();
 });
 
+const t = messages.verifyEmail.pending;
+
 describe('VerifyEmailPage', () => {
+  it('has one h1 inside a main and names the e-mail', async () => {
+    const { container } = render(<VerifyEmailPage />);
+
+    expect(screen.getByRole('main')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: t.title })).toBeInTheDocument();
+    expect(screen.getByText('ana@exemplo.test')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it('names the address the email was sent to and has no accessibility violations', async () => {
     const { container } = render(<VerifyEmailPage />);
 
@@ -49,9 +61,19 @@ describe('VerifyEmailPage', () => {
     setAuth({ loading: true });
     render(<VerifyEmailPage />);
 
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
-    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    // the spinner is aria-hidden and the only heading is the loading h1, visually hidden
+    expect(screen.getByRole('progressbar', { hidden: true })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: t.title })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(env.push).not.toHaveBeenCalled();
+  });
+
+  it('keeps one hidden h1 while the session loads', () => {
+    setAuth({ loading: true });
+    render(<VerifyEmailPage />);
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('main')).toBeInTheDocument();
   });
 
   it('sends a visitor to the login', () => {
@@ -62,12 +84,30 @@ describe('VerifyEmailPage', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('sends a signed-out visitor to the sign-in page', () => {
+    setAuth({ isAuthenticated: false });
+    render(<VerifyEmailPage />);
+
+    expect(env.push).toHaveBeenCalledWith('/login');
+  });
+
   it('sends an already verified account home', () => {
     setAuth({ emailVerified: true });
     const { container } = render(<VerifyEmailPage />);
 
     expect(env.push).toHaveBeenCalledWith('/');
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('resends the e-mail and confirms it', async () => {
+    env.resend.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<VerifyEmailPage />);
+
+    await user.click(screen.getByRole('button', { name: t.resend }));
+
+    expect(env.resend).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('alert')).toHaveTextContent(t.sent);
   });
 
   it('asks for a new email and confirms it was sent', async () => {
@@ -107,6 +147,17 @@ describe('VerifyEmailPage', () => {
       messages.errors.EMAIL_ALREADY_VERIFIED,
     );
     expect(screen.queryByText(messages.verifyEmail.pending.sent)).not.toBeInTheDocument();
+  });
+
+  it('signs out and goes to the sign-in page', async () => {
+    env.logout.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<VerifyEmailPage />);
+
+    await user.click(screen.getByRole('button', { name: messages.common.signOut }));
+
+    expect(env.logout).toHaveBeenCalledTimes(1);
+    expect(env.push).toHaveBeenCalledWith('/login');
   });
 
   it('signs out and goes to the login', async () => {

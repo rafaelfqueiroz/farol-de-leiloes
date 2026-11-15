@@ -3,16 +3,8 @@
 import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import {
-  Box,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Typography,
-  Alert,
-  CircularProgress,
-} from '@mui/material';
+import { Stack, TextField, Button, Alert, CircularProgress } from '@mui/material';
+import { AuthFormPage } from '@/app/components/patterns/PublicScreens';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 // The shortest password the form accepts
@@ -72,71 +64,43 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 2,
-      }}
-    >
-      <Card sx={{ maxWidth: 450, width: '100%' }}>
-        <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" component="h1" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
-            {t('title')}
-          </Typography>
+    <AuthFormPage title={t('title')} summary={success ? undefined : t('hint')}>
+      {error && <Alert severity="error">{error}</Alert>}
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
+      {success ? (
+        <Alert severity="success">{t('success')}</Alert>
+      ) : (
+        <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+          <TextField
+            fullWidth
+            label={t('password')}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
 
-          {success ? (
-            <Alert severity="success" sx={{ mb: 2 }}>
-              {t('success')}
-            </Alert>
-          ) : (
-            <form onSubmit={handleSubmit}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                {t('hint')}
-              </Typography>
+          <TextField
+            fullWidth
+            label={t('confirmPassword')}
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+          />
 
-              <TextField
-                fullWidth
-                label={t('password')}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                margin="normal"
-                required
-              />
-
-              <TextField
-                fullWidth
-                label={t('confirmPassword')}
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                margin="normal"
-                required
-              />
-
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                fullWidth
-                disabled={loading}
-                sx={{ mt: 3 }}
-              >
-                {loading ? <CircularProgress size={24} /> : t('submit')}
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
-    </Box>
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            size="large"
+            fullWidth
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size="1.5rem" /> : t('submit')}
+          </Button>
+        </Stack>
+      )}
+    </AuthFormPage>
   );
 }

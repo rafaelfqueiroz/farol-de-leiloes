@@ -4,9 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
-  Box,
-  Card,
-  CardContent,
+  Stack,
   TextField,
   Button,
   Typography,
@@ -17,7 +15,7 @@ import {
 import GoogleIcon from '@mui/icons-material/Google';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
-import Logo from '@/app/components/patterns/Logo';
+import { AuthFormPage } from '@/app/components/patterns/PublicScreens';
 import { publicEnv } from '@/lib/env';
 import { useApiErrorMessage } from '@/lib/api-error';
 
@@ -50,107 +48,63 @@ export default function LoginPage() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: 'background.default',
-        padding: 2,
-      }}
-    >
-      <Card sx={{ maxWidth: 450, width: '100%' }}>
-        <CardContent sx={{ p: 4 }}>
-          <Box sx={{ textAlign: 'center', mb: 3 }}>
-            {/* the card is background.paper, so the mark's primary tower reads on it */}
-            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-              <Logo variant="lockup" size={40} />
-            </Box>
-            <Typography component="h1" variant="body1" color="text.secondary">
-              {t('subtitle')}
-            </Typography>
-          </Box>
+    <AuthFormPage title={t('title')} summary={t('subtitle')}>
+      {error && <Alert severity="error">{error}</Alert>}
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
+      <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+        <TextField
+          fullWidth
+          label={t('email')}
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+        />
 
-          <form onSubmit={handleSubmit}>
-            <TextField
-              fullWidth
-              label={t('email')}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              sx={{ mb: 2 }}
-              autoComplete="email"
-            />
+        <TextField
+          fullWidth
+          label={t('password')}
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          autoComplete="current-password"
+        />
 
-            <TextField
-              fullWidth
-              label={t('password')}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              sx={{ mb: 3 }}
-              autoComplete="current-password"
-            />
+        <Button fullWidth size="large" variant="contained" type="submit" disabled={loading}>
+          {loading ? t('submitting') : tCommon('signIn')}
+        </Button>
+      </Stack>
 
-            <Button
-              fullWidth
-              variant="contained"
-              type="submit"
-              disabled={loading}
-              sx={{ mb: 2, py: 1.5 }}
-            >
-              {loading ? t('submitting') : tCommon('signIn')}
-            </Button>
-          </form>
+      <Divider>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          {t('or')}
+        </Typography>
+      </Divider>
 
-          <Divider sx={{ my: 3 }}>
-            <Typography variant="body2" color="text.secondary">
-              {t('or')}
-            </Typography>
-          </Divider>
+      <Button
+        fullWidth
+        size="large"
+        variant="outlined"
+        startIcon={<GoogleIcon />}
+        onClick={() => {
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- the Google sign-in starts on the API (a redirect to the provider), not on a Next page, so it needs a full-page navigation
+          window.location.assign(`${API_URL}/api/auth/google`);
+        }}
+      >
+        {t('google')}
+      </Button>
 
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<GoogleIcon />}
-            onClick={() => {
-              // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- the Google sign-in starts on the API (a redirect to the provider), not on a Next page, so it needs a full-page navigation
-              window.location.assign(`${API_URL}/api/auth/google`);
-            }}
-            sx={{
-              mb: 3,
-              py: 1.5,
-            }}
-          >
-            {t('google')}
-          </Button>
-
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="body2" color="text.secondary">
-              {t.rich('noAccount', {
-                link: (chunks) => (
-                  <MuiLink
-                    component={Link}
-                    href="/register"
-                    sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}
-                  >
-                    {chunks}
-                  </MuiLink>
-                ),
-              })}
-            </Typography>
-          </Box>
-        </CardContent>
-      </Card>
-    </Box>
+      <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+        {t.rich('noAccount', {
+          link: (chunks) => (
+            <MuiLink component={Link} href="/register" variant="subtitle2">
+              {chunks}
+            </MuiLink>
+          ),
+        })}
+      </Typography>
+    </AuthFormPage>
   );
 }

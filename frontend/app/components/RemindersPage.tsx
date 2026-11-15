@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import ErrorState from '@/app/components/patterns/ErrorState';
+import PageHeader from '@/app/components/patterns/PageHeader';
+import PageShell from '@/app/components/patterns/PageShell';
 import {
   Box,
   Typography,
@@ -171,126 +173,121 @@ export default function RemindersPage() {
     router.push(`/auction/${auctionCode}`);
   };
 
+  // DS-14: the shell owns <main>; the page only picks its width. DS-15: one h1 in every state.
   if (loading) {
     return (
-      <Box>
-        <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
-          {t('title')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {t('subtitle')}
-        </Typography>
+      <PageShell width="app">
+        <PageHeader title={t('title')} summary={t('subtitle')} />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} variant="rounded" height={120} />
           ))}
         </Box>
-      </Box>
+      </PageShell>
     );
   }
 
   return (
-    <Box>
-      <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
-        {t('title')}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        {t('subtitle')}
-      </Typography>
+    <>
+      <PageShell width="app">
+        <PageHeader title={t('title')} summary={t('subtitle')} />
 
-      {loadFailed && (
-        <ErrorState
-          title={tLoadFailed('title')}
-          message={tLoadFailed('message')}
-          onRetry={() => void refreshReminders()}
-        />
-      )}
+        {loadFailed && (
+          <ErrorState
+            title={tLoadFailed('title')}
+            message={tLoadFailed('message')}
+            onRetry={() => void refreshReminders()}
+          />
+        )}
 
-      {upcomingReminders.length === 0 ? (
-        loadFailed ? null : (
-          <Card sx={{ textAlign: 'center', py: 6 }}>
-            <CardContent>
-              <NotificationsIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
-                {t('empty.title')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                {t('empty.description')}
-              </Typography>
-              <Button variant="contained" onClick={() => router.push('/search')}>
-                {t('empty.action')}
-              </Button>
-            </CardContent>
-          </Card>
-        )
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {upcomingReminders.map((reminder) => (
-            <Card key={reminder._id}>
-              <CardContent sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-                <Box sx={{ flex: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 600 }}>
-                      {auctionTitle(reminder.auction)}
-                    </Typography>
-                    <Chip
-                      icon={CHANNEL_ICONS[reminder.channel]}
-                      label={t(`channel.${reminder.channel}`)}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </Box>
-
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    {formatAddress(reminder.auction)}
-                  </Typography>
-
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                    <Typography variant="body2">
-                      {t.rich('scheduledFor', {
-                        strong: bold,
-                        date: () => <DateText value={reminder.scheduledAt} withTime />,
-                      })}
-                    </Typography>
-                    {reminder.description && (
-                      <Typography variant="body2" color="text.secondary">
-                        {t.rich('note', { strong: bold, text: reminder.description })}
-                      </Typography>
-                    )}
-                  </Box>
-                </Box>
-
-                <Box sx={{ display: 'flex', gap: 0.5 }}>
-                  <IconButton
-                    onClick={() => handleNavigateToAuction(reminder.auction.code)}
-                    size="small"
-                    title={t('actions.viewAuction')}
-                    sx={{ color: 'info.main' }}
-                  >
-                    <OpenInNewIcon />
-                  </IconButton>
-                  <IconButton
-                    onClick={() => handleOpenEditDialog(reminder)}
-                    size="small"
-                    title={t('actions.edit')}
-                    sx={{ color: 'primary.main' }}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    onClick={() => handleOpenDeleteDialog(reminder)}
-                    size="small"
-                    title={t('actions.remove')}
-                    color="destructive"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </Box>
+        {upcomingReminders.length === 0 ? (
+          loadFailed ? null : (
+            <Card sx={{ textAlign: 'center', py: 6 }}>
+              <CardContent>
+                <NotificationsIcon
+                  sx={(theme) => ({ fontSize: theme.spacing(8), color: 'text.disabled', mb: 2 })}
+                />
+                <Typography variant="h5" component="h2" sx={{ color: 'text.secondary', mb: 1 }}>
+                  {t('empty.title')}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  {t('empty.description')}
+                </Typography>
+                <Button variant="contained" onClick={() => router.push('/search')}>
+                  {t('empty.action')}
+                </Button>
               </CardContent>
             </Card>
-          ))}
-        </Box>
-      )}
+          )
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {upcomingReminders.map((reminder) => (
+              <Card key={reminder._id}>
+                <CardContent sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                  <Box sx={{ flex: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      <Typography variant="h5" component="h2">
+                        {auctionTitle(reminder.auction)}
+                      </Typography>
+                      <Chip
+                        icon={CHANNEL_ICONS[reminder.channel]}
+                        label={t(`channel.${reminder.channel}`)}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </Box>
+
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      {formatAddress(reminder.auction)}
+                    </Typography>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                      <Typography variant="body2">
+                        {t.rich('scheduledFor', {
+                          strong: bold,
+                          date: () => <DateText value={reminder.scheduledAt} withTime />,
+                        })}
+                      </Typography>
+                      {reminder.description && (
+                        <Typography variant="body2" color="text.secondary">
+                          {t.rich('note', { strong: bold, text: reminder.description })}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <IconButton
+                      onClick={() => handleNavigateToAuction(reminder.auction.code)}
+                      size="small"
+                      title={t('actions.viewAuction')}
+                      sx={{ color: 'text.secondary' }}
+                    >
+                      <OpenInNewIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={() => handleOpenEditDialog(reminder)}
+                      size="small"
+                      title={t('actions.edit')}
+                      sx={{ color: 'primary.main' }}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={() => handleOpenDeleteDialog(reminder)}
+                      size="small"
+                      title={t('actions.remove')}
+                      color="destructive"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        )}
+      </PageShell>
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onClose={handleCloseEditDialog} maxWidth="sm" fullWidth>
@@ -399,6 +396,6 @@ export default function RemindersPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

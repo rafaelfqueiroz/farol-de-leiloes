@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Box, Card, CardContent, Typography, Button, Alert, CircularProgress } from '@mui/material';
-import EmailIcon from '@mui/icons-material/Email';
+import { Typography, Button, Alert } from '@mui/material';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
+import { LoadingScreen, ResultScreen } from '@/app/components/patterns/PublicScreens';
 import { useAuth } from '../contexts/AuthContext';
 import { useApiErrorMessage } from '@/lib/api-error';
 
@@ -50,18 +51,7 @@ export default function VerifyEmailPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingScreen title={tCommon('loading')} />;
   }
 
   if (!isAuthenticated || emailVerified) {
@@ -69,61 +59,30 @@ export default function VerifyEmailPage() {
   }
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 2,
-      }}
+    <ResultScreen
+      tone="info"
+      icon={MailOutlineIcon}
+      title={t('title')}
+      description={t.rich('description', {
+        email: user?.email ?? '',
+        strong: (chunks) => <strong>{chunks}</strong>,
+      })}
     >
-      <Card sx={{ maxWidth: 450, width: '100%' }}>
-        <CardContent sx={{ p: 4, textAlign: 'center' }}>
-          <EmailIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+      {sent && <Alert severity="success">{t('sent')}</Alert>}
 
-          <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
-            {t('title')}
-          </Typography>
+      {error && <Alert severity="error">{error}</Alert>}
 
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            {t.rich('description', {
-              email: user?.email ?? '',
-              strong: (chunks) => <strong>{chunks}</strong>,
-            })}
-          </Typography>
+      <Button fullWidth size="large" variant="contained" onClick={handleResend} disabled={sending}>
+        {sending ? t('sending') : t('resend')}
+      </Button>
 
-          {sent && (
-            <Alert severity="success" sx={{ mb: 3 }}>
-              {t('sent')}
-            </Alert>
-          )}
+      <Button fullWidth size="large" variant="outlined" onClick={handleLogout}>
+        {tCommon('signOut')}
+      </Button>
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
-
-          <Button
-            fullWidth
-            variant="contained"
-            onClick={handleResend}
-            disabled={sending}
-            sx={{ mb: 2, py: 1.5 }}
-          >
-            {sending ? t('sending') : t('resend')}
-          </Button>
-
-          <Button fullWidth variant="outlined" onClick={handleLogout} sx={{ py: 1.5 }}>
-            {tCommon('signOut')}
-          </Button>
-
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 3, display: 'block' }}>
-            {t('expiry')}
-          </Typography>
-        </CardContent>
-      </Card>
-    </Box>
+      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+        {t('expiry')}
+      </Typography>
+    </ResultScreen>
   );
 }

@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithProviders as render } from '@/test/render';
+import messages from '@/messages/pt-BR.json';
+import { axe, renderWithProviders as render } from '@/test/render';
 import AuthCallbackPage from './page';
 
 // SPEC-001: the landing of the Google sign-in. The backend redirects here with `?token=`; the page
@@ -22,12 +23,33 @@ vi.mock('@/lib/report-client-error', () => ({ reportClientError: env.report }));
 beforeEach(() => {
   window.localStorage.clear();
   env.push.mockReset();
-  env.loadUser.mockReset();
+  env.loadUser.mockReset().mockResolvedValue(undefined);
   env.report.mockReset();
   env.search = '';
 });
 
 describe('AuthCallbackPage', () => {
+  it('shows a spinner with a hidden h1 and sends a visitor without token to the sign-in', async () => {
+    const { container } = render(<AuthCallbackPage />);
+
+    expect(screen.getByRole('main')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(
+      screen.getByRole('heading', { level: 1, name: messages.authCallback.authenticating }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(env.push).toHaveBeenCalledWith('/login'));
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('stores the token, loads the user and goes home', async () => {
+    env.search = 'token=jwt-1';
+    render(<AuthCallbackPage />);
+
+    await waitFor(() => expect(env.push).toHaveBeenCalledWith('/'));
+    expect(localStorage.getItem('token')).toBe('jwt-1');
+    expect(env.loadUser).toHaveBeenCalledTimes(1);
+  });
+
   it('says it is authenticating', () => {
     env.search = 'token=jwt-1';
     env.loadUser.mockReturnValue(new Promise(() => undefined));

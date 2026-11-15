@@ -2,12 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Alert, Box, Pagination, Typography } from '@mui/material';
+import Link from 'next/link';
+import { Box, Button, Pagination } from '@mui/material';
+import FavoriteBorderOutlined from '@mui/icons-material/FavoriteBorderOutlined';
 import { useTranslations } from 'next-intl';
 import { useFavorites } from '../contexts/FavoritesContext';
 import type { Auction } from '@/lib/auction';
 import { useAuth } from '../contexts/AuthContext';
 import AuctionCard from './AuctionCard';
+import EmptyState from './patterns/EmptyState';
+import ErrorState from './patterns/ErrorState';
+import PageHeader from './patterns/PageHeader';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 import { formatCount } from '@/lib/numbers';
 import { pageCount, type Paginated } from '@/lib/pagination';
@@ -16,11 +21,9 @@ import { reportClientError } from '@/lib/report-client-error';
 // AR-35: the favourites list is paginated; this is how many cards one page shows.
 const PAGE_SIZE = 20;
 
-// decoration, not copy (DS-20)
-const EMPTY_ICON = '💔';
-
 export default function FavoritesView() {
   const t = useTranslations('favorites');
+  const tLoadFailed = useTranslations('loadFailed.favorites');
   const { favoriteCodes, loading: favoritesLoading, toggleFavorite } = useFavorites();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -28,6 +31,8 @@ export default function FavoritesView() {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<Paginated<Auction> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // bumped by the error state's retry, which loads the list again
+  const [attempt, setAttempt] = useState(0);
 
   // The cards come from the paginated list; the codes the context holds say when it is stale (a
   // favourite added or removed anywhere), so the page loads again when they change.
@@ -60,7 +65,15 @@ export default function FavoritesView() {
     return () => {
       current = false;
     };
-  }, [authLoading, isAuthenticated, favoritesLoading, favoriteCodes, page, apiErrorMessage]);
+  }, [
+    authLoading,
+    isAuthenticated,
+    favoritesLoading,
+    favoriteCodes,
+    page,
+    attempt,
+    apiErrorMessage,
+  ]);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -77,30 +90,46 @@ export default function FavoritesView() {
   // Backend already filters out inactive auctions (unavailable or past date)
   // Only active favorites are returned
 
+  // DS-15: the view owns the page's h1 in every state, so the page has one h1 while the list loads
+  // and when it fails
   if (error) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <>
+        <PageHeader title={t('title')} />
+        <ErrorState
+          title={tLoadFailed('title')}
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setAttempt((n) => n + 1);
+          }}
+        />
+      </>
+    );
   }
 
   // the first page has not arrived yet
   if (!result) {
-    return null;
+    return <PageHeader title={t('title')} />;
   }
 
   const { items: favorites, total } = result;
 
   if (total === 0) {
     return (
-      <Box sx={{ textAlign: 'center', py: 12 }}>
-        <Box aria-hidden sx={{ fontSize: 60, mb: 2 }}>
-          {EMPTY_ICON}
-        </Box>
-        <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-          {t('emptyTitle')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {t('emptyHint')}
-        </Typography>
-      </Box>
+      <>
+        <PageHeader title={t('title')} summary={t('emptySummary')} />
+        <EmptyState
+          icon={FavoriteBorderOutlined}
+          title={t('emptyTitle')}
+          description={t('emptyHint')}
+          actions={
+            <Button component={Link} href="/search" variant="outlined">
+              {t('emptyAction')}
+            </Button>
+          }
+        />
+      </>
     );
   }
 
@@ -116,30 +145,25 @@ export default function FavoritesView() {
   );
 
   return (
-    <Box>
-      {/* Page Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
-          {t('title')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {t('summary', { count: total, formatted: formatCount(total) })}
-        </Typography>
-      </Box>
+    <>
+      <PageHeader
+        title={t('title')}
+        summary={t('summary', { count: total, formatted: formatCount(total) })}
+      />
 
       {/* Active Favorites */}
       <Box
-        sx={{
+        sx={(theme) => ({
           display: 'grid',
           gap: 2,
-          gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-        }}
+          gridTemplateColumns: `repeat(auto-fill, minmax(${theme.spacing(44)}, 1fr))`,
+        })}
       >
         {favorites.map(renderAuctionCard)}
       </Box>
 
       {total > PAGE_SIZE && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
           <Pagination
             count={pageCount(total, PAGE_SIZE)}
             page={page}
@@ -152,6 +176,6 @@ export default function FavoritesView() {
           />
         </Box>
       )}
-    </Box>
+    </>
   );
 }

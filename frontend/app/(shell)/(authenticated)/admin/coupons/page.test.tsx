@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithProviders as render } from '@/test/render';
+import { axe, renderWithProviders as render } from '@/test/render';
 import AdminCouponsPage from './page';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -77,5 +77,36 @@ describe('AdminCouponsPage coupon discount', () => {
 
     expect(await screen.findByText(/até duas casas decimais/)).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  });
+});
+
+describe('AdminCouponsPage structure (DS-15)', () => {
+  it('has one h1 with the new-coupon action beside it, and no <main> of its own', async () => {
+    render(<AdminCouponsPage />);
+    await screen.findByText('R$ 10,00');
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Gerenciar Cupons' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /Novo Cupom/ })).toBeVisible();
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+  });
+
+  it('keeps the h1 while the list loads', () => {
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    render(<AdminCouponsPage />);
+
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Novo Cupom/ })).not.toBeInTheDocument();
+  });
+
+  it('has no accessibility violations', async () => {
+    // the AppShell owns <main> (#42), so the landmark is supplied here
+    const { baseElement } = render(
+      <main>
+        <AdminCouponsPage />
+      </main>,
+    );
+    await screen.findByText('R$ 10,00');
+    expect(await axe(baseElement)).toHaveNoViolations();
   });
 });

@@ -4,6 +4,9 @@
       "title": "Não foi possível carregar seus lembretes",
       "message": "Os lembretes que aparecem aqui podem estar incompletos. Tente novamente."
     },
+    "favorites": {
+      "title": "Não foi possível carregar seus favoritos"
+    },
     "savedFilters": {
       "title": "Não foi possível carregar seus filtros salvos",
       "message": "Tente novamente para ver os filtros que você salvou."
@@ -267,6 +270,7 @@
     "viewPlans": "Ver planos"
   },
   "login": {
+    "title": "Entrar",
     "subtitle": "Entre para acessar sua conta",
     "email": "E-mail",
     "password": "Senha",
@@ -276,6 +280,7 @@
     "noAccount": "Não tem uma conta? <link>Criar conta</link>"
   },
   "register": {
+    "title": "Criar conta",
     "subtitle": "Crie sua conta",
     "name": "Nome",
     "email": "E-mail",
@@ -406,10 +411,16 @@
   "favorites": {
     "emptyTitle": "Nenhum leilão favorito",
     "emptyHint": "Marque leilões como favoritos para acompanhá-los aqui",
+    "emptySummary": "Nenhum leilão marcado como favorito",
+    "emptyAction": "Buscar imóveis",
     "title": "Leilões favoritos",
     "summary": "{count, plural, =1 {{formatted} leilão marcado como favorito} other {{formatted} leilões marcados como favoritos}}"
   },
   "auctionDetail": {
+    "breadcrumbs": {
+      "label": "Você está em",
+      "search": "Buscar imóveis"
+    },
     "info": "Informações do imóvel",
     "address": "Endereço",
     "zipcode": "CEP: {zipcode}",

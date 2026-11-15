@@ -1,22 +1,39 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { axe, renderWithProviders as render } from '@/test/render';
+import { axe, renderWithProviders } from '@/test/render';
 import NotFound from './not-found';
 
-const env = vi.hoisted(() => ({ push: vi.fn() }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: env.push }) }));
-// The shell (top bar, navigation) has its own spec; here only the page content matters.
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
+// The shell (top bar, navigation) has its own spec; here it only has to frame the state.
 vi.mock('@/app/components/patterns/AppShell', () => ({
-  default: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
+  default: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }));
 
-beforeEach(() => env.push.mockReset());
+beforeEach(() => router.push.mockReset());
 
 describe('root NotFound', () => {
+  it('is a centred state whose title is the only h1, with a way back to the search', async () => {
+    const { container } = renderWithProviders(<NotFound />);
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Página não encontrada' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('O conteúdo que você procura não existe ou não está mais disponível.'),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Buscar imóveis' }));
+    expect(router.push).toHaveBeenCalledWith('/search');
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it('explains that the page does not exist', async () => {
-    const { container } = render(<NotFound />);
+    const { container } = renderWithProviders(<NotFound />);
 
     expect(screen.getByRole('heading', { name: 'Página não encontrada' })).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
@@ -24,10 +41,10 @@ describe('root NotFound', () => {
 
   it('takes the visitor back to the search', async () => {
     const user = userEvent.setup();
-    render(<NotFound />);
+    renderWithProviders(<NotFound />);
 
     await user.click(screen.getByRole('button', { name: 'Buscar imóveis' }));
 
-    expect(env.push).toHaveBeenCalledWith('/search');
+    expect(router.push).toHaveBeenCalledWith('/search');
   });
 });

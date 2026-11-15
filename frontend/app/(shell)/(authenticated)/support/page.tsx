@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useTranslations } from 'next-intl';
-import { Box, Container, CircularProgress } from '@mui/material';
+import { Box, CircularProgress } from '@mui/material';
 import RequireRole from '@/app/components/RequireRole';
 import SupportPage from '@/app/components/SupportPage';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
@@ -28,12 +28,7 @@ export default function Support() {
   return (
     <RequireRole minimumRole="free" featureName={t('featureName')}>
       <Suspense fallback={<SupportPageLoading />}>
-        {/* #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar */}
-        <Box sx={{ pt: 2, pb: 4 }}>
-          <Container maxWidth="lg">
-            <SupportPage />
-          </Container>
-        </Box>
+        <SupportPage />
       </Suspense>
     </RequireRole>
   );

@@ -38,6 +38,23 @@ beforeEach(() => {
   );
 });
 
+describe('SearchFilters headings', () => {
+  it('titles the AI search with an h2 and the filter groups with h3 under the panel h2 (DS-15)', () => {
+    render(<SearchFilters onSearch={vi.fn()} />);
+
+    expect(
+      screen.getByRole('heading', { level: 2, name: messages.searchFilters.ai.title }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: messages.searchFilters.panelTitle }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 3, name: messages.searchFilters.price.title }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+  });
+});
+
 describe('SearchFilters saved filters load failure', () => {
   it('shows the ErrorState when the saved filters failed to load', () => {
     env.saved.loadFailed = true;

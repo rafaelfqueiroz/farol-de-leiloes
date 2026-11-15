@@ -1,4 +1,4 @@
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import messages from '@/messages/pt-BR.json';
@@ -26,6 +26,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const t = messages.resetPassword.confirm;
+
 const answer = (status: number, body: unknown) =>
   fetchMock.mockResolvedValue({ ok: status < 400, status, json: async () => body });
 
@@ -39,10 +41,42 @@ async function fillAndSubmit(password: string, confirmation: string) {
 }
 
 describe('ResetPasswordPage', () => {
-  it('has no accessibility violations', async () => {
+  it('has one h1 inside a main, with the hint as its summary', async () => {
     const { container } = render(<ResetPasswordPage />);
 
+    expect(screen.getByRole('main')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: t.title })).toBeInTheDocument();
+    expect(screen.getByText(t.hint)).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('refuses passwords that differ without calling the API', async () => {
+    const user = userEvent.setup();
+    render(<ResetPasswordPage />);
+
+    await user.type(screen.getByLabelText(/^nova senha/i), 'secret1');
+    await user.type(screen.getByLabelText(/confirmar nova senha/i), 'secret2');
+    await user.click(screen.getByRole('button', { name: t.submit }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(t.errors.passwordMismatch);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('shows the success message after a reset', async () => {
+    // TS-06: the page schedules a redirect after two seconds; on a fake clock it never fires into a
+    // later test (a real timer leaking past this test made the catalogue-message test flaky)
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    answer(200, {});
+    const user = userEvent.setup();
+    render(<ResetPasswordPage />);
+
+    await user.type(screen.getByLabelText(/^nova senha/i), 'secret1');
+    await user.type(screen.getByLabelText(/confirmar nova senha/i), 'secret1');
+    await user.click(screen.getByRole('button', { name: t.submit }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(t.success));
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
   it('refuses two different passwords without calling the API', async () => {

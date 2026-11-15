@@ -79,12 +79,12 @@ describe('AuctionDetailClient favourite', () => {
   });
 });
 
-describe('AuctionDetailClient back button', () => {
+describe('AuctionDetailClient way back (first breadcrumb)', () => {
   it('goes home by default', async () => {
     const user = userEvent.setup();
     render(<AuctionDetailClient auction={anAuction()} />);
 
-    await user.click(screen.getByRole('button', { name: 'Voltar' }));
+    await user.click(screen.getByRole('link', { name: 'Buscar imóveis' }));
 
     expect(env.push).toHaveBeenCalledWith('/');
   });
@@ -94,7 +94,7 @@ describe('AuctionDetailClient back button', () => {
     const user = userEvent.setup();
     render(<AuctionDetailClient auction={anAuction()} />);
 
-    await user.click(screen.getByRole('button', { name: 'Voltar' }));
+    await user.click(screen.getByRole('link', { name: 'Buscar imóveis' }));
 
     expect(env.push).toHaveBeenCalledWith('/search?state=TO');
   });
@@ -104,14 +104,14 @@ describe('AuctionDetailClient header and image', () => {
   it('shows the title and the code', () => {
     render(<AuctionDetailClient auction={anAuction()} />);
 
-    expect(screen.getByRole('heading', { level: 4, name: 'Casa em Palmas' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Casa em Palmas' })).toBeVisible();
     expect(screen.getByText('Código: C-1')).toBeVisible();
   });
 
   it('names an untitled property', () => {
     render(<AuctionDetailClient auction={anAuction({ title: '' })} />);
 
-    expect(screen.getByRole('heading', { level: 4, name: 'Imóvel sem título' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Imóvel sem título' })).toBeVisible();
   });
 
   it('shows the photo with the title as its text, and no placeholder', () => {
@@ -329,9 +329,7 @@ describe('AuctionDetailClient payment, expenses and documents', () => {
     expect(within(rows[1] as HTMLElement).getByText('Financiamento')).toBeVisible();
   });
 
-  // Known defect, reported for its own issue (DV-23): the property title is an <h4> and its section
-  // titles are <h6>, so axe's heading-order fails (DS-21). Delete `.fails` when it is fixed.
-  it.fails('has no accessibility violations', async () => {
+  it('has no accessibility violations', async () => {
     const { baseElement } = render(
       <main>
         <AuctionDetailClient

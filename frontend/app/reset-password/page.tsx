@@ -3,17 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import {
-  Box,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Typography,
-  Alert,
-  CircularProgress,
-  Link,
-} from '@mui/material';
+import { Box, Stack, TextField, Button, Alert, CircularProgress, Link } from '@mui/material';
+import { AuthFormPage } from '@/app/components/patterns/PublicScreens';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function ResetPasswordRequestPage() {
@@ -54,84 +45,56 @@ export default function ResetPasswordRequestPage() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 2,
-      }}
-    >
-      <Card sx={{ maxWidth: 450, width: '100%' }}>
-        <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" component="h1" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
-            {t('title')}
-          </Typography>
+    <AuthFormPage title={t('title')} summary={success ? undefined : t('hint')}>
+      {error && <Alert severity="error">{error}</Alert>}
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
+      {success ? (
+        <>
+          <Alert severity="success">{t('success')}</Alert>
+          <Button
+            variant="contained"
+            color="primary"
+            size="large"
+            fullWidth
+            onClick={() => router.push('/login')}
+          >
+            {t('backToLogin')}
+          </Button>
+        </>
+      ) : (
+        <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+          <TextField
+            fullWidth
+            label={t('email')}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
 
-          {success ? (
-            <>
-              <Alert severity="success" sx={{ mb: 2 }}>
-                {t('success')}
-              </Alert>
-              <Button
-                variant="contained"
-                color="primary"
-                fullWidth
-                onClick={() => router.push('/login')}
-                sx={{ mt: 2 }}
-              >
-                {t('backToLogin')}
-              </Button>
-            </>
-          ) : (
-            <form onSubmit={handleSubmit}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                {t('hint')}
-              </Typography>
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            size="large"
+            fullWidth
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size="1.5rem" /> : t('submit')}
+          </Button>
 
-              <TextField
-                fullWidth
-                label={t('email')}
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                margin="normal"
-                required
-              />
-
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                fullWidth
-                disabled={loading}
-                sx={{ mt: 3, mb: 2 }}
-              >
-                {loading ? <CircularProgress size={24} /> : t('submit')}
-              </Button>
-
-              <Box sx={{ textAlign: 'center', mt: 2 }}>
-                <Link
-                  component="button"
-                  type="button"
-                  variant="body2"
-                  onClick={() => router.push('/login')}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  {t('backToLogin')}
-                </Link>
-              </Box>
-            </form>
-          )}
-        </CardContent>
-      </Card>
-    </Box>
+          <Box sx={{ textAlign: 'center' }}>
+            <Link
+              component="button"
+              type="button"
+              variant="subtitle2"
+              onClick={() => router.push('/login')}
+            >
+              {t('backToLogin')}
+            </Link>
+          </Box>
+        </Stack>
+      )}
+    </AuthFormPage>
   );
 }

@@ -139,3 +139,40 @@ describe('RemindersPage load failure', () => {
     expect(screen.getByText('Nenhum lembrete agendado')).toBeInTheDocument();
   });
 });
+
+describe('RemindersPage structure (DS-15)', () => {
+  it('has one h1 and the reminder titles as h2, without a <main> of its own', () => {
+    env.reminders.reminders = [reminder];
+    render(<RemindersPage />);
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Meus Lembretes' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Imóvel de teste' })).toBeInTheDocument();
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+  });
+
+  it('keeps the single h1 while loading and in the empty state', () => {
+    env.reminders.loading = true;
+    const { unmount } = render(<RemindersPage />);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    unmount();
+
+    env.reminders.loading = false;
+    render(<RemindersPage />);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Nenhum lembrete agendado' }),
+    ).toBeInTheDocument();
+  });
+
+  it('has no accessibility violations in the list', async () => {
+    env.reminders.reminders = [reminder];
+    // the AppShell owns <main> (#42), so the landmark is supplied here
+    const { baseElement } = render(
+      <main>
+        <RemindersPage />
+      </main>,
+    );
+    expect(await axe(baseElement)).toHaveNoViolations();
+  });
+});

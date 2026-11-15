@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Box, Card, CardContent, Typography, Alert, CircularProgress, Button } from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
+import { Alert, Button } from '@mui/material';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Link from 'next/link';
+import { ResultScreen } from '@/app/components/patterns/PublicScreens';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function VerifyEmailTokenPage() {
@@ -44,64 +45,38 @@ export default function VerifyEmailTokenPage() {
     }
   }, [token, router, apiErrorMessage]);
 
+  if (status === 'loading') {
+    return <ResultScreen loading title={t('loadingTitle')} description={t('loadingHint')} />;
+  }
+
+  if (status === 'success') {
+    return (
+      <ResultScreen
+        tone="success"
+        icon={CheckCircleOutlineIcon}
+        title={t('successTitle')}
+        description={t('successHint')}
+      >
+        <Button component={Link} href="/login" variant="contained" size="large" fullWidth>
+          {t('goToLogin')}
+        </Button>
+      </ResultScreen>
+    );
+  }
+
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 2,
-      }}
+    <ResultScreen
+      tone="error"
+      icon={ErrorOutlineIcon}
+      title={t('errorTitle')}
+      description={t('errorHint')}
     >
-      <Card sx={{ maxWidth: 450, width: '100%' }}>
-        <CardContent sx={{ p: 4, textAlign: 'center' }}>
-          {status === 'loading' && (
-            <>
-              <CircularProgress size={64} sx={{ mb: 3 }} />
-              <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
-                {t('loadingTitle')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {t('loadingHint')}
-              </Typography>
-            </>
-          )}
-
-          {status === 'success' && (
-            <>
-              <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
-                {t('successTitle')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                {t('successHint')}
-              </Typography>
-              <Button component={Link} href="/login" variant="contained" fullWidth>
-                {t('goToLogin')}
-              </Button>
-            </>
-          )}
-
-          {status === 'error' && (
-            <>
-              <ErrorIcon sx={{ fontSize: 64, color: 'error.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
-                {t('errorTitle')}
-              </Typography>
-              <Alert severity="error" sx={{ mb: 3, textAlign: 'left' }}>
-                {error}
-              </Alert>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                {t('errorHint')}
-              </Typography>
-              <Button component={Link} href="/login" variant="contained" fullWidth>
-                {t('goToLogin')}
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </Box>
+      <Alert severity="error" sx={{ textAlign: 'left' }}>
+        {error}
+      </Alert>
+      <Button component={Link} href="/login" variant="contained" size="large" fullWidth>
+        {t('goToLogin')}
+      </Button>
+    </ResultScreen>
   );
 }

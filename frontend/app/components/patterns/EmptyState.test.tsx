@@ -42,6 +42,21 @@ describe('EmptyState', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'Nada aqui' })).toBeInTheDocument();
   });
 
+  it('can be the page h1 for a full-page state', () => {
+    renderWithProviders(
+      <EmptyState
+        icon={FavoriteBorderOutlined}
+        title="Página não encontrada"
+        description="Sem itens."
+        titleComponent="h1"
+      />,
+    );
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Página não encontrada' }),
+    ).toBeInTheDocument();
+  });
+
   it('hides the decorative icon from assistive tech and omits absent actions', () => {
     const { container } = renderWithProviders(
       <EmptyState icon={FavoriteBorderOutlined} title="Nada" description="Sem itens." />,

@@ -1,42 +1,7 @@
 {
-  "app/(shell)/(authenticated)/search/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "app/(shell)/auction/[code]/AuctionDetailClient.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "app/components/AuctionCard.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "app/components/AuctionList.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "app/components/FavoritesView.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "app/components/LandingPage.tsx": {
     "no-restricted-syntax": {
       "count": 2
-    }
-  },
-  "app/components/SearchFilters.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "app/components/SupportPage.tsx": {
-    "no-restricted-syntax": {
-      "count": 5
     }
   }
 }

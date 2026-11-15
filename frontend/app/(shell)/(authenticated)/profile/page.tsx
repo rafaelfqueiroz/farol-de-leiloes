@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/app/contexts/AuthContext';
 import {
@@ -12,16 +12,42 @@ import {
   Typography,
   Alert,
   CircularProgress,
-  Container,
   Divider,
   MenuItem,
+  Stack,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import BadgeIcon from '@mui/icons-material/Badge';
 import LockIcon from '@mui/icons-material/Lock';
+import PageHeader from '@/app/components/patterns/PageHeader';
+import PageShell from '@/app/components/patterns/PageShell';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 import { reportClientError } from '@/lib/report-client-error';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+
+// DS-15: the card titles are the page's h2s; DS-11: h5 is the card-title variant
+function CardHeading({ icon, title }: { icon: ReactNode; title: string }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+      <Box
+        sx={(theme) => ({
+          width: theme.spacing(4.5),
+          height: theme.spacing(4.5),
+          borderRadius: 1,
+          backgroundColor: 'primary.main',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        })}
+      >
+        {icon}
+      </Box>
+      <Typography variant="h5" component="h2">
+        {title}
+      </Typography>
+    </Box>
+  );
+}
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();
@@ -257,47 +283,21 @@ export default function ProfilePage() {
   }
 
   return (
-    <>
-      {/* #42: the AppShell owns the top bar, navigation and <main>; pt no longer offsets a fixed bar */}
-      <Container maxWidth="md" sx={{ pt: 4, pb: 4, flexGrow: 1 }}>
-        <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
-          {t('title')}
-        </Typography>
-        <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
-          {t('subtitle')}
-        </Typography>
+    // DS-14: the shell owns <main>; the page sets no width or padding of its own
+    <PageShell width="reading">
+      <PageHeader title={t('title')} summary={t('subtitle')} />
+      <Stack spacing={3}>
+        {error && <Alert severity="error">{error}</Alert>}
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {error}
-          </Alert>
-        )}
-
-        {success && (
-          <Alert severity="success" sx={{ mb: 3 }}>
-            {success}
-          </Alert>
-        )}
+        {success && <Alert severity="success">{success}</Alert>}
 
         {/* Profile Information */}
-        <Card sx={{ mb: 3 }}>
+        <Card>
           <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <Box
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 1,
-                  backgroundColor: 'primary.main',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <PersonIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
-              </Box>
-              <Typography variant="h6">{t('profileInfo.title')}</Typography>
-            </Box>
+            <CardHeading
+              icon={<PersonIcon fontSize="small" sx={{ color: 'primary.contrastText' }} />}
+              title={t('profileInfo.title')}
+            />
             <Divider sx={{ mb: 2 }} />
             <form onSubmit={handleUpdateProfile}>
               <TextField
@@ -329,24 +329,12 @@ export default function ProfilePage() {
         </Card>
 
         {/* Personal Data */}
-        <Card sx={{ mb: 3 }}>
+        <Card>
           <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <Box
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 1,
-                  backgroundColor: 'primary.main',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <BadgeIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
-              </Box>
-              <Typography variant="h6">{t('personalData.title')}</Typography>
-            </Box>
+            <CardHeading
+              icon={<BadgeIcon fontSize="small" sx={{ color: 'primary.contrastText' }} />}
+              title={t('personalData.title')}
+            />
             <Divider sx={{ mb: 2 }} />
             <form onSubmit={handleSavePersonalData}>
               <TextField
@@ -388,7 +376,11 @@ export default function ProfilePage() {
                 <MenuItem value="other">{t('personalData.sexOptions.other')}</MenuItem>
               </TextField>
 
-              <Typography variant="subtitle2" sx={{ mt: 2, mb: 1, color: 'text.secondary' }}>
+              <Typography
+                variant="subtitle2"
+                component="p"
+                sx={{ mt: 2, mb: 1, color: 'text.secondary' }}
+              >
                 {t('personalData.address')}
               </Typography>
               <TextField
@@ -440,22 +432,10 @@ export default function ProfilePage() {
         {user?.providers?.includes('local') ? (
           <Card>
             <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                <Box
-                  sx={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 1,
-                    backgroundColor: 'primary.main',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <LockIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
-                </Box>
-                <Typography variant="h6">{t('changePassword.title')}</Typography>
-              </Box>
+              <CardHeading
+                icon={<LockIcon fontSize="small" sx={{ color: 'primary.contrastText' }} />}
+                title={t('changePassword.title')}
+              />
               <Divider sx={{ mb: 2 }} />
               <form onSubmit={handleChangePassword}>
                 <TextField
@@ -500,22 +480,10 @@ export default function ProfilePage() {
         ) : (
           <Card>
             <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                <Box
-                  sx={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 1,
-                    backgroundColor: 'primary.main',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <LockIcon sx={{ color: 'primary.contrastText', fontSize: 20 }} />
-                </Box>
-                <Typography variant="h6">{t('setPassword.title')}</Typography>
-              </Box>
+              <CardHeading
+                icon={<LockIcon fontSize="small" sx={{ color: 'primary.contrastText' }} />}
+                title={t('setPassword.title')}
+              />
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 {t('setPassword.intro')}
               </Typography>
@@ -552,7 +520,7 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
         )}
-      </Container>
-    </>
+      </Stack>
+    </PageShell>
   );
 }

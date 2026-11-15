@@ -143,6 +143,7 @@ export const theme = createTheme({
   layout: {
     containerWidth: size.container,
     readingWidth: size.reading,
+    narrowWidth: size.narrow,
     sidebarWidth: size.sidebar,
     railWidth: size.sidebarRail,
     topbarHeight: size.topbar,

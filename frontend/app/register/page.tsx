@@ -3,19 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import {
-  Box,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Typography,
-  Alert,
-  Link as MuiLink,
-} from '@mui/material';
+import { Stack, TextField, Button, Typography, Alert, Link as MuiLink } from '@mui/material';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
-import Logo from '@/app/components/patterns/Logo';
+import { AuthFormPage } from '@/app/components/patterns/PublicScreens';
 import { useApiErrorMessage } from '@/lib/api-error';
 
 // The shortest password the form accepts
@@ -60,107 +51,64 @@ export default function RegisterPage() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: 'background.default',
-        padding: 2,
-      }}
-    >
-      <Card sx={{ maxWidth: 450, width: '100%' }}>
-        <CardContent sx={{ p: 4 }}>
-          <Box sx={{ textAlign: 'center', mb: 3 }}>
-            {/* the card is background.paper, so the mark's primary tower reads on it */}
-            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-              <Logo variant="lockup" size={40} />
-            </Box>
-            <Typography component="h1" variant="body1" color="text.secondary">
-              {t('subtitle')}
-            </Typography>
-          </Box>
+    <AuthFormPage title={t('title')} summary={t('subtitle')}>
+      {error && <Alert severity="error">{error}</Alert>}
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
+      <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+        <TextField
+          fullWidth
+          label={t('name')}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          autoComplete="name"
+        />
 
-          <form onSubmit={handleSubmit}>
-            <TextField
-              fullWidth
-              label={t('name')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              sx={{ mb: 2 }}
-              autoComplete="name"
-            />
+        <TextField
+          fullWidth
+          label={t('email')}
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+        />
 
-            <TextField
-              fullWidth
-              label={t('email')}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              sx={{ mb: 2 }}
-              autoComplete="email"
-            />
+        <TextField
+          fullWidth
+          label={t('password')}
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          autoComplete="new-password"
+          helperText={t('passwordHelper', { min: MIN_PASSWORD_LENGTH })}
+        />
 
-            <TextField
-              fullWidth
-              label={t('password')}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              sx={{ mb: 2 }}
-              autoComplete="new-password"
-              helperText={t('passwordHelper', { min: MIN_PASSWORD_LENGTH })}
-            />
+        <TextField
+          fullWidth
+          label={t('confirmPassword')}
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+          autoComplete="new-password"
+        />
 
-            <TextField
-              fullWidth
-              label={t('confirmPassword')}
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              sx={{ mb: 3 }}
-              autoComplete="new-password"
-            />
+        <Button fullWidth size="large" variant="contained" type="submit" disabled={loading}>
+          {loading ? t('submitting') : t('submit')}
+        </Button>
 
-            <Button
-              fullWidth
-              variant="contained"
-              type="submit"
-              disabled={loading}
-              sx={{ mb: 2, py: 1.5 }}
-            >
-              {loading ? t('submitting') : t('submit')}
-            </Button>
-
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                {t.rich('hasAccount', {
-                  link: (chunks) => (
-                    <MuiLink
-                      component={Link}
-                      href="/login"
-                      sx={{ cursor: 'pointer', color: 'primary.main', fontWeight: 500 }}
-                    >
-                      {chunks}
-                    </MuiLink>
-                  ),
-                })}
-              </Typography>
-            </Box>
-          </form>
-        </CardContent>
-      </Card>
-    </Box>
+        <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+          {t.rich('hasAccount', {
+            link: (chunks) => (
+              <MuiLink component={Link} href="/login" variant="subtitle2">
+                {chunks}
+              </MuiLink>
+            ),
+          })}
+        </Typography>
+      </Stack>
+    </AuthFormPage>
   );
 }

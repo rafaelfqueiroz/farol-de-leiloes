@@ -118,9 +118,7 @@ describe('ProfilePage loading', () => {
     expect(screen.getByLabelText('Telefone')).toBeEnabled();
   });
 
-  // Known defect, reported for its own issue (DV-23): the page title is an <h4> and the section
-  // titles are <h6>, so axe's heading-order fails (DS-21). Delete `.fails` when it is fixed.
-  it.fails('has no accessibility violations', async () => {
+  it('has no accessibility violations', async () => {
     signIn(['local']);
     const { baseElement } = render(
       <main>
