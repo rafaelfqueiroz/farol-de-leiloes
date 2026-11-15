@@ -115,15 +115,13 @@ The list grows with the milestones — each spec's issue says whether it adds a 
 | Scope | Threshold | Blocking |
 |---|---|---|
 | Critical `domain/` modules (AR-06) | **100% branch** | ✅ |
-| Backend overall | **80% lines and branches** (the floor reached the target in #57) | ✅ |
-| Frontend overall | **80% lines and branches** (temporary floor: 57% lines, 54% branches — #57) | ✅ |
+| Backend overall | **80% lines and branches** | ✅ |
+| Frontend overall | **80% lines and branches** | ✅ |
 | Isolation — every owned collection | **100%** (TS-14, from #2) | ✅ |
 
-80% is the target. The legacy code was far below it when the gate was introduced, so each package commits a **floor** at the coverage measured then (rounded down): `coverage.thresholds` in `backend/vitest.config.mts` and in `frontend/vitest.config.ts`. The floor only goes up — a PR that raises coverage raises it — until it reaches 80%; #57 tracks the ratchet. `npm run test:cov` enforces it (backend: Vitest with V8 coverage over the `unit` and `structural` projects; frontend: Vitest with V8 coverage) and writes an lcov report to `coverage/`.
+80% is the target, and both packages gate on it: `coverage.thresholds` in `backend/vitest.config.mts` and in `frontend/vitest.config.ts` set 80% lines and 80% branches, and a PR that drops either below fails `test:cov`. `npm run test:cov` enforces it (backend: Vitest with V8 coverage over the `unit` and `structural` projects; frontend: Vitest with V8 coverage) and writes an lcov report to `coverage/`.
 
-The frontend coverage floor was re-measured in #58 at 55% lines / 52% branches, incorporating gains from earlier changes as well as the reminder regression tests.
-The DateField precision regressions in #87 raised the branch floor to 53%; the line floor stayed at 55%.
-The security baseline regressions in #37 measured 56.97% lines / 54.28% branches and raised the frontend floor to 56% / 54%. The owner-review fixes then measured 57.00% / 54.36%, raising the line floor again to 57%.
+The frontend reached the 80% target in #57 (measured 95.6% lines / 91.6% branches, from 65.5% / 66.4%): its `coverage.thresholds` are 80 lines and 80 branches, with no floor left to ratchet. The thin BFF route handlers under `app/api/` are covered together by one table-driven spec (`app/api/bff-routes.test.ts`): method, path, body and `Authorization` forwarding, `401 UNAUTHENTICATED` without a call to the backend, and the error pass-through (AR-38).
 
 The module-boundary regressions in #51 measured 65.39% lines / 61.73% branches and raised the backend floor to 65% / 61%. The PR #98 review regressions then measured 66.20% / 62.62%, raising the floor to 66% / 62%. The #37 security regressions, including owner-review fixes, measured 66.90% / 62.96%, retaining that floor.
 
@@ -201,7 +199,7 @@ SPEC-003 sets the budgets (BR-003-06 to BR-003-10): measured against the referen
 | Unit, service and component tests | ✅ |
 | Integration tests on real MongoDB | ✅ |
 | **Isolation tests, every owned collection** | ✅ |
-| Coverage: 100% branch on critical modules, 80% overall (temporary floors until then, #57) | ✅ |
+| Coverage: 100% branch on critical modules, 80% overall | ✅ |
 | E2E journeys, desktop + 360 px, with axe | ✅ |
 | Structural checks (Node pin, tokens, env example) | ✅ |
 | `npm audit` high+, CodeQL high+ | ✅ |
