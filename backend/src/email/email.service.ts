@@ -139,7 +139,7 @@ export class EmailService {
     await this.transporter.sendMail({
       from: emailFrom,
       to: email,
-      subject: `Lembrete: Leilao ${payload.auctionCode} - Farol dos Leiloes`,
+      subject: `Lembrete: leilão ${payload.auctionCode} - Farol dos Leilões`,
       html: getAuctionReminderEmailTemplate(payload),
     });
 

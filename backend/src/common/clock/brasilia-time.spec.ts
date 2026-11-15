@@ -1,16 +1,33 @@
 // TS-11 / AR-23: calendar logic on its boundaries — 23:59 and 00:00 in Brasília against UTC, month
 // ends, 29 February — and a rule-based zone, not a fixed offset (SPEC-003 BR-003-28). Every
 // expectation is a UTC instant worked out by hand, so the host's own zone plays no part.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, inject } from 'vitest';
 import {
+  addYearsAnniversary,
+  BRASILIA_TIME_MARKER,
   BRASILIA_TIME_ZONE,
+  brasiliaMonthBounds,
   brasiliaWallClockToInstant,
   endOfBrasiliaDay,
+  formatBrasiliaDateTime,
+  formatBrasiliaDateTimeMarked,
   isSameBrasiliaDay,
   startOfBrasiliaDay,
 } from './brasilia-time.js';
 
 const utc = (iso: string) => new Date(iso);
+
+declare module 'vitest' {
+  export interface ProvidedContext {
+    timeZone: string;
+  }
+}
+
+describe('the host zone of this run', () => {
+  it('is the one the tz-* project injected, so the matrix really varies the server zone', () => {
+    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(inject('timeZone'));
+  });
+});
 
 describe('BRASILIA_TIME_ZONE', () => {
   it('is the IANA zone, not an offset', () => {
@@ -136,5 +153,133 @@ describe('isSameBrasiliaDay', () => {
     expect(
       isSameBrasiliaDay(utc('2028-03-01T03:00:00.000Z'), utc('2028-02-29T03:00:00.000Z')),
     ).toBe(false);
+  });
+});
+
+describe('addYearsAnniversary', () => {
+  it('keeps the Brasília day and time: 15/01/2026 10:00 + 5 years = 15/01/2031 10:00', () => {
+    expect(addYearsAnniversary(utc('2026-01-15T13:00:00.000Z'), 5)).toEqual(
+      utc('2031-01-15T13:00:00.000Z'),
+    );
+  });
+
+  it('moves 29 February to 1 March when the target year is not a leap year (BR-010-19)', () => {
+    // 29/02/2028 10:00 in Brasília + 5 years = 01/03/2033 10:00 (2033 has no 29 February).
+    expect(addYearsAnniversary(utc('2028-02-29T13:00:00.000Z'), 5)).toEqual(
+      utc('2033-03-01T13:00:00.000Z'),
+    );
+  });
+
+  it('keeps 29 February when the target year is a leap year', () => {
+    expect(addYearsAnniversary(utc('2028-02-29T13:00:00.000Z'), 4)).toEqual(
+      utc('2032-02-29T13:00:00.000Z'),
+    );
+  });
+
+  it('treats a century year that is not a leap year as common (2100)', () => {
+    expect(addYearsAnniversary(utc('2096-02-29T13:00:00.000Z'), 4)).toEqual(
+      utc('2100-03-01T13:00:00.000Z'),
+    );
+  });
+
+  it('reads the Brasília day, not the UTC date: 01/03 02:30 UTC is still 29/02 in Brasília', () => {
+    // 29/02/2028 23:30 in Brasília = 01/03/2028 02:30 UTC; +1 year -> 01/03/2029 23:30 = 02:30 UTC on 02/03.
+    expect(addYearsAnniversary(utc('2028-03-01T02:30:00.000Z'), 1)).toEqual(
+      utc('2029-03-02T02:30:00.000Z'),
+    );
+  });
+
+  it('does not touch a day that is 29 February in UTC only', () => {
+    // 29/02/2028 02:30 UTC is 28/02/2028 23:30 in Brasília: an ordinary 28 February.
+    expect(addYearsAnniversary(utc('2028-02-29T02:30:00.000Z'), 1)).toEqual(
+      utc('2029-03-01T02:30:00.000Z'),
+    );
+  });
+
+  it('follows the zone rules, not a fixed offset (BR-003-28)', () => {
+    // 15/12/2018 12:00 was UTC-2 (summer time): 14:00 UTC. One year later, 15/12/2019, summer
+    // time had been abolished: the same wall clock is 15:00 UTC.
+    expect(addYearsAnniversary(utc('2018-12-15T14:00:00.000Z'), 1)).toEqual(
+      utc('2019-12-15T15:00:00.000Z'),
+    );
+  });
+
+  it('keeps seconds and milliseconds and accepts zero and negative years', () => {
+    const base = utc('2026-06-10T12:34:56.789Z');
+    expect(addYearsAnniversary(base, 0)).toEqual(base);
+    expect(addYearsAnniversary(base, -1)).toEqual(utc('2025-06-10T12:34:56.789Z'));
+  });
+});
+
+describe('brasiliaMonthBounds', () => {
+  it('runs from midnight of the 1st to midnight of the next 1st in Brasília', () => {
+    expect(brasiliaMonthBounds(utc('2026-01-15T12:00:00.000Z'))).toEqual({
+      start: utc('2026-01-01T03:00:00.000Z'),
+      end: utc('2026-02-01T03:00:00.000Z'),
+    });
+  });
+
+  it('still reads January at 01/02 02:59 UTC, and February from 03:00 UTC (month edges)', () => {
+    const january = {
+      start: utc('2026-01-01T03:00:00.000Z'),
+      end: utc('2026-02-01T03:00:00.000Z'),
+    };
+    expect(brasiliaMonthBounds(utc('2026-02-01T02:59:59.999Z'))).toEqual(january);
+    expect(brasiliaMonthBounds(utc('2026-02-01T03:00:00.000Z'))).toEqual({
+      start: utc('2026-02-01T03:00:00.000Z'),
+      end: utc('2026-03-01T03:00:00.000Z'),
+    });
+  });
+
+  it('starts a new month at 03:00 UTC on the 1st: 03:30Z is a new Brasília day', () => {
+    // 01/03/2026 03:30 UTC = 01/03/2026 00:30 in Brasília: already March.
+    expect(brasiliaMonthBounds(utc('2026-03-01T03:30:00.000Z')).start).toEqual(
+      utc('2026-03-01T03:00:00.000Z'),
+    );
+    // 01/03/2026 02:30 UTC = 28/02/2026 23:30 in Brasília: still February.
+    expect(brasiliaMonthBounds(utc('2026-03-01T02:30:00.000Z')).start).toEqual(
+      utc('2026-02-01T03:00:00.000Z'),
+    );
+  });
+
+  it('measures February by its Brasília length: 28 days, and 29 in a leap year', () => {
+    const hours = (b: { start: Date; end: Date }) => (b.end.getTime() - b.start.getTime()) / 36e5;
+    expect(hours(brasiliaMonthBounds(utc('2026-02-10T12:00:00.000Z')))).toBe(28 * 24);
+    expect(hours(brasiliaMonthBounds(utc('2028-02-10T12:00:00.000Z')))).toBe(29 * 24);
+  });
+
+  it('rolls December into January of the next year', () => {
+    expect(brasiliaMonthBounds(utc('2026-12-31T20:00:00.000Z'))).toEqual({
+      start: utc('2026-12-01T03:00:00.000Z'),
+      end: utc('2027-01-01T03:00:00.000Z'),
+    });
+  });
+
+  it('follows the zone rules: November 2018 lost an hour to summer time (BR-003-28)', () => {
+    // Summer time began on 04/11/2018, so 01/12/2018 00:00 was UTC-2 (02:00 UTC): the month is
+    // 30 days minus an hour long. A fixed -03:00 offset would make it exactly 720 hours.
+    const bounds = brasiliaMonthBounds(utc('2018-11-20T12:00:00.000Z'));
+    expect(bounds).toEqual({
+      start: utc('2018-11-01T03:00:00.000Z'),
+      end: utc('2018-12-01T02:00:00.000Z'),
+    });
+    expect((bounds.end.getTime() - bounds.start.getTime()) / 36e5).toBe(30 * 24 - 1);
+  });
+});
+
+describe('formatBrasiliaDateTime', () => {
+  it('writes dd/mm/aaaa HH:mm in Brasília time', () => {
+    expect(formatBrasiliaDateTime(utc('2026-01-26T13:00:00.000Z'))).toBe('26/01/2026 10:00');
+  });
+
+  it('shows a 02:30 UTC instant on the previous Brasília day', () => {
+    expect(formatBrasiliaDateTime(utc('2026-02-01T02:30:00.000Z'))).toBe('31/01/2026 23:30');
+  });
+
+  it('marks the time as Brasília time', () => {
+    expect(BRASILIA_TIME_MARKER).toBe('(horário de Brasília)');
+    expect(formatBrasiliaDateTimeMarked(utc('2026-01-26T13:00:00.000Z'))).toBe(
+      '26/01/2026 10:00 (horário de Brasília)',
+    );
   });
 });

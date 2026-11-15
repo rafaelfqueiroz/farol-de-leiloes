@@ -73,6 +73,8 @@ describe('RemindersPage dates (AR-23, DS-26)', () => {
 
   it('formats the list and edit picker in Brasília and saves an unchanged UTC instant', async () => {
     render(<RemindersPage />);
+    // BR-003-23: the time of day says which clock it is
+    expect(document.body).toHaveTextContent('31/12/2026 22:30 (horário de Brasília)');
     expect(screen.getByText('31/12/2026 22:30')).toHaveAttribute(
       'datetime',
       '2027-01-01T01:30:00.000Z',

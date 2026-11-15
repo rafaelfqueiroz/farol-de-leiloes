@@ -20,6 +20,7 @@ const reminder = {
   auctionCity: 'Natal',
   auctionState: 'RN',
   description: TEXT,
+  scheduledAt: new Date('2026-01-26T13:00:00.000Z'),
 } as unknown as Parameters<EmailService['sendReminderEmail']>[1];
 
 // No SMTP key at all: the transporter is never built.

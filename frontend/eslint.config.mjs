@@ -87,6 +87,28 @@ const noLiteralCopyInProps = [
   },
 ];
 
+// AR-23, DS-29, BR-003-23/24: one rule for time (and numbers). A date is built, read and formatted
+// only through the helpers (lib/dates.ts, lib/money.ts, lib/numbers.ts), which fix the zone and
+// the pt-BR locale. `new Date(y, m, d…)` reads its fields in the browser's zone; `toLocale*String`
+// and `Intl.DateTimeFormat` format in the browser's zone and locale.
+const brasiliaTimeSyntax = [
+  {
+    selector: "NewExpression[callee.name='Date'][arguments.length>=2]",
+    message:
+      'AR-23: new Date(y, m, d…) reads the fields in the browser zone. Use lib/dates.ts (TZDate in Brasília).',
+  },
+  {
+    selector: 'MemberExpression[property.name=/^toLocale(Date|Time)?String$/]',
+    message:
+      'DS-29, AR-23: toLocale*String uses the browser locale and zone. Use lib/dates.ts, lib/money.ts or lib/numbers.ts.',
+  },
+  {
+    selector: "MemberExpression[object.name='Intl'][property.name='DateTimeFormat']",
+    message:
+      'DS-29, AR-23: Intl.DateTimeFormat uses the browser zone. Use lib/dates.ts (date-fns + @date-fns/tz).',
+  },
+];
+
 export default defineConfig([
   globalIgnores([
     '.next/**',
@@ -123,7 +145,7 @@ export default defineConfig([
           message: 'AR-42: read configuration through lib/env.ts (publicEnv / serverEnv()).',
         },
       ],
-      'no-restricted-syntax': ['error', ...noHardcodedStyleInSx], // DS-01
+      'no-restricted-syntax': ['error', ...noHardcodedStyleInSx, ...brasiliaTimeSyntax], // DS-01, AR-23
     },
   },
   {
@@ -137,8 +159,24 @@ export default defineConfig([
     ignores: ['**/*.test.tsx'],
     rules: {
       'react/jsx-no-literals': ['error', { noStrings: true, ignoreProps: true }],
-      'no-restricted-syntax': ['error', ...noHardcodedStyleInSx, ...noLiteralCopyInProps],
+      'no-restricted-syntax': [
+        'error',
+        ...noHardcodedStyleInSx,
+        ...noLiteralCopyInProps,
+        ...brasiliaTimeSyntax,
+      ],
     },
+  },
+  {
+    // The helpers own zone and locale; tests build fixed instants and assert the host zone.
+    files: [
+      'lib/dates.ts',
+      'lib/money.ts',
+      'lib/numbers.ts',
+      '**/*.test.{ts,tsx}',
+      'test/**/*.{ts,tsx}',
+    ],
+    rules: { 'no-restricted-syntax': ['error', ...noHardcodedStyleInSx] },
   },
   {
     // Plain JS/MJS (this config) has no tsconfig project to type-check against.
