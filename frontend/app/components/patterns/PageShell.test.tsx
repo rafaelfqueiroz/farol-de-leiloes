@@ -24,10 +24,17 @@ describe('PageShell', () => {
     expect(screen.queryByRole('main')).not.toBeInTheDocument();
   });
 
+  it('renders the single <main> landmark when the page sits outside the shell', () => {
+    renderWithProviders(<PageShell component="main">conteúdo</PageShell>);
+
+    expect(screen.getByRole('main')).toHaveTextContent('conteúdo');
+  });
+
   it.each([
     [undefined, '1200px'],
     ['app', '1200px'],
     ['reading', '720px'],
+    ['narrow', '480px'],
   ] as const)('caps the width for %s at %s', (width, expected) => {
     const { container } = renderWithProviders(<PageShell width={width}>conteúdo</PageShell>);
 

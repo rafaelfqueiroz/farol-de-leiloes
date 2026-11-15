@@ -129,6 +129,7 @@ export const size = {
   sidebarRail: 72,
   container: 1200,
   reading: 720,
+  narrow: 480,
 } as const;
 
 export const breakpoints = { xs: 0, sm: 600, md: 900, lg: 1200, xl: 1536 } as const;

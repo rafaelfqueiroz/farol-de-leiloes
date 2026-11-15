@@ -89,6 +89,8 @@ declare module '@mui/material/styles' {
   interface Layout {
     containerWidth: number;
     readingWidth: number;
+    /** `size-narrow`: short forms and result screens outside the shell. */
+    narrowWidth: number;
     /** `size-sidebar`: the AppShell sidebar from lg, and pinned open from md. */
     sidebarWidth: number;
     /** `size-sidebar` rail: the AppShell icon rail from md to lg. */

@@ -13,8 +13,9 @@ export interface EmptyStateProps {
   description: string;
   /** One or two actions: the next step (DS-19). */
   actions?: ReactNode;
-  /** Heading level of the title; follows the page outline, never its size (DS-15). */
-  titleComponent?: 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+  /** Heading level of the title; follows the page outline, never its size (DS-15). `h1` for a
+   * full-page state (404, no access) that has no PageHeader. */
+  titleComponent?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
 }
 
 export default function EmptyState({

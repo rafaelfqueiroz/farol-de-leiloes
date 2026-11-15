@@ -163,6 +163,7 @@ The family is Inter and the variant scale is in §5.
 | `size-sidebar`   | 264px  | Sidebar width from lg; collapses to 72px icons from md to lg; drawer below md.                                       |
 | `size-container` | 1200px | PageShell max width for app pages.                                                                                   |
 | `size-reading`   | 720px  | PageShell max width for forms, settings and reading pages.                                                           |
+| `size-narrow`    | 480px  | PageShell max width for short forms and result screens outside the shell.                                            |
 
 **DS-04 — Tokens are CSS variables.** The theme is created with `cssVariables: true`, so components read `var(--mui-palette-…)` and the colour scheme switches without re-rendering. Raw `colors.*` constants are not exported for use outside the theme.
 
@@ -260,7 +261,7 @@ A role sees only the groups where it has a destination — a group with none dis
 
 ### Page widths
 
-`PageShell` is the only place a page's width, gutters and vertical rhythm are set. `width="app"` (default) is max **1200 px** for lists, dashboards and detail pages; `width="reading"` is max **720 px** for forms, settings, plans and legal text. Gutters are **16 px on phone and 24 px from `sm`**; sections are 32 px apart. Pages never set their own `maxWidth`, padding or background.
+`PageShell` is the only place a page's width, gutters and vertical rhythm are set. `width="app"` (default) is max **1200 px** for lists, dashboards, plans and detail pages; `width="reading"` is max **720 px** for forms, settings, support and legal text; `width="narrow"` is max **480 px** for short forms and result screens outside the shell (login, register, password reset, email verification, payment result), where the page passes `component="main"` because it has no shell `<main>`. Gutters are **16 px on phone and 24 px from `sm`**; sections are 32 px apart. Pages never set their own `maxWidth`, padding or background.
 
 ## 7. Components
 
