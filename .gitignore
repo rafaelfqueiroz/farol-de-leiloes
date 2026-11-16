@@ -6,6 +6,8 @@ node_modules/
 # Testing
 coverage/
 playwright-report/
+.lighthouseci/
+perf-results/
 test-results/
 blob-report/
 
