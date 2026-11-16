@@ -32,8 +32,13 @@
       "dark": "Escuro",
       "system": "Sistema"
     },
+    "dateField": {
+      "timeZoneNote": "Horário de Brasília",
+      "timeZoneNoteWithHelper": "Horário de Brasília. {helper}"
+    },
     "dateText": {
       "invalid": "Data indisponível",
+      "timeZoneMarker": " (horário de Brasília)",
       "relative": {
         "joined": " · {relative}",
         "now": "agora",

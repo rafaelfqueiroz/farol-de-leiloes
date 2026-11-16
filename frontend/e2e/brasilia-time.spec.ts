@@ -15,9 +15,10 @@ test('the property page shows 26/01/2026 10:00 in Brasília time', async ({ page
   await expect(main).not.toContainText('26/01/2026 13:00');
 });
 
-// BR-003-23: "where a time of day appears, it is marked as Brasília time". The marker lands with
-// #3 slice A; this case turns on when it does.
-test.fixme('the time of day is marked "(horário de Brasília)" (#3 slice A)', async ({ page }) => {
+// BR-003-23: "where a time of day appears, it is marked as Brasília time" (DateText, #138).
+test('the time of day is marked "(horário de Brasília)"', async ({ page }) => {
   await page.goto(PROPERTY_PAGE);
-  await expect(page.locator('#app-content')).toContainText('10:00 (horário de Brasília)');
+  await expect(page.locator('#app-content')).toContainText(
+    '26/01/2026 10:00 (horário de Brasília)',
+  );
 });

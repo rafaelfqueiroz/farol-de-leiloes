@@ -120,6 +120,8 @@ describe('ResetPasswordPage', () => {
     await fillAndSubmit('secret-one', 'secret-one');
 
     expect(await screen.findByText(messages.resetPassword.confirm.success)).toBeVisible();
+    // the redirect is scheduled by an effect: let it commit before moving the clock
+    await act(async () => {});
     expect(env.push).not.toHaveBeenCalled();
 
     act(() => {
@@ -127,6 +129,26 @@ describe('ResetPasswordPage', () => {
     });
 
     expect(env.push).toHaveBeenCalledWith('/login');
+  });
+
+  it('does not redirect after the page is left before the two seconds', async () => {
+    // a timer outliving the component would navigate a user who already left
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    answer(200, {});
+    const user = userEvent.setup();
+    const { unmount } = render(<ResetPasswordPage />);
+    await user.type(screen.getByLabelText(/^nova senha/i), 'secret1');
+    await user.type(screen.getByLabelText(/confirmar nova senha/i), 'secret1');
+    await user.click(screen.getByRole('button', { name: t.submit }));
+    await screen.findByText(t.success);
+    await act(async () => {});
+
+    unmount();
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(env.push).not.toHaveBeenCalled();
   });
 
   it('shows the catalogue message when the link is invalid or expired', async () => {

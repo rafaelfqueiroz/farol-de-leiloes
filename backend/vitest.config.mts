@@ -1,13 +1,16 @@
 // TESTING §2: one Vitest project per test type, so each script selects what it runs.
 //   unit        — domain and service specs next to their source (src/**/*.spec.ts), plus the
 //                 test helpers' own specs; no database, no network (TS-01)
+//   tz-<zone>   — the specs whose answer must not depend on the host's zone, repeated once per
+//                 zone (UTC, Tokyo, Brasília) in forked workers that get TZ before Node starts
+//                 (TS-11, AR-23); they are excluded from `unit` so each runs once per zone
 //   structural  — checks on the repository itself (test/structural/)
 //   integration — real MongoDB from Testcontainers (test/integration/); needs Docker (DV-17)
 //   isolation   — the owner-isolation gate (test/isolation/, TESTING §4); needs Docker
 //   smoke       — loads the compiled dist/ import graph in plain Node (test/smoke/, #63); needs
 //                 `npm run build` first, which `npm run test:smoke` does
 // Specs import `describe`, `it`, `expect` and `vi` from 'vitest' explicitly; there are no globals.
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // Every project runs test/support/silence-logger.ts first: the Nest Logger is silent in tests, so
 // the expected ERROR/WARN lines of error-path specs do not bury real failures (TESTING §2). A spec
@@ -22,6 +25,14 @@ const shared = {
   // code, and nothing to act on: silence this one warning, every other still shows.
   execArgv: ['--disable-warning=DEP0040'],
 };
+
+// TS-11, AR-23, BR-003-23: Brasília time must come out the same on any server. These specs run in
+// each zone below; a spec that reads the host's zone by accident fails in at least two of them.
+const timeZoneSpecs = [
+  'src/common/clock/brasilia-time.spec.ts',
+  'src/reminders/templates/reminder.template.spec.ts',
+];
+const timeZones = ['UTC', 'Asia/Tokyo', 'America/Sao_Paulo'];
 
 // One mongo:8.2 container per run, shared by both projects; each spec file uses its own database
 // on it (TS-05, test/support/test-database.ts). A real database round trip (plus Nest
@@ -69,8 +80,20 @@ export default defineConfig({
           name: 'unit',
           // scripts/: the reference-workload generator (SPEC-003 BR-003-08) is pure, so unit.
           include: ['src/**/*.spec.ts', 'test/support/**/*.spec.ts', 'scripts/**/*.spec.ts'],
+          exclude: [...configDefaults.exclude, ...timeZoneSpecs],
         },
       },
+      ...timeZones.map((timeZone) => ({
+        extends: true as const,
+        test: {
+          ...shared,
+          name: `tz-${timeZone}`,
+          pool: 'forks' as const,
+          include: timeZoneSpecs,
+          env: { TZ: timeZone },
+          provide: { timeZone }, // the specs assert the host zone really is this one
+        },
+      })),
       {
         extends: true,
         test: { ...shared, name: 'structural', include: ['test/structural/**/*.spec.ts'] },

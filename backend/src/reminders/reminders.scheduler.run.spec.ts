@@ -21,6 +21,7 @@ function aReminder(overrides: Record<string, unknown> = {}): PopulatedReminder {
     userId: 'user-1',
     channel: ReminderChannel.EMAIL,
     description: 'Bid before noon',
+    scheduledAt: new Date('2026-01-26T13:00:00.000Z'),
     auction: {
       title: 'Apartamento',
       code: 'A1',
@@ -153,6 +154,7 @@ describe('RemindersScheduler per-channel delivery', () => {
       auctionState: 'SP',
       auctionDetailsUrl: 'https://example.test/a1',
       description: 'Bid before noon',
+      scheduledAt: new Date('2026-01-26T13:00:00.000Z'),
     });
     expect(remindersService.logNotification).toHaveBeenCalledWith(
       'reminder-1',
@@ -178,6 +180,7 @@ describe('RemindersScheduler per-channel delivery', () => {
       auctionState: null,
       auctionDetailsUrl: null,
       description: null,
+      scheduledAt: new Date('2026-01-26T13:00:00.000Z'),
     });
   });
 

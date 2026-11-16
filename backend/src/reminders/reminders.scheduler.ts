@@ -164,6 +164,7 @@ export class RemindersScheduler implements OnModuleInit {
         auctionState: auction?.address?.state ?? null,
         auctionDetailsUrl: auction?.detailsUrl ?? null,
         description: reminder.description ?? null,
+        scheduledAt: reminder.scheduledAt, // BR-003-23: the email shows it in Brasília time
       };
 
       await this.emailService.sendReminderEmail(user.email, payload);
