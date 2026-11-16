@@ -3,7 +3,6 @@ import { Reflector } from '@nestjs/core';
 import { DomainError } from '../../common/errors/domain-error.js';
 import type { Persona } from '../domain/personas.js';
 import { accessContextOf, type RequestWithAccess } from '../decorators/access.decorator.js';
-import { isPublicRoute } from './public-route.js';
 
 export const REQUIRED_PERSONAS = 'access:required-personas';
 
@@ -18,7 +17,9 @@ export class PersonaGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    if (isPublicRoute(this.reflector, context)) return true;
+    // SC-07: never skipped for @Public(). An access requirement overrides it (isPublicRoute), so the
+    // global guards authenticated this request and built its context; without one, accessContextOf
+    // refuses with UNAUTHENTICATED (fail closed).
     const access = accessContextOf(context.switchToHttp().getRequest<RequestWithAccess>());
     const personas = this.reflector.getAllAndOverride<Persona[] | undefined>(REQUIRED_PERSONAS, [
       context.getHandler(),

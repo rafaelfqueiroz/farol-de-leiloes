@@ -20,6 +20,14 @@ import { NoSelfAdvisedSource, SELF_ADVISED_SOURCE } from './sources/self-advised
  *   SELF_ADVISED_SOURCE  SPEC-011 self-advised status
  *   OFFICE_PLAN_SOURCE   SPEC-012 advisor plan, read-only state and entitlements
  *
+ * BINDINGS (BR-002-21): a spec plugs its implementation in HERE, by replacing the default line below
+ * (and importing its own module into this one if the implementation needs its services). Never bind
+ * these tokens in another module: the API reaches AccessModule through AuthModule, and
+ * `npm run grant-admin` through GrantAdminModule, which does not load the rest of the app. A binding
+ * anywhere else would let one of the two read the permissive defaults, so grant-admin could grant
+ * the admin capability to an office member or a client. A binding outside this file fails
+ * test/structural/access-source-bindings.spec.ts.
+ *
  * AccessContextGuard is registered as a global guard by AuthModule, right after JwtAuthGuard.
  */
 @Global()

@@ -2,7 +2,7 @@ import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { describe, expect, it } from 'vitest';
 import { DomainError } from '../../common/errors/domain-error.js';
-import { IS_PUBLIC } from '../../auth/decorators/public.decorator.js';
+import { IS_PUBLIC, REQUIRES_ACCESS } from '../../auth/decorators/public.decorator.js';
 import {
   accessContextFactory,
   fakeAccessSources,
@@ -58,6 +58,33 @@ describe('AccessContextGuard (SPEC-002 AR-13)', () => {
     expect(request[ACCESS_CONTEXT]).toBeUndefined();
     expect(sources.fake.reads).toBe(0);
   });
+
+  it.each([
+    ['on the handler', 'handler'],
+    ['on the controller', 'class'],
+  ] as const)(
+    'SC-07: does not skip a @Public() route whose access requirement sits %s',
+    async (_label, where) => {
+      const sources = fakeAccessSources();
+      const guard = new AccessContextGuard(new Reflector(), accessContextFactory(sources));
+      const handler = () => undefined;
+      class Probe {}
+      Reflect.defineMetadata(IS_PUBLIC, true, where === 'handler' ? Probe : handler);
+      Reflect.defineMetadata(REQUIRES_ACCESS, true, where === 'handler' ? handler : Probe);
+      const request: Record<symbol | string, unknown> = {};
+      const context = {
+        getHandler: () => handler,
+        getClass: () => Probe,
+        switchToHttp: () => ({ getRequest: () => request }),
+      } as unknown as ExecutionContext;
+
+      await expect(guard.canActivate(context)).rejects.toEqual(new DomainError('UNAUTHENTICATED'));
+
+      request.user = { userId: 'account-1', isAdmin: false };
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(accessContextOf(request)).toMatchObject({ accountId: 'account-1' });
+    },
+  );
 
   it('SC-07: refuses a protected route that reached it with no authenticated user', async () => {
     const guard = new AccessContextGuard(new Reflector(), accessContextFactory());

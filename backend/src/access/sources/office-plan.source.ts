@@ -5,6 +5,12 @@
 // Until SPEC-012 binds a real implementation to OFFICE_PLAN_SOURCE (in AccessModule), the default
 // knows no plan. An office missing from the answer is treated as having no active advisor plan, no
 // entitlement and read-only (AccessContextFactory): unknown plan state fails closed (BR-002-10).
+//
+// BR-002-21: the real binding MUST be made inside AccessModule (access.module.ts, importing the
+// owning spec's module if it needs its services), never in another module: AccessModule is the one
+// place the API (through AuthModule) and `npm run grant-admin` (GrantAdminModule) both read it from,
+// so a binding elsewhere would leave one of them on this permissive default. Enforced by
+// test/structural/access-source-bindings.spec.ts.
 
 /** What an office's stored subscription says right now. */
 export interface OfficePlanState {

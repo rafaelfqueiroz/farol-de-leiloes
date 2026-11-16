@@ -472,14 +472,42 @@ export class UsersService {
   /**
    * SPEC-002 DL-002-05: sets or clears the admin capability. Its only caller is the grant-admin ops
    * script (`access/grant-admin`), which first refuses an account with client relationships
-   * (BR-002-21); no request reaches it, and `isAdmin` is in no DTO or whitelist (BR-001-30).
-   * Returns whether the account exists.
+   * (BR-002-21), an unconfirmed email or an inactive account (SC-09); no request reaches it, and
+   * `isAdmin` is in no DTO or whitelist (BR-001-30). Returns whether the write matched.
+   *
+   * - grant: atomic and conditional on the state grant-admin decided on (TOCTOU): the account is not
+   *   an admin yet, its email is confirmed and it is active (a missing status is active, AR-28).
+   * - revoke: clears the flag and resets a legacy `role: 'admin'` to 'free', so a re-run of
+   *   migration 0004 (which copies role 'admin' to the flag) cannot re-grant it. Each of the two
+   *   writes is atomic; the first matches only a legacy admin, the second any account.
    */
   async setAdminCapability(userId: string, isAdmin: boolean): Promise<boolean> {
-    const result = await this.userRepository
-      .updateOne({ _id: { $eq: userId } }, { $set: { isAdmin: isAdmin === true } })
+    if (isAdmin) {
+      const granted = await this.userRepository
+        .updateOne(
+          {
+            _id: { $eq: userId },
+            // SC-10: server-written operators, nothing here comes from a request.
+            isAdmin: serverOperators({ $ne: true }),
+            emailVerified: { $eq: true },
+            status: serverOperators({ $in: ['active' as const, null] }),
+          },
+          { $set: { isAdmin: true } },
+        )
+        .exec();
+      return granted.matchedCount > 0;
+    }
+    const legacy = await this.userRepository
+      .updateOne(
+        { _id: { $eq: userId }, role: { $eq: 'admin' } },
+        { $set: { isAdmin: false, role: 'free' } },
+      )
       .exec();
-    return result.matchedCount > 0;
+    if (legacy.matchedCount > 0) return true;
+    const revoked = await this.userRepository
+      .updateOne({ _id: { $eq: userId } }, { $set: { isAdmin: false } })
+      .exec();
+    return revoked.matchedCount > 0;
   }
 
   async isEmailVerified(userId: string): Promise<boolean> {

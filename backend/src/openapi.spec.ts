@@ -22,7 +22,7 @@ import { DECORATORS, type OpenAPIObject } from '@nestjs/swagger';
 import { getMetadataStorage } from 'class-validator';
 import request from 'supertest';
 import { configureApp } from './app.setup.js';
-import { IS_PUBLIC } from './auth/decorators/public.decorator.js';
+import { isPublicTarget } from './auth/decorators/public.decorator.js';
 import { Reflector } from '@nestjs/core';
 import { createOpenApiDocument } from './openapi.js';
 import { testConfigService } from '../test/support/test-env.js';
@@ -224,10 +224,8 @@ describe('OpenAPI document (AR-33)', () => {
   it('declares bearer auth and 401 exactly on the routes behind JwtAuthGuard', () => {
     const mismatched = controllers.flatMap((controller) =>
       handlersOf(controller).flatMap((handler) => {
-        const guarded = !new Reflector().getAllAndOverride<boolean>(IS_PUBLIC, [
-          controller.prototype[handler],
-          controller,
-        ]);
+        // SC-07: the guards' own rule, so an access requirement overriding @Public() counts.
+        const guarded = !isPublicTarget(new Reflector(), controller.prototype[handler], controller);
         const operation = operationById(`${controller.name}_${handler}`);
         const documented =
           (operation.security ?? []).some((requirement) => 'bearer' in requirement) &&

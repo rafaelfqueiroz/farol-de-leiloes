@@ -76,7 +76,7 @@ describe('AccessContextFactory.forAccount (SPEC-002)', () => {
     ]);
     expect(access.clientLinks).toEqual([
       { officeId: 'office-b', status: 'active' },
-      { officeId: 'office-c', status: 'ended', endedAt: ENDED_AT },
+      { officeId: 'office-c', status: 'ended', endedAtMs: ENDED_AT.getTime() },
     ]);
     expect([...access.entitlements]).toEqual(['journeys', 'self-journeys']);
     expect(access.conductedOwners()).toEqual([
@@ -209,15 +209,20 @@ describe('AccessContext (SPEC-002 AR-13)', () => {
     expect('add' in access.entitlements).toBe(false);
   });
 
-  it('keeps its own copy of an end date', async () => {
+  it('keeps an end date as epoch ms: neither the source Date nor the context can change it', async () => {
     const endedAt = new Date(ENDED_AT.getTime());
     const access = await contextFor({
       clientLinks: [{ officeId: 'office-b', status: 'ended', endedAt }],
     }).built;
 
     endedAt.setTime(0);
+    const link = access.clientLinks[0];
 
-    expect(access.clientLinks[0]?.endedAt).toEqual(ENDED_AT);
+    expect(link?.endedAtMs).toBe(ENDED_AT.getTime());
+    expect(Object.values(link ?? {}).some((value) => value instanceof Date)).toBe(false);
+    expect(() => {
+      (link as { endedAtMs: number }).endedAtMs = 0;
+    }).toThrow(TypeError);
   });
 
   it('exposes the entitlements as a read-only set', async () => {

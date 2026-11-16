@@ -17,7 +17,8 @@ class FakePorts implements GrantAdminPorts {
 
   constructor(
     private account: AdminAccount | null,
-    private readonly relationships = false,
+    /** The answers of successive relationship checks; the last one repeats. */
+    private readonly relationships: boolean | boolean[] = false,
     private readonly writeMatches = true,
   ) {}
 
@@ -32,13 +33,21 @@ class FakePorts implements GrantAdminPorts {
   }
 
   hasClientRelationships(): Promise<boolean> {
+    const answers = Array.isArray(this.relationships) ? this.relationships : [this.relationships];
+    const answer = answers[Math.min(this.relationshipChecks, answers.length - 1)] ?? false;
     this.relationshipChecks += 1;
-    return Promise.resolve(this.relationships);
+    return Promise.resolve(answer);
   }
 }
 
-const plain: AdminAccount = { id: 'u1', isAdmin: false };
-const admin: AdminAccount = { id: 'u1', isAdmin: true };
+const plain: AdminAccount = {
+  id: 'u1',
+  isAdmin: false,
+  legacyAdminRole: false,
+  emailVerified: true,
+  active: true,
+};
+const admin: AdminAccount = { ...plain, isAdmin: true };
 
 describe('changeAdminCapability (SPEC-002 DL-002-05)', () => {
   it('grants the capability to an account with no client relationship', async () => {
@@ -48,6 +57,8 @@ describe('changeAdminCapability (SPEC-002 DL-002-05)', () => {
       'granted',
     );
     expect(ports.writes).toEqual([{ accountId: 'u1', isAdmin: true }]);
+    // BR-002-21: checked before the write and again after it (TOCTOU).
+    expect(ports.relationshipChecks).toBe(2);
   });
 
   it('BR-002-21: refuses an office member, investor or self-advised account and writes nothing', async () => {
@@ -59,6 +70,40 @@ describe('changeAdminCapability (SPEC-002 DL-002-05)', () => {
     expect(ports.writes).toEqual([]);
   });
 
+  it('BR-002-21 TOCTOU: undoes the grant when a relationship appeared between the check and the write', async () => {
+    const ports = new FakePorts(plain, [false, true]);
+
+    await expect(changeAdminCapability(ports, { email: EMAIL, change: 'grant' })).resolves.toBe(
+      'refused_client_relationships',
+    );
+    expect(ports.writes).toEqual([
+      { accountId: 'u1', isAdmin: true },
+      { accountId: 'u1', isAdmin: false },
+    ]);
+  });
+
+  it.each([
+    ['refused_unconfirmed_email', { emailVerified: false }],
+    ['refused_inactive', { active: false }],
+    ['refused_inactive', { active: false, emailVerified: false }],
+  ] as const)('SC-09: answers %s to a grant and writes nothing', async (outcome, overrides) => {
+    const ports = new FakePorts({ ...plain, ...overrides });
+
+    await expect(changeAdminCapability(ports, { email: EMAIL, change: 'grant' })).resolves.toBe(
+      outcome,
+    );
+    expect(ports.writes).toEqual([]);
+    expect(ports.relationshipChecks).toBe(0);
+  });
+
+  it('SC-09: reports an existing admin that is not confirmed instead of calling it unchanged', async () => {
+    const ports = new FakePorts({ ...admin, emailVerified: false });
+
+    await expect(changeAdminCapability(ports, { email: EMAIL, change: 'grant' })).resolves.toBe(
+      'refused_unconfirmed_email',
+    );
+  });
+
   it('revokes without asking about relationships (taking it away is always allowed)', async () => {
     const ports = new FakePorts(admin, true);
 
@@ -67,6 +112,26 @@ describe('changeAdminCapability (SPEC-002 DL-002-05)', () => {
     );
     expect(ports.writes).toEqual([{ accountId: 'u1', isAdmin: false }]);
     expect(ports.relationshipChecks).toBe(0);
+  });
+
+  it.each([
+    ['an unconfirmed', { emailVerified: false }],
+    ['an inactive', { active: false }],
+  ])('revokes %s account too', async (_label, overrides) => {
+    const ports = new FakePorts({ ...admin, ...overrides });
+
+    await expect(changeAdminCapability(ports, { email: EMAIL, change: 'revoke' })).resolves.toBe(
+      'revoked',
+    );
+  });
+
+  it("revokes an account whose only trace is the legacy role 'admin' (so 0004 cannot re-grant)", async () => {
+    const ports = new FakePorts({ ...plain, legacyAdminRole: true });
+
+    await expect(changeAdminCapability(ports, { email: EMAIL, change: 'revoke' })).resolves.toBe(
+      'revoked',
+    );
+    expect(ports.writes).toEqual([{ accountId: 'u1', isAdmin: false }]);
   });
 
   it.each([
@@ -88,12 +153,13 @@ describe('changeAdminCapability (SPEC-002 DL-002-05)', () => {
     expect(ports.writes).toEqual([]);
   });
 
-  it('reports an account deleted between the lookup and the write', async () => {
+  it('reports an account deleted or changed between the lookup and the write', async () => {
     const ports = new FakePorts(plain, false, false);
 
     await expect(changeAdminCapability(ports, { email: EMAIL, change: 'grant' })).resolves.toBe(
-      'account_not_found',
+      'account_changed',
     );
+    expect(ports.relationshipChecks).toBe(1);
   });
 });
 
@@ -137,7 +203,10 @@ describe('exitCodeOf', () => {
     ['revoked', 0],
     ['unchanged', 0],
     ['account_not_found', 1],
+    ['account_changed', 1],
     ['refused_client_relationships', 1],
+    ['refused_unconfirmed_email', 1],
+    ['refused_inactive', 1],
   ] as const)('%s exits with %i', (outcome, code) => {
     expect(exitCodeOf(outcome)).toBe(code);
   });

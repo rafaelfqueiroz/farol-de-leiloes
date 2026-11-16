@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as bcrypt from 'bcrypt';
+import { serverOperators } from '../common/mongo/query-safety.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UsersService } from './users.service.js';
@@ -248,25 +249,55 @@ describe('UsersService.updateProfile', () => {
 
 // SPEC-002 DL-002-05: the one write of the admin capability, for the grant-admin script.
 describe('UsersService.setAdminCapability', () => {
-  function withUpdate(matchedCount: number) {
-    const updateOne = vi
-      .fn()
-      .mockReturnValue({ exec: vi.fn().mockResolvedValue({ matchedCount }) });
+  function withUpdates(...matchedCounts: number[]) {
+    const updateOne = vi.fn();
+    for (const matchedCount of matchedCounts) {
+      updateOne.mockReturnValueOnce({ exec: vi.fn().mockResolvedValue({ matchedCount }) });
+    }
     const service = new UsersService({ updateOne } as unknown as ServiceDeps[0]);
     return { service, updateOne };
   }
 
-  it('sets the flag on the account matched by equality on the id', async () => {
-    const { service, updateOne } = withUpdate(1);
+  it('grants only to a non-admin, confirmed, active account, by equality on the id (TOCTOU, SC-09)', async () => {
+    const { service, updateOne } = withUpdates(1);
 
     await expect(service.setAdminCapability('u1', true)).resolves.toBe(true);
-    expect(updateOne).toHaveBeenCalledWith({ _id: { $eq: 'u1' } }, { $set: { isAdmin: true } });
+    expect(updateOne).toHaveBeenCalledTimes(1);
+    expect(updateOne).toHaveBeenCalledWith(
+      {
+        _id: { $eq: 'u1' },
+        isAdmin: serverOperators({ $ne: true }),
+        emailVerified: { $eq: true },
+        status: serverOperators({ $in: ['active', null] }),
+      },
+      { $set: { isAdmin: true } },
+    );
   });
 
-  it('clears the flag, and reports a missing account as false', async () => {
-    const { service, updateOne } = withUpdate(0);
+  it('reports a grant that matched nothing as false', async () => {
+    const { service } = withUpdates(0);
+
+    await expect(service.setAdminCapability('u1', true)).resolves.toBe(false);
+  });
+
+  it("revokes a legacy role 'admin' in the same write, resetting it to 'free'", async () => {
+    const { service, updateOne } = withUpdates(1);
+
+    await expect(service.setAdminCapability('u1', false)).resolves.toBe(true);
+    expect(updateOne).toHaveBeenCalledTimes(1);
+    expect(updateOne).toHaveBeenCalledWith(
+      { _id: { $eq: 'u1' }, role: { $eq: 'admin' } },
+      { $set: { isAdmin: false, role: 'free' } },
+    );
+  });
+
+  it('otherwise clears the flag only, and reports a missing account as false', async () => {
+    const { service, updateOne } = withUpdates(0, 0);
 
     await expect(service.setAdminCapability('u1', false)).resolves.toBe(false);
-    expect(updateOne).toHaveBeenCalledWith({ _id: { $eq: 'u1' } }, { $set: { isAdmin: false } });
+    expect(updateOne).toHaveBeenLastCalledWith(
+      { _id: { $eq: 'u1' } },
+      { $set: { isAdmin: false } },
+    );
   });
 });

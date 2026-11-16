@@ -8,7 +8,7 @@ import type { ExecutionContext, INestApplication, ModuleMetadata } from '@nestjs
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { configureApp } from '../../src/app.setup.js';
-import { IS_PUBLIC } from '../../src/auth/decorators/public.decorator.js';
+import { isPublicRoute } from '../../src/auth/decorators/public.decorator.js';
 import { APP_GUARD, Reflector } from '@nestjs/core';
 import type { AuthenticatedUser } from '../../src/auth/interfaces/auth.interface.js';
 import {
@@ -59,15 +59,9 @@ export async function createHttpApp(
         provide: APP_GUARD,
         useValue: {
           canActivate: async (context: ExecutionContext) => {
-            // SC-07: mirror production's opt-out so public controller specs stay anonymous.
-            if (
-              reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
-                context.getHandler(),
-                context.getClass(),
-              ])
-            ) {
-              return true;
-            }
+            // SC-07: mirror production's opt-out so public controller specs stay anonymous; the
+            // same rule as the real guards, so an access requirement overrides @Public().
+            if (isPublicRoute(reflector, context)) return true;
             const request = context
               .switchToHttp()
               .getRequest<RequestWithAccess & { user?: AuthenticatedUser }>();

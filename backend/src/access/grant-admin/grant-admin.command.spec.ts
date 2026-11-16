@@ -12,7 +12,16 @@ import { GrantAdminCommand } from './grant-admin.command.js';
 const ID = new Types.ObjectId('64b7f0000000000000000077');
 const EMAIL = 'operadora.teste@example.test';
 
-function commandFor(stored: { isAdmin?: boolean } | null, relationships: FakeRelationships = {}) {
+interface Stored {
+  isAdmin?: boolean;
+  role?: string;
+  emailVerified?: boolean;
+  status?: string;
+}
+
+const CONFIRMED: Stored = { emailVerified: true, role: 'free' };
+
+function commandFor(stored: Stored | null, relationships: FakeRelationships = {}) {
   const users = {
     findByEmail: vi.fn().mockResolvedValue(stored && { _id: ID, ...stored }),
     setAdminCapability: vi.fn().mockResolvedValue(true),
@@ -29,7 +38,7 @@ function commandFor(stored: { isAdmin?: boolean } | null, relationships: FakeRel
 
 describe('GrantAdminCommand (SPEC-002 DL-002-05)', () => {
   it('grants an account found by email, by its id', async () => {
-    const { command, users } = commandFor({});
+    const { command, users } = commandFor(CONFIRMED);
 
     await expect(command.run(EMAIL, 'grant')).resolves.toBe('granted');
 
@@ -38,10 +47,35 @@ describe('GrantAdminCommand (SPEC-002 DL-002-05)', () => {
   });
 
   it('reads a stored flag (a missing one is false)', async () => {
-    await expect(commandFor({ isAdmin: true }).command.run(EMAIL, 'grant')).resolves.toBe(
-      'unchanged',
+    await expect(
+      commandFor({ ...CONFIRMED, isAdmin: true }).command.run(EMAIL, 'grant'),
+    ).resolves.toBe('unchanged');
+    await expect(commandFor(CONFIRMED).command.run(EMAIL, 'revoke')).resolves.toBe('unchanged');
+  });
+
+  it.each([
+    ['refused_unconfirmed_email', {}],
+    ['refused_unconfirmed_email', { emailVerified: false }],
+    ['refused_inactive', { emailVerified: true, status: 'deactivated' }],
+    ['refused_inactive', { emailVerified: true, status: 'closed' }],
+  ])('SC-09: answers %s for %j and writes nothing', async (outcome, stored) => {
+    const { command, users } = commandFor(stored);
+
+    await expect(command.run(EMAIL, 'grant')).resolves.toBe(outcome);
+    expect(users.setAdminCapability).not.toHaveBeenCalled();
+  });
+
+  it('reads a missing status as active (AR-28)', async () => {
+    await expect(commandFor({ emailVerified: true }).command.run(EMAIL, 'grant')).resolves.toBe(
+      'granted',
     );
-    await expect(commandFor({}).command.run(EMAIL, 'revoke')).resolves.toBe('unchanged');
+  });
+
+  it("revokes an account holding only the legacy role 'admin'", async () => {
+    const { command, users } = commandFor({ ...CONFIRMED, role: 'admin' });
+
+    await expect(command.run(EMAIL, 'revoke')).resolves.toBe('revoked');
+    expect(users.setAdminCapability).toHaveBeenCalledWith(ID.toHexString(), false);
   });
 
   it('reports an unknown email', async () => {
@@ -57,7 +91,7 @@ describe('GrantAdminCommand (SPEC-002 DL-002-05)', () => {
     ['the investor of a journey', { hasJourneyAsInvestor: true }],
     ['self-advised', { selfAdvised: true }],
   ])('BR-002-21: refuses %s and writes nothing', async (_label, relationships) => {
-    const { command, users } = commandFor({}, relationships);
+    const { command, users } = commandFor(CONFIRMED, relationships);
 
     await expect(command.run(EMAIL, 'grant')).resolves.toBe('refused_client_relationships');
     expect(users.setAdminCapability).not.toHaveBeenCalled();

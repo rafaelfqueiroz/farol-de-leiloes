@@ -30,7 +30,14 @@ export class GrantAdminCommand implements GrantAdminPorts {
   async findAccountByEmail(email: string): Promise<AdminAccount | null> {
     const account = await this.users.findByEmail(email);
     if (!account) return null;
-    return { id: account._id.toHexString(), isAdmin: account.isAdmin === true };
+    return {
+      id: account._id.toHexString(),
+      isAdmin: account.isAdmin === true,
+      legacyAdminRole: account.role === 'admin',
+      emailVerified: account.emailVerified === true,
+      // BR-001-16 / AR-28: a document without a status predates the field and is active.
+      active: (account.status ?? 'active') === 'active',
+    };
   }
 
   setAdminCapability(accountId: string, isAdmin: boolean): Promise<boolean> {

@@ -3,6 +3,12 @@
 //
 // Until SPEC-011 binds a real implementation to MEMBERSHIP_SOURCE (in AccessModule), the default
 // says nobody is a member of anything, which is the safe direction to fail (BR-002-10).
+//
+// BR-002-21: the real binding MUST be made inside AccessModule (access.module.ts, importing the
+// owning spec's module if it needs its services), never in another module: AccessModule is the one
+// place the API (through AuthModule) and `npm run grant-admin` (GrantAdminModule) both read it from,
+// so a binding elsewhere would leave one of them on this permissive default. Enforced by
+// test/structural/access-source-bindings.spec.ts.
 
 /** A current membership of the account in an office. A removed member has none (BR-002-16). */
 export interface OfficeMembership {

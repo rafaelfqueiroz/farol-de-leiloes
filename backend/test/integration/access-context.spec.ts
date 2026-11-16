@@ -120,7 +120,11 @@ describe('SPEC-002 access context (integration)', () => {
     const { email, token } = await signUp('operator');
     await request(server()).get('/api/coupons').set(as(token)).expect(403);
 
+    // SC-09: an admin also needs a confirmed email (AdminGuard); until then it is refused.
     await users.updateOne({ email }, { $set: { isAdmin: true } });
+    const unconfirmed = await request(server()).get('/api/coupons').set(as(token)).expect(403);
+    expect(unconfirmed.body).toEqual({ code: 'EMAIL_VERIFICATION_REQUIRED', context: {} });
+    await users.updateOne({ email }, { $set: { emailVerified: true } });
     await request(server()).get('/api/coupons').set(as(token)).expect(200);
     const me = await request(server()).get('/api/auth/me').set(as(token)).expect(200);
     expect(me.body).toMatchObject({ isAdmin: true, personas: ['searcher'] });

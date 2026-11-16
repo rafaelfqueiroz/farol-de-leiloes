@@ -56,7 +56,7 @@ class ProbeController {
   }
 }
 
-/** SC-07: a class-level access decorator leaves a @Public() handler public. */
+/** SC-07: a class-level access decorator overrides a @Public() handler (isPublicRoute). */
 @AdminOnly()
 @RequiresPersona('advisor')
 @RequiresEntitlement('journeys', { write: true })
@@ -198,6 +198,16 @@ describe('access guards over HTTP (SPEC-002)', () => {
       await request(admin.getHttpServer()).get('/api/probe/admin').expect(200);
     });
 
+    it('SC-09: refuses an admin whose email is not confirmed with EMAIL_VERIFICATION_REQUIRED', async () => {
+      const unconfirmed = await appFor({}, { ...TEST_USER, isAdmin: true, emailVerified: false });
+
+      const response = await request(unconfirmed.getHttpServer())
+        .get('/api/probe/admin')
+        .expect(403);
+
+      expect(response.body).toEqual({ code: 'EMAIL_VERIFICATION_REQUIRED', context: {} });
+    });
+
     it('refuses anyone else with FORBIDDEN, including the legacy plan role admin', async () => {
       const legacy = await appFor({}, { ...TEST_USER, role: 'admin', isAdmin: false });
 
@@ -209,8 +219,11 @@ describe('access guards over HTTP (SPEC-002)', () => {
   });
 
   describe('class-level decorators', () => {
-    it('SC-07: leave a @Public() handler public', async () => {
-      await request(searcher.getHttpServer()).get('/api/probe-class/public').expect(200);
+    it('SC-07: override a @Public() handler: the requirement still applies', async () => {
+      await request(searcher.getHttpServer()).get('/api/probe-class/public').expect(403);
+      // An admin advisor of an office with the write entitlement would pass all three, but an admin
+      // is never an advisor (BR-002-21), so nobody reaches this probe: it fails closed.
+      await request(admin.getHttpServer()).get('/api/probe-class/public').expect(403);
     });
 
     it('apply to every other handler', async () => {

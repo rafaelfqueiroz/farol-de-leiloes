@@ -45,7 +45,8 @@ class SpecJwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: { sub: string; isAdmin: boolean }) {
-    return { userId: payload.sub, isAdmin: payload.isAdmin };
+    // SC-09: AdminGuard also needs a confirmed email.
+    return { userId: payload.sub, isAdmin: payload.isAdmin, emailVerified: true };
   }
 }
 

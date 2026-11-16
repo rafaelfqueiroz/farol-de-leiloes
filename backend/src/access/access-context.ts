@@ -29,7 +29,17 @@ export interface Owner {
 }
 
 export type AccessMembership = ResolvedMembership;
-export type AccessClientLink = ClientLinkFacts;
+/**
+ * A client link as the context keeps it. The end date is epoch milliseconds, a primitive, so the
+ * frozen context holds nothing mutable (a Date can be changed through setTime, even when frozen).
+ * `new Date(link.endedAtMs)` gives a Date to work with; it is the caller's own copy.
+ */
+export interface AccessClientLink {
+  readonly officeId: string;
+  readonly status: ClientLinkFacts['status'];
+  /** When the link ended (BR-002-07), in epoch ms; absent while active. */
+  readonly endedAtMs?: number;
+}
 
 /** The account the context is for, as JwtStrategy read it from the database for this request. */
 export interface AccessAccount {
@@ -46,7 +56,7 @@ interface AccessContextFields {
   isAdmin: boolean;
   personas: readonly Persona[];
   memberships: readonly AccessMembership[];
-  clientLinks: readonly AccessClientLink[];
+  clientLinks: readonly ClientLinkFacts[];
   selfAdvised: boolean;
   entitlements: readonly string[];
   writableEntitlements: readonly string[];
@@ -120,11 +130,12 @@ export class AccessContext {
     this.personas = Object.freeze([...fields.personas]);
     this.memberships = Object.freeze(fields.memberships.map((m) => Object.freeze({ ...m })));
     this.clientLinks = Object.freeze(
-      fields.clientLinks.map((link) =>
+      fields.clientLinks.map(({ officeId, status, endedAt }) =>
         Object.freeze({
-          ...link,
-          // A Date is mutable; the context keeps its own copy.
-          ...(link.endedAt ? { endedAt: new Date(link.endedAt.getTime()) } : {}),
+          officeId,
+          status,
+          // A Date is mutable even inside a frozen object: the context keeps epoch ms.
+          ...(endedAt ? { endedAtMs: endedAt.getTime() } : {}),
         }),
       ),
     );

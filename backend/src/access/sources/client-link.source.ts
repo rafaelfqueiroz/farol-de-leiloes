@@ -4,6 +4,12 @@
 //
 // Until a real implementation is bound to CLIENT_LINK_SOURCE (in AccessModule), the default says
 // the account is nobody's client, which is the safe direction to fail (BR-002-10).
+//
+// BR-002-21: the real binding MUST be made inside AccessModule (access.module.ts, importing the
+// owning spec's module if it needs its services), never in another module: AccessModule is the one
+// place the API (through AuthModule) and `npm run grant-admin` (GrantAdminModule) both read it from,
+// so a binding elsewhere would leave one of them on this permissive default. Enforced by
+// test/structural/access-source-bindings.spec.ts.
 import type { ClientLinkFacts } from '../domain/personas.js';
 
 /** An active or ended link; `endedAt` is set once it ended (BR-002-07). */
