@@ -15,6 +15,13 @@ export class SessionEntity {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   userId!: Types.ObjectId;
 
+  /**
+   * DL-001-02: the account's credential version when the session was issued; the session is
+   * refused once the account's version moves on. A session stored before the field counts as 0.
+   */
+  @Prop({ type: Number, required: true, default: 0, min: 0 })
+  credentialVersion!: number;
+
   @Prop({ type: Date, required: true })
   expiresAt!: Date;
 

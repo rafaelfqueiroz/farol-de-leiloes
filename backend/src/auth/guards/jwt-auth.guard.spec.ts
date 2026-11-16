@@ -53,7 +53,10 @@ const productionGuards = (
   providers: [
     ...productionGuards,
     JwtStrategy,
-    { provide: SessionsService, useValue: { isActive: vi.fn().mockResolvedValue(true) } },
+    {
+      provide: SessionsService,
+      useValue: { activeCredentialVersion: vi.fn().mockResolvedValue(0) },
+    },
     { provide: ConfigService, useValue: testConfigService() },
     {
       provide: UsersService,

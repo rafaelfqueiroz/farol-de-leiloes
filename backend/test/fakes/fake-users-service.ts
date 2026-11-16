@@ -1,5 +1,6 @@
 import { normalizeEmail } from '../../src/common/normalize-email.js';
 import { DomainError } from '../../src/common/errors/domain-error.js';
+import { credentialVersionOf } from '../../src/users/domain/credential-version.js';
 import type { UserAccount } from '../../src/users/user-account.js';
 import type { UsersService } from '../../src/users/users.service.js';
 
@@ -70,11 +71,18 @@ export class FakeUsersService implements UsersPort {
     return [...this.accounts.values()].find((a) => a.email === normalizeEmail(email)) ?? null;
   }
 
+  /**
+   * Like the real one: only an account with the `local` provider and a stored password qualifies.
+   * It answers a snapshot of the account, as a database read would, so a caller that keeps it
+   * holds the credential version it proved even if the account moves on afterwards.
+   */
   async validatePassword(email: string, password: string): Promise<FakeAccount | null> {
     const account = await this.findByEmail(email);
     const active = (account?.status ?? 'active') === 'active';
-    return active && account?.password !== undefined && account.password === password
-      ? account
+    const signsInByPassword =
+      account?.providers.includes('local') === true && account.password !== undefined;
+    return active && signsInByPassword && account.password === password
+      ? { ...account, providers: [...account.providers] }
       : null;
   }
 
@@ -85,18 +93,35 @@ export class FakeUsersService implements UsersPort {
     return account;
   }
 
-  async setPassword(userId: string, newPassword: string): Promise<FakeAccount> {
+  /** DL-001-02: bumps the credential version; fenced on `expected` when it is given. */
+  async setPassword(userId: string, newPassword: string, expected?: number): Promise<FakeAccount> {
     const account = this.accounts.get(userId);
+    if (expected !== undefined && (!account || credentialVersionOf(account) !== expected)) {
+      throw new DomainError('UNAUTHENTICATED');
+    }
     if (!account) throw new DomainError('USER_NOT_FOUND');
     account.password = newPassword;
+    account.credentialVersion = credentialVersionOf(account) + 1;
     if (!account.providers.includes('local')) account.providers.push('local');
     return account;
   }
 
-  async changePassword(userId: string, newPassword: string): Promise<FakeAccount> {
+  /** DL-001-02: fenced on the version and on the `local` provider, and bumps the version. */
+  async changePassword(
+    userId: string,
+    newPassword: string,
+    expected: number,
+  ): Promise<FakeAccount> {
     const account = this.accounts.get(userId);
-    if (!account) throw new DomainError('USER_NOT_FOUND');
+    if (
+      !account ||
+      credentialVersionOf(account) !== expected ||
+      !account.providers.includes('local')
+    ) {
+      throw new DomainError('UNAUTHENTICATED');
+    }
     account.password = newPassword;
+    account.credentialVersion = credentialVersionOf(account) + 1;
     return account;
   }
 
