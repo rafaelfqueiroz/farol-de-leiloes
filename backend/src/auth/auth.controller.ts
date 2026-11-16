@@ -294,7 +294,7 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: SetPasswordDto,
   ): Promise<MessageResponseDto> {
-    await this.authService.setPassword(user.userId, dto.newPassword);
+    await this.authService.setPassword(user.userId, user.sessionId, dto.newPassword);
     return new MessageResponseDto('Password set successfully');
   }
 

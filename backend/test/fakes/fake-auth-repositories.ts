@@ -136,6 +136,14 @@ export class FakeSessionsRepository implements Port<SessionsRepository> {
       if (s.userId === userId && !s.revokedAt && s.id !== exceptId) s.revokedAt = now;
     }
   }
+
+  async rebind(id: string, userId: string, credentialVersion: number, now: Date): Promise<boolean> {
+    const found = this.stored.find(
+      (s) => s.id === id && s.userId === userId && !s.revokedAt && s.expiresAt > now,
+    );
+    if (found) found.credentialVersion = credentialVersion;
+    return found !== undefined;
+  }
 }
 
 /**
@@ -146,6 +154,8 @@ export class FakeLoginAttemptsRepository implements Port<LoginAttemptsRepository
   readonly reserved = new Map<string, number>();
   readonly cleared: string[] = [];
   readonly released: string[] = [];
+  /** The reservation instant each `release` named, in call order. */
+  readonly releasedAt: Date[] = [];
   private readonly blocked = new Set<string>();
 
   block(key: string): void {
@@ -163,8 +173,9 @@ export class FakeLoginAttemptsRepository implements Port<LoginAttemptsRepository
     this.reserved.delete(key);
   }
 
-  async release(key: string): Promise<void> {
+  async release(key: string, at: Date): Promise<void> {
     this.released.push(key);
+    this.releasedAt.push(at);
     this.reserved.set(key, Math.max(0, (this.reserved.get(key) ?? 0) - 1));
   }
 }

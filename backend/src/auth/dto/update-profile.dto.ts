@@ -3,7 +3,7 @@
 // providers, emailVerified...) into a 400 that changes nothing, whatever else the body carries.
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { normalizeEmail } from '../../common/normalize-email.js';
 import { PhoneField } from '../../users/dto/phone-field.decorator.js';
 
@@ -27,10 +27,13 @@ export class UpdateProfileDto {
     description:
       'Read-only (BR-001-26): must equal the current address; a different one is refused with EMAIL_CHANGE_UNAVAILABLE.',
   })
-  @IsOptional()
+  // Absent is fine, but `null` is a value like any other here (`@IsOptional` would let it through
+  // and normalizeEmail(null) threw a 500): only `undefined` skips validation (SC-10, AR-34).
+  @ValidateIf((_object: unknown, value: unknown) => value !== undefined)
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? normalizeEmail(value) : value,
   )
+  @IsString()
   @IsEmail()
   email?: string;
 

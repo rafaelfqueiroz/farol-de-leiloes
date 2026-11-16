@@ -37,6 +37,7 @@ import {
   SavedFilterSchema,
 } from '../../src/saved-filters/schemas/saved-filter.schema.js';
 import { UserEntity, UserSchema } from '../../src/users/schemas/user.schema.js';
+import { credentialVersionOf } from '../../src/users/domain/credential-version.js';
 import { UsersService } from '../../src/users/users.service.js';
 import { useTestDatabase } from '../support/test-database.js';
 import { testBusinessConfig, testConfigService } from '../support/test-env.js';
@@ -413,7 +414,7 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       const id = user?._id.toString() ?? '';
 
       await users.update(id, { subscriptionStatus: null });
-      await users.changePassword(id, 'outra-senha-de-teste');
+      await users.changePassword(id, 'outra-senha-de-teste', credentialVersionOf(user ?? {}));
 
       await expect(
         users.validatePassword('ana.teste@example.test', 'outra-senha-de-teste'),

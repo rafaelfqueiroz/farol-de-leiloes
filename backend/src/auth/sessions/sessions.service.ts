@@ -62,4 +62,16 @@ export class SessionsService {
   async revokeAllForUser(userId: string, exceptJti?: string): Promise<void> {
     await this.sessions.revokeAllForUser(userId, this.clock.now(), exceptJti);
   }
+
+  /**
+   * DL-001-02: after the account holder changes their own credential, the session that made the
+   * change is bound to the new version so it stays signed in, while every other session (still
+   * stamped with the old one) is refused. `credentialVersion` is the one the credential write
+   * returned. True when the session was still live.
+   */
+  async rebind(jti: string, userId: string, credentialVersion: number): Promise<boolean> {
+    if (typeof jti !== 'string' || jti === '' || typeof userId !== 'string') return false;
+    if (!OBJECT_ID.test(userId)) return false;
+    return this.sessions.rebind(jti, userId, credentialVersion, this.clock.now());
+  }
 }

@@ -56,4 +56,21 @@ export class SessionsRepository {
       { $set: { revokedAt: now } },
     );
   }
+
+  /**
+   * Binds a live session to a new credential version; true when it was still live. Revoked and
+   * expired sessions are left as they are (DL-001-02).
+   */
+  async rebind(id: string, userId: string, credentialVersion: number, now: Date): Promise<boolean> {
+    const result = await this.model.updateOne(
+      {
+        _id: { $eq: id },
+        userId: { $eq: new Types.ObjectId(userId) },
+        revokedAt: null,
+        expiresAt: serverOperators({ $gt: now }),
+      },
+      { $set: { credentialVersion } },
+    );
+    return result.matchedCount > 0;
+  }
 }

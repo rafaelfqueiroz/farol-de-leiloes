@@ -1,11 +1,4 @@
-import {
-  IsOptional,
-  IsString,
-  IsArray,
-  IsEnum,
-  IsDateString,
-  ValidateNested,
-} from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsDateString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class AddressDto {
@@ -26,21 +19,12 @@ class AddressDto {
   zipCode?: string;
 }
 
-// BR-001-31: no `password` here; passwords change only through UsersService.setPassword /
+// BR-001-31, DL-001-02: no `password`, `providers` or `googleId` here; passwords change only through UsersService.setPassword /
 // changePassword (BR-001-31). BR-001-29 narrows the rest in the profile work.
 export class UpdateUserDto {
   @IsString()
   @IsOptional()
   name?: string;
-
-  @IsArray()
-  @IsEnum(['local', 'google'], { each: true })
-  @IsOptional()
-  providers?: string[];
-
-  @IsString()
-  @IsOptional()
-  googleId?: string;
 
   @IsEnum(['admin', 'free', 'standard', 'premium'])
   @IsOptional()
