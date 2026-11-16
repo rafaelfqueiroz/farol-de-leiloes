@@ -4,7 +4,6 @@ import { UsersService } from '../users/users.service.js';
 import { EmailService } from '../email/email.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
-import { CompleteProfileDto } from './dto/complete-profile.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import type { UserAccount } from '../users/user-account.js';
 import {
@@ -264,11 +263,6 @@ export class AuthService implements BeforeApplicationShutdown {
     return this.toUserProfile(user);
   }
 
-  async completeProfile(userId: string, dto: CompleteProfileDto): Promise<UserProfile> {
-    const user = await this.usersService.updateContactDetails(userId, dto);
-    return this.toUserProfile(user);
-  }
-
   async getFullProfile(userId: string): Promise<UserProfile> {
     const user = await this.usersService.findByIdFull(userId);
     if (!user) {
@@ -472,17 +466,6 @@ export class AuthService implements BeforeApplicationShutdown {
       role: user.role ?? 'free',
       subscriptionStatus: user.subscriptionStatus ?? null,
       phone: user.phone,
-      cpf: user.cpf,
-      dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth) : undefined,
-      sex: user.sex,
-      address: user.address
-        ? {
-            street: user.address.street,
-            city: user.address.city,
-            state: user.address.state,
-            zipCode: user.address.zipCode,
-          }
-        : undefined,
       createdAt: new Date(user.createdAt),
       updatedAt: new Date(user.updatedAt),
     };

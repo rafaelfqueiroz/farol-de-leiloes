@@ -50,6 +50,15 @@ export async function readApiError(response: Response): Promise<ApiError> {
   return new ApiError(parsed.data.code, parsed.data.context, response.status);
 }
 
+/**
+ * BR-001-04: the guarded features (favourites, filters, reminders, support) answer an account with
+ * an unconfirmed e-mail with 403 EMAIL_VERIFICATION_REQUIRED. The shell's banner already explains it
+ * on every page, so callers treat it as "nothing to show", not as a failure to report or to repeat.
+ */
+export function isEmailVerificationRequired(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'EMAIL_VERIFICATION_REQUIRED';
+}
+
 // ICU values are primitives; a list (`fields`, `requiredRoles`) reads as a comma-separated string.
 // AR-37: codes are UPPER_SNAKE_CASE. Anything else off the wire is not looked up (no `a.b` paths).
 const CODE_SHAPE = /^[A-Z][A-Z0-9_]*$/;

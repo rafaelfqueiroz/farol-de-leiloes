@@ -89,7 +89,7 @@ export const ROUTES: readonly AppRoute[] = [
   // /search is signed-in only today; SPEC-005 (#5) opens it to the public.
   { name: 'search', path: '/search', as: 'investor', heading: 'Busca de imóveis' },
   { name: 'plans', path: '/plans', as: 'investor', heading: 'Planos' },
-  { name: 'profile', path: '/profile', as: 'investor', heading: 'Meu Perfil' },
+  { name: 'profile', path: '/profile', as: 'investor', heading: 'Meu perfil' },
   { name: 'reminders', path: '/reminders', as: 'investor', heading: 'Meus Lembretes' },
   { name: 'support', path: '/support', as: 'investor', heading: 'Suporte' },
   // A verified account is sent to /, so this one is the seeded unverified account.

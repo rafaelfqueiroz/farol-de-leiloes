@@ -155,14 +155,18 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       },
     );
 
-    it('BR-001-02: refuses a sign-up that declines the terms, and creates no account', async () => {
+    it.each([
+      ['declines the terms', { acceptTerms: false }],
+      ['does not send the acceptance', {}],
+    ])('BR-001-02: refuses a sign-up that %s, and creates no account', async (_label, terms) => {
       const email = freshEmail('terms');
 
-      await request(server())
+      const response = await request(server())
         .post('/api/auth/register')
-        .send({ email, password: PASSWORD, name: 'Ana', acceptTerms: false })
+        .send({ email, password: PASSWORD, name: 'Ana', ...terms })
         .expect(400);
 
+      expect(response.body.code).toBe('VALIDATION_FAILED');
       expect(await users.countDocuments({ email })).toBe(0);
     });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -12,14 +12,11 @@ import {
   Link as MuiLink,
   Divider,
 } from '@mui/material';
-import GoogleIcon from '@mui/icons-material/Google';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthFormPage } from '@/app/components/patterns/PublicScreens';
-import { publicEnv } from '@/lib/env';
+import GoogleSignInButton from '@/app/components/account/GoogleSignInButton';
 import { ApiError, useApiErrorMessage } from '@/lib/api-error';
-
-const API_URL = publicEnv.apiUrl;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,6 +28,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const alertRef = useRef<HTMLDivElement>(null);
+
+  // Frame 2: when a refusal appears, focus moves to its alert so it is read at once
+  useEffect(() => {
+    if (error) alertRef.current?.focus();
+  }, [error]);
 
   // The Google callback sends a refusal back as /login?error=<CODE> (BR-001-08); show its message.
   useEffect(() => {
@@ -58,7 +61,11 @@ export default function LoginPage() {
 
   return (
     <AuthFormPage title={t('title')} summary={t('subtitle')}>
-      {error && <Alert severity="error">{error}</Alert>}
+      {error && (
+        <Alert severity="error" ref={alertRef} tabIndex={-1}>
+          {error}
+        </Alert>
+      )}
 
       <Stack component="form" spacing={2} onSubmit={handleSubmit}>
         <TextField
@@ -98,18 +105,7 @@ export default function LoginPage() {
         </Typography>
       </Divider>
 
-      <Button
-        fullWidth
-        size="large"
-        variant="outlined"
-        startIcon={<GoogleIcon />}
-        onClick={() => {
-          // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- the Google sign-in starts on the API (a redirect to the provider), not on a Next page, so it needs a full-page navigation
-          window.location.assign(`${API_URL}/api/auth/google`);
-        }}
-      >
-        {t('google')}
-      </Button>
+      <GoogleSignInButton />
 
       <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
         {t.rich('noAccount', {

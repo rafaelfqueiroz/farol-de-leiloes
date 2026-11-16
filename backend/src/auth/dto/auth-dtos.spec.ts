@@ -4,7 +4,6 @@ import 'reflect-metadata';
 import { ValidationPipe, type Type } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { ChangePasswordDto } from './change-password.dto.js';
-import { CompleteProfileDto } from './complete-profile.dto.js';
 import { UpdateProfileDto } from './update-profile.dto.js';
 import { LoginDto } from './login.dto.js';
 import { RegisterDto } from './register.dto.js';
@@ -70,10 +69,10 @@ describe('RegisterDto', () => {
     expect(await failedFields(RegisterDto, { ...valid, acceptTerms: false })).toEqual([
       'acceptTerms',
     ]);
-    // Transitional: absent is accepted until the frontend checkbox ships (PR 4 makes it required).
+    // Required: absent is refused too, there is no account without the acceptance.
     const without: Partial<typeof valid> = { ...valid };
     delete without.acceptTerms;
-    expect(await failedFields(RegisterDto, without)).toEqual([]);
+    expect(await failedFields(RegisterDto, without)).toEqual(['acceptTerms']);
     expect(await failedFields(RegisterDto, { ...valid, acceptTerms: 'true' })).toEqual([
       'acceptTerms',
     ]);
@@ -159,6 +158,10 @@ describe('UpdateProfileDto (BR-001-25, BR-001-27, BR-001-29)', () => {
     ['password', 'a new password'],
     ['stripeCustomerId', 'cus_1'],
     ['pendingEmail', 'x@example.test'],
+    ['cpf', '00000000000'],
+    ['dateOfBirth', '1990-01-01'],
+    ['sex', 'female'],
+    ['address', { city: 'Natal' }],
   ])('BR-001-29: a body with %s is refused as a whole', async (field, value) => {
     expect(await failedFields(UpdateProfileDto, { name: 'X', [field]: value })).toEqual([field]);
   });
@@ -190,16 +193,6 @@ describe('UpdateProfileDto (BR-001-25, BR-001-27, BR-001-29)', () => {
 
   it('refuses an email that is not an email', async () => {
     expect(await failedFields(UpdateProfileDto, { email: 'not-an-email' })).toEqual(['email']);
-  });
-});
-
-describe('CompleteProfileDto phone (BR-001-27)', () => {
-  it('normalises a valid phone, clears on empty, refuses a number without area code', async () => {
-    expect((await parse(CompleteProfileDto, { phone: '84999991234' })).phone).toBe(
-      '+5584999991234',
-    );
-    expect((await parse(CompleteProfileDto, { phone: '' })).phone).toBeNull();
-    expect(await failedFields(CompleteProfileDto, { phone: '99999-1234' })).toEqual(['phone']);
   });
 });
 

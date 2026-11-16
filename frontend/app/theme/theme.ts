@@ -257,6 +257,13 @@ export const theme = createTheme({
       // labels sit above the field, so an empty field never hides its label
       defaultProps: { slotProps: { inputLabel: { shrink: true } } },
     },
+    MuiFormHelperText: {
+      styleOverrides: {
+        // helper text carries information (DS-08: 4.5:1), so a disabled field's one — the read-only
+        // e-mail on the profile — keeps the secondary text colour instead of the disabled grey
+        root: ({ theme }) => ({ '&.Mui-disabled': { color: theme.vars.palette.text.secondary } }),
+      },
+    },
     MuiOutlinedInput: {
       styleOverrides: {
         root: { minHeight: size.input },

@@ -86,6 +86,18 @@ describe('RemindersProvider', () => {
     expect(requests).toHaveLength(1);
   });
 
+  it('BR-001-04: an unconfirmed e-mail is not a load failure: no reminders, no failure flag', async () => {
+    answers = [() => ({ status: 403, body: { code: 'EMAIL_VERIFICATION_REQUIRED', context: {} } })];
+    render(
+      <RemindersProvider>
+        <RemindersProbe />
+      </RemindersProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('lembretes 0')).toBeInTheDocument());
+    expect(screen.getByText('ok')).toBeInTheDocument();
+  });
+
   it('shows no reminders when the API answers with an error', async () => {
     answers = [() => ({ status: 500, body: { code: 'INTERNAL_ERROR', context: {} } })];
     render(
@@ -196,12 +208,13 @@ describe('RemindersProvider', () => {
 });
 
 function SavedFiltersProbe() {
-  const { savedFilters, loading, saveFilter } = useSavedFilters();
+  const { savedFilters, loading, loadFailed, saveFilter } = useSavedFilters();
   const [message, setMessage] = useState('');
   return (
     <>
       <p>{loading ? 'carregando' : `filtros ${savedFilters.length}`}</p>
       <p>{message}</p>
+      <p>{loadFailed ? 'falhou' : 'ok'}</p>
       <button
         type="button"
         onClick={() =>
@@ -248,6 +261,18 @@ describe('SavedFiltersProvider', () => {
     await user.click(screen.getByRole('button', { name: 'Salvar' }));
 
     expect(await screen.findByText('SAVED_FILTER_LIMIT_REACHED 5')).toBeInTheDocument();
+  });
+
+  it('BR-001-04: an unconfirmed e-mail is not a load failure: no filters, no failure flag', async () => {
+    answers = [() => ({ status: 403, body: { code: 'EMAIL_VERIFICATION_REQUIRED', context: {} } })];
+    render(
+      <SavedFiltersProvider>
+        <SavedFiltersProbe />
+      </SavedFiltersProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('filtros 0')).toBeInTheDocument());
+    expect(screen.getByText('ok')).toBeInTheDocument();
   });
 
   it('clears the filters on a 401', async () => {

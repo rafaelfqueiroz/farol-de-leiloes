@@ -1,6 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { Equals, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { Equals, IsNotEmpty, IsString } from 'class-validator';
 import { EmailField } from './normalize-email.decorator.js';
 import { NewPasswordField } from './new-password.decorator.js';
 
@@ -19,12 +19,10 @@ export class RegisterDto {
   @IsNotEmpty()
   name!: string;
 
-  // BR-001-02: sign-up requires accepting the current terms and privacy policy. Optional here, and
-  // refused when present but not true, only until the sign-up form carries the checkbox (its
-  // DS-30 frame is awaiting approval on #1); the frontend PR makes it required in the same change.
+  // BR-001-02: sign-up requires accepting the current terms and privacy policy; a missing or false
+  // value is a VALIDATION_FAILED before any account exists.
   // TODO(#10): SPEC-010 records the acceptance (versions, time, method)
-  @ApiPropertyOptional({ type: Boolean, enum: [true], description: 'Must be true when sent' })
-  @IsOptional()
+  @ApiProperty({ type: Boolean, enum: [true], description: 'Must be true' })
   @Equals(true)
-  acceptTerms?: true;
+  acceptTerms!: true;
 }

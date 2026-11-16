@@ -4,27 +4,35 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/app/contexts/AuthContext';
 import {
+  Alert,
   Box,
+  Button,
   Card,
   CardContent,
-  TextField,
-  Button,
-  Typography,
-  Alert,
   CircularProgress,
   Divider,
-  MenuItem,
+  Skeleton,
+  Snackbar,
   Stack,
+  TextField,
+  Typography,
 } from '@mui/material';
-import PersonIcon from '@mui/icons-material/Person';
-import BadgeIcon from '@mui/icons-material/Badge';
-import LockIcon from '@mui/icons-material/Lock';
+import PersonOutlined from '@mui/icons-material/PersonOutlined';
+import LockOutlined from '@mui/icons-material/LockOutlined';
+import DevicesOutlined from '@mui/icons-material/DevicesOutlined';
 import PageHeader from '@/app/components/patterns/PageHeader';
+import ErrorState from '@/app/components/patterns/ErrorState';
 import PageShell from '@/app/components/patterns/PageShell';
+import StatusBadge from '@/app/components/patterns/StatusBadge';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 import { reportClientError } from '@/lib/report-client-error';
-import { apiFetch, apiJson } from '@/lib/api-client';
-import { useApiErrorMessage } from '@/lib/api-error';
+import { apiJson } from '@/lib/api-client';
+import { formatPhone } from '@/lib/phone';
+import { ApiError, useApiErrorMessage } from '@/lib/api-error';
+
+// BR-001-13
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 128;
 
 // DS-15: the card titles are the page's h2s; DS-11: h5 is the card-title variant
 function CardHeading({ icon, title }: { icon: ReactNode; title: string }) {
@@ -36,6 +44,7 @@ function CardHeading({ icon, title }: { icon: ReactNode; title: string }) {
           height: theme.spacing(4.5),
           borderRadius: 1,
           backgroundColor: 'primary.main',
+          color: 'primary.contrastText',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -50,175 +59,150 @@ function CardHeading({ icon, title }: { icon: ReactNode; title: string }) {
   );
 }
 
+// the answer of VALIDATION_FAILED names the refused fields (AR-38)
+function refusedFields(error: unknown): string[] {
+  if (!(error instanceof ApiError) || error.code !== 'VALIDATION_FAILED') return [];
+  const fields = error.context.fields;
+  return Array.isArray(fields) ? fields : [];
+}
+
+// DS-19: the account form has a state per read of the stored phone. The form exists only in
+// `ready`, so no save can be sent before the phone is known (a save of the name must never unset a
+// phone the page has not read).
+type StoredPhone =
+  { status: 'loading' } | { status: 'failed'; error: unknown } | { status: 'ready'; value: string };
+
+// shaped like the account form: name, e-mail, phone, Salvar
+function AccountFormSkeleton({ label }: { label: string }) {
+  return (
+    <Stack role="status" aria-label={label} aria-busy="true" spacing={2}>
+      <Skeleton variant="rounded" height={56} />
+      <Skeleton variant="rounded" height={56} />
+      <Skeleton variant="rounded" height={56} />
+      <Skeleton variant="rounded" height={36} />
+    </Stack>
+  );
+}
+
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();
   const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
+  const [stored, setStored] = useState<StoredPhone>({ status: 'loading' });
+  const [attempt, setAttempt] = useState(0);
+  const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
   const t = useTranslations('profile');
+  const tCommon = useTranslations('common');
+  const tLoadFailed = useTranslations('loadFailed.profile');
   const apiErrorMessage = useApiErrorMessage();
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  // Personal data fields
-  const [phone, setPhone] = useState('');
-  const [cpf, setCpf] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
-  const [sex, setSex] = useState('');
-  const [street, setStreet] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [zipCode, setZipCode] = useState('');
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
 
   // follow the signed-in user (it arrives, or refreshes after a save) while rendering, not in an
   // effect, so the form never paints a stale name first
   const [syncedUser, setSyncedUser] = useState(user);
   if (user !== syncedUser) {
     setSyncedUser(user);
-    if (user) {
-      setName(user.name || '');
-      setEmail(user.email || '');
-    }
+    if (user) setName(user.name || '');
   }
 
-  // Load full profile data
+  // The phone is not in the session user: read it from the full profile. A retry bumps `attempt`.
   useEffect(() => {
     if (!isAuthenticated) return;
+    let cancelled = false;
     const loadFullProfile = async () => {
       try {
-        const response = await apiFetch('/api/auth/profile/full');
-        if (response.ok) {
-          const data = await response.json();
-          setPhone(data.phone || '');
-          setCpf(data.cpf || '');
-          setDateOfBirth(data.dateOfBirth ? data.dateOfBirth.split('T')[0] : '');
-          setSex(data.sex || '');
-          setStreet(data.address?.street || '');
-          setCity(data.address?.city || '');
-          setState(data.address?.state || '');
-          setZipCode(data.address?.zipCode || '');
-        }
+        const data = await apiJson<{ phone?: string }>('/api/auth/profile/full');
+        if (cancelled) return;
+        // the API stores E.164; the person sees it as they would type it
+        const shown = formatPhone(data.phone);
+        setPhone(shown);
+        setStored({ status: 'ready', value: shown });
       } catch (err) {
+        if (cancelled) return;
         reportClientError(err, { where: 'profile page' });
+        setStored({ status: 'failed', error: err });
       }
     };
     void loadFullProfile();
-  }, [isAuthenticated]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, attempt]);
 
-  const handleSavePersonalData = async (e: React.FormEvent) => {
+  const retryFullProfile = () => {
+    setStored({ status: 'loading' });
+    setAttempt((current) => current + 1);
+  };
+
+  const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (stored.status !== 'ready') return;
     setError('');
-    setSuccess('');
-    setProfileLoading(true);
+    setPhoneError(false);
+    setSavingAccount(true);
 
     try {
-      await apiJson('/api/auth/profile/complete', {
+      // BR-001-25: the page sends name and phone only, never the e-mail. The phone goes only when
+      // the person changed it, exactly as typed (the API normalises it, BR-001-27); an emptied
+      // phone is sent as '' and removes it. An untouched phone is omitted, so saving the name never
+      // rewrites or unsets the stored one.
+      const phoneChanged = phone !== stored.value;
+      await apiJson('/api/auth/profile', {
         method: 'PATCH',
-        json: {
-          phone: phone || undefined,
-          cpf: cpf || undefined,
-          dateOfBirth: dateOfBirth || undefined,
-          sex: sex || undefined,
-          address: {
-            street: street || undefined,
-            city: city || undefined,
-            state: state || undefined,
-            zipCode: zipCode || undefined,
-          },
-        },
+        json: phoneChanged ? { name, phone } : { name },
       });
-
-      setSuccess(t('success.personalData'));
-    } catch (err: unknown) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setLoading(true);
-
-    try {
-      await apiJson('/api/auth/profile', { method: 'PATCH', json: { name, email } });
-
-      setSuccess(t('success.profile'));
-    } catch (err: unknown) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (newPassword !== confirmPassword) {
-      setError(t('errors.passwordMismatch'));
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setError(t('errors.passwordTooShort'));
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      await apiJson('/api/auth/change-password', {
-        method: 'POST',
-        json: { currentPassword, newPassword },
-      });
-
-      setSuccess(t('success.passwordChanged'));
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (err: unknown) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (newPassword !== confirmPassword) {
-      setError(t('errors.passwordMismatch'));
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setError(t('errors.passwordTooShort'));
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      await apiJson('/api/auth/set-password', { method: 'POST', json: { newPassword } });
-
-      setSuccess(t('success.passwordSet'));
-      setNewPassword('');
-      setConfirmPassword('');
+      if (phoneChanged) setStored({ status: 'ready', value: phone });
+      setToast(t('account.saved'));
       await loadUser();
     } catch (err: unknown) {
+      if (refusedFields(err).includes('phone')) {
+        setPhoneError(true);
+      } else {
+        setError(apiErrorMessage(err));
+      }
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
+  const hasPassword = user?.providers?.includes('local') ?? false;
+
+  const handleSavePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+      setPasswordError(true);
+      return;
+    }
+    setPasswordError(false);
+    setSavingPassword(true);
+
+    try {
+      if (hasPassword) {
+        await apiJson('/api/auth/change-password', {
+          method: 'POST',
+          json: { currentPassword, newPassword },
+        });
+        setToast(t('password.changed'));
+      } else {
+        await apiJson('/api/auth/set-password', { method: 'POST', json: { newPassword } });
+        setToast(t('password.created'));
+      }
+      setCurrentPassword('');
+      setNewPassword('');
+      // a Google account that created its password now has the `local` provider
+      if (!hasPassword) await loadUser();
+    } catch (err: unknown) {
       setError(apiErrorMessage(err));
     } finally {
-      setLoading(false);
+      setSavingPassword(false);
     }
   };
 
@@ -240,243 +224,155 @@ export default function ProfilePage() {
 
   return (
     // DS-14: the shell owns <main>; the page sets no width or padding of its own
-    <PageShell width="reading">
-      <PageHeader title={t('title')} summary={t('subtitle')} />
-      <Stack spacing={3}>
-        {error && <Alert severity="error">{error}</Alert>}
+    <>
+      <PageShell width="reading">
+        <PageHeader title={t('title')} summary={t('subtitle')} />
+        <Stack spacing={3}>
+          {error && <Alert severity="error">{error}</Alert>}
 
-        {success && <Alert severity="success">{success}</Alert>}
-
-        {/* Profile Information */}
-        <Card>
-          <CardContent sx={{ p: 3 }}>
-            <CardHeading
-              icon={<PersonIcon fontSize="small" sx={{ color: 'primary.contrastText' }} />}
-              title={t('profileInfo.title')}
-            />
-            <Divider sx={{ mb: 2 }} />
-            <form onSubmit={handleUpdateProfile}>
-              <TextField
-                fullWidth
-                label={t('profileInfo.name')}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                margin="normal"
-                required
-              />
-              <TextField
-                fullWidth
-                label={t('profileInfo.email')}
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                margin="normal"
-                required
-                disabled={user?.providers?.includes('google')}
-                helperText={
-                  user?.providers?.includes('google') ? t('profileInfo.emailLockedForGoogle') : ''
-                }
-              />
-              <Button type="submit" variant="contained" fullWidth disabled={loading} sx={{ mt: 2 }}>
-                {loading ? <CircularProgress size={24} /> : t('profileInfo.submit')}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Personal Data */}
-        <Card>
-          <CardContent sx={{ p: 3 }}>
-            <CardHeading
-              icon={<BadgeIcon fontSize="small" sx={{ color: 'primary.contrastText' }} />}
-              title={t('personalData.title')}
-            />
-            <Divider sx={{ mb: 2 }} />
-            <form onSubmit={handleSavePersonalData}>
-              <TextField
-                fullWidth
-                label={t('personalData.phone')}
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                margin="normal"
-                placeholder={t('personalData.phonePlaceholder')}
-              />
-              <TextField
-                fullWidth
-                label={t('personalData.cpf')}
-                value={cpf}
-                onChange={(e) => setCpf(e.target.value)}
-                margin="normal"
-                placeholder={t('personalData.cpfPlaceholder')}
-              />
-              <TextField
-                fullWidth
-                label={t('personalData.dateOfBirth')}
-                type="date"
-                value={dateOfBirth}
-                onChange={(e) => setDateOfBirth(e.target.value)}
-                margin="normal"
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <TextField
-                fullWidth
-                select
-                label={t('personalData.sex')}
-                value={sex}
-                onChange={(e) => setSex(e.target.value)}
-                margin="normal"
-              >
-                <MenuItem value="">{t('personalData.sexOptions.none')}</MenuItem>
-                <MenuItem value="male">{t('personalData.sexOptions.male')}</MenuItem>
-                <MenuItem value="female">{t('personalData.sexOptions.female')}</MenuItem>
-                <MenuItem value="other">{t('personalData.sexOptions.other')}</MenuItem>
-              </TextField>
-
-              <Typography
-                variant="subtitle2"
-                component="p"
-                sx={{ mt: 2, mb: 1, color: 'text.secondary' }}
-              >
-                {t('personalData.address')}
-              </Typography>
-              <TextField
-                fullWidth
-                label={t('personalData.street')}
-                value={street}
-                onChange={(e) => setStreet(e.target.value)}
-                margin="normal"
-              />
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <TextField
-                  fullWidth
-                  label={t('personalData.city')}
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  margin="normal"
-                />
-                <TextField
-                  fullWidth
-                  label={t('personalData.state')}
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                  margin="normal"
-                  placeholder={t('personalData.statePlaceholder')}
-                />
-              </Box>
-              <TextField
-                fullWidth
-                label={t('personalData.zipCode')}
-                value={zipCode}
-                onChange={(e) => setZipCode(e.target.value)}
-                margin="normal"
-                placeholder={t('personalData.zipCodePlaceholder')}
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                fullWidth
-                disabled={profileLoading}
-                sx={{ mt: 2 }}
-              >
-                {profileLoading ? <CircularProgress size={24} /> : t('personalData.submit')}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Password Section */}
-        {user?.providers?.includes('local') ? (
           <Card>
-            <CardContent sx={{ p: 3 }}>
-              <CardHeading
-                icon={<LockIcon fontSize="small" sx={{ color: 'primary.contrastText' }} />}
-                title={t('changePassword.title')}
-              />
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <CardHeading icon={<PersonOutlined fontSize="small" />} title={t('account.title')} />
               <Divider sx={{ mb: 2 }} />
-              <form onSubmit={handleChangePassword}>
-                <TextField
-                  fullWidth
-                  label={t('changePassword.current')}
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  margin="normal"
-                  required
+              {stored.status === 'loading' && <AccountFormSkeleton label={tCommon('loading')} />}
+              {stored.status === 'failed' && (
+                <ErrorState
+                  title={tLoadFailed('title')}
+                  message={apiErrorMessage(stored.error)}
+                  titleComponent="h3"
+                  onRetry={retryFullProfile}
                 />
+              )}
+              {stored.status === 'ready' && (
+                <Stack component="form" spacing={2} onSubmit={handleSaveAccount}>
+                  <TextField
+                    fullWidth
+                    label={t('account.name')}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    autoComplete="name"
+                  />
+                  {/* BR-001-26, D-63: the e-mail is the account's identity and is read-only for every
+                      account; an unconfirmed one says so under the field */}
+                  <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+                    <TextField
+                      fullWidth
+                      label={t('account.email')}
+                      type="email"
+                      value={user?.email ?? ''}
+                      disabled
+                      helperText={t('account.emailHelper')}
+                    />
+                    {user?.emailVerified === false && (
+                      <StatusBadge status="neutral" label={t('account.unconfirmed')} />
+                    )}
+                  </Stack>
+                  <TextField
+                    fullWidth
+                    label={t('account.phone')}
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      setPhoneError(false);
+                    }}
+                    type="tel"
+                    autoComplete="tel"
+                    error={phoneError}
+                    helperText={phoneError ? t('account.phoneInvalid') : t('account.phoneHelper')}
+                  />
+                  <Button type="submit" variant="contained" disabled={savingAccount}>
+                    {savingAccount ? (
+                      <CircularProgress size={24} aria-label={tCommon('loading')} />
+                    ) : (
+                      tCommon('save')
+                    )}
+                  </Button>
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <CardHeading icon={<LockOutlined fontSize="small" />} title={t('password.title')} />
+              {!hasPassword && (
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                  {t('password.googleIntro')}
+                </Typography>
+              )}
+              <Divider sx={{ mb: 2 }} />
+              <Stack component="form" spacing={2} onSubmit={handleSavePassword}>
+                {hasPassword && (
+                  <TextField
+                    fullWidth
+                    label={t('password.current')}
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                  />
+                )}
                 <TextField
                   fullWidth
                   label={t('password.new')}
                   type="password"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  margin="normal"
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setPasswordError(false);
+                  }}
                   required
+                  autoComplete="new-password"
+                  slotProps={{ htmlInput: { maxLength: MAX_PASSWORD_LENGTH } }}
+                  error={passwordError}
+                  helperText={t(passwordError ? 'password.tooShort' : 'password.newHelper', {
+                    min: MIN_PASSWORD_LENGTH,
+                    max: MAX_PASSWORD_LENGTH,
+                  })}
                 />
-                <TextField
-                  fullWidth
-                  label={t('password.confirm')}
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  margin="normal"
-                  required
-                />
-                <Button
-                  type="submit"
-                  variant="contained"
-                  fullWidth
-                  disabled={loading}
-                  sx={{ mt: 2 }}
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', color: 'text.secondary' }}
                 >
-                  {loading ? <CircularProgress size={24} /> : t('changePassword.submit')}
+                  <DevicesOutlined aria-hidden fontSize="small" />
+                  <Typography variant="body2">
+                    {t(hasPassword ? 'password.devicesOnChange' : 'password.devicesOnCreate')}
+                  </Typography>
+                </Stack>
+                <Button type="submit" variant="contained" disabled={savingPassword}>
+                  {savingPassword ? (
+                    <CircularProgress size={24} aria-label={tCommon('loading')} />
+                  ) : (
+                    t(hasPassword ? 'password.change' : 'password.create')
+                  )}
                 </Button>
-              </form>
+              </Stack>
             </CardContent>
           </Card>
-        ) : (
-          <Card>
-            <CardContent sx={{ p: 3 }}>
-              <CardHeading
-                icon={<LockIcon fontSize="small" sx={{ color: 'primary.contrastText' }} />}
-                title={t('setPassword.title')}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                {t('setPassword.intro')}
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <form onSubmit={handleSetPassword}>
-                <TextField
-                  fullWidth
-                  label={t('password.new')}
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  margin="normal"
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label={t('password.confirm')}
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  margin="normal"
-                  required
-                />
-                <Button
-                  type="submit"
-                  variant="contained"
-                  fullWidth
-                  disabled={loading}
-                  sx={{ mt: 2 }}
-                >
-                  {loading ? <CircularProgress size={24} /> : t('setPassword.submit')}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        )}
-      </Stack>
-    </PageShell>
+        </Stack>
+      </PageShell>
+
+      {/* DS toast: a short past-tense confirmation */}
+      <Snackbar
+        open={toast !== null}
+        autoHideDuration={5000}
+        onClose={(_event, reason) => {
+          if (reason !== 'clickaway') setToast(null);
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          closeText={tCommon('close')}
+          onClose={() => setToast(null)}
+        >
+          {toast}
+        </Alert>
+      </Snackbar>
+    </>
   );
 }

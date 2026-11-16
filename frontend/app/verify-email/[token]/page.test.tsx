@@ -7,8 +7,13 @@ import VerifyEmailTokenPage from './page';
 // SPEC-001: opening the link of the confirmation email verifies the address on arrival.
 const env = vi.hoisted(() => {
   const push = vi.fn();
-  // Next's router is a stable object; the page's effect depends on it
-  return { push, router: { push }, token: 'tok-abc' as string | undefined };
+  // Next's router and the auth context are stable objects; the page's effect depends on them
+  return {
+    push,
+    router: { push },
+    token: 'tok-abc' as string | undefined,
+    auth: { refreshUser: vi.fn() },
+  };
 });
 const fetchMock = vi.fn();
 
@@ -16,6 +21,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => env.router,
   useParams: () => ({ token: env.token }),
 }));
+vi.mock('@/app/contexts/AuthContext', () => ({ useAuth: () => env.auth }));
 // a plain anchor: jsdom cannot navigate, the page only needs the href
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
@@ -27,6 +33,7 @@ vi.mock('next/link', () => ({
 
 beforeEach(() => {
   env.push.mockReset();
+  env.auth.refreshUser.mockReset().mockResolvedValue(undefined);
   env.token = 'tok-abc';
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -50,6 +57,22 @@ describe('VerifyEmailTokenPage', () => {
     expect(screen.getByRole('main')).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1, name: t.loadingTitle })).toBeInTheDocument();
+  });
+
+  it('refreshes the signed-in account once the address is verified, so the shell banner goes', async () => {
+    answer(200, {});
+    render(<VerifyEmailTokenPage />);
+
+    await screen.findByRole('heading', { level: 1, name: t.successTitle });
+    expect(env.auth.refreshUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refresh the account when the link is refused', async () => {
+    answer(400, { code: 'INVALID_VERIFICATION_TOKEN', context: {} });
+    render(<VerifyEmailTokenPage />);
+
+    await screen.findByRole('heading', { level: 1, name: t.errorTitle });
+    expect(env.auth.refreshUser).not.toHaveBeenCalled();
   });
 
   it('switches the h1 to "verified" and offers the sign-in link', async () => {

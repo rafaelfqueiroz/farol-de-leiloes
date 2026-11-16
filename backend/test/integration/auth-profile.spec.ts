@@ -10,7 +10,6 @@ import { useTestDatabase } from '../support/test-database.js';
 type AuthDeps = ConstructorParameters<typeof AuthService>;
 const CREATED = new Date('2026-01-01T12:00:00.000Z');
 const UPDATED = new Date('2026-01-02T12:00:00.000Z');
-const BIRTH_DATE = new Date('1990-01-01T00:00:00.000Z');
 
 describe('AuthService hydrated account profiles (integration)', () => {
   const db = useTestDatabase();
@@ -36,9 +35,7 @@ describe('AuthService hydrated account profiles (integration)', () => {
       email: 'profile-detachment@example.test',
       name: 'Profile Test Account',
       providers: ['local', 'google'],
-      address: { street: 'Test Street', city: 'Test City', state: 'SP', zipCode: '00000000' },
       password: 'fake-password-hash',
-      dateOfBirth: BIRTH_DATE,
       createdAt: CREATED,
     });
     // Mongoose initializes both timestamps to createdAt on insert; seed a distinct later update.
@@ -62,40 +59,22 @@ describe('AuthService hydrated account profiles (integration)', () => {
     expect(profile._id).toBe(saved._id.toHexString());
     expect(Object.getPrototypeOf(profile)).toBe(Object.prototype);
     expect(Object.getPrototypeOf(profile.providers)).toBe(Array.prototype);
-    expect(Object.getPrototypeOf(profile.address)).toBe(Object.prototype);
     expect(profile.providers).toEqual(['local', 'google']);
-    expect(profile.address).toEqual({
-      street: 'Test Street',
-      city: 'Test City',
-      state: 'SP',
-      zipCode: '00000000',
-    });
     expect(profile.providers).not.toBe(user.providers);
-    expect(profile.address).not.toBe(user.address);
-    expect(profile.dateOfBirth).not.toBe(user.dateOfBirth);
     expect(profile.createdAt).not.toBe(user.createdAt);
     expect(profile.updatedAt).not.toBe(user.updatedAt);
     for (const privateField of ['password', 'status', '$__']) {
       expect(profile).not.toHaveProperty(privateField);
     }
 
-    if (!user.address || !profile.address || !user.dateOfBirth || !profile.dateOfBirth) {
-      throw new Error('The test account must have an address and birth date');
-    }
     profile.providers.push('profile-only');
-    profile.address.city = 'Profile City';
-    profile.dateOfBirth.setUTCFullYear(1991);
     profile.createdAt.setUTCFullYear(2027);
     expect(Array.from(user.providers)).toEqual(['local', 'google']);
-    expect(user.address.city).toBe('Test City');
-    expect(user.dateOfBirth.toISOString()).toBe('1990-01-01T00:00:00.000Z');
     expect(user.createdAt.toISOString()).toBe('2026-01-01T12:00:00.000Z');
 
     user.providers.push('document-only');
-    user.address.state = 'RJ';
     user.updatedAt.setUTCFullYear(2028);
     expect(profile.providers).toEqual(['local', 'google', 'profile-only']);
-    expect(profile.address.state).toBe('SP');
     expect(profile.updatedAt.toISOString()).toBe('2026-01-02T12:00:00.000Z');
   });
 });

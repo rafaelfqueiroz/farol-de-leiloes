@@ -11,9 +11,9 @@ import { UserEntity, UserSchema, type UserDocument } from '../../src/users/schem
 import { UsersService } from '../../src/users/users.service.js';
 import {
   BOOKKEEPING,
-  CONTACT_DETAILS,
   EMAIL_READ_ONLY,
   HOSTILE_VALUES,
+  LEGACY_UNUSED,
   PROFILE_EDITABLE,
   PROTECTED,
 } from '../support/profile-fields.js';
@@ -66,7 +66,7 @@ describe('profile allowlist over the user schema (integration)', () => {
     await moduleRef.close();
   });
 
-  const NOT_PROFILE = [...EMAIL_READ_ONLY, ...CONTACT_DETAILS, ...PROTECTED];
+  const NOT_PROFILE = [...EMAIL_READ_ONLY, ...LEGACY_UNUSED, ...PROTECTED];
 
   it.each(NOT_PROFILE)(
     'updateProfile cannot change %s, even when the input carries it',
@@ -101,36 +101,42 @@ describe('profile allowlist over the user schema (integration)', () => {
     expect(await raw(id)).not.toHaveProperty('phone');
   });
 
-  it.each([...EMAIL_READ_ONLY, ...PROTECTED])(
-    'updateContactDetails cannot change %s either',
+  // `update` is the server-flow write (payments, Google link): it may write the protected paths it
+  // owns, but never the email (D-63) nor the legacy details, which no path writes any more.
+  it.each([...EMAIL_READ_ONLY, ...LEGACY_UNUSED])(
+    'update (the server flow) cannot change %s either',
     async (path) => {
       const { id } = await seed();
       const before = await raw(id);
       const hostile = { [path]: HOSTILE_VALUES[path] } as unknown as Parameters<
-        UsersService['updateContactDetails']
+        UsersService['update']
       >[1];
 
-      await service.updateContactDetails(id, hostile);
+      await service.update(id, hostile);
 
-      expect(await raw(id)).toEqual(before);
+      // an empty `$set` still moves updatedAt, which changedKeys leaves out
+      expect(changedKeys(before, await raw(id))).toEqual([]);
     },
   );
 
-  it('updateContactDetails changes the legacy contact details and phone, and nothing else', async () => {
-    const { id } = await seed();
-    const before = await raw(id);
+  it.each(LEGACY_UNUSED)(
+    'stored %s survives every write path untouched and is never returned by them',
+    async (path) => {
+      const { id } = await seed();
+      await users.collection.updateOne(
+        { _id: new users.base.Types.ObjectId(id) },
+        { $set: { [path]: HOSTILE_VALUES[path] } },
+      );
+      const before = await raw(id);
 
-    await service.updateContactDetails(id, {
-      phone: '+5584999991234',
-      cpf: HOSTILE_VALUES['cpf'] as string,
-      dateOfBirth: HOSTILE_VALUES['dateOfBirth'] as string,
-      sex: 'female',
-      address: HOSTILE_VALUES['address'] as { street: string },
-    });
+      await service.updateProfile(id, { name: 'Ana Nova', phone: '+5584999991234' });
+      await service.update(id, { name: 'Ana Servidor' });
 
-    const changed = changedKeys(before, await raw(id)).sort();
-    expect(changed).toEqual([...CONTACT_DETAILS, 'phone'].sort());
-  });
+      const after = await raw(id);
+      expect(after[path]).toEqual(before[path]);
+      expect(changedKeys(before, after).sort()).toEqual(['name', 'phone']);
+    },
+  );
 
   it('the walk covers every non-bookkeeping schema path', () => {
     const covered: string[] = [...PROFILE_EDITABLE, ...NOT_PROFILE, ...BOOKKEEPING];

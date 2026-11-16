@@ -142,21 +142,19 @@ describe('UsersService.update (SC-10)', () => {
     expect(setOf(model)).toEqual({ name: 'Ana' });
   });
 
-  it('copies only the string address fields it knows', async () => {
+  it('SC-26: update no longer writes the legacy cpf, date of birth, sex and address', async () => {
     const { service, model } = build();
-    const address = { street: 'Rua A', city: { $ne: null }, state: 'SP', extra: 'x' };
+    const legacy = {
+      name: 'Ana',
+      cpf: '00000000000',
+      dateOfBirth: '1990-05-06',
+      sex: 'female',
+      address: { street: 'Rua A', city: 'Santos', state: 'SP', zipCode: '11000000' },
+    } as unknown as UpdateUserDto;
 
-    await service.update('u1', { address } as unknown as UpdateUserDto);
+    await service.update('u1', legacy);
 
-    expect(setOf(model)).toEqual({ address: { street: 'Rua A', state: 'SP' } });
-  });
-
-  it('ignores an address that is not an object', async () => {
-    const { service, model } = build();
-
-    await service.update('u1', { address: null } as unknown as UpdateUserDto);
-
-    expect(setOf(model)).toEqual({});
+    expect(setOf(model)).toEqual({ name: 'Ana' });
   });
 
   it('reports USER_NOT_FOUND when nothing matched', async () => {
@@ -170,7 +168,7 @@ describe('UsersService.update (SC-10)', () => {
 });
 
 // BR-001-25, BR-001-29, BR-001-31: the profile is written from an explicit allowlist.
-describe('UsersService.updateProfile and updateContactDetails', () => {
+describe('UsersService.updateProfile', () => {
   function buildWrites(found: unknown = { _id: 'u1' }) {
     const exec = vi.fn().mockResolvedValue(found);
     const select = vi.fn().mockReturnValue({ exec });
@@ -237,36 +235,5 @@ describe('UsersService.updateProfile and updateContactDetails', () => {
     await expect(service.updateProfile('u1', { name: 'Ana' })).rejects.toEqual(
       new DomainError('USER_NOT_FOUND'),
     );
-  });
-
-  it('updateContactDetails writes only phone, cpf, date of birth, sex and address', async () => {
-    const { service, model } = buildWrites();
-    const details = {
-      phone: '+5584999991234',
-      cpf: '00000000000',
-      sex: 'other',
-      address: { street: 'Rua A', city: 'Natal', state: 'RN', zipCode: '59000000', role: 'x' },
-      role: 'admin',
-      name: 'Other',
-    } as unknown as Parameters<UsersService['updateContactDetails']>[1];
-
-    await service.updateContactDetails('u1', details);
-
-    expect(update(model)).toEqual({
-      $set: {
-        cpf: '00000000000',
-        sex: 'other',
-        address: { street: 'Rua A', city: 'Natal', state: 'RN', zipCode: '59000000' },
-        phone: '+5584999991234',
-      },
-    });
-  });
-
-  it('updateContactDetails removes the phone with $unset when it is null', async () => {
-    const { service, model } = buildWrites();
-
-    await service.updateContactDetails('u1', { phone: null });
-
-    expect(update(model)).toEqual({ $unset: { phone: '' } });
   });
 });

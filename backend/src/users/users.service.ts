@@ -13,17 +13,7 @@ import { decideGoogleLink } from './domain/google-link.js';
 // decides how the account signs in is here (`password`, `providers`, `googleId`): those change only
 // through the fenced, version-bumping methods (setPassword, changePassword, linkGoogleIdentity),
 // so no write of a credential can skip the credential version (DL-001-02, BR-001-31).
-const TEXT_FIELDS = [
-  'name',
-  'role',
-  'stripeCustomerId',
-  'stripeSubscriptionId',
-  'phone',
-  'cpf',
-  'dateOfBirth',
-  'sex',
-] as const;
-const ADDRESS_FIELDS = ['street', 'city', 'state', 'zipCode'] as const;
+const TEXT_FIELDS = ['name', 'role', 'stripeCustomerId', 'stripeSubscriptionId', 'phone'] as const;
 
 // SC-01: bcrypt, cost >= 10. The one place a password is hashed.
 const BCRYPT_COST = 10;
@@ -38,15 +28,6 @@ const DUPLICATE_KEY = 11000;
 export type GoogleLinkOutcome =
   | { result: 'linked_confirmed' | 'linked_unconfirmed'; account: UserDocument }
   | { result: 'inactive' | 'google_conflict' | 'not_found' };
-
-/** The legacy contact details `updateContactDetails` writes; the shape of CompleteProfileDto. */
-export interface ContactDetails {
-  phone?: string | null;
-  cpf?: string;
-  dateOfBirth?: string;
-  sex?: string;
-  address?: { street?: string; city?: string; state?: string; zipCode?: string };
-}
 
 @Injectable()
 export class UsersService {
@@ -351,9 +332,10 @@ export class UsersService {
 
   /**
    * Internal writes by named server flows (payments: Stripe ids and subscription status). It is
-   * never reached from a request body: the profile goes through `updateProfile`, the legacy
-   * contact details through `updateContactDetails` (BR-001-29, BR-001-31). The email is not here
-   * at all: it cannot be changed (BR-001-26, D-63).
+   * never reached from a request body: the profile goes through `updateProfile` (BR-001-29,
+   * BR-001-31). The email is not here at all: it cannot be changed (BR-001-26, D-63). Neither are
+   * the legacy cpf, dateOfBirth, sex and address: stored, unused and written by nothing until
+   * SPEC-010 decides their fate (BR-010-06).
    */
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserDocument> {
     // SC-10: the update is built field by field from a whitelist, never the DTO object itself, so
@@ -389,25 +371,6 @@ export class UsersService {
     const name: unknown = profile.name;
     if (typeof name === 'string') set.name = name.trim();
     const phone: unknown = profile.phone;
-    if (typeof phone === 'string') set.phone = phone;
-    else if (phone === null) unset.phone = '';
-    return this.applyChanges(userId, { $set: set, $unset: unset });
-  }
-
-  /**
-   * The legacy "complete profile" details (phone, CPF, date of birth, sex, address), which
-   * RF-CON-04 does not list and the frontend profile work removes. A named method with its own
-   * allowlist so `update` is not reachable from the request (BR-001-31).
-   */
-  async updateContactDetails(userId: string, details: ContactDetails): Promise<UserDocument> {
-    const set = this.updatableFields({
-      cpf: details.cpf,
-      dateOfBirth: details.dateOfBirth,
-      sex: details.sex,
-      address: details.address,
-    });
-    const unset: Record<string, ''> = {};
-    const phone: unknown = details.phone;
     if (typeof phone === 'string') set.phone = phone;
     else if (phone === null) unset.phone = '';
     return this.applyChanges(userId, { $set: set, $unset: unset });
@@ -449,16 +412,6 @@ export class UsersService {
     // Stripe's status is cleared with an explicit null, which is a value here, not "absent".
     const status: unknown = dto.subscriptionStatus;
     if (typeof status === 'string' || status === null) fields.subscriptionStatus = status;
-
-    const address: unknown = dto.address;
-    if (typeof address === 'object' && address !== null) {
-      const copy: Record<string, string> = {};
-      for (const key of ADDRESS_FIELDS) {
-        const value: unknown = (address as Record<string, unknown>)[key];
-        if (typeof value === 'string') copy[key] = value;
-      }
-      fields.address = copy;
-    }
 
     return fields;
   }

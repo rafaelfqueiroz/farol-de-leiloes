@@ -97,6 +97,7 @@ The inventory is the source the privacy policy is written from (SPEC-010 BR-010-
 | Data | Where | Purpose | Proposed legal basis (LGPD) | Retention |
 |---|---|---|---|---|
 | Name, email, phone, password hash, Google id | `users` | Account and sign-in | Contract — art. 7º V | Until deletion + 30 days (BR-010-15) |
+| CPF, date of birth, sex, address — **no longer collected**: the profile stopped showing and asking for them (SPEC-001 BR-001-25, issue #1 decision of 16/11/2026) | `users` (fields kept in the schema, stored values untouched) | None. Nothing reads, returns or writes them; no migration erases them | Not collected any more; what is stored has no stated purpose (SC-25) | Until SPEC-010 decides their deletion (BR-010-06); SPEC-012 may ask for the CPF again for billing, with its own purpose |
 | Terms/policy acceptances, WhatsApp consent | acceptance records | Proof of acceptance and consent | Legal obligation / accountability — art. 7º II, art. 8º §2º | Lawyer-set (Q-21); not deleted until set |
 | Favorites, saved filters, alerts, reminders, notification preferences | own collections | Features the account uses | Contract — art. 7º V | Until deletion + 30 days |
 | Investor profile (budget, purpose, financing need) | profiles | Radar and match score (SPEC-013) | Contract — art. 7º V | Until deletion + 30 days (BR-010-17) |

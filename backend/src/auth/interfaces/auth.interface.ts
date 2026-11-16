@@ -1,5 +1,4 @@
 import type { SubscriptionStatus } from '../../users/subscription-status.js';
-import type { UserAddress } from '../../users/user-account.js';
 
 export interface UserProfile {
   _id: string;
@@ -10,10 +9,6 @@ export interface UserProfile {
   role: string;
   subscriptionStatus: SubscriptionStatus | null;
   phone?: string;
-  cpf?: string;
-  dateOfBirth?: Date;
-  sex?: string;
-  address?: UserAddress;
   createdAt: Date;
   updatedAt: Date;
 }

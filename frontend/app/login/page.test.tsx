@@ -73,6 +73,28 @@ describe('LoginPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(messages.errors.INVALID_CREDENTIALS);
   });
 
+  it.each([
+    ['INVALID_CREDENTIALS', 'E-mail ou senha incorretos'],
+    ['TOO_MANY_ATTEMPTS', 'Muitas tentativas. Tente de novo em 15 minutos'],
+  ])('frame 2: %s reads exactly "%s" and moves focus to the alert', async (code, text) => {
+    env.login.mockRejectedValue(new ApiError(code, {}, code === 'TOO_MANY_ATTEMPTS' ? 429 : 401));
+    await submit();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(new RegExp(`^${text}$`));
+    expect(alert).toHaveFocus();
+  });
+
+  it('frame 2.4: a Google refusal reads exactly the frame text', async () => {
+    window.history.pushState({}, '', '/login?error=GOOGLE_EMAIL_NOT_VERIFIED');
+    render(<LoginPage />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'O Google não confirmou este e-mail. Entre com e-mail e senha.',
+    );
+    window.history.pushState({}, '', '/');
+  });
+
   it('shows the generic message when the failure is not an API error', async () => {
     env.login.mockRejectedValue(new TypeError('Failed to fetch'));
     await submit();

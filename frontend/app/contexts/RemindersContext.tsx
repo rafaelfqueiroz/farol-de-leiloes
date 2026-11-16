@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from './AuthContext';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
 import { apiFetch } from '@/lib/api-client';
-import { ApiError, readApiError } from '@/lib/api-error';
+import { ApiError, isEmailVerificationRequired, readApiError } from '@/lib/api-error';
 import { fetchAllPages } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
 
@@ -90,7 +90,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       if (isLatest()) setReminders(items);
     } catch (error) {
       if (!isLatest()) return;
-      if (error instanceof ApiError && error.status === 401) {
+      if (
+        (error instanceof ApiError && error.status === 401) ||
+        isEmailVerificationRequired(error)
+      ) {
+        // signed out, or BR-001-04: an unconfirmed account has no reminders to list (the shell
+        // banner says why); neither is a load failure
         setReminders([]);
       } else {
         setLoadFailed(true);

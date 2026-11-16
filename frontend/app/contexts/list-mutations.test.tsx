@@ -185,6 +185,29 @@ describe('FavoritesProvider', () => {
     expect(result.current.isFavorite('A')).toBe(true);
   });
 
+  const unconfirmed = { status: 403, body: { code: 'EMAIL_VERIFICATION_REQUIRED', context: {} } };
+
+  it('BR-001-04: an unconfirmed account reads no favourites and nothing is reported (the banner says why)', async () => {
+    route = () => unconfirmed;
+    const { result } = renderHook(() => useFavorites(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.favoriteCodes).toEqual([]);
+    expect(env.report).not.toHaveBeenCalled();
+  });
+
+  it('BR-001-04: a heart refused for an unconfirmed e-mail stays off, with no report and no redirect', async () => {
+    const { result } = await mounted();
+    route = () => unconfirmed;
+
+    await act(() => result.current.toggleFavorite(auction('A')));
+
+    expect(result.current.isFavorite('A')).toBe(false);
+    expect(env.report).not.toHaveBeenCalled();
+    expect(env.push).not.toHaveBeenCalled();
+  });
+
   it('reports a refused add and leaves the heart off', async () => {
     const { result } = await mounted();
     route = () => ({ status: 400, body: { code: 'VALIDATION_FAILED', context: {} } });

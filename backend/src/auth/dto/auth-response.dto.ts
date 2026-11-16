@@ -8,31 +8,9 @@ import {
   UserProfile,
 } from '../interfaces/auth.interface.js';
 import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status.js';
-import { SEX_VALUES } from './complete-profile.dto.js';
 
 export const PROVIDERS = ['local', 'google'] as const;
 export const ROLES = ['admin', 'free', 'standard', 'premium'] as const;
-
-export class UserAddressDto {
-  @ApiPropertyOptional({ type: String })
-  street?: string;
-
-  @ApiPropertyOptional({ type: String })
-  city?: string;
-
-  @ApiPropertyOptional({ type: String })
-  state?: string;
-
-  @ApiPropertyOptional({ type: String })
-  zipCode?: string;
-
-  constructor(address: NonNullable<UserProfile['address']>) {
-    this.street = address.street;
-    this.city = address.city;
-    this.state = address.state;
-    this.zipCode = address.zipCode;
-  }
-}
 
 export class UserProfileResponseDto {
   @ApiProperty({ type: String })
@@ -59,18 +37,6 @@ export class UserProfileResponseDto {
   @ApiPropertyOptional({ type: String })
   phone?: string;
 
-  @ApiPropertyOptional({ type: String })
-  cpf?: string;
-
-  @ApiPropertyOptional({ type: String, format: 'date-time' })
-  dateOfBirth?: Date;
-
-  @ApiPropertyOptional({ enum: SEX_VALUES, enumName: 'Sex' })
-  sex?: string;
-
-  @ApiPropertyOptional({ type: () => UserAddressDto })
-  address?: UserAddressDto;
-
   @ApiProperty({ type: String, format: 'date-time' })
   createdAt: Date;
 
@@ -86,10 +52,6 @@ export class UserProfileResponseDto {
     this.role = profile.role;
     this.subscriptionStatus = profile.subscriptionStatus;
     this.phone = profile.phone;
-    this.cpf = profile.cpf;
-    this.dateOfBirth = profile.dateOfBirth;
-    this.sex = profile.sex;
-    this.address = profile.address ? new UserAddressDto(profile.address) : undefined;
     this.createdAt = profile.createdAt;
     this.updatedAt = profile.updatedAt;
   }

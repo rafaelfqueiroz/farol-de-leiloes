@@ -29,7 +29,6 @@ import { LoginDto } from './dto/login.dto.js';
 import { RequestResetPasswordDto, ResetPasswordDto } from './dto/reset-password.dto.js';
 import { SetPasswordDto } from './dto/set-password.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
-import { CompleteProfileDto } from './dto/complete-profile.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 import {
@@ -71,7 +70,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Create a local account and send the verification email',
     description:
-      'acceptTerms, when sent, must be true (BR-001-02; required once the form carries it). Any property beyond email, name, password and ' +
+      'acceptTerms must be true (BR-001-02); without it, or false, the request is refused as VALIDATION_FAILED and creates nothing. Any property beyond email, name, password and ' +
       'acceptTerms is refused as VALIDATION_FAILED and creates nothing (BR-001-31). ' +
       'EMAIL_ALREADY_REGISTERED (409) when the address exists in any letter case (BR-001-01).',
   })
@@ -288,7 +287,10 @@ export class AuthController {
   @Post('set-password')
   @HttpCode(HttpStatus.OK)
   @ApiJwtAuth()
-  @ApiOperation({ summary: 'Add a password to a Google-only account' })
+  @ApiOperation({
+    summary: 'Add a password to a Google-only account',
+    description: 'Ends every other session of the account (BR-001-19).',
+  })
   @ApiOkResponse({ type: MessageResponseDto })
   async setPassword(
     @CurrentUser() user: AuthenticatedUser,
@@ -336,18 +338,6 @@ export class AuthController {
   ): Promise<VerificationStatusResponseDto> {
     const status = await this.authService.getVerificationStatus(user.userId);
     return new VerificationStatusResponseDto(status);
-  }
-
-  @Patch('profile/complete')
-  @ApiJwtAuth()
-  @ApiOperation({ summary: 'Fill in the profile details (phone, CPF, address...)' })
-  @ApiOkResponse({ type: UserProfileResponseDto })
-  async completeProfile(
-    @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: CompleteProfileDto,
-  ): Promise<UserProfileResponseDto> {
-    const profile = await this.authService.completeProfile(user.userId, dto);
-    return new UserProfileResponseDto(profile);
   }
 
   @Get('profile/full')

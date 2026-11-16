@@ -31,6 +31,13 @@ describe('StatusBadge', () => {
     },
   );
 
+  it('shows a label from the catalogue in place of the shared one', () => {
+    renderWithProviders(<StatusBadge status="neutral" label="Não confirmado" />);
+
+    expect(screen.getByText('Não confirmado')).toBeInTheDocument();
+    expect(screen.queryByText('Não iniciada')).not.toBeInTheDocument();
+  });
+
   it('hides the dot from assistive tech so only the label is read', () => {
     renderWithProviders(<StatusBadge status="late" />);
 

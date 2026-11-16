@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { apiFetch } from '@/lib/api-client';
-import { ApiError, readApiError } from '@/lib/api-error';
+import { ApiError, isEmailVerificationRequired, readApiError } from '@/lib/api-error';
 import { fetchAllPages } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
 
@@ -53,7 +53,12 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
       // read page by page
       setSavedFilters(await fetchAllPages<SavedFilter>('/api/saved-filters'));
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
+      if (
+        (error instanceof ApiError && error.status === 401) ||
+        isEmailVerificationRequired(error)
+      ) {
+        // signed out, or BR-001-04: an unconfirmed account has no saved filters (the shell banner
+        // says why); neither is a load failure
         setSavedFilters([]);
       } else {
         setLoadFailed(true);
