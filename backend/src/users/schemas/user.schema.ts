@@ -42,6 +42,11 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: String, required: true, enum: ACCOUNT_STATUSES, default: 'active' })
   status!: AccountStatus;
 
+  // DL-001-02: bumped in the same atomic update that takes over an unconfirmed account at Google
+  // link, so sessions issued for the old credential are refused. Server-written only (BR-001-30).
+  @Prop({ type: Number, required: false, default: 0, min: 0 })
+  credentialVersion?: number;
+
   // Role-based access control
   @Prop({ required: true, enum: ['admin', 'free', 'standard', 'premium'], default: 'free' })
   role!: string;

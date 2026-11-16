@@ -157,8 +157,10 @@ export class UsersService {
    * - not active (BR-001-16), or already linked to another Google identity (BR-001-11): no write;
    * - email confirmed: `googleId` is set and `google` joins the providers; the password and the
    *   local provider stay;
-   * - email not confirmed: the same, and the email becomes confirmed, the password is deleted and
-   *   `local` leaves the providers (whoever set that password never proved they own the address).
+   * - email not confirmed: the same, and the email becomes confirmed, the password is deleted,
+   *   `local` leaves the providers (whoever set that password never proved they own the address)
+   *   and the credential version goes up by one, which ends every session issued for the old
+   *   credential, even one a sign-in that already checked the password opens afterwards.
    *
    * The unique index on `googleId` makes a second account unable to take the same identity even
    * under a race (DUPLICATE_KEY is a conflict). Ending the sessions and links of a taken-over
@@ -237,6 +239,16 @@ export class UsersService {
               },
               // Confirmed: keep the password. Unconfirmed: delete it.
               password: { $cond: [confirmed, '$password', '$$REMOVE'] },
+              // DL-001-02: unconfirmed takes over the credentials, so the version moves in this
+              // same update; a session opened for the old one never matches again, whatever
+              // revocation write fails or races afterwards (see credentialVersionAfterLink).
+              credentialVersion: {
+                $cond: [
+                  confirmed,
+                  '$credentialVersion',
+                  { $add: [{ $ifNull: ['$credentialVersion', 0] }, 1] },
+                ],
+              },
             },
           },
         ],

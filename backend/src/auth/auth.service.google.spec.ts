@@ -140,7 +140,7 @@ describe('Google linking decision table (BR-001-10, BR-001-11, BR-001-16, DL-001
     const jti = await new SessionsService(
       ctx.sessionRepo as unknown as SessionsRepository,
       ctx.clock,
-    ).create(id);
+    ).create(id, 0);
     const confirmation = await ctx.tokens.issue(id, 'email_confirmation');
     const recovery = await ctx.tokens.issue(id, 'account_recovery');
 
@@ -161,13 +161,63 @@ describe('Google linking decision table (BR-001-10, BR-001-11, BR-001-16, DL-001
       ctx.sessionRepo as unknown as SessionsRepository,
       ctx.clock,
     );
-    const jti = await sessions.create(id);
+    const jti = await sessions.create(id, 0);
     const recovery = await ctx.tokens.issue(id, 'account_recovery');
 
     await ctx.service.beginGoogleSignIn(identity());
 
     await expect(sessions.isActive(jti, id)).resolves.toBe(true);
     await expect(ctx.tokens.consume(recovery, 'account_recovery')).resolves.not.toBeNull();
+  });
+
+  it('DL-001-02: taking over an unconfirmed account moves its credential version from 0 to 1; a confirmed link leaves it', async () => {
+    const takenOver = ctx.users.seed(account({ emailVerified: false }));
+    const kept = ctx.users.seed(
+      account({
+        _id: '64b000000000000000000002',
+        email: 'bia@example.test',
+        credentialVersion: 4,
+      }),
+    );
+
+    await ctx.service.beginGoogleSignIn(identity());
+    await ctx.service.beginGoogleSignIn(identity({ googleId: 'g-2', email: 'bia@example.test' }));
+
+    expect(takenOver.credentialVersion).toBe(1);
+    expect(kept.credentialVersion).toBe(4);
+  });
+
+  it('DL-001-02: a session opened from a document read before the takeover carries the old version; the exchange afterwards carries the new one', async () => {
+    const existing = ctx.users.seed(account({ emailVerified: false }));
+    const id = '64b000000000000000000001';
+    // The sign-in that already passed the password check holds this snapshot.
+    const validatedBeforeLink = { ...existing };
+
+    const code = await ctx.service.beginGoogleSignIn(identity());
+    await ctx.service.startSession(validatedBeforeLink);
+    await ctx.service.exchangeGoogleCode(code);
+
+    const versions = ctx.sessionRepo.stored
+      .filter((s) => s.userId === id)
+      .map((s) => s.credentialVersion);
+    expect(versions).toEqual([0, 1]);
+    expect(existing.credentialVersion).toBe(1);
+  });
+
+  it('DL-001-02: both clean-up steps are attempted when one fails, the failure is surfaced, and a retry sees the account already linked', async () => {
+    ctx.users.seed(account({ emailVerified: false }));
+    const revokeSessions = vi
+      .spyOn(SessionsService.prototype, 'revokeAllForUser')
+      .mockRejectedValueOnce(new Error('write failed'));
+    const revokeTokens = vi.spyOn(AccountTokenService.prototype, 'revokeAllUnused');
+
+    await expect(ctx.service.beginGoogleSignIn(identity())).rejects.toThrow('write failed');
+
+    expect(revokeSessions).toHaveBeenCalledTimes(1);
+    expect(revokeTokens).toHaveBeenCalledTimes(1);
+    // The credential version moved with the link, so the retry (linked by Google id) is safe.
+    await expect(ctx.service.beginGoogleSignIn(identity())).resolves.toMatch(/^[0-9a-f]{64}$/);
+    vi.restoreAllMocks();
   });
 
   it('BR-001-11: an account already linked is found by Google id even when the email differs', async () => {

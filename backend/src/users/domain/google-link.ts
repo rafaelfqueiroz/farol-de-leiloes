@@ -22,6 +22,20 @@ export interface GoogleLinkSubject {
   googleId?: string | null;
 }
 
+/**
+ * DL-001-02: the account's credential version after a link. Taking over an unconfirmed account
+ * bumps it, in the same atomic update that deletes the password, so every session issued for the
+ * earlier credential (including one a racing sign-in opens after the link) stops matching. A
+ * missing version counts as 0; any other outcome leaves it as it was.
+ */
+export function credentialVersionAfterLink(
+  current: number | undefined,
+  decision: GoogleLinkDecision,
+): number {
+  const version = current ?? 0;
+  return decision === 'linked_unconfirmed' ? version + 1 : version;
+}
+
 export function decideGoogleLink(subject: GoogleLinkSubject, googleId: string): GoogleLinkDecision {
   if ((subject.status ?? 'active') !== 'active') return 'inactive';
   if (subject.googleId != null && subject.googleId !== googleId) return 'google_conflict';

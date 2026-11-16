@@ -2,7 +2,12 @@
 // existing account. The same table is held against MongoDB in
 // test/integration/auth-google.spec.ts, which runs the real conditional update.
 import { describe, expect, it } from 'vitest';
-import { decideGoogleLink, type GoogleLinkSubject } from './google-link.js';
+import {
+  credentialVersionAfterLink,
+  decideGoogleLink,
+  type GoogleLinkDecision,
+  type GoogleLinkSubject,
+} from './google-link.js';
 
 describe('decideGoogleLink', () => {
   it.each<[string, GoogleLinkSubject, string]>([
@@ -43,5 +48,18 @@ describe('decideGoogleLink', () => {
     ['inactive wins over a conflict', { status: 'closed', googleId: 'g-other' }, 'inactive'],
   ])('%s', (_label, subject, expected) => {
     expect(decideGoogleLink(subject, 'g-1')).toBe(expected);
+  });
+});
+
+describe('credentialVersionAfterLink (DL-001-02)', () => {
+  it.each<[string, number | undefined, GoogleLinkDecision, number]>([
+    ['taking over an unconfirmed account bumps the version', 4, 'linked_unconfirmed', 5],
+    ['a missing version counts as 0 and becomes 1 on takeover', undefined, 'linked_unconfirmed', 1],
+    ['linking a confirmed account leaves the version', 4, 'linked_confirmed', 4],
+    ['a missing version stays 0 on a confirmed link', undefined, 'linked_confirmed', 0],
+    ['an inactive account is not touched', 2, 'inactive', 2],
+    ['a conflict is not touched', 2, 'google_conflict', 2],
+  ])('%s', (_label, current, decision, expected) => {
+    expect(credentialVersionAfterLink(current, decision)).toBe(expected);
   });
 });

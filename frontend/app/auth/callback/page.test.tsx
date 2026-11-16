@@ -8,6 +8,7 @@ import AuthCallbackPage from './page';
 // `?code=`, never a session; the page trades it through the BFF, stores the session it gets, loads
 // the account and goes home, or goes back to the login (with the error code) when it cannot.
 const env = vi.hoisted(() => ({
+  replace: vi.fn(),
   push: vi.fn(),
   loadUser: vi.fn(),
   report: vi.fn(),
@@ -16,7 +17,7 @@ const env = vi.hoisted(() => ({
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: env.push }),
+  useRouter: () => ({ push: env.push, replace: env.replace }),
   useSearchParams: () => new URLSearchParams(env.search),
 }));
 vi.mock('@/app/contexts/AuthContext', () => ({ useAuth: () => ({ loadUser: env.loadUser }) }));
@@ -25,11 +26,13 @@ vi.mock('@/lib/report-client-error', () => ({ reportClientError: env.report }));
 beforeEach(() => {
   window.localStorage.clear();
   env.push.mockReset();
+  env.replace.mockReset();
   env.loadUser.mockReset().mockResolvedValue(undefined);
   env.report.mockReset();
   env.fetch.mockReset();
   vi.stubGlobal('fetch', env.fetch);
   env.search = '';
+  window.history.replaceState(null, '', '/auth/callback');
 });
 
 afterEach(() => {
@@ -48,7 +51,7 @@ describe('AuthCallbackPage', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: messages.authCallback.authenticating }),
     ).toBeInTheDocument();
-    await waitFor(() => expect(env.push).toHaveBeenCalledWith('/login'));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/login'));
     expect(env.fetch).not.toHaveBeenCalled();
     expect(await axe(container)).toHaveNoViolations();
   });
@@ -66,7 +69,7 @@ describe('AuthCallbackPage', () => {
     env.fetch.mockResolvedValue(json({ status: 'signed_in', accessToken: 'jwt-1', user: {} }));
     render(<AuthCallbackPage />);
 
-    await waitFor(() => expect(env.push).toHaveBeenCalledWith('/'));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/'));
     expect(env.fetch).toHaveBeenCalledTimes(1);
     const [url, init] = env.fetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/auth/google/exchange');
@@ -80,7 +83,7 @@ describe('AuthCallbackPage', () => {
     env.search = 'token=jwt-from-url';
     render(<AuthCallbackPage />);
 
-    await waitFor(() => expect(env.push).toHaveBeenCalledWith('/login'));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/login'));
     expect(localStorage.getItem('token')).toBeNull();
     expect(env.fetch).not.toHaveBeenCalled();
   });
@@ -90,23 +93,71 @@ describe('AuthCallbackPage', () => {
     env.fetch.mockResolvedValue(json({ code: 'INVALID_GOOGLE_CODE', context: {} }, 400));
     render(<AuthCallbackPage />);
 
-    await waitFor(() => expect(env.push).toHaveBeenCalledWith('/login?error=INVALID_GOOGLE_CODE'));
+    await waitFor(() =>
+      expect(env.replace).toHaveBeenCalledWith('/login?error=INVALID_GOOGLE_CODE'),
+    );
     expect(localStorage.getItem('token')).toBeNull();
     expect(env.loadUser).not.toHaveBeenCalled();
   });
 
-  it('BR-001-09: a first Google sign-in (terms_required) stores nothing and ends on the login until the terms screen exists', async () => {
+  it('BR-001-09, BR-010-01: a first Google sign-in (terms_required) cancels the waiting profile, stores nothing and ends on the login until the terms screen exists', async () => {
     env.search = 'code=new-person';
-    env.fetch.mockResolvedValue(
-      json({ status: 'terms_required', email: 'ana@example.test', name: 'Ana' }),
+    env.fetch.mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/api/auth/google/exchange'
+          ? json({ status: 'terms_required', email: 'ana@example.test', name: 'Ana' })
+          : json({}),
+      ),
     );
     render(<AuthCallbackPage />);
 
     await waitFor(() =>
-      expect(env.push).toHaveBeenCalledWith('/login?error=GOOGLE_SIGN_IN_FAILED'),
+      expect(env.replace).toHaveBeenCalledWith('/login?error=GOOGLE_SIGN_IN_FAILED'),
     );
+    const calls = env.fetch.mock.calls as [string, RequestInit][];
+    expect(calls.map(([url]) => url)).toEqual([
+      '/api/auth/google/exchange',
+      '/api/auth/google/cancel',
+    ]);
+    expect(calls[1]?.[1].method).toBe('POST');
+    expect(calls[1]?.[1].body).toBe(JSON.stringify({ code: 'new-person' }));
     expect(localStorage.getItem('token')).toBeNull();
     expect(env.loadUser).not.toHaveBeenCalled();
+    expect(env.push).not.toHaveBeenCalled();
+  });
+
+  it('still ends on the login, reporting it, when the cancel cannot be reached', async () => {
+    env.search = 'code=new-person';
+    const failure = new TypeError('Failed to fetch');
+    env.fetch
+      .mockResolvedValueOnce(json({ status: 'terms_required', email: 'a@example.test', name: 'A' }))
+      .mockRejectedValueOnce(failure);
+    render(<AuthCallbackPage />);
+
+    await waitFor(() =>
+      expect(env.replace).toHaveBeenCalledWith('/login?error=GOOGLE_SIGN_IN_FAILED'),
+    );
+    expect(env.report).toHaveBeenCalledWith(failure, { where: 'auth/callback' });
+  });
+
+  it('removes the code from the address bar as soon as it is read, before the exchange answers', async () => {
+    window.history.replaceState(null, '', '/auth/callback?code=abc123');
+    env.search = 'code=abc123';
+    env.fetch.mockReturnValue(new Promise(() => undefined));
+    render(<AuthCallbackPage />);
+
+    await waitFor(() => expect(env.fetch).toHaveBeenCalledTimes(1));
+    expect(window.location.search).toBe('');
+    expect(window.location.pathname).toBe('/auth/callback');
+  });
+
+  it('never pushes a history entry: every redirect replaces the callback', async () => {
+    env.search = 'code=abc123';
+    env.fetch.mockResolvedValue(json({ status: 'signed_in', accessToken: 'jwt-1', user: {} }));
+    render(<AuthCallbackPage />);
+
+    await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/'));
+    expect(env.push).not.toHaveBeenCalled();
   });
 
   it('reports the failure and goes to the login when the exchange cannot be reached', async () => {
@@ -115,7 +166,7 @@ describe('AuthCallbackPage', () => {
     env.fetch.mockRejectedValue(failure);
     render(<AuthCallbackPage />);
 
-    await waitFor(() => expect(env.push).toHaveBeenCalledWith('/login'));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/login'));
     expect(env.report).toHaveBeenCalledWith(failure, { where: 'auth/callback' });
   });
 
@@ -126,8 +177,8 @@ describe('AuthCallbackPage', () => {
     env.loadUser.mockRejectedValue(failure);
     render(<AuthCallbackPage />);
 
-    await waitFor(() => expect(env.push).toHaveBeenCalledWith('/login'));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/login'));
     expect(env.report).toHaveBeenCalledWith(failure, { where: 'auth/callback' });
-    expect(env.push).not.toHaveBeenCalledWith('/');
+    expect(env.replace).not.toHaveBeenCalledWith('/');
   });
 });

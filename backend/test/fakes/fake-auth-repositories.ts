@@ -103,6 +103,7 @@ export class FakeAccountTokenRepository implements Port<AccountTokenRepository> 
 interface StoredSession {
   id: string;
   userId: string;
+  credentialVersion: number;
   expiresAt: Date;
   revokedAt?: Date;
 }
@@ -110,14 +111,20 @@ interface StoredSession {
 export class FakeSessionsRepository implements Port<SessionsRepository> {
   readonly stored: StoredSession[] = [];
 
-  async insert(session: { id: string; userId: string; expiresAt: Date }): Promise<void> {
+  async insert(session: {
+    id: string;
+    userId: string;
+    credentialVersion: number;
+    expiresAt: Date;
+  }): Promise<void> {
     this.stored.push({ ...session });
   }
 
-  async isActive(id: string, userId: string, now: Date): Promise<boolean> {
-    return this.stored.some(
+  async activeCredentialVersion(id: string, userId: string, now: Date): Promise<number | null> {
+    const found = this.stored.find(
       (s) => s.id === id && s.userId === userId && !s.revokedAt && s.expiresAt > now,
     );
+    return found ? found.credentialVersion : null;
   }
 
   async revoke(id: string, now: Date): Promise<void> {

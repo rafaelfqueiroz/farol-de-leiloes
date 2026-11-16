@@ -18,6 +18,7 @@ import { normalizeEmail } from '../common/normalize-email.js';
 import { AccountTokenService } from './tokens/account-token.service.js';
 import { SessionsService } from './sessions/sessions.service.js';
 import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
+import { credentialVersionOf } from '../users/domain/credential-version.js';
 import type { GoogleIdentity } from './google/google-identity.js';
 
 function idOf(user: UserAccount): string {
@@ -176,11 +177,30 @@ export class AuthService implements BeforeApplicationShutdown {
     }
     if (outcome.result === 'linked_unconfirmed') {
       // DL-001-02: the email was never confirmed, so whoever set the password never proved they
-      // own it. The update already deleted the password; sessions and links it produced end now.
-      await this.sessions.revokeAllForUser(userId);
-      await this.accountTokens.revokeAllUnused(userId);
+      // own it. The same update that deleted the password also moved the credential version, so
+      // every session issued for the old credential is already refused (JwtStrategy), including
+      // one a sign-in that had passed the password check opens after this point. Revoking them
+      // and the outstanding links is the tidy-up on top; each step is idempotent and both are
+      // attempted even when one fails, so the failure is reported only after neither was skipped.
+      await this.endTakenOverCredentials(userId);
     }
     return outcome.account;
+  }
+
+  private async endTakenOverCredentials(userId: string): Promise<void> {
+    const steps = [
+      this.sessions.revokeAllForUser(userId),
+      this.accountTokens.revokeAllUnused(userId),
+    ];
+    const results = await Promise.allSettled(steps);
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed) {
+      // SC-15: kind of failure only, never the provider's message.
+      this.logger.warn(
+        `Google link clean-up incomplete (${failed.reason instanceof Error ? failed.reason.name : 'error'})`,
+      );
+      throw failed.reason;
+    }
   }
 
   /** BR-001-18: sign-out ends this session on the server, so a copy of the token stops working. */
@@ -300,10 +320,15 @@ export class AuthService implements BeforeApplicationShutdown {
   /**
    * BR-001-17/18: opens a server-side session and signs a token that only points at it. The token
    * carries `sub` and `jti`; no email, name, role or plan (those are read per request).
+   *
+   * DL-001-02: the session records the credential version of `user`, so `user` must be the
+   * document that proved the credential (the one `validatePassword` checked, the account the
+   * exchange or the Google flow just read), never a later fetch: a credential takeover in between
+   * then leaves this session with the old version, and the next request refuses it.
    */
   async startSession(user: UserAccount): Promise<AuthResult> {
     const userId = idOf(user);
-    const jti = await this.sessions.create(userId);
+    const jti = await this.sessions.create(userId, credentialVersionOf(user));
     const payload: JwtPayload = { sub: userId, jti };
     return {
       accessToken: this.jwtService.sign(payload),

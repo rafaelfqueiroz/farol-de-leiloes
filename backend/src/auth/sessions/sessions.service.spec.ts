@@ -21,8 +21,8 @@ describe('SessionsService', () => {
   it('opens a session with a random UUID id that is active for its owner only', async () => {
     const { service } = build();
 
-    const first = await service.create(USER);
-    const second = await service.create(USER);
+    const first = await service.create(USER, 0);
+    const second = await service.create(USER, 0);
 
     expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(second).not.toBe(first);
@@ -32,7 +32,7 @@ describe('SessionsService', () => {
 
   it('BR-001-18: a session lives 7 days: active at 6 days 23 hours, refused 7 days and 1 minute after sign-in', async () => {
     const { service, clock } = build();
-    const jti = await service.create(USER);
+    const jti = await service.create(USER, 0);
     expect(SESSION_TTL_MS).toBe(7 * DAY);
 
     clock.advance(7 * DAY - MINUTE);
@@ -44,8 +44,8 @@ describe('SessionsService', () => {
 
   it('BR-001-18: revoke ends only that session, at once', async () => {
     const { service } = build();
-    const mine = await service.create(USER);
-    const other = await service.create(USER);
+    const mine = await service.create(USER, 0);
+    const other = await service.create(USER, 0);
 
     await service.revoke(mine);
 
@@ -55,9 +55,9 @@ describe('SessionsService', () => {
 
   it('BR-001-19: revokeAllForUser ends every session of that user and no one else', async () => {
     const { service } = build();
-    const a = await service.create(USER);
-    const b = await service.create(USER);
-    const stranger = await service.create(OTHER);
+    const a = await service.create(USER, 0);
+    const b = await service.create(USER, 0);
+    const stranger = await service.create(OTHER, 0);
 
     await service.revokeAllForUser(USER);
 
@@ -68,8 +68,8 @@ describe('SessionsService', () => {
 
   it('BR-001-19: revokeAllForUser keeps the session named as the exception', async () => {
     const { service } = build();
-    const current = await service.create(USER);
-    const other = await service.create(USER);
+    const current = await service.create(USER, 0);
+    const other = await service.create(USER, 0);
 
     await service.revokeAllForUser(USER, current);
 
@@ -86,5 +86,33 @@ describe('SessionsService', () => {
     const { service } = build();
 
     await expect(service.isActive(jti, user)).resolves.toBe(false);
+  });
+
+  describe('DL-001-02: sessions are bound to the credential version', () => {
+    it('stores the version the session was issued for and reports it while active', async () => {
+      const { service, repo } = build();
+
+      const old = await service.create(USER, 0);
+      const bumped = await service.create(USER, 3);
+
+      expect(repo.stored.find((s) => s.id === bumped)?.credentialVersion).toBe(3);
+      await expect(service.activeCredentialVersion(old, USER)).resolves.toBe(0);
+      await expect(service.activeCredentialVersion(bumped, USER)).resolves.toBe(3);
+    });
+
+    it('reports no version for a revoked, expired, foreign or unknown session', async () => {
+      const { service, clock } = build();
+      const revoked = await service.create(USER, 1);
+      const expired = await service.create(USER, 1);
+      await service.revoke(revoked);
+      clock.advance(7 * DAY + MINUTE);
+      const fresh = await service.create(USER, 1);
+
+      await expect(service.activeCredentialVersion(revoked, USER)).resolves.toBeNull();
+      await expect(service.activeCredentialVersion(expired, USER)).resolves.toBeNull();
+      await expect(service.activeCredentialVersion(fresh, OTHER)).resolves.toBeNull();
+      await expect(service.activeCredentialVersion('unknown', USER)).resolves.toBeNull();
+      await expect(service.activeCredentialVersion(fresh, USER)).resolves.toBe(1);
+    });
   });
 });

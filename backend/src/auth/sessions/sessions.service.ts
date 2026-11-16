@@ -20,22 +20,37 @@ export class SessionsService {
     private readonly clock: Clock, // AR-24
   ) {}
 
-  /** Opens a session for the user and returns its id, the token's `jti`. */
-  async create(userId: string): Promise<string> {
+  /**
+   * Opens a session for the user and returns its id, the token's `jti`. `credentialVersion` is the
+   * one the caller read from the same account document that proved the credential (the password
+   * check, the Google exchange), never from a later fetch: if the credentials are taken over in
+   * between, this session carries the old version and the next request refuses it (DL-001-02).
+   */
+  async create(userId: string, credentialVersion: number): Promise<string> {
     const id = randomUUID();
     await this.sessions.insert({
       id,
       userId,
+      credentialVersion,
       expiresAt: new Date(this.clock.now().getTime() + SESSION_TTL_MS),
     });
     return id;
   }
 
   async isActive(jti: string, userId: string): Promise<boolean> {
+    return (await this.activeCredentialVersion(jti, userId)) !== null;
+  }
+
+  /**
+   * The credential version a live session was issued for, or null when it is unknown, another
+   * account's, revoked or expired. The caller compares it with the account's current version
+   * (DL-001-02).
+   */
+  async activeCredentialVersion(jti: string, userId: string): Promise<number | null> {
     // Both come out of a signed token we issued, but a malformed value must refuse, not throw.
-    if (typeof jti !== 'string' || jti === '' || typeof userId !== 'string') return false;
-    if (!OBJECT_ID.test(userId)) return false;
-    return this.sessions.isActive(jti, userId, this.clock.now());
+    if (typeof jti !== 'string' || jti === '' || typeof userId !== 'string') return null;
+    if (!OBJECT_ID.test(userId)) return null;
+    return this.sessions.activeCredentialVersion(jti, userId, this.clock.now());
   }
 
   /** BR-001-18: sign-out ends this session at once on the server. */

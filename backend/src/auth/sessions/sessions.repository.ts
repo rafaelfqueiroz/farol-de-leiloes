@@ -9,23 +9,36 @@ import { SessionEntity } from './session.schema.js';
 export class SessionsRepository {
   constructor(@InjectModel(SessionEntity.name) private readonly model: Model<SessionEntity>) {}
 
-  async insert(session: { id: string; userId: string; expiresAt: Date }): Promise<void> {
+  async insert(session: {
+    id: string;
+    userId: string;
+    credentialVersion: number;
+    expiresAt: Date;
+  }): Promise<void> {
     await this.model.create({
       _id: session.id,
       userId: new Types.ObjectId(session.userId),
+      credentialVersion: session.credentialVersion,
       expiresAt: session.expiresAt,
     });
   }
 
-  /** True when the session exists, belongs to the user, is not revoked and has not expired. */
-  async isActive(id: string, userId: string, now: Date): Promise<boolean> {
-    const found = await this.model.exists({
-      _id: { $eq: id },
-      userId: { $eq: new Types.ObjectId(userId) },
-      revokedAt: null,
-      expiresAt: serverOperators({ $gt: now }),
-    });
-    return found !== null;
+  /**
+   * The credential version the session was issued for, or null when it does not exist, does not
+   * belong to the user, is revoked or has expired. A session stored before the field counts as 0.
+   */
+  async activeCredentialVersion(id: string, userId: string, now: Date): Promise<number | null> {
+    const found = await this.model
+      .findOne({
+        _id: { $eq: id },
+        userId: { $eq: new Types.ObjectId(userId) },
+        revokedAt: null,
+        expiresAt: serverOperators({ $gt: now }),
+      })
+      .select('credentialVersion')
+      .lean()
+      .exec();
+    return found === null ? null : (found.credentialVersion ?? 0);
   }
 
   async revoke(id: string, now: Date): Promise<void> {

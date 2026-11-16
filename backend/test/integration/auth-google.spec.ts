@@ -4,15 +4,20 @@
 // `GoogleAuthGuard`, which would redirect to Google and verify the profile, is replaced by a guard
 // that takes the identity a verified Google profile would have produced from a request header; the
 // callback, the service, the rules and the database are all real. Nothing reaches the network.
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ExecutionContext } from '@nestjs/common';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
-import type { Connection, Model } from 'mongoose';
+import { Types, type Connection, type Model } from 'mongoose';
 import request from 'supertest';
 import { AuthService } from '../../src/auth/auth.service.js';
 import { GoogleAuthGuard } from '../../src/auth/guards/google-auth.guard.js';
 import type { GoogleIdentity } from '../../src/auth/google/google-identity.js';
-import { decideGoogleLink } from '../../src/users/domain/google-link.js';
+import { SessionsService } from '../../src/auth/sessions/sessions.service.js';
+import { credentialVersionOf } from '../../src/users/domain/credential-version.js';
+import {
+  credentialVersionAfterLink,
+  decideGoogleLink,
+} from '../../src/users/domain/google-link.js';
 import { UserEntity, type UserDocument } from '../../src/users/schemas/user.schema.js';
 import { UsersService } from '../../src/users/users.service.js';
 import { SECOND } from '../fakes/fake-clock.js';
@@ -114,6 +119,8 @@ describe('SPEC-001 Google sign-in (integration)', () => {
   afterAll(async () => {
     await harness.app.close();
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   describe('a first sign-in with a verified email (BR-001-03, BR-001-09, SPEC-010 BR-010-01)', () => {
     it('AC: asks for the terms, then creates a confirmed searcher account with Google only', async () => {
@@ -312,6 +319,104 @@ describe('SPEC-001 Google sign-in (integration)', () => {
         .send({ token: confirmation })
         .expect(400);
       await request(server()).get('/api/auth/me').set(as(signedIn.body.accessToken)).expect(200);
+    });
+
+    it('DL-001-02: a sign-in that checked the password before the link cannot keep a session after it', async () => {
+      const who = identity();
+      const registration = await registerLocal(who.email, false);
+      // The race, in order: the password is validated (login is past bcrypt)...
+      const validatedBeforeLink = await usersService.validatePassword(who.email, PASSWORD);
+      expect(validatedBeforeLink).not.toBeNull();
+      // ...Google takes the unconfirmed account over (password deleted, sessions revoked)...
+      const signedIn = await exchange(await codeFor(who)).expect(200);
+      // ...and only then does that login create its session, from the pre-link validation.
+      const late = await harness.moduleRef
+        .get(AuthService)
+        .startSession(validatedBeforeLink as UserDocument);
+
+      // The session exists and was never revoked, yet it carries the credential version it was
+      // validated for, which the takeover has since moved past.
+      const claims = JSON.parse(
+        Buffer.from(late.accessToken.split('.')[1] ?? '', 'base64url').toString(),
+      ) as { jti: string };
+      const lateSession = await collection('sessions').findOne({ _id: claims.jti as never });
+      expect(lateSession).toMatchObject({ credentialVersion: 0 });
+      expect(lateSession?.['revokedAt']).toBeUndefined();
+      expect((await users.findById(registration.user._id).lean())?.credentialVersion).toBe(1);
+      const refused = await request(server()).get('/api/auth/me').set(as(late.accessToken));
+      expect(refused.status).toBe(401);
+      expect(refused.body).toEqual({ code: 'UNAUTHENTICATED', context: {} });
+      // The legitimate Google session, issued for the new version, works.
+      await request(server()).get('/api/auth/me').set(as(signedIn.body.accessToken)).expect(200);
+    });
+
+    it('DL-001-02: sessions opened before the link are refused through the credential version alone', async () => {
+      const who = identity();
+      const registration = await registerLocal(who.email, false);
+      const login = await loginLocal(who.email).expect(200);
+      // The revocation writes do nothing (as if they had failed or never ran).
+      vi.spyOn(SessionsService.prototype, 'revokeAllForUser').mockResolvedValue(undefined);
+
+      const signedIn = await exchange(await codeFor(who)).expect(200);
+
+      // Nothing revoked them: the version alone refuses them.
+      expect(
+        await collection('sessions').countDocuments({
+          userId: new Types.ObjectId(registration.user._id),
+          revokedAt: { $exists: true },
+        }),
+      ).toBe(0);
+      const stored = await users.findById(registration.user._id).lean();
+      expect(stored?.credentialVersion).toBe(1);
+      await request(server()).get('/api/auth/me').set(as(registration.accessToken)).expect(401);
+      await request(server()).get('/api/auth/me').set(as(login.body.accessToken)).expect(401);
+      await request(server()).get('/api/auth/me').set(as(signedIn.body.accessToken)).expect(200);
+    });
+
+    it('DL-001-02: a clean-up that fails after the link leaves nothing usable, and the retry signs in', async () => {
+      const who = identity();
+      const registration = await registerLocal(who.email, false);
+      vi.spyOn(SessionsService.prototype, 'revokeAllForUser').mockRejectedValueOnce(
+        new Error('write failed'),
+      );
+
+      // The callback reports the failure (a redirect to the sign-in page)...
+      const failed = await callback(who).expect(302);
+      expect(failed.headers['location']).toContain('/login?error=');
+      // ...the link itself happened, in one update, together with the version...
+      const stored = await users.findById(registration.user._id).lean();
+      expect(stored).toMatchObject({ googleId: who.googleId, credentialVersion: 1 });
+      // ...so the earlier session is refused although nothing revoked it...
+      await request(server()).get('/api/auth/me').set(as(registration.accessToken)).expect(401);
+      // ...and the next attempt goes through the linked-by-Google-id path and signs in.
+      const signedIn = await exchange(await codeFor(who)).expect(200);
+      await request(server()).get('/api/auth/me').set(as(signedIn.body.accessToken)).expect(200);
+    });
+
+    it('DL-001-02: linking a confirmed account does not move the version; its open sessions keep working', async () => {
+      const who = identity();
+      const registration = await registerLocal(who.email, true);
+      const login = await loginLocal(who.email).expect(200);
+
+      const signedIn = await exchange(await codeFor(who)).expect(200);
+
+      const stored = await users.findById(registration.user._id).lean();
+      expect(credentialVersionOf(stored ?? {})).toBe(0);
+      await request(server()).get('/api/auth/me').set(as(registration.accessToken)).expect(200);
+      await request(server()).get('/api/auth/me').set(as(login.body.accessToken)).expect(200);
+      await request(server()).get('/api/auth/me').set(as(signedIn.body.accessToken)).expect(200);
+    });
+
+    it('DL-001-02: a session stored before the field existed counts as version 0 on both sides', async () => {
+      const who = identity();
+      const registration = await registerLocal(who.email, true);
+      await collection('users').updateOne(
+        { _id: new Types.ObjectId(registration.user._id) },
+        { $unset: { credentialVersion: '' } },
+      );
+      await collection('sessions').updateMany({}, { $unset: { credentialVersion: '' } });
+
+      await request(server()).get('/api/auth/me').set(as(registration.accessToken)).expect(200);
     });
 
     it('DL-001-02: an unconfirmed account loses its outstanding recovery link too', async () => {
@@ -544,6 +649,12 @@ describe('SPEC-001 Google sign-in (integration)', () => {
 
       expect(outcome.result).toBe(expected);
       const after = await collection('users').findOne({ _id: insertedId });
+      // DL-001-02: only a takeover moves the version (a missing one counts as 0).
+      expect(
+        credentialVersionOf({
+          credentialVersion: after?.['credentialVersion'] as number | undefined,
+        }),
+      ).toBe(credentialVersionAfterLink(undefined, expected));
       if (expected === 'linked_confirmed') {
         expect(after).toMatchObject({
           googleId: mine,

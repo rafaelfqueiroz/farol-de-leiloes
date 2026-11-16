@@ -1,6 +1,9 @@
 import { normalizeEmail } from '../../src/common/normalize-email.js';
 import { DomainError } from '../../src/common/errors/domain-error.js';
-import { decideGoogleLink } from '../../src/users/domain/google-link.js';
+import {
+  credentialVersionAfterLink,
+  decideGoogleLink,
+} from '../../src/users/domain/google-link.js';
 import type { UserAccount } from '../../src/users/user-account.js';
 import type { UsersService } from '../../src/users/users.service.js';
 
@@ -89,6 +92,7 @@ export class FakeUsersService implements UsersPort {
     if (!account) return { result: 'not_found' };
     const decision = decideGoogleLink(account, googleId);
     if (decision === 'inactive' || decision === 'google_conflict') return { result: decision };
+    account.credentialVersion = credentialVersionAfterLink(account.credentialVersion, decision);
     account.googleId = googleId;
     account.emailVerified = true;
     if (decision === 'linked_unconfirmed') {

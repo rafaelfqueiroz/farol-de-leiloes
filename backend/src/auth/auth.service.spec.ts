@@ -356,6 +356,21 @@ describe('AuthService with fake collaborators', () => {
       expect(attemptRepo.released).toEqual([`ip:${IP}`]);
     });
 
+    it.each<[string, number | undefined, number]>([
+      ['a version the account holds', 3, 3],
+      ['an account without a version (counts as 0)', undefined, 0],
+    ])(
+      'DL-001-02: the session records the credential version of the validated account: %s',
+      async (_label, stored, expected) => {
+        const { service, users, sessionRepo } = build();
+        users.seed(localAccount({ credentialVersion: stored }));
+
+        await service.login({ email: 'local@example.test', password: 'correct-password' }, IP);
+
+        expect(sessionRepo.stored.map((s) => s.credentialVersion)).toEqual([expected]);
+      },
+    );
+
     it.each([
       ['wrong password', 'local@example.test', 'wrong-password'],
       ['unknown email', 'nobody@example.test', 'correct-password'],
