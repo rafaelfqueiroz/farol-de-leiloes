@@ -78,7 +78,8 @@ export default defineConfig({
         test: {
           ...shared,
           name: 'unit',
-          include: ['src/**/*.spec.ts', 'test/support/**/*.spec.ts'],
+          // scripts/: the reference-workload generator (SPEC-003 BR-003-08) is pure, so unit.
+          include: ['src/**/*.spec.ts', 'test/support/**/*.spec.ts', 'scripts/**/*.spec.ts'],
           exclude: [...configDefaults.exclude, ...timeZoneSpecs],
         },
       },

@@ -489,7 +489,7 @@ describe('AppShell — account menu', () => {
     const user = userEvent.setup();
     renderShell();
 
-    await user.click(screen.getByRole('button', { name: 'Conta de Ana Teste' }));
+    await user.click(screen.getByRole('button', { name: 'AT, conta de Ana Teste' }));
     const menu = await screen.findByRole('menu', { name: 'Conta de Ana Teste' });
     expect(screen.getByText('ana@exemplo.test')).toBeInTheDocument();
     expect(screen.getByText('Plano Premium')).toBeInTheDocument();
@@ -515,7 +515,7 @@ describe('AppShell — account menu', () => {
       </AppShell>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Conta de Ana Teste' }));
+    await user.click(screen.getByRole('button', { name: 'AT, conta de Ana Teste' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Sair' }));
 
     await waitFor(() => expect(env.push).toHaveBeenCalledWith('/'));

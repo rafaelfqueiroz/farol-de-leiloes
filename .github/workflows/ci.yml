@@ -3,7 +3,8 @@
 # the ruleset in the same change. SC-21: every action is pinned to a commit SHA with its version
 # in a comment, permissions are least privilege, and there is no `pull_request_target`. The
 # structural suite (test/structural/workflows.spec.ts) enforces it.
-# `e2e` joins with #3; until it exists it is not a required check.
+# `e2e` (#3) is a required check once the owner adds it to the `main` ruleset; until then it runs
+# on every PR and push but does not gate the merge.
 name: CI
 
 on:
@@ -20,7 +21,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # npm 11 skips puppeteer's install script anyway; no CI job drives a browser (ARCHITECTURE).
+  # npm 11 skips puppeteer's install script anyway. The only browser CI drives is Playwright's
+  # Chromium in `e2e`, installed by Playwright itself, never through puppeteer.
   PUPPETEER_SKIP_DOWNLOAD: 'true'
   NEXT_TELEMETRY_DISABLED: '1'
 
@@ -173,6 +175,39 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  # TESTING §6, DV-18, TS-21..TS-23: Playwright against the E2E Compose stack, which
+  # `npm run test:e2e` builds, seeds (SPEC-003 BR-003-08) and tears down on the runner's Docker,
+  # with every provider faked (TS-22). Desktop and 360 px projects (axe on every route, no
+  # horizontal scroll) and the Manaus and Lisbon time-zone projects (BR-003-23). The HTML report,
+  # traces and screenshots are uploaded when it fails; they hold only the seed's fake data (TS-27).
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ failure() }}
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
 
   # SC-19: a high or critical advisory blocks. `npm audit` reads the lockfile, so no install.
   audit:

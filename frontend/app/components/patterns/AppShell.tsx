@@ -374,7 +374,9 @@ function AccountMenu({ name, email, plan, onSignOut }: AccountMenuProps) {
   return (
     <>
       <IconButton
-        aria-label={t('account', { name })}
+        // WCAG 2.5.3 (label in name, BR-003-14): the button shows the initials, so its name
+        // starts with them.
+        aria-label={initials ? t('accountButton', { initials, name }) : t('account', { name })}
         aria-haspopup="true"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
