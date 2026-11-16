@@ -110,12 +110,28 @@ export class AuthService implements BeforeApplicationShutdown {
   }
 
   async updateProfile(userId: string, updateData: UpdateProfileDto): Promise<UserProfile> {
-    const user = await this.usersService.update(userId, updateData);
+    // BR-001-26 / D-63: the email cannot be changed. The profile form still sends it back with the
+    // name, so the current address is accepted as a no-op and any other is refused as a whole,
+    // before anything is written (BR-001-29).
+    if (typeof updateData.email === 'string') {
+      const current = await this.usersService.findById(userId);
+      if (!current) {
+        throw new DomainError('USER_NOT_FOUND');
+      }
+      if (normalizeEmail(current.email) !== normalizeEmail(updateData.email)) {
+        throw new DomainError('EMAIL_CHANGE_UNAVAILABLE');
+      }
+    }
+    // BR-001-25 / BR-001-31: only name and phone are handed on.
+    const user = await this.usersService.updateProfile(userId, {
+      name: updateData.name,
+      phone: updateData.phone,
+    });
     return this.toUserProfile(user);
   }
 
   async completeProfile(userId: string, dto: CompleteProfileDto): Promise<UserProfile> {
-    const user = await this.usersService.update(userId, dto);
+    const user = await this.usersService.updateContactDetails(userId, dto);
     return this.toUserProfile(user);
   }
 

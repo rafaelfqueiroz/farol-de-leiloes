@@ -108,12 +108,12 @@ describe('UsersService.update (SC-10)', () => {
     expect(setOf(model)).toEqual({ name: '' });
   });
 
-  it('BR-001-01: an email written through update is trimmed and lower-cased', async () => {
+  it('BR-001-26 / D-63: update has no email: an email in the body is dropped, never written', async () => {
     const { service, model } = build();
 
-    await service.update('u1', { email: ' Ana@Example.TEST ' } as UpdateUserDto);
+    await service.update('u1', { name: 'Ana', email: 'other@example.test' } as UpdateUserDto);
 
-    expect(setOf(model)).toEqual({ email: 'ana@example.test' });
+    expect(setOf(model)).toEqual({ name: 'Ana' });
   });
 
   it('keeps an explicit null subscriptionStatus and a string one, and drops other types', async () => {
@@ -163,18 +163,6 @@ describe('UsersService.update (SC-10)', () => {
     expect(setOf(model)).toEqual({});
   });
 
-  it('refuses an e-mail that belongs to another user and allows the user own e-mail', async () => {
-    const taken = build({ _id: { toString: () => 'other' } });
-    await expect(taken.service.update('u1', { email: 'a@b.com' } as UpdateUserDto)).rejects.toEqual(
-      new DomainError('EMAIL_ALREADY_REGISTERED'),
-    );
-    expect(taken.model.findOneAndUpdate).not.toHaveBeenCalled();
-
-    const own = build({ _id: { toString: () => 'u1' } });
-    await own.service.update('u1', { email: 'a@b.com' } as UpdateUserDto);
-    expect(own.model.findOneAndUpdate).toHaveBeenCalled();
-  });
-
   it('reports USER_NOT_FOUND when nothing matched', async () => {
     const { service, selectExec } = build();
     selectExec.mockResolvedValue(null);
@@ -182,5 +170,107 @@ describe('UsersService.update (SC-10)', () => {
     await expect(service.update('u1', { name: 'Ana' } as UpdateUserDto)).rejects.toEqual(
       new DomainError('USER_NOT_FOUND'),
     );
+  });
+});
+
+// BR-001-25, BR-001-29, BR-001-31: the profile is written from an explicit allowlist.
+describe('UsersService.updateProfile and updateContactDetails', () => {
+  function buildWrites(found: unknown = { _id: 'u1' }) {
+    const exec = vi.fn().mockResolvedValue(found);
+    const select = vi.fn().mockReturnValue({ exec });
+    const findOneAndUpdate = vi.fn().mockReturnValue({ select });
+    const findOne = vi.fn().mockReturnValue({ select });
+    const model = { findOneAndUpdate, findOne };
+    return { service: new UsersService(model as unknown as ServiceDeps[0]), model, exec };
+  }
+  const update = (model: ReturnType<typeof buildWrites>['model']) =>
+    model.findOneAndUpdate.mock.calls[0]?.[1] as Record<string, unknown>;
+
+  it('writes name (trimmed) and phone under $set, matched by equality on the id', async () => {
+    const { service, model } = buildWrites();
+
+    await service.updateProfile('u1', { name: '  Ana Teste ', phone: '+5584999991234' });
+
+    expect(model.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: { $eq: 'u1' } },
+      { $set: { name: 'Ana Teste', phone: '+5584999991234' } },
+      { returnDocument: 'after' },
+    );
+  });
+
+  it('removes the phone with $unset when it is null, and writes nothing else', async () => {
+    const { service, model } = buildWrites();
+
+    await service.updateProfile('u1', { phone: null });
+
+    expect(update(model)).toEqual({ $unset: { phone: '' } });
+  });
+
+  it('BR-001-29: carries nothing but name and phone, whatever the input object holds', async () => {
+    const { service, model } = buildWrites();
+    const hostile = {
+      name: 'Ana',
+      role: 'admin',
+      status: 'closed',
+      providers: ['google'],
+      emailVerified: true,
+      $set: { role: 'admin' },
+      $unset: { password: '' },
+    } as unknown as Parameters<UsersService['updateProfile']>[1];
+
+    await service.updateProfile('u1', hostile);
+
+    expect(update(model)).toEqual({ $set: { name: 'Ana' } });
+  });
+
+  it('ignores a name or phone that is not text', async () => {
+    const { service, model } = buildWrites();
+    const odd = { name: { $ne: null }, phone: 5584999991234 } as unknown as Parameters<
+      UsersService['updateProfile']
+    >[1];
+
+    await service.updateProfile('u1', odd);
+
+    expect(model.findOneAndUpdate).not.toHaveBeenCalled(); // nothing to write: a read only
+    expect(model.findOne).toHaveBeenCalledWith({ _id: { $eq: 'u1' } });
+  });
+
+  it('reports USER_NOT_FOUND when the account is gone', async () => {
+    const { service } = buildWrites(null);
+
+    await expect(service.updateProfile('u1', { name: 'Ana' })).rejects.toEqual(
+      new DomainError('USER_NOT_FOUND'),
+    );
+  });
+
+  it('updateContactDetails writes only phone, cpf, date of birth, sex and address', async () => {
+    const { service, model } = buildWrites();
+    const details = {
+      phone: '+5584999991234',
+      cpf: '00000000000',
+      sex: 'other',
+      address: { street: 'Rua A', city: 'Natal', state: 'RN', zipCode: '59000000', role: 'x' },
+      role: 'admin',
+      name: 'Other',
+    } as unknown as Parameters<UsersService['updateContactDetails']>[1];
+
+    await service.updateContactDetails('u1', details);
+
+    expect(update(model)).toEqual({
+      $set: {
+        cpf: '00000000000',
+        sex: 'other',
+        address: { street: 'Rua A', city: 'Natal', state: 'RN', zipCode: '59000000' },
+        phone: '+5584999991234',
+      },
+    });
+  });
+
+  it('updateContactDetails removes the phone with $unset when it is null', async () => {
+    const { service, model } = buildWrites();
+
+    await service.updateContactDetails('u1', { phone: null });
+
+    expect(update(model)).toEqual({ $unset: { phone: '' } });
   });
 });

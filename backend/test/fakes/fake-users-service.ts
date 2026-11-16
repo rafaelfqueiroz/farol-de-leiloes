@@ -17,6 +17,8 @@ interface UsersPort {
   findByEmail(...args: Args<'findByEmail'>): Promise<FakeAccount | null>;
   validatePassword(...args: Args<'validatePassword'>): Promise<FakeAccount | null>;
   update(...args: Args<'update'>): Promise<FakeAccount>;
+  updateProfile(...args: Args<'updateProfile'>): Promise<FakeAccount>;
+  updateContactDetails(...args: Args<'updateContactDetails'>): Promise<FakeAccount>;
   setPassword(...args: Args<'setPassword'>): Promise<FakeAccount>;
   createLocalAccount(...args: Args<'createLocalAccount'>): Promise<FakeAccount>;
   changePassword(...args: Args<'changePassword'>): Promise<FakeAccount>;
@@ -90,6 +92,26 @@ export class FakeUsersService implements UsersPort {
     const account = this.accounts.get(id);
     if (!account) throw new DomainError('USER_NOT_FOUND');
     Object.assign(account, dto);
+    return account;
+  }
+
+  async updateProfile(id: string, profile: Args<'updateProfile'>[1]): Promise<FakeAccount> {
+    const account = this.accounts.get(id);
+    if (!account) throw new DomainError('USER_NOT_FOUND');
+    if (profile.name !== undefined) account.name = profile.name;
+    if (profile.phone === null) delete account.phone;
+    else if (profile.phone !== undefined) account.phone = profile.phone;
+    return account;
+  }
+
+  async updateContactDetails(
+    id: string,
+    details: Args<'updateContactDetails'>[1],
+  ): Promise<FakeAccount> {
+    const account = this.accounts.get(id);
+    if (!account) throw new DomainError('USER_NOT_FOUND');
+    if (details.phone === null) delete account.phone;
+    else if (details.phone !== undefined) account.phone = details.phone;
     return account;
   }
 

@@ -437,6 +437,11 @@ describe('AuthService with fake collaborators', () => {
   });
 
   describe('verifyEmail and resendVerification', () => {
+    function changeEmail(ctx: ReturnType<typeof build>, email: string) {
+      const account = ctx.users.accounts.get(ID);
+      if (account) account.email = email;
+    }
+
     async function confirmationFor(ctx: ReturnType<typeof build>) {
       await ctx.service.resendVerification(ID);
       return ctx.email.verificationEmails.slice(-1)[0]?.token ?? '';
@@ -479,7 +484,7 @@ describe('AuthService with fake collaborators', () => {
       const ctx = build();
       ctx.users.seed(localAccount());
       const token = await confirmationFor(ctx);
-      await ctx.users.update(ID, { email: 'changed@example.test' });
+      changeEmail(ctx, 'changed@example.test');
 
       await expectDomainError(ctx.service.verifyEmail(token), 'INVALID_VERIFICATION_TOKEN');
 
@@ -489,7 +494,7 @@ describe('AuthService with fake collaborators', () => {
     it('the link is bound to the address, so a link for the new address confirms it', async () => {
       const ctx = build();
       ctx.users.seed(localAccount());
-      await ctx.users.update(ID, { email: 'changed@example.test' });
+      changeEmail(ctx, 'changed@example.test');
       const token = await confirmationFor(ctx);
 
       await expect(ctx.service.verifyEmail(token)).resolves.toBeUndefined();
@@ -686,6 +691,46 @@ describe('AuthService with fake collaborators', () => {
       const { service } = build();
 
       await expectDomainError(service.getFullProfile(ID), 'USER_NOT_FOUND');
+    });
+
+    it('BR-001-26 / D-63: the email is accepted only when it repeats the current one', async () => {
+      const { service, users } = build();
+      users.seed(localAccount());
+
+      const same = await service.updateProfile(ID, {
+        name: 'Renamed',
+        email: ' LOCAL@example.test ',
+      });
+      expect(same).toMatchObject({ name: 'Renamed', email: 'local@example.test' });
+
+      await expectDomainError(
+        service.updateProfile(ID, { name: 'Other', email: 'another@example.test' }),
+        'EMAIL_CHANGE_UNAVAILABLE',
+      );
+      // Refused as a whole: the name in the same body was not applied either.
+      expect(users.accounts.get(ID)).toMatchObject({
+        name: 'Renamed',
+        email: 'local@example.test',
+      });
+    });
+
+    it('BR-001-27: passes the phone on, and null removes it', async () => {
+      const { service, users } = build();
+      users.seed(localAccount());
+
+      expect((await service.updateProfile(ID, { phone: '+5584999991234' })).phone).toBe(
+        '+5584999991234',
+      );
+      expect((await service.updateProfile(ID, { phone: null })).phone).toBeUndefined();
+    });
+
+    it('updateProfile for an unknown user with an email is USER_NOT_FOUND', async () => {
+      const { service } = build();
+
+      await expectDomainError(
+        service.updateProfile(ID, { email: 'a@example.test' }),
+        'USER_NOT_FOUND',
+      );
     });
 
     it('updateProfile and completeProfile return the updated, mapped profile', async () => {

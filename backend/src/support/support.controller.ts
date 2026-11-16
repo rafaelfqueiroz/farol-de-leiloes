@@ -1,8 +1,10 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SupportService } from './support.service.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { ApiConfirmedEmail } from '../auth/decorators/api-confirmed-email.decorator.js';
+import { ConfirmedEmailGuard } from '../auth/guards/confirmed-email.guard.js';
 import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
 import { CreateSupportRequestDto } from './dto/create-support-request.dto.js';
 import { MessageResponseDto } from '../common/dto/message-response.dto.js';
@@ -11,6 +13,8 @@ import { ApiErrorResponses } from '../common/errors/api-error-responses.decorato
 @ApiTags('support')
 @ApiErrorResponses()
 @ApiJwtAuth()
+@ApiConfirmedEmail()
+@UseGuards(ConfirmedEmailGuard) // BR-001-04: server-side, not only the frontend banner
 @Controller('support')
 export class SupportController {
   constructor(private readonly supportService: SupportService) {}

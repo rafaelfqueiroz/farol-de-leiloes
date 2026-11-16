@@ -11,7 +11,6 @@ import { serverOperators } from '../common/mongo/query-safety.js';
 
 // SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34).
 const TEXT_FIELDS = [
-  'email',
   'name',
   'googleId',
   'role',
@@ -28,6 +27,15 @@ const ADDRESS_FIELDS = ['street', 'city', 'state', 'zipCode'] as const;
 const BCRYPT_COST = 10;
 // 11000: MongoDB's duplicate-key error code.
 const DUPLICATE_KEY = 11000;
+
+/** The legacy contact details `updateContactDetails` writes; the shape of CompleteProfileDto. */
+export interface ContactDetails {
+  phone?: string | null;
+  cpf?: string;
+  dateOfBirth?: string;
+  sex?: string;
+  address?: { street?: string; city?: string; state?: string; zipCode?: string };
+}
 
 @Injectable()
 export class UsersService {
@@ -240,25 +248,86 @@ export class UsersService {
     return updatedUser;
   }
 
+  /**
+   * Internal writes by named server flows (payments: Stripe ids and subscription status). It is
+   * never reached from a request body: the profile goes through `updateProfile`, the legacy
+   * contact details through `updateContactDetails` (BR-001-29, BR-001-31). The email is not here
+   * at all: it cannot be changed (BR-001-26, D-63).
+   */
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserDocument> {
-    // If email is being updated, check for conflicts
-    if (updateUserDto.email) {
-      const existingUser = await this.findByEmail(updateUserDto.email);
-      if (existingUser && existingUser._id.toString() !== id) {
-        throw new DomainError('EMAIL_ALREADY_REGISTERED');
-      }
-    }
-
     // SC-10: the update is built field by field from a whitelist, never the DTO object itself, so
     // a body can neither carry an operator ({ $set, $unset, $inc ... }) nor reach a field the
     // DTO does not name. Each value is checked for its type before it is copied.
     const fields = this.updatableFields(updateUserDto);
-    if (typeof fields.email === 'string') fields.email = normalizeEmail(fields.email);
 
     const user = await this.userRepository
       .findOneAndUpdate({ _id: { $eq: id } }, { $set: fields }, { returnDocument: 'after' })
       .select('-password')
       .exec();
+
+    if (!user) {
+      throw new DomainError('USER_NOT_FOUND');
+    }
+
+    return user;
+  }
+
+  /**
+   * BR-001-25 / BR-001-29 / BR-001-31: the profile an account holder edits is exactly `name` and
+   * `phone`. Each is read from the input by name and written under an explicit `$set` / `$unset`;
+   * the input object is never spread, so any other property it carries (role, status, providers,
+   * emailVerified...) goes nowhere. `phone: null` removes the phone. The email is read-only
+   * (BR-001-26, D-63).
+   */
+  async updateProfile(
+    userId: string,
+    profile: { name?: string; phone?: string | null },
+  ): Promise<UserDocument> {
+    const set: Record<string, string> = {};
+    const unset: Record<string, ''> = {};
+    const name: unknown = profile.name;
+    if (typeof name === 'string') set.name = name.trim();
+    const phone: unknown = profile.phone;
+    if (typeof phone === 'string') set.phone = phone;
+    else if (phone === null) unset.phone = '';
+    return this.applyChanges(userId, { $set: set, $unset: unset });
+  }
+
+  /**
+   * The legacy "complete profile" details (phone, CPF, date of birth, sex, address), which
+   * RF-CON-04 does not list and the frontend profile work removes. A named method with its own
+   * allowlist so `update` is not reachable from the request (BR-001-31).
+   */
+  async updateContactDetails(userId: string, details: ContactDetails): Promise<UserDocument> {
+    const set = this.updatableFields({
+      cpf: details.cpf,
+      dateOfBirth: details.dateOfBirth,
+      sex: details.sex,
+      address: details.address,
+    });
+    const unset: Record<string, ''> = {};
+    const phone: unknown = details.phone;
+    if (typeof phone === 'string') set.phone = phone;
+    else if (phone === null) unset.phone = '';
+    return this.applyChanges(userId, { $set: set, $unset: unset });
+  }
+
+  /** Writes the non-empty parts of an update; with nothing to write it just reads the account. */
+  private async applyChanges(
+    id: string,
+    changes: { $set: Record<string, unknown>; $unset?: Record<string, ''> },
+  ): Promise<UserDocument> {
+    const update: Record<string, Record<string, unknown>> = {};
+    if (Object.keys(changes.$set).length > 0) update.$set = changes.$set;
+    if (changes.$unset && Object.keys(changes.$unset).length > 0) update.$unset = changes.$unset;
+
+    const query =
+      Object.keys(update).length > 0
+        ? this.userRepository.findOneAndUpdate({ _id: { $eq: id } }, update, {
+            returnDocument: 'after',
+          })
+        : this.userRepository.findOne({ _id: { $eq: id } });
+    const user = await query.select('-password').exec();
 
     if (!user) {
       throw new DomainError('USER_NOT_FOUND');

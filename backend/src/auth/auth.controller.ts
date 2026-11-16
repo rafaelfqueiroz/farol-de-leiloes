@@ -167,7 +167,7 @@ export class AuthController {
 
   @Patch('profile')
   @ApiJwtAuth()
-  @ApiOperation({ summary: 'Change the signed-in user name or email' })
+  @ApiOperation({ summary: 'Change the signed-in user name or phone (the e-mail is read-only)' })
   @ApiOkResponse({ type: UserProfileResponseDto })
   async updateProfile(
     @CurrentUser() user: AuthenticatedUser,

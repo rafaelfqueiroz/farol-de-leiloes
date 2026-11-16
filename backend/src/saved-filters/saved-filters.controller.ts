@@ -1,5 +1,6 @@
 import {
   Controller,
+  UseGuards,
   Get,
   Post,
   Delete,
@@ -19,6 +20,8 @@ import {
 import { SavedFiltersService } from './saved-filters.service.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { ApiConfirmedEmail } from '../auth/decorators/api-confirmed-email.decorator.js';
+import { ConfirmedEmailGuard } from '../auth/guards/confirmed-email.guard.js';
 import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
 import { SavedFilterResponseDto } from './dto/saved-filter-response.dto.js';
 import { CreateSavedFilterDto } from './dto/create-saved-filter.dto.js';
@@ -31,6 +34,8 @@ import { mapPage, type Paginated } from '../common/pagination/paginated.js';
 @ApiTags('saved-filters')
 @ApiErrorResponses()
 @ApiJwtAuth()
+@ApiConfirmedEmail()
+@UseGuards(ConfirmedEmailGuard) // BR-001-04: server-side, not only the frontend banner
 @Controller('saved-filters')
 export class SavedFiltersController {
   constructor(private readonly savedFiltersService: SavedFiltersService) {}
