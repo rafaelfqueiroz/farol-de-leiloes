@@ -33,7 +33,6 @@ export default function VerifyEmailTokenPage() {
         }
 
         setStatus('success');
-        setTimeout(() => router.push('/login'), 3000);
       } catch (err: unknown) {
         setStatus('error');
         setError(apiErrorMessage(err));
@@ -43,7 +42,14 @@ export default function VerifyEmailTokenPage() {
     if (token) {
       void verifyEmail();
     }
-  }, [token, router, apiErrorMessage]);
+  }, [token, apiErrorMessage]);
+
+  // the redirect belongs to the success state, so leaving the page clears it
+  useEffect(() => {
+    if (status !== 'success') return;
+    const timer = setTimeout(() => router.push('/login'), 3000);
+    return () => clearTimeout(timer);
+  }, [status, router]);
 
   if (status === 'loading') {
     return <ResultScreen loading title={t('loadingTitle')} description={t('loadingHint')} />;
