@@ -1,0 +1,125 @@
+# E2E stack (DEVELOPMENT DV-18, TESTING §6, TS-22). `npm run test:e2e` brings it up, runs
+# Playwright on the host against it and tears it down (e2e/global-setup.ts). Never used for
+# development and never deployed: the images are built here and never pushed.
+#
+# - MongoDB is a throwaway container with no published port and no volume: the developer's
+#   database is never involved (DV-19). The `seed` service fills it with the reference workload
+#   (SPEC-003 BR-003-08) before the API starts.
+# - The API is backend/e2e.Dockerfile: the production AppModule with every provider faked
+#   (backend/test/e2e-stack/main.ts). All values below are fake test values; none is a secret,
+#   and there is no env file (DV-19, SC-16).
+# - The web app is the production frontend image, built with the stack's public URLs.
+# - Ports bind 127.0.0.1 only, on E2E_WEB_PORT / E2E_API_PORT (38101 / 38100 by default), away
+#   from the developer's 3000/3001.
+#
+# Parameters (environment of `npm run test:e2e`):
+#   E2E_SEED_AUCTIONS   generated auctions; 2000 by default, `full` for the performance run
+#                       (the full-catalog size, catalog.ts FULL_CATALOG_SIZE)
+#   E2E_WEB_PORT, E2E_API_PORT
+name: farol-e2e
+
+x-backend-build: &backend-build
+  context: ../../backend
+  dockerfile: e2e.Dockerfile
+
+services:
+  mongo-e2e:
+    # TESTING §2: the Testcontainers image (8.0/8.3 do not start on the CI runners' kernels).
+    image: mongo:8.2
+    command: ['--quiet', '--bind_ip_all']
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  seed:
+    image: farol-e2e-backend
+    build: *backend-build
+    command: ['node', 'dist-e2e/scripts/seed-reference-workload.js']
+    environment:
+      SEED_MONGODB_URI: mongodb://mongo-e2e:27017/farol-e2e
+      SEED_AUCTIONS: ${E2E_SEED_AUCTIONS:-2000}
+    depends_on:
+      mongo-e2e:
+        condition: service_healthy
+    restart: 'no'
+
+  backend:
+    image: farol-e2e-backend
+    build: *backend-build
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - '127.0.0.1:${E2E_API_PORT:-38100}:3000'
+    environment:
+      NODE_ENV: test
+      PORT: '3000'
+      FRONTEND_URL: http://localhost:${E2E_WEB_PORT:-38101}
+      MONGODB_URI: mongodb://mongo-e2e:27017/farol-e2e
+      JWT_SECRET: e2e-only-jwt-secret-not-used-anywhere-else
+      LOG_LEVEL: warn
+      # TS-22: the providers are fakes (test/e2e-stack/main.ts) or unreachable. Values below are
+      # placeholders the boot validation requires (AR-41); `.test` never resolves.
+      GOOGLE_CLIENT_ID: e2e-google-client-id
+      GOOGLE_CLIENT_SECRET: e2e-google-client-secret
+      GOOGLE_CALLBACK_URL: http://localhost:${E2E_API_PORT:-38100}/api/auth/google/callback
+      STRIPE_SECRET_KEY: sk_test_e2e_fake
+      STRIPE_WEBHOOK_SECRET: whsec_e2e_fake
+      STRIPE_STANDARD_PRICE_ID: price_e2e_fake
+      EMAIL_FROM: noreply@farol.test
+      SMTP_HOST: smtp.farol.test
+      SMTP_USER: e2e
+      SMTP_PASS: e2e
+      SMS_PROVIDER_API_KEY: e2e-fake
+      WHATSAPP_API_KEY: e2e-fake
+      LLM_PROVIDER: ollama
+      # A closed loopback port: an AI search fails at once instead of reaching a model.
+      OLLAMA_BASE_URL: http://127.0.0.1:9/v1
+      CLOUDFLARE_ACCOUNT_ID: e2e-fake
+      R2_ACCESS_KEY_ID: e2e-fake
+      R2_SECRET_ACCESS_KEY: e2e-fake
+      R2_BUCKET: e2e-fake
+      R2_PUBLIC_URL: https://files.farol.test
+      # Caixa importer and scraper are inert fakes; the switches stay off as a second guard.
+      IMPORT_ENABLED: 'false'
+      SCRAPER_ENABLED: 'false'
+      REMINDERS_ENABLED: 'false'
+      CLEANUP_ON_STARTUP: 'false'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  frontend:
+    image: farol-e2e-frontend
+    build:
+      context: ..
+      args:
+        # Public values only (SC-16), inlined at build time: where the browser reaches the API.
+        NEXT_PUBLIC_AUCTIONS_API_URL: http://localhost:${E2E_API_PORT:-38100}
+        NEXT_PUBLIC_SITE_URL: http://localhost:${E2E_WEB_PORT:-38101}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:${E2E_WEB_PORT:-38101}:3001'
+    environment:
+      BACKEND_API_URL: http://backend:3000
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/robots.txt').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 2s
+      timeout: 5s
+      retries: 60

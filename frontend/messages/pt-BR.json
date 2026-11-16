@@ -82,6 +82,7 @@
       "signIn": "Entrar",
       "signOut": "Sair",
       "account": "Conta de {name}",
+      "accountButton": "{initials}, conta de {name}",
       "plan": "Plano {plan, select, admin {Admin} premium {Premium} standard {Standard} other {Gratuito}}",
       "withCount": "{label}, {count}",
       "upcomingReminders": "{label}, {count, plural, one {# próximo} other {# próximos}}",
