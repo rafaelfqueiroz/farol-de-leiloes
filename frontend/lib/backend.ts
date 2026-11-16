@@ -7,6 +7,7 @@
 // never rewrites an error body into `{ error }` or `{ message }`.
 import { NextRequest, NextResponse } from 'next/server';
 import { serverEnv } from '@/lib/env';
+import { clientAddressHeaders } from '@/lib/forwarded-for';
 import { reportClientError } from '@/lib/report-client-error';
 
 /** The BFF's own error codes. Every other code comes from the backend, verbatim (AR-38). */
@@ -114,7 +115,8 @@ interface ProxyOptions {
 /**
  * Forwards a BFF request to the backend and returns the backend's answer. The method and the raw
  * body are passed through, so the backend alone validates them and answers with its own code.
- * Only the `Authorization` header is forwarded (no cookies, no other headers).
+ * Only `Authorization` and the validated `X-Forwarded-For` chain (the caller's address for the
+ * per-origin limits, SC-04; lib/forwarded-for.ts) are forwarded: no cookies, no other headers.
  *
  * SC-15: the only thing logged is the route label, the error name and its message; never a body,
  * a header or a token.
@@ -124,7 +126,7 @@ export async function proxyToBackend(
   path: string,
   { auth = false, query }: ProxyOptions = {},
 ): Promise<NextResponse> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...clientAddressHeaders(request) };
   if (auth) {
     const authorization = authorizationOf(request);
     if (!authorization) return unauthenticated();
