@@ -8,6 +8,8 @@ import {
   UserProfile,
 } from '../interfaces/auth.interface.js';
 import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status.js';
+import type { AccessContext } from '../../access/access-context.js';
+import { type Persona, PERSONAS } from '../../access/domain/personas.js';
 
 export const PROVIDERS = ['local', 'google'] as const;
 export const ROLES = ['admin', 'free', 'standard', 'premium'] as const;
@@ -34,6 +36,12 @@ export class UserProfileResponseDto {
   @ApiProperty({ enum: SUBSCRIPTION_STATUSES, enumName: 'SubscriptionStatus', nullable: true })
   subscriptionStatus: string | null;
 
+  @ApiProperty({
+    type: Boolean,
+    description: 'Platform-operation capability (SPEC-002 DL-002-05); no client data, no plan',
+  })
+  isAdmin: boolean;
+
   @ApiPropertyOptional({ type: String })
   phone?: string;
 
@@ -51,6 +59,7 @@ export class UserProfileResponseDto {
     this.emailVerified = profile.emailVerified;
     this.role = profile.role;
     this.subscriptionStatus = profile.subscriptionStatus;
+    this.isAdmin = profile.isAdmin;
     this.phone = profile.phone;
     this.createdAt = profile.createdAt;
     this.updatedAt = profile.updatedAt;
@@ -105,7 +114,11 @@ export class GoogleExchangeResponseDto {
   }
 }
 
-/** GET /auth/me: the signed-in user as the token and the account state describe them. */
+/**
+ * GET /auth/me: the signed-in user as the token and the account state describe them, plus the
+ * capabilities the interface may show (SPEC-002). They are UI hints only: the server checks every
+ * request on its own (BR-002-10, AR-51).
+ */
 export class CurrentUserResponseDto {
   @ApiProperty({ type: String })
   userId: string;
@@ -122,13 +135,33 @@ export class CurrentUserResponseDto {
   @ApiProperty({ enum: PROVIDERS, enumName: 'AuthProvider', isArray: true })
   providers: string[];
 
-  @ApiProperty({ enum: ROLES, enumName: 'Role' })
+  @ApiProperty({
+    enum: ROLES,
+    enumName: 'Role',
+    description:
+      "The plan tier until SPEC-012. 'admin' is a legacy value that is no plan (BR-002-23); " +
+      'the admin capability is isAdmin',
+  })
   role: string;
 
   @ApiProperty({ enum: SUBSCRIPTION_STATUSES, enumName: 'SubscriptionStatus', nullable: true })
   subscriptionStatus: string | null;
 
-  constructor(user: AuthenticatedUser) {
+  @ApiProperty({
+    type: Boolean,
+    description: 'Platform-operation capability (SPEC-002 DL-002-05); no client data, no plan',
+  })
+  isAdmin: boolean;
+
+  @ApiProperty({
+    enum: PERSONAS,
+    enumName: 'Persona',
+    isArray: true,
+    description: 'Derived from current relationships on this request (SPEC-002 BR-002-14)',
+  })
+  personas: Persona[];
+
+  constructor(user: AuthenticatedUser, access: AccessContext) {
     this.userId = user.userId;
     this.email = user.email;
     this.name = user.name;
@@ -136,6 +169,8 @@ export class CurrentUserResponseDto {
     this.providers = user.providers;
     this.role = user.role;
     this.subscriptionStatus = user.subscriptionStatus;
+    this.isAdmin = access.isAdmin;
+    this.personas = [...access.personas];
   }
 }
 

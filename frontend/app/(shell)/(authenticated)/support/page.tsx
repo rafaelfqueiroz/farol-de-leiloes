@@ -26,7 +26,7 @@ function SupportPageLoading() {
 export default function Support() {
   const t = useTranslations('support');
   return (
-    <RequireRole minimumRole="free" featureName={t('featureName')}>
+    <RequireRole minimumPlan="free" featureName={t('featureName')}>
       <Suspense fallback={<SupportPageLoading />}>
         <SupportPage />
       </Suspense>

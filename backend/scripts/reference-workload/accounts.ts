@@ -9,7 +9,10 @@ export interface SeedAccount {
   email: string;
   password: string;
   name: string;
+  /** The plan tier; `'admin'` is the legacy value production still holds and grants no plan. */
   role: 'admin' | 'premium' | 'free';
+  /** SPEC-002 DL-002-05: the admin capability (what the grant-admin script sets). */
+  isAdmin: boolean;
   emailVerified: boolean;
 }
 
@@ -20,14 +23,16 @@ export const SEED_ACCOUNTS = {
     password: 'Farol-E2E-investidor-2026',
     name: 'Investidora Teste E2E',
     role: 'premium',
+    isAdmin: false,
     emailVerified: true,
   },
-  /** A verified admin, for the admin screens (/admin/coupons). */
+  /** A verified admin (isAdmin, SPEC-002), for the admin screens (/admin/coupons). */
   admin: {
     email: 'admin.e2e@farol.test',
     password: 'Farol-E2E-admin-2026',
     name: 'Admin Teste E2E',
     role: 'admin',
+    isAdmin: true,
     emailVerified: true,
   },
   /** Signed up but never confirmed: the screen that asks to confirm the email (/verify-email). */
@@ -36,6 +41,7 @@ export const SEED_ACCOUNTS = {
     password: 'Farol-E2E-nao-verificado-2026',
     name: 'Cadastro Pendente E2E',
     role: 'free',
+    isAdmin: false,
     emailVerified: false,
   },
 } as const satisfies Record<string, SeedAccount>;

@@ -1,6 +1,8 @@
 // A Nest app for HTTP-level unit specs of a controller (TESTING §2): the controller under test,
 // its services stubbed, the app's own setup (configureApp: prefix, validation, error filter,
-// OpenAPI) and JwtAuthGuard replaced by a stand-in that signs TEST_USER in. supertest binds an
+// OpenAPI) and the two global guards (JwtAuthGuard, AccessContextGuard) replaced by a stand-in
+// that signs TEST_USER in and puts the AccessContext the real AccessContextFactory builds for it on
+// the request (SPEC-002), from the default sources unless a spec passes its own. supertest binds an
 // ephemeral loopback port in the test process; nothing leaves the machine (TS-01, TS-07).
 import type { ExecutionContext, INestApplication, ModuleMetadata } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +11,15 @@ import { configureApp } from '../../src/app.setup.js';
 import { IS_PUBLIC } from '../../src/auth/decorators/public.decorator.js';
 import { APP_GUARD, Reflector } from '@nestjs/core';
 import type { AuthenticatedUser } from '../../src/auth/interfaces/auth.interface.js';
+import {
+  ACCESS_CONTEXT,
+  type RequestWithAccess,
+} from '../../src/access/decorators/access.decorator.js';
+import {
+  accessContextFactory,
+  type AccessSources,
+  fakeAccessSources,
+} from '../fakes/fake-access-sources.js';
 import { testConfigService } from './test-env.js';
 
 /** An obviously fake signed-in user (TS-27). */
@@ -21,6 +32,7 @@ export const TEST_USER: AuthenticatedUser = {
   providers: ['local'],
   role: 'standard',
   subscriptionStatus: 'active',
+  isAdmin: false,
 };
 
 export interface HttpAppOptions {
@@ -28,13 +40,16 @@ export interface HttpAppOptions {
   user?: AuthenticatedUser;
   /** Raw environment overrides, e.g. { NODE_ENV: 'production' }. */
   env?: Record<string, string>;
+  /** The SPEC-002 relationships of the user; none by default (fakeAccessSources). */
+  access?: AccessSources;
 }
 
 export async function createHttpApp(
   metadata: ModuleMetadata,
-  { user = TEST_USER, env = {} }: HttpAppOptions = {},
+  { user = TEST_USER, env = {}, access = fakeAccessSources() }: HttpAppOptions = {},
 ): Promise<INestApplication> {
   const reflector = new Reflector();
+  const factory = accessContextFactory(access);
   const moduleRef = await Test.createTestingModule({
     ...metadata,
     providers: [
@@ -43,7 +58,7 @@ export async function createHttpApp(
       {
         provide: APP_GUARD,
         useValue: {
-          canActivate: (context: ExecutionContext) => {
+          canActivate: async (context: ExecutionContext) => {
             // SC-07: mirror production's opt-out so public controller specs stay anonymous.
             if (
               reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
@@ -53,7 +68,11 @@ export async function createHttpApp(
             ) {
               return true;
             }
-            context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>().user = user;
+            const request = context
+              .switchToHttp()
+              .getRequest<RequestWithAccess & { user?: AuthenticatedUser }>();
+            request.user = user;
+            request[ACCESS_CONTEXT] = await factory.forAccount(user);
             return true;
           },
         },

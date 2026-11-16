@@ -4,10 +4,12 @@
 import { moneyDecimal128 } from './0001-money-decimal128.migration.js';
 import { savedFilterPriceBounds } from './0002-saved-filter-price-bounds.migration.js';
 import { accountTokens } from './0003-account-tokens.migration.js';
+import { adminCapability } from './0004-admin-capability.migration.js';
 import type { Migration } from './migration.js';
 
 export const MIGRATIONS: readonly Migration[] = [
   moneyDecimal128,
   savedFilterPriceBounds,
   accountTokens,
+  adminCapability,
 ];

@@ -34,7 +34,7 @@ describe('CouponsController over HTTP', () => {
           controllers: [CouponsController],
           providers: [{ provide: CouponsService, useValue: coupons }],
         },
-        { user: { ...TEST_USER, role: 'admin' } },
+        { user: { ...TEST_USER, isAdmin: true } },
       );
     });
 
@@ -67,7 +67,7 @@ describe('CouponsController over HTTP', () => {
           controllers: [CouponsController],
           providers: [{ provide: CouponsService, useValue: { ...coupons, create } }],
         },
-        { user: { ...TEST_USER, role: 'admin' } },
+        { user: { ...TEST_USER, isAdmin: true } },
       );
     });
 
@@ -123,7 +123,33 @@ describe('CouponsController over HTTP', () => {
     it('is refused before the service is asked', async () => {
       const response = await request(app.getHttpServer()).get('/api/coupons').expect(403);
 
-      expect(response.body.code).toBe('PLAN_NOT_ALLOWED');
+      expect(response.body.code).toBe('FORBIDDEN');
+      expect(coupons.findPage).not.toHaveBeenCalled();
+    });
+  });
+
+  // SPEC-002 BR-002-23: the plan tier `role: 'admin'` is no admin capability any more.
+  describe("GET /api/coupons with the legacy role 'admin' but no isAdmin", () => {
+    let app: INestApplication;
+
+    beforeAll(async () => {
+      app = await createHttpApp(
+        {
+          controllers: [CouponsController],
+          providers: [{ provide: CouponsService, useValue: coupons }],
+        },
+        { user: { ...TEST_USER, role: 'admin', isAdmin: false } },
+      );
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it('is refused before the service is asked', async () => {
+      const response = await request(app.getHttpServer()).get('/api/coupons').expect(403);
+
+      expect(response.body).toEqual({ code: 'FORBIDDEN', context: {} });
       expect(coupons.findPage).not.toHaveBeenCalled();
     });
   });

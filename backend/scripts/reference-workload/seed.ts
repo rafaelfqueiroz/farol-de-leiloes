@@ -112,6 +112,7 @@ async function upsertAccounts(model: Model<UserEntity>): Promise<number> {
           providers: ['local'],
           emailVerified: account.emailVerified,
           role: account.role,
+          isAdmin: account.isAdmin, // SPEC-002: the capability, not the plan tier
           // The top plan without Stripe: no customer or subscription id (TS-07, TS-22).
           subscriptionStatus: account.role === 'premium' ? 'active' : null,
         },

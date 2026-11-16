@@ -13,7 +13,7 @@ import SupportAgent from '@mui/icons-material/SupportAgent';
 import SupportAgentOutlined from '@mui/icons-material/SupportAgentOutlined';
 import WorkspacePremium from '@mui/icons-material/WorkspacePremium';
 import WorkspacePremiumOutlined from '@mui/icons-material/WorkspacePremiumOutlined';
-import { hasMinimumRole, type UserRole } from '@/app/components/RequireRole';
+import { hasMinimumPlan, type PlanTier } from '@/app/components/RequireRole';
 import type messages from '@/messages/pt-BR.json';
 
 // DESIGN.md §6: the navigation model (groups, items, permission, count source) is this one file,
@@ -41,7 +41,11 @@ export interface NavItem {
   Icon: SvgIconComponent;
   /** DS-25: filled only for the current item. */
   CurrentIcon: SvgIconComponent;
-  minimumRole: UserRole;
+  /**
+   * Who sees the item: a plan tier and above, or the admin capability alone (SPEC-002 BR-002-23:
+   * an admin is no plan, and a plan is no admin). UX only; the server checks (AR-51).
+   */
+  requires: { plan: PlanTier } | { admin: true };
   count?: CountSource;
   match: NavMatch;
 }
@@ -67,7 +71,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: '/search',
         Icon: SearchOutlined,
         CurrentIcon: Search,
-        minimumRole: 'free',
+        requires: { plan: 'free' },
         // a signed-in visitor of a property page is still "in" the search
         match: { paths: ['/search', '/auction'] },
       },
@@ -77,7 +81,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: '/search?view=favorites',
         Icon: FavoriteBorderOutlined,
         CurrentIcon: Favorite,
-        minimumRole: 'standard',
+        requires: { plan: 'standard' },
         count: 'favorites',
         match: { paths: ['/search'], query: { view: 'favorites' } },
       },
@@ -93,7 +97,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: '/reminders',
         Icon: NotificationsOutlined,
         CurrentIcon: Notifications,
-        minimumRole: 'standard',
+        requires: { plan: 'standard' },
         count: 'upcomingReminders',
         match: { paths: ['/reminders'] },
       },
@@ -111,7 +115,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: '/profile',
         Icon: PersonOutlined,
         CurrentIcon: Person,
-        minimumRole: 'free',
+        requires: { plan: 'free' },
         match: { paths: ['/profile'] },
       },
       {
@@ -120,7 +124,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: '/plans',
         Icon: WorkspacePremiumOutlined,
         CurrentIcon: WorkspacePremium,
-        minimumRole: 'free',
+        requires: { plan: 'free' },
         match: { paths: ['/plans'] },
       },
       {
@@ -129,7 +133,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: '/support',
         Icon: SupportAgentOutlined,
         CurrentIcon: SupportAgent,
-        minimumRole: 'free',
+        requires: { plan: 'free' },
         match: { paths: ['/support'] },
       },
     ],
@@ -144,19 +148,32 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: '/admin/coupons',
         Icon: ConfirmationNumberOutlined,
         CurrentIcon: ConfirmationNumber,
-        minimumRole: 'admin',
+        requires: { admin: true },
         match: { paths: ['/admin/coupons'] },
       },
     ],
   },
 ];
 
-/** The groups a role can use, in the fixed order; a group left with no item is dropped. */
-export function visibleGroups(role: string, groups: readonly NavGroup[] = NAV_GROUPS): NavGroup[] {
+/** What /api/auth/me says the account may see: its plan tier and the admin capability. */
+export interface NavCapabilities {
+  role: string;
+  isAdmin: boolean;
+}
+
+function canSee(item: NavItem, { role, isAdmin }: NavCapabilities): boolean {
+  return 'plan' in item.requires ? hasMinimumPlan(role, item.requires.plan) : isAdmin;
+}
+
+/** The groups an account can use, in the fixed order; a group left with no item is dropped. */
+export function visibleGroups(
+  capabilities: NavCapabilities,
+  groups: readonly NavGroup[] = NAV_GROUPS,
+): NavGroup[] {
   return groups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => hasMinimumRole(role, item.minimumRole)),
+      items: group.items.filter((item) => canSee(item, capabilities)),
     }))
     .filter((group) => group.items.length > 0);
 }

@@ -10,6 +10,8 @@ export interface E2eAccount {
 
 export const ACCOUNTS = {
   investor: { email: 'investidor.e2e@farol.test', password: 'Farol-E2E-investidor-2026' },
+  // Seeded with `isAdmin: true` (SPEC-002 DL-002-05), the capability the admin screens need. It
+  // lives in the database only: these objects are the sign-in body, which takes nothing else.
   admin: { email: 'admin.e2e@farol.test', password: 'Farol-E2E-admin-2026' },
   /** Never confirmed its email: what /verify-email is for. */
   unverified: {

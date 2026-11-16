@@ -247,11 +247,11 @@ Destinations are grouped under `overline` labels, in this fixed order:
 | Acompanhamento | Lembretes (`/reminders`, count of upcoming reminders)                    | standard and up         |
 | Escritório     | — reserved, empty until its routes exist, so it never renders            | —                       |
 | Conta          | Perfil (`/profile`) · Assinatura (`/plans`) · Suporte (`/support`)       | everyone                |
-| Administração  | Cupons (`/admin/coupons`)                                                | admin only              |
+| Administração  | Cupons (`/admin/coupons`)                                                | admin capability only   |
 
 There is no "Início": `/` sends signed-in users to `/search`. Busca com IA, Jornadas, Relatórios, Investidores and Equipe join their groups when their specs ship.
 
-A role sees only the groups where it has a destination — a group with none disappears with its label — and **groups never reorder between roles**, so a shared destination is always in the same place. The navigation model (groups, items, minimum role, count source, how an item matches the location) is one config file owned by the shell, `patterns/app-shell-navigation.ts`; no component keeps its own list of destinations.
+A role sees only the groups where it has a destination — a group with none disappears with its label — and **groups never reorder between roles**, so a shared destination is always in the same place. The navigation model (groups, items, who sees each item — a minimum plan tier, or the admin capability `isAdmin` alone, which is no plan (SPEC-002 BR-002-23) — count source, how an item matches the location) is one config file owned by the shell, `patterns/app-shell-navigation.ts`; no component keeps its own list of destinations.
 
 - **Current item**: `primary-soft` with `primary` text, a filled icon and `aria-current="page"`. The most specific match wins: `/search?view=favorites` is Favoritos, any other `/search` is Buscar imóveis; nested paths match by prefix (`/admin/coupons/…` is Cupons); a signed-in visitor of `/auction/[code]` is in Buscar imóveis. The search page reads its view from the URL, so the links switch it.
 - **Counts** are neutral pills (`background.muted`, `text.primary`, pill radius), only from what `FavoritesContext` and `RemindersContext` already hold (upcoming = `PENDING` reminders). While they load, on failure or at zero there is no pill; above 99 it reads "99+". The item's accessible name carries the count ("Favoritos, 24"; "Lembretes, 3 próximos").

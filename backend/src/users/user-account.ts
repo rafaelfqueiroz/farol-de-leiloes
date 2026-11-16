@@ -19,6 +19,11 @@ export interface UserAccount {
    */
   credentialVersion?: number;
   role?: string;
+  /**
+   * SPEC-002 DL-002-05 / BR-002-21: operator capability. Set only by the grant-admin script, never
+   * by a request; a missing flag is false (AR-28).
+   */
+  isAdmin?: boolean;
   subscriptionStatus?: SubscriptionStatus | null;
   phone?: string;
   createdAt: Date;

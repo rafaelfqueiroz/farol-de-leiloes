@@ -109,11 +109,24 @@ describe('RemindersService.create guards', () => {
     },
   );
 
-  it.each(['standard', 'premium', 'admin'])('lets the %s role use SMS', async (role) => {
+  it.each(['standard', 'premium'])('lets the %s role use SMS', async (role) => {
     const { service } = aCreateService(AUCTION, { role, phone: '+5500000000000' });
     await expect(
       service.create(USER_ID, createDto({ channel: ReminderChannel.SMS })),
     ).resolves.toBeDefined();
+  });
+
+  it('SPEC-002 BR-002-23: the legacy admin role is no plan, so it cannot use SMS', async () => {
+    const { service } = aCreateService(AUCTION, {
+      role: 'admin',
+      isAdmin: true,
+      phone: '+5500000000000',
+    });
+    await expect(
+      service.create(USER_ID, createDto({ channel: ReminderChannel.SMS })),
+    ).rejects.toEqual(
+      new DomainError('REMINDER_CHANNEL_NOT_IN_PLAN', { channel: ReminderChannel.SMS }),
+    );
   });
 
   it.each([

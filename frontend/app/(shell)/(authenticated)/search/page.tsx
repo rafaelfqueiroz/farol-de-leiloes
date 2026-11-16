@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Alert, Box, CircularProgress } from '@mui/material';
-import { hasMinimumRole } from '@/app/components/RequireRole';
+import { hasMinimumPlan } from '@/app/components/RequireRole';
 import { useAuth } from '@/app/contexts/AuthContext';
 import SearchFilters, { AuctionFilters } from '@/app/components/SearchFilters';
 import AuctionList from '@/app/components/AuctionList';
@@ -79,7 +79,7 @@ function SearchPageContent() {
   const searchParams = useSearchParams();
   const { role } = useAuth();
   const apiErrorMessage = useApiErrorMessage();
-  const canAccessFavorites = hasMinimumRole(role, 'standard');
+  const canAccessFavorites = hasMinimumPlan(role, 'standard');
   // #42: the view follows the URL, so the AppShell's Favoritos link (/search?view=favorites) and
   // Buscar imóveis link (/search) switch it without a callback into the page
   const activeView =

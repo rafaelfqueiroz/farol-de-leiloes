@@ -161,6 +161,7 @@ describe('assertMigrationOrder', () => {
       '0001-money-decimal128',
       '0002-saved-filter-price-bounds',
       '0003-account-tokens',
+      '0004-admin-capability',
     ]);
   });
 });

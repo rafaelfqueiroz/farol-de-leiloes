@@ -60,7 +60,9 @@ interface Coupon {
 
 export default function AdminCouponsPage() {
   const router = useRouter();
-  const { role, loading: authLoading } = useAuth();
+  // SPEC-002 BR-002-23: the admin capability, never the plan tier. UX only: the API refuses a
+  // non-admin on its own (AR-51).
+  const { isAdmin, loading: authLoading } = useAuth();
   const t = useTranslations('adminCoupons');
   const tCommon = useTranslations('common');
   const apiErrorMessage = useApiErrorMessage();
@@ -106,15 +108,15 @@ export default function AdminCouponsPage() {
   }, [page]);
 
   useEffect(() => {
-    if (!authLoading && role !== 'admin') {
+    if (!authLoading && !isAdmin) {
       router.push('/');
       return;
     }
-    if (!authLoading && role === 'admin') {
+    if (!authLoading && isAdmin) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the page from the API (an external system); loadCoupons writes state only once the request settles
       void loadCoupons();
     }
-  }, [authLoading, role, router, loadCoupons]);
+  }, [authLoading, isAdmin, router, loadCoupons]);
 
   const handleCreateCoupon = async () => {
     if (!newCode.trim() || !newDiscountValue || !newValidTo) return;
@@ -166,7 +168,7 @@ export default function AdminCouponsPage() {
 
   const isExpired = (validTo: string) => new Date(validTo) < new Date();
 
-  if (!authLoading && role !== 'admin') return null;
+  if (!authLoading && !isAdmin) return null;
 
   return (
     <>

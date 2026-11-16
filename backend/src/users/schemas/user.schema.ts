@@ -50,9 +50,17 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: Number, required: false, default: 0, min: 0 })
   credentialVersion?: number;
 
-  // Role-based access control
+  // The plan tier until SPEC-012 moves plans to the office. `'admin'` is a legacy value that grants
+  // nothing any more, not even a plan (SPEC-002 BR-002-23): the capability is `isAdmin` below, and
+  // migration 0004 copied it there. The value stays readable until SPEC-012 contracts it (AR-28).
   @Prop({ required: true, enum: ['admin', 'free', 'standard', 'premium'], default: 'free' })
   role!: string;
+
+  // SPEC-002 DL-002-05 / BR-002-21 / BR-002-23: the platform-operation capability. Written only by
+  // the grant-admin script (UsersService.setAdminCapability), never from a request (BR-001-30);
+  // read fresh on every request (BR-002-15). A document without it is not an admin (AR-28).
+  @Prop({ type: Boolean, required: false, default: false })
+  isAdmin?: boolean;
 
   // Stripe integration
   @Prop({ required: false, unique: true, sparse: true })

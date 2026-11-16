@@ -102,8 +102,9 @@ describe('profile allowlist over the user schema (integration)', () => {
   });
 
   // `update` is the server-flow write (payments, Google link): it may write the protected paths it
-  // owns, but never the email (D-63) nor the legacy details, which no path writes any more.
-  it.each([...EMAIL_READ_ONLY, ...LEGACY_UNUSED])(
+  // owns, but never the email (D-63) nor the legacy details, which no path writes any more, nor
+  // the admin capability, which only the grant-admin script sets (SPEC-002 BR-002-21).
+  it.each([...EMAIL_READ_ONLY, ...LEGACY_UNUSED, 'isAdmin'])(
     'update (the server flow) cannot change %s either',
     async (path) => {
       const { id } = await seed();

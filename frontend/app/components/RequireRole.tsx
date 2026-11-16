@@ -10,22 +10,33 @@ import EmptyState from '@/app/components/patterns/EmptyState';
 import PageShell from '@/app/components/patterns/PageShell';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 
-export type UserRole = 'free' | 'standard' | 'premium' | 'admin';
+/**
+ * The plan tiers, lowest first. SPEC-002 BR-002-23: the admin capability is not a plan and sits
+ * above none of them; an account's legacy `role: 'admin'` reads as the free tier. The admin
+ * capability is `isAdmin` from /api/auth/me, checked on its own (AR-51: all of this is UX only,
+ * the server decides).
+ */
+export type PlanTier = 'free' | 'standard' | 'premium';
 
-const ROLE_HIERARCHY: Record<UserRole, number> = {
+const PLAN_RANK: Record<PlanTier, number> = {
   free: 0,
   standard: 1,
   premium: 2,
-  admin: 3,
 };
+
+/** The plan tier a `role` stands for; anything that is not a paid tier, `'admin'` included, is free. */
+export function planTierOf(role: string): PlanTier {
+  return role === 'standard' || role === 'premium' ? role : 'free';
+}
 
 interface RequireRoleProps {
   children: React.ReactNode;
-  minimumRole: UserRole;
+  minimumPlan: PlanTier;
   featureName?: string;
 }
 
-export default function RequireRole({ children, minimumRole, featureName }: RequireRoleProps) {
+/** Shows its children only to an account whose plan tier reaches `minimumPlan`. */
+export default function RequireRole({ children, minimumPlan, featureName }: RequireRoleProps) {
   const t = useTranslations('requireRole');
   const tPlan = useTranslations('plan');
   const { loading, isAuthenticated, role } = useAuth();
@@ -69,12 +80,8 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
     );
   }
 
-  const userLevel = ROLE_HIERARCHY[(role as UserRole) || 'free'];
-  const requiredLevel = ROLE_HIERARCHY[minimumRole];
-
-  if (userLevel < requiredLevel) {
-    const planKey = minimumRole === 'standard' || minimumRole === 'premium' ? minimumRole : 'admin';
-    const planName = tPlan(`names.${planKey}`);
+  if (!hasMinimumPlan(role, minimumPlan)) {
+    const planName = tPlan(`names.${minimumPlan}`);
     return (
       // DS-15: a full-page state has no PageHeader, so its title is the page's h1
       <PageShell width="reading">
@@ -100,8 +107,7 @@ export default function RequireRole({ children, minimumRole, featureName }: Requ
   return <>{children}</>;
 }
 
-export function hasMinimumRole(role: string, minimumRole: UserRole): boolean {
-  const userLevel = ROLE_HIERARCHY[(role as UserRole) || 'free'];
-  const requiredLevel = ROLE_HIERARCHY[minimumRole];
-  return userLevel >= requiredLevel;
+/** Whether the plan tier `role` stands for reaches `minimumPlan` (an admin role is free). */
+export function hasMinimumPlan(role: string, minimumPlan: PlanTier): boolean {
+  return PLAN_RANK[planTierOf(role)] >= PLAN_RANK[minimumPlan];
 }

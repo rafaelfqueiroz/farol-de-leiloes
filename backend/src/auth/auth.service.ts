@@ -465,6 +465,8 @@ export class AuthService implements BeforeApplicationShutdown {
       emailVerified: user.emailVerified ?? false,
       role: user.role ?? 'free',
       subscriptionStatus: user.subscriptionStatus ?? null,
+      // SPEC-002 DL-002-05: the capability as stored; a missing flag is false (AR-28).
+      isAdmin: user.isAdmin === true,
       phone: user.phone,
       createdAt: new Date(user.createdAt),
       updatedAt: new Date(user.updatedAt),

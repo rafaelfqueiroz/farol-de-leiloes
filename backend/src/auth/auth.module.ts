@@ -25,6 +25,8 @@ import { SessionsService } from './sessions/sessions.service.js';
 import { LoginAttemptEntity, LoginAttemptSchema } from './login-attempts/login-attempt.schema.js';
 import { LoginAttemptsRepository } from './login-attempts/login-attempts.repository.js';
 import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
+import { AccessModule } from '../access/access.module.js';
+import { AccessContextGuard } from '../access/guards/access-context.guard.js';
 
 @Module({
   imports: [
@@ -33,6 +35,7 @@ import { LoginAttemptsService } from './login-attempts/login-attempts.service.js
     EmailModule,
     CommonModule, // AR-24: the Clock
     AuthThrottlerModule, // SC-04
+    AccessModule, // SPEC-002: the AccessContextFactory behind the second global guard
     MongooseModule.forFeature([
       { name: AccountTokenEntity.name, schema: AccountTokenSchema },
       { name: SessionEntity.name, schema: SessionSchema },
@@ -53,7 +56,6 @@ import { LoginAttemptsService } from './login-attempts/login-attempts.service.js
     }),
   ],
   controllers: [AuthController],
-  // SC-07: global registration protects every module, including future controllers.
   providers: [
     AuthService,
     AccountTokenRepository,
@@ -66,7 +68,13 @@ import { LoginAttemptsService } from './login-attempts/login-attempts.service.js
     GoogleOAuthStateStore,
     GoogleStrategy,
     GoogleCallbackRedirectFilter,
+    // SC-07: global registration protects every module, including future controllers.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // SPEC-002 AR-13 / BR-002-15: builds the request's AccessContext from the user JwtStrategy has
+    // just read. It MUST stay immediately after JwtAuthGuard in this same array: Nest runs the
+    // global guards of one module in the order they are listed, which is what puts `request.user`
+    // in place before it (jwt-auth.guard.spec.ts holds this order).
+    { provide: APP_GUARD, useClass: AccessContextGuard },
   ],
   exports: [AuthService],
 })

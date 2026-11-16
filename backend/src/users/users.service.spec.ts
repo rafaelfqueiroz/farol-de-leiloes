@@ -157,6 +157,14 @@ describe('UsersService.update (SC-10)', () => {
     expect(setOf(model)).toEqual({ name: 'Ana' });
   });
 
+  it('SPEC-002 BR-002-21: update cannot grant the admin capability, whatever the body carries', async () => {
+    const { service, model } = build();
+
+    await service.update('u1', { name: 'Ana', isAdmin: true } as unknown as UpdateUserDto);
+
+    expect(setOf(model)).toEqual({ name: 'Ana' });
+  });
+
   it('reports USER_NOT_FOUND when nothing matched', async () => {
     const { service, selectExec } = build();
     selectExec.mockResolvedValue(null);
@@ -235,5 +243,30 @@ describe('UsersService.updateProfile', () => {
     await expect(service.updateProfile('u1', { name: 'Ana' })).rejects.toEqual(
       new DomainError('USER_NOT_FOUND'),
     );
+  });
+});
+
+// SPEC-002 DL-002-05: the one write of the admin capability, for the grant-admin script.
+describe('UsersService.setAdminCapability', () => {
+  function withUpdate(matchedCount: number) {
+    const updateOne = vi
+      .fn()
+      .mockReturnValue({ exec: vi.fn().mockResolvedValue({ matchedCount }) });
+    const service = new UsersService({ updateOne } as unknown as ServiceDeps[0]);
+    return { service, updateOne };
+  }
+
+  it('sets the flag on the account matched by equality on the id', async () => {
+    const { service, updateOne } = withUpdate(1);
+
+    await expect(service.setAdminCapability('u1', true)).resolves.toBe(true);
+    expect(updateOne).toHaveBeenCalledWith({ _id: { $eq: 'u1' } }, { $set: { isAdmin: true } });
+  });
+
+  it('clears the flag, and reports a missing account as false', async () => {
+    const { service, updateOne } = withUpdate(0);
+
+    await expect(service.setAdminCapability('u1', false)).resolves.toBe(false);
+    expect(updateOne).toHaveBeenCalledWith({ _id: { $eq: 'u1' } }, { $set: { isAdmin: false } });
   });
 });

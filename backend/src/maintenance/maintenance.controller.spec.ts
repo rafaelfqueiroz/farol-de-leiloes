@@ -43,7 +43,7 @@ describe('MaintenanceController over HTTP', () => {
       controllers: [MaintenanceController],
       providers: [{ provide: MaintenanceService, useValue: maintenance }],
     };
-    admin = await createHttpApp(metadata, { user: { ...TEST_USER, role: 'admin' } });
+    admin = await createHttpApp(metadata, { user: { ...TEST_USER, isAdmin: true } });
     standard = await createHttpApp(metadata);
   });
 
@@ -145,7 +145,7 @@ describe('MaintenanceController over HTTP', () => {
         .send(BODY)
         .expect(403);
 
-      expect(response.body.code).toBe('PLAN_NOT_ALLOWED');
+      expect(response.body.code).toBe('FORBIDDEN');
       expect(maintenance.create).not.toHaveBeenCalled();
     });
 

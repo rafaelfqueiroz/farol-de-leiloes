@@ -36,7 +36,7 @@ The specs say **what** must hold; this document says **how the code makes it hol
 |---|---|
 | **SC-07** | **Deny by default.** `JwtAuthGuard` is registered globally; a public endpoint opts out with `@Public()`, which a reviewer reads as a decision. |
 | **SC-08** | Ownership and permission are enforced on the server on every request, through the scoped repositories and `AccessContext` of ARCHITECTURE §4 (AR-11–AR-16). Hiding a button is never the control (BR-002-10). |
-| **SC-09** | Admin capability grants no client data (BR-002-23). Reads under a support access grant go through a dedicated, read-only, logged path (BR-002-24–BR-002-27); there is no "admin bypass" flag on scoped repositories. |
+| **SC-09** | Admin capability grants no client data and no paid feature (BR-002-23). It is `users.isAdmin`, read on every request (BR-002-15) and checked by `AdminGuard` (`@AdminOnly()`) on the platform-operation endpoints; the plan tier `role: 'admin'` grants nothing, and no guard lets an admin through a plan or persona check. No API writes the flag: only the ops script `npm run grant-admin`, which refuses an office member, an investor or a self-advised account (BR-002-21, DL-002-05). Reads under a support access grant go through a dedicated, read-only, logged path (BR-002-24–BR-002-27); there is no "admin bypass" flag on scoped repositories. |
 
 ## 4. Input and output
 

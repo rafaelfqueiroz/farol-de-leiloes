@@ -9,12 +9,10 @@ import {
   Param,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiConflictResponse,
   ApiCreatedResponse,
-  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -23,9 +21,8 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { AdminOnly } from '../access/decorators/access-guards.decorator.js';
 import { Public } from '../auth/decorators/public.decorator.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
-import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
 import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
@@ -38,11 +35,6 @@ import {
   UpcomingMaintenanceResponseDto,
 } from './dto/maintenance-response.dto.js';
 import { MaintenanceService } from './maintenance.service.js';
-
-const ADMIN_ONLY = {
-  description: 'FORBIDDEN or PLAN_NOT_ALLOWED: admins only',
-  type: ErrorResponseDto,
-};
 
 /** SPEC-003 BR-003-03: scheduled maintenance announced inside the product. */
 @ApiTags('maintenance')
@@ -67,11 +59,9 @@ export class MaintenanceController {
 
   @Get()
   @ApiJwtAuth()
-  @UseGuards(RolesGuard)
-  @Roles('admin')
+  @AdminOnly() // SPEC-002 BR-002-23: users.isAdmin, never the plan tier
   @ApiOperation({ summary: 'Every maintenance window, newest start first (admin, paginated)' })
   @ApiPaginatedResponse(MaintenanceWindowResponseDto)
-  @ApiForbiddenResponse(ADMIN_ONLY)
   async findAll(
     @Query() query: PaginationQueryDto,
   ): Promise<Paginated<MaintenanceWindowResponseDto>> {
@@ -81,15 +71,13 @@ export class MaintenanceController {
 
   @Post()
   @ApiJwtAuth()
-  @UseGuards(RolesGuard)
-  @Roles('admin')
+  @AdminOnly() // SPEC-002 BR-002-23: users.isAdmin, never the plan tier
   @ApiOperation({
     summary:
       'Announce a maintenance window (admin). Less than 48 h notice is accepted but ' +
       'announcedInTime is false and it counts as downtime (BR-003-03)',
   })
   @ApiCreatedResponse({ type: MaintenanceWindowResponseDto })
-  @ApiForbiddenResponse(ADMIN_ONLY)
   async create(
     @Body() dto: CreateMaintenanceWindowDto,
     @CurrentUser() admin: AuthenticatedUser,
@@ -100,11 +88,9 @@ export class MaintenanceController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiJwtAuth()
-  @UseGuards(RolesGuard)
-  @Roles('admin')
+  @AdminOnly() // SPEC-002 BR-002-23: users.isAdmin, never the plan tier
   @ApiOperation({ summary: 'Cancel a maintenance window that has not started (admin)' })
   @ApiNoContentResponse({ description: 'Removed' })
-  @ApiForbiddenResponse(ADMIN_ONLY)
   @ApiNotFoundResponse({ description: 'MAINTENANCE_WINDOW_NOT_FOUND', type: ErrorResponseDto })
   @ApiConflictResponse({
     description: 'MAINTENANCE_WINDOW_ALREADY_STARTED',

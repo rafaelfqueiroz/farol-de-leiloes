@@ -45,6 +45,12 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // BR-001-15: too many failed sign-ins; the throttle answers even when the password is right.
   TOO_MANY_ATTEMPTS: HttpStatus.TOO_MANY_REQUESTS,
 
+  // SPEC-002: refusals that involve no record, so a 403 reveals nothing (AR-14 covers records).
+  // BR-002-14: the route needs a persona the account's relationships do not give.
+  PERSONA_REQUIRED: HttpStatus.FORBIDDEN,
+  // BR-002-30 / D-47: the office's plan lapsed beyond its grace period; writes are refused.
+  OFFICE_READ_ONLY: HttpStatus.FORBIDDEN,
+
   PLAN_NOT_ALLOWED: HttpStatus.FORBIDDEN,
   INVALID_PLAN: HttpStatus.BAD_REQUEST,
   // Stripe answered without a checkout URL: an upstream failure, not the caller's.

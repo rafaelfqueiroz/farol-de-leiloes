@@ -242,7 +242,9 @@ export class RemindersService {
     const premiumChannels = [ReminderChannel.SMS, ReminderChannel.WHATSAPP];
 
     if (premiumChannels.includes(channel)) {
-      const allowedRoles = ['standard', 'premium', 'admin'];
+      // SPEC-002 BR-002-23: admin capability grants no paid feature; a legacy `role: 'admin'` is
+      // no plan at all. SPEC-012 moves this check to the plan entitlements (EntitlementGuard).
+      const allowedRoles = ['standard', 'premium'];
       if (!allowedRoles.includes(user.role)) {
         throw new DomainError('REMINDER_CHANNEL_NOT_IN_PLAN', { channel });
       }

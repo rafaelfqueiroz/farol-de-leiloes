@@ -13,6 +13,7 @@ import { decideGoogleLink } from './domain/google-link.js';
 // decides how the account signs in is here (`password`, `providers`, `googleId`): those change only
 // through the fenced, version-bumping methods (setPassword, changePassword, linkGoogleIdentity),
 // so no write of a credential can skip the credential version (DL-001-02, BR-001-31).
+// SPEC-002 BR-002-21: `isAdmin` is never here either; only setAdminCapability writes it.
 const TEXT_FIELDS = ['name', 'role', 'stripeCustomerId', 'stripeSubscriptionId', 'phone'] as const;
 
 // SC-01: bcrypt, cost >= 10. The one place a password is hashed.
@@ -464,6 +465,19 @@ export class UsersService {
         { _id: { $eq: userId }, email: { $eq: normalizeEmail(email) } },
         { $set: { emailVerified: true } },
       )
+      .exec();
+    return result.matchedCount > 0;
+  }
+
+  /**
+   * SPEC-002 DL-002-05: sets or clears the admin capability. Its only caller is the grant-admin ops
+   * script (`access/grant-admin`), which first refuses an account with client relationships
+   * (BR-002-21); no request reaches it, and `isAdmin` is in no DTO or whitelist (BR-001-30).
+   * Returns whether the account exists.
+   */
+  async setAdminCapability(userId: string, isAdmin: boolean): Promise<boolean> {
+    const result = await this.userRepository
+      .updateOne({ _id: { $eq: userId } }, { $set: { isAdmin: isAdmin === true } })
       .exec();
     return result.matchedCount > 0;
   }

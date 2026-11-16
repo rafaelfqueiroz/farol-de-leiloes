@@ -34,7 +34,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import DescriptionIcon from '@mui/icons-material/Description';
 import { useFavorites } from '@/app/contexts/FavoritesContext';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { hasMinimumRole } from '@/app/components/RequireRole';
+import { hasMinimumPlan } from '@/app/components/RequireRole';
 import { useAuctionLabels } from '@/app/components/AuctionCard';
 import PageShell from '@/app/components/patterns/PageShell';
 import PageHeader from '@/app/components/patterns/PageHeader';
@@ -58,7 +58,7 @@ export default function AuctionDetailClient({ auction }: AuctionDetailClientProp
   const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { role } = useAuth();
-  const canAccessFavorites = hasMinimumRole(role, 'standard');
+  const canAccessFavorites = hasMinimumPlan(role, 'standard');
 
   const getReturnUrl = () => {
     if (typeof window !== 'undefined') {
