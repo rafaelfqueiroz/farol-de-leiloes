@@ -6,6 +6,7 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { ptBR as ptBRPickers } from '@mui/x-date-pickers/locales';
 import { isValid, startOfMinute } from 'date-fns';
+import { useTranslations } from 'next-intl';
 import { ptBR } from 'date-fns/locale';
 import {
   calendarToWallClock,
@@ -94,8 +95,19 @@ export default function DateField({
     onChange(next);
   };
 
+  // BR-003-23, BR-003-24: a time of day is typed and shown in Brasília time, and the field says so.
+  const t = useTranslations('patterns.dateField');
+  const timeZoneNote = helperText
+    ? t('timeZoneNoteWithHelper', { helper: helperText })
+    : t('timeZoneNote');
   const slotProps = {
-    textField: { fullWidth, helperText, error, required, disabled },
+    textField: {
+      fullWidth,
+      helperText: type === 'datetime' ? timeZoneNote : helperText,
+      error,
+      required,
+      disabled,
+    },
   };
 
   return (

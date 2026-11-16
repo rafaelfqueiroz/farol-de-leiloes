@@ -189,7 +189,7 @@ A status is a **soft tinted pill with a leading dot** (`StatusBadge`): the label
 
 ## 5. Typography and numerals
 
-**DS-11 — Only theme typography variants** (`h1`–`h6`, `subtitle1/2`, `body1/2`, `caption`, `overline`, `button`, and the project variant `metric`). No ad-hoc `fontSize`/`fontWeight`. A missing size is a new variant in the theme, added in the design system, not on a page.
+**DS-11 — Only theme typography variants** (`display`, `h1`–`h6`, `subtitle1/2`, `body1/2`, `caption`, `overline`, `button`, and the project variant `metric`). No ad-hoc `fontSize`/`fontWeight`. A missing size is a new variant in the theme, added in the design system, not on a page.
 
 **DS-12 — Money, areas, counts and dates in tables render with `font-variant-numeric: tabular-nums`**, built into `Money`, `DateText`, `DataTable` and `metric`. Columns of values must line up.
 
@@ -197,24 +197,25 @@ A status is a **soft tinted pill with a leading dot** (`StatusBadge`): the label
 
 Weights: 400 text · 500 emphasis and labels · 600 headings, buttons and figures · 700 `h1`/`h2` and the wordmark. Headings use `text-wrap: balance`; running text stays near 65 characters (`PageShell` `reading` is 720 px).
 
-| Variant     | Size/line | Weight | Tracking | Use                                                                                    |
-| ----------- | --------- | ------ | -------- | -------------------------------------------------------------------------------------- |
-| `h1`        | 32px/40px | 700    | -0.02em  | Page title, once per page via PageHeader (DS-15). 28/36 below md.                      |
-| `h2`        | 24px/32px | 700    | -0.015em | Section title inside a page.                                                           |
-| `h3`        | 20px/28px | 600    | -0.01em  | Card group or panel title; auction detail title on phone.                              |
-| `h4`        | 18px/26px | 600    | 0        | Dialog title, sub-section.                                                             |
-| `h5`        | 16px/24px | 600    | 0        | Card title, form section title.                                                        |
-| `h6`        | 14px/20px | 600    | 0        | Small group heading, sidebar group label (overline is preferred there).                |
-| `subtitle1` | 16px/24px | 500    | 0        | Emphasised body line under a title.                                                    |
-| `subtitle2` | 14px/20px | 500    | 0        | Emphasised secondary line, table header text.                                          |
-| `body1`     | 16px/24px | 400    | 0        | Default text, form inputs.                                                             |
-| `body2`     | 14px/20px | 400    | 0        | Secondary text, table cells, card metadata.                                            |
-| `caption`   | 12px/16px | 400    | 0.01em   | Timestamps, helper text, footnotes.                                                    |
-| `overline`  | 12px/16px | 600    | 0.08em   | Uppercase group labels (sidebar groups, KPI labels). Set text-transform uppercase.     |
-| `button`    | 14px/20px | 600    | 0.01em   | Button and tab labels. No uppercase.                                                   |
-| `metric`    | 28px/36px | 600    | -0.01em  | Project variant: the headline figure of a StatTile or auction price. Tabular numerals. |
+| Variant     | Size/line | Weight | Tracking | Use                                                                                                       |
+| ----------- | --------- | ------ | -------- | --------------------------------------------------------------------------------------------------------- |
+| `display`   | 48px/56px | 700    | -0.02em  | Marketing hero headline: the landing page's only `h1`, never a page title (that is `h1`). 32/40 below md. |
+| `h1`        | 32px/40px | 700    | -0.02em  | Page title, once per page via PageHeader (DS-15). 28/36 below md.                                         |
+| `h2`        | 24px/32px | 700    | -0.015em | Section title inside a page.                                                                              |
+| `h3`        | 20px/28px | 600    | -0.01em  | Card group or panel title; auction detail title on phone.                                                 |
+| `h4`        | 18px/26px | 600    | 0        | Dialog title, sub-section.                                                                                |
+| `h5`        | 16px/24px | 600    | 0        | Card title, form section title.                                                                           |
+| `h6`        | 14px/20px | 600    | 0        | Small group heading, sidebar group label (overline is preferred there).                                   |
+| `subtitle1` | 16px/24px | 500    | 0        | Emphasised body line under a title.                                                                       |
+| `subtitle2` | 14px/20px | 500    | 0        | Emphasised secondary line, table header text.                                                             |
+| `body1`     | 16px/24px | 400    | 0        | Default text, form inputs.                                                                                |
+| `body2`     | 14px/20px | 400    | 0        | Secondary text, table cells, card metadata.                                                               |
+| `caption`   | 12px/16px | 400    | 0.01em   | Timestamps, helper text, footnotes.                                                                       |
+| `overline`  | 12px/16px | 600    | 0.08em   | Uppercase group labels (sidebar groups, KPI labels). Set text-transform uppercase.                        |
+| `button`    | 14px/20px | 600    | 0.01em   | Button and tab labels. No uppercase.                                                                      |
+| `metric`    | 28px/36px | 600    | -0.01em  | Project variant: the headline figure of a StatTile or auction price. Tabular numerals.                    |
 
-`h1` is **28/36 below `md`** and 32/40 from `md`. `metric` is the one project variant: the headline figure of a `StatTile` or an auction price.
+`h1` is **28/36 below `md`** and 32/40 from `md`; `display` is 32/40 below `md` and 48/56 from `md`. `display` and `metric` are the project variants: `display` is the landing hero (the one place a page's `h1` is larger than the scale's `h1`), `metric` the headline figure of a `StatTile` or an auction price. A visual variant never picks the heading level: the hero is `variant="display" component="h1"`, a card title `variant="h5" component="h3"`, a price `variant="metric" component="p"`.
 
 ## 6. Layout and responsiveness
 
@@ -261,7 +262,7 @@ A role sees only the groups where it has a destination — a group with none dis
 
 ### Page widths
 
-`PageShell` is the only place a page's width, gutters and vertical rhythm are set. `width="app"` (default) is max **1200 px** for lists, dashboards, plans and detail pages; `width="reading"` is max **720 px** for forms, settings, support and legal text; `width="narrow"` is max **480 px** for short forms and result screens outside the shell (login, register, password reset, email verification, payment result), where the page passes `component="main"` because it has no shell `<main>`. Gutters are **16 px on phone and 24 px from `sm`**; sections are 32 px apart. Pages never set their own `maxWidth`, padding or background.
+`PageShell` is the only place a page's width, gutters and vertical rhythm are set. `width="app"` (default) is max **1200 px** for lists, dashboards, plans and detail pages; `width="reading"` is max **720 px** for forms, settings, support and legal text; `width="narrow"` is max **480 px** for short forms and result screens outside the shell (login, register, password reset, email verification, payment result), where the page passes `component="main"` because it has no shell `<main>`. Gutters are **16 px on phone and 24 px from `sm`**; sections are 32 px apart. Pages never set their own `maxWidth`, padding or background. The one exception is the landing page (`/`): it is built from full-bleed bands (`primary.soft` backgrounds, a `Container lg` per section) that `PageShell`'s single column cannot express (#43 decision 5, #126). It still follows DS-11 and DS-15: its hero is the only `h1` (`display`), section titles are `h2` and card titles `h3`.
 
 ## 7. Components
 
@@ -328,7 +329,7 @@ Every component the design system specifies. Each has a card in the artifact wit
 
 **DS-28 — One concept, one wording.** Auction terms are Caixa's (_modalidade_, _edital_, _matrícula_, _arremate_, _desocupação_); journey phases use the PRD's names. A second catalogue string for an existing concept is a review failure; `test/structural/catalogue-vocabulary.test.ts` lists the variants that were merged (for example _E-mail_, _lance mínimo_, _valor de avaliação_) so they cannot come back. Plan names (_Gratuito_, _Standard_, _Premium_) and the _modalidade_ labels each have one home (`plan.names`, `auctionCard.modality`).
 
-**DS-29 — Numbers and dates are formatted only through the shared formatters** (`Money`, `DateText`, `formatPercent`, `formatArea`, `formatCount`): `R$ 1.234,56`, `dd/mm/aaaa HH:mm`, `12,5%`, `1.250 m²` (BR-003-19–BR-003-21). `formatArea` and `formatCount` live in `frontend/lib/numbers.ts`; inline `toLocaleString`, `Intl.*` and `toFixed` are not used in `app/`. Countdowns ("Hoje", "Amanhã", "em 5 dias") count calendar days in Brasília through `relativeParts` (AR-23).
+**DS-29 — Numbers and dates are formatted only through the shared formatters** (`Money`, `DateText`, `formatPercent`, `formatArea`, `formatCount`): `R$ 1.234,56`, `dd/mm/aaaa HH:mm (horário de Brasília)`, `12,5%`, `1.250 m²` (BR-003-19–BR-003-21). `formatArea` and `formatCount` live in `frontend/lib/numbers.ts`; inline `toLocaleString`, `Intl.*` and `toFixed` are not used in `app/`; ESLint bans `new Date(y, m, d…)`, `toLocale*String` and `Intl.DateTimeFormat` outside `lib/dates.ts`, `lib/money.ts`, `lib/numbers.ts` and tests (AR-23). A time of day is always followed by "(horário de Brasília)" (BR-003-23): `DateText` with a time adds it, and a datetime `DateField` states it in its helper text, both from the catalogue. Countdowns ("Hoje", "Amanhã", "em 5 dias") count calendar days in Brasília through `relativeParts` (AR-23).
 
 Voice: address the user as "você"; sentence case; buttons are verbs of one to three words ("Criar lembrete", never "OK"); errors say what happened and what to do, with no apology; confirmations are past tense without "com sucesso" ("Busca salva"); AI output is labelled and hedged; no emoji and no exclamation marks in system copy. The full content fundamentals are in the artifact's brand book.
 
@@ -357,12 +358,10 @@ The artifact's `SearchPageFrame` card is the example to follow.
 
 The theme, tokens, shared patterns, formatters and logo from issue #38 are in place. What is still open, and who owns it:
 
-| Rule                       | Today                                                                                                                                                                                                                                                                                         | Owner                         |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| DS-01, DS-11, DS-14, DS-15 | The landing page (`/`) still has numeric `fontSize` / `fontWeight` literals, no single `h1` and stays outside `PageShell` (full-bleed bands); every other page uses `PageShell` / `PageHeader` and theme typography                                                                           | #126                          |
-| DS-27                      | Destructive confirmations are hand-rolled `Dialog`s (`RemindersPage` delete reminder, `plans` cancel subscription) instead of `ConfirmDialog`; some destructive actions have no confirmation at all (admin coupons "Invalidar", `ReminderButton` delete, `SearchFilters` delete saved filter) | no issue yet                  |
-| §6                         | Busca com IA, Jornadas, Relatórios, Investidores and Equipe are not in the navigation yet; Escritório is reserved and empty                                                                                                                                                                   | each destination's spec issue |
-| TESTING §9                 | Lint enforces hex/px in `sx` (DS-01); the only bulk-suppressed hits left in `frontend/eslint-suppressions.json` are the two in `LandingPage.tsx` (no `react/jsx-no-literals` entry is left)                                                                                                   | #126                          |
-| MUI built-ins              | `Pagination` keeps MUI's English default `aria-label`s ("Go to page 2") until the theme takes MUI's `ptBR` locale                                                                                                                                                                             | no issue yet                  |
-| TS-24                      | No frontend coverage gate                                                                                                                                                                                                                                                                     | #32                           |
-| Logo                       | First version: the SVGs in `frontend/public/brand/` are replaceable (see Brand)                                                                                                                                                                                                               | —                             |
+| Rule          | Today                                                                                                                                                                                                                                                                                         | Owner                         |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| DS-27         | Destructive confirmations are hand-rolled `Dialog`s (`RemindersPage` delete reminder, `plans` cancel subscription) instead of `ConfirmDialog`; some destructive actions have no confirmation at all (admin coupons "Invalidar", `ReminderButton` delete, `SearchFilters` delete saved filter) | no issue yet                  |
+| §6            | Busca com IA, Jornadas, Relatórios, Investidores and Equipe are not in the navigation yet; Escritório is reserved and empty                                                                                                                                                                   | each destination's spec issue |
+| MUI built-ins | `Pagination` keeps MUI's English default `aria-label`s ("Go to page 2") until the theme takes MUI's `ptBR` locale                                                                                                                                                                             | no issue yet                  |
+| TS-24         | No frontend coverage gate                                                                                                                                                                                                                                                                     | #32                           |
+| Logo          | First version: the SVGs in `frontend/public/brand/` are replaceable (see Brand)                                                                                                                                                                                                               | —                             |
