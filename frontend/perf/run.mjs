@@ -16,7 +16,15 @@
 // Exit codes: 0 budgets met (or --report-only), 3 a budget missed, 1 a fault (stack, Chrome, ...).
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { summarizeReports, summaryTable } from './stats.mjs';
 
@@ -28,6 +36,7 @@ const ROOT = join(import.meta.dirname, '..');
 const COMPOSE_FILE = join(ROOT, 'e2e', 'compose.e2e.yml');
 const REPORTS = join(ROOT, '.lighthouseci');
 const RESULTS = join(ROOT, 'perf-results');
+const REPORTS_COPY = join(RESULTS, 'lighthouse');
 
 // The seed's full catalog is 35 000 auctions (backend FULL_CATALOG_SIZE); below this it is not.
 const FULL_CATALOG_FLOOR = 30_000;
@@ -62,12 +71,23 @@ async function findChrome(env) {
   throw new Error('No Chrome found: set CHROME_PATH, or run `npx playwright install chromium`');
 }
 
-/** The number of active auctions the run measured against, for the record. */
+/** The most auctions any catalog this harness measures can hold; a larger count is a fault. */
+const MAX_CATALOG = 10_000_000;
+
+/**
+ * The number of active auctions the run measured against, for the record. The answer is data
+ * from the network, so it is parsed as the one shape expected (`{ total: <count> }`), bounded,
+ * and only the validated integer is returned: nothing of the response body is kept (SC-15).
+ */
 async function catalogSize(env) {
   const api = env.PERF_API_URL || `http://localhost:${env.E2E_API_PORT || '38100'}`;
   const response = await fetch(`${api}/api/auctions?pageSize=1`);
-  const body = await response.json();
-  return body.total;
+  if (!response.ok) throw new Error(`the catalog count answered ${response.status}`);
+  const total = (await response.json())?.total;
+  if (!Number.isSafeInteger(total) || total < 0 || total > MAX_CATALOG) {
+    throw new Error('the catalog count is not an integer within bounds');
+  }
+  return total;
 }
 
 function lighthouse(command, env) {
@@ -108,6 +128,10 @@ async function measure(env, runs, requests) {
   const assertion = lighthouse('assert', { ...env, PERF_RUNS: String(runs) });
   echo(assertion);
   const lighthousePassed = assertion.status === 0;
+  // The reports are written to the hidden `.lighthouseci/`, which `upload-artifact` skips: copy
+  // them (JSON and HTML per run, and the assertion results) under the results directory, a fixed
+  // path, so the workflow's artifact carries them.
+  cpSync(REPORTS, REPORTS_COPY, { recursive: true });
 
   log(`API latency: ${requests} requests per target`);
   const api = spawnSync(

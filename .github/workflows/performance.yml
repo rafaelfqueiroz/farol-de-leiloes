@@ -91,15 +91,14 @@ jobs:
       - name: Job summary
         if: ${{ !cancelled() }}
         run: cat perf-results/summary.md >> "$GITHUB_STEP_SUMMARY"
-      # The Lighthouse reports (JSON and HTML, one pair per run) and the verdict. They hold only
-      # the seed's fake data (TS-27).
+      # The verdict, the summary, the API check and, in perf-results/lighthouse/, the Lighthouse
+      # reports (JSON and HTML, one pair per run): run.mjs copies them out of the hidden
+      # .lighthouseci/, which upload-artifact leaves out. They hold only the seed's fake data (TS-27).
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
           name: lighthouse-reports
-          path: |
-            frontend/.lighthouseci/
-            frontend/perf-results/
+          path: frontend/perf-results/
           retention-days: 30
           if-no-files-found: warn
 
