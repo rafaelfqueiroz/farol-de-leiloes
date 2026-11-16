@@ -369,19 +369,17 @@ describe('proxyToBackend', () => {
     });
   });
 
-  describe('a dead session (SC-02, BR-001-18)', () => {
+  describe('a dead session (SC-02, BR-001-18; the late-401 race is in backend.session-race.test.ts)', () => {
     const signedInGet = () => requestTo('/api/auth/me', { headers: sessionCookie() });
 
-    it('clears the cookie when the backend answers 401 UNAUTHENTICATED to a request that carried it', async () => {
+    it('does not clear the cookie when the backend answers 401 UNAUTHENTICATED (a stateless BFF cannot know which cookie the browser holds now)', async () => {
       fetchMock.mockResolvedValue(json({ code: 'UNAUTHENTICATED', context: {} }, 401));
 
       const res = await proxyToBackend(signedInGet(), '/auth/me', { auth: true });
 
       expect(res.status).toBe(401);
       expect(await res.json()).toEqual({ code: 'UNAUTHENTICATED', context: {} });
-      const [cleared] = setCookieOf(res);
-      expect(cleared).toContain(`${PLAIN_SESSION_COOKIE}=;`);
-      expect(cleared).toMatch(/Max-Age=0/i);
+      expect(setCookieOf(res)).toEqual([]);
     });
 
     it('keeps the cookie on any other 401 (a wrong current password is not a dead session)', async () => {

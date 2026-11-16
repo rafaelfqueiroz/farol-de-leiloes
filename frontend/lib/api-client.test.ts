@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from './api-error';
-import { apiFetch, apiJson, onSessionEnded } from './api-client';
+import {
+  apiFetch,
+  apiJson,
+  bumpAuthGeneration,
+  currentAuthGeneration,
+  onSessionEnded,
+} from './api-client';
 
 // SC-02: browser code calls the same-origin BFF with the session cookie and never builds an
 // Authorization header; a 401 UNAUTHENTICATED is the one global "session ended" signal.
@@ -100,6 +106,53 @@ describe('apiFetch', () => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
     await expect(apiFetch('/api/x')).rejects.toThrow('Failed to fetch');
+  });
+});
+
+describe('the auth generation (BR-001-18)', () => {
+  it('counts the session changes it is told about', () => {
+    const before = currentAuthGeneration();
+
+    bumpAuthGeneration();
+
+    expect(currentAuthGeneration()).toBe(before + 1);
+  });
+
+  it('ignores a 401 UNAUTHENTICATED whose request started under an older generation, and still returns it', async () => {
+    let release!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>((resolve) => (release = resolve))),
+    );
+    const ended = vi.fn();
+    const unsubscribe = onSessionEnded(ended);
+
+    const call = apiFetch('/api/favorites');
+    bumpAuthGeneration(); // a sign-in happened while the call was in flight
+    release(answer({ code: 'UNAUTHENTICATED', context: {} }, 401));
+    const response = await call;
+
+    expect(ended).not.toHaveBeenCalled();
+    expect(response.status).toBe(401);
+    unsubscribe();
+  });
+
+  it('notifies for a 401 UNAUTHENTICATED whose request started under the current generation', async () => {
+    let release!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>((resolve) => (release = resolve))),
+    );
+    const ended = vi.fn();
+    const unsubscribe = onSessionEnded(ended);
+    bumpAuthGeneration();
+
+    const call = apiFetch('/api/favorites');
+    release(answer({ code: 'UNAUTHENTICATED', context: {} }, 401));
+    await call;
+
+    expect(ended).toHaveBeenCalledTimes(1);
+    unsubscribe();
   });
 });
 

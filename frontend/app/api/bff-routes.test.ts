@@ -202,7 +202,7 @@ describe.each(routes)('$name', (route) => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('clears the session cookie when the backend says the session is dead', async () => {
+    it('does not touch the session cookie when the backend says the session is dead (BR-001-18)', async () => {
       fetchMock.mockResolvedValueOnce(
         new Response(JSON.stringify({ code: 'UNAUTHENTICATED', context: {} }), {
           status: 401,
@@ -213,9 +213,7 @@ describe.each(routes)('$name', (route) => {
       const response = await call(route, requestFor(route, signedIn));
 
       expect(response.status).toBe(401);
-      expect(response.headers.getSetCookie().join(';')).toMatch(
-        new RegExp(`${PLAIN_SESSION_COOKIE}=;.*Max-Age=0`, 'i'),
-      );
+      expect(response.headers.getSetCookie()).toEqual([]);
     });
 
     it('answers 401 UNAUTHENTICATED without calling the backend when signed out', async () => {

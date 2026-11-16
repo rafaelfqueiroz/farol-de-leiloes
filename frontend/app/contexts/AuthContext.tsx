@@ -1,7 +1,21 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { apiFetch, apiJson, onSessionEnded } from '@/lib/api-client';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  ReactNode,
+} from 'react';
+import {
+  apiFetch,
+  apiJson,
+  bumpAuthGeneration,
+  currentAuthGeneration,
+  onSessionEnded,
+} from '@/lib/api-client';
 import { reportClientError } from '@/lib/report-client-error';
 
 interface User {
@@ -46,22 +60,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // The newest lookup; an older one that is still in flight has been superseded.
+  const lookups = useRef(0);
+
   // SC-02: there is no token in the browser to read. "Signed in" is whatever `GET /api/auth/me`
   // answers for the session cookie the browser sends by itself.
+  //
+  // BR-001-18: a lookup starts a new auth generation, so the answers of earlier calls are stale
+  // from here on. Its own answer is stale, and ignored (the user is neither set nor cleared), when
+  // the session changed while it was in flight (a sign-in during the first visit's lookup, which
+  // would otherwise be undone by the lookup's anonymous answer) or a newer lookup started.
   const loadUser = useCallback(async () => {
+    const lookup = ++lookups.current;
+    bumpAuthGeneration();
+    const generation = currentAuthGeneration();
     try {
       const response = await apiFetch('/api/auth/me');
+      if (currentAuthGeneration() !== generation || lookups.current !== lookup) return;
       if (response.ok) {
         // GET /auth/me answers with `userId` (CurrentUserResponseDto), the sign-in answers with
         // `_id` (UserProfileResponseDto): the app keys its per-account state on `_id`.
         const { userId, ...rest }: { userId: string } & Omit<User, '_id'> = await response.json();
+        if (currentAuthGeneration() !== generation || lookups.current !== lookup) return;
         setUser({ ...rest, _id: userId });
       }
       // a 401 UNAUTHENTICATED reaches `onSessionEnded` below; any other failure keeps the user
     } catch (error) {
       reportClientError(error, { where: 'AuthContext.loadUser' });
     } finally {
-      setLoading(false);
+      // a superseded lookup leaves `loading` to the newer one
+      if (lookups.current === lookup) setLoading(false);
     }
   }, []);
 
@@ -76,7 +104,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // The session ended anywhere in the app (expired, revoked, signed out elsewhere): drop the user.
-  useEffect(() => onSessionEnded(() => setUser(null)), []);
+  // Answers of calls made under that session are stale from now on.
+  useEffect(
+    () =>
+      onSessionEnded(() => {
+        bumpAuthGeneration();
+        setUser(null);
+      }),
+    [],
+  );
 
   // Load user on mount
   useEffect(() => {
@@ -90,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       json: { email, password },
     });
+    bumpAuthGeneration(); // BR-001-18: calls started before this sign-in are stale now
     setUser(data.user);
   };
 
@@ -98,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       json: { email, password, name },
     });
+    bumpAuthGeneration(); // BR-001-18: calls started before this registration are stale now
     setUser(data.user);
   };
 
@@ -108,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       reportClientError(error, { where: 'AuthContext.logout' });
     } finally {
+      bumpAuthGeneration(); // BR-001-18: calls started under the ended session are stale now
       setUser(null);
     }
   };

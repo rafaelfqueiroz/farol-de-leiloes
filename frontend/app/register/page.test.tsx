@@ -1,18 +1,21 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import messages from '@/messages/pt-BR.json';
 import { axe, renderWithProviders as render } from '@/test/render';
 import RegisterPage from './page';
 
-const env = vi.hoisted(() => ({ register: vi.fn(), push: vi.fn() }));
+const env = vi.hoisted(() => ({ register: vi.fn(), push: vi.fn(), authLoading: false }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: env.push }) }));
-vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ register: env.register }) }));
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ register: env.register, loading: env.authLoading }),
+}));
 
 beforeEach(() => {
   env.register.mockReset();
   env.push.mockReset();
+  env.authLoading = false;
 });
 
 async function fill(password: string, confirmation: string) {
@@ -24,6 +27,36 @@ async function fill(password: string, confirmation: string) {
   await user.type(screen.getByLabelText(/confirmar senha/i), confirmation);
   await user.click(screen.getByRole('button', { name: /^criar conta$/i }));
 }
+
+describe('RegisterPage while the first session lookup is pending (BR-001-18)', () => {
+  // A registration that raced the lookup would be undone by the lookup's anonymous answer.
+  it('disables the submit button, with the same label, until the lookup is done', () => {
+    env.authLoading = true;
+    render(<RegisterPage />);
+
+    expect(screen.getByRole('button', { name: /^criar conta$/i })).toBeDisabled();
+  });
+
+  it('does not submit a valid form (Enter in a field) while the lookup is pending', async () => {
+    env.authLoading = true;
+    const user = userEvent.setup();
+    render(<RegisterPage />);
+    await user.type(screen.getByLabelText(/nome/i), 'Ana');
+    await user.type(screen.getByLabelText(/e-?mail/i), 'a@b.com');
+    await user.type(screen.getByLabelText(/^senha/i), 'secret123');
+    await user.type(screen.getByLabelText(/confirmar senha/i), 'secret123');
+
+    fireEvent.submit(screen.getByRole('button', { name: /^criar conta$/i }));
+
+    expect(env.register).not.toHaveBeenCalled();
+  });
+
+  it('enables the submit button once the lookup is done', () => {
+    render(<RegisterPage />);
+
+    expect(screen.getByRole('button', { name: /^criar conta$/i })).toBeEnabled();
+  });
+});
 
 describe('RegisterPage', () => {
   it('has one h1 "Criar conta" inside a main, with the old subtitle as its summary', async () => {

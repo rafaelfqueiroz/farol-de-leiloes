@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api-error';
@@ -8,14 +8,17 @@ import LoginPage from './page';
 
 // AR-39: a failed sign-in shows the pt-BR message of the code the API answered with, never the
 // backend's own text and never a hardcoded English fallback.
-const env = vi.hoisted(() => ({ login: vi.fn(), push: vi.fn() }));
+const env = vi.hoisted(() => ({ login: vi.fn(), push: vi.fn(), authLoading: false }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: env.push }) }));
-vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ login: env.login }) }));
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ login: env.login, loading: env.authLoading }),
+}));
 
 beforeEach(() => {
   env.login.mockReset();
   env.push.mockReset();
+  env.authLoading = false;
 });
 
 async function submit() {
@@ -25,6 +28,31 @@ async function submit() {
   await user.type(screen.getByLabelText(/senha/i), 'secret1');
   await user.click(screen.getByRole('button', { name: /^entrar$/i }));
 }
+
+describe('LoginPage while the first session lookup is pending (BR-001-18)', () => {
+  // A sign-in that raced the lookup would be undone by the lookup's anonymous answer.
+  it('disables the submit button, with the same label, until the lookup is done', () => {
+    env.authLoading = true;
+    render(<LoginPage />);
+
+    expect(screen.getByRole('button', { name: /^entrar$/i })).toBeDisabled();
+  });
+
+  it('does not submit the form (Enter in a field) while the lookup is pending', () => {
+    env.authLoading = true;
+    render(<LoginPage />);
+
+    fireEvent.submit(screen.getByRole('button', { name: /^entrar$/i }));
+
+    expect(env.login).not.toHaveBeenCalled();
+  });
+
+  it('enables the submit button once the lookup is done', () => {
+    render(<LoginPage />);
+
+    expect(screen.getByRole('button', { name: /^entrar$/i })).toBeEnabled();
+  });
+});
 
 describe('LoginPage', () => {
   it('has one h1 "Entrar" inside a main, with the old subtitle as its summary', async () => {
