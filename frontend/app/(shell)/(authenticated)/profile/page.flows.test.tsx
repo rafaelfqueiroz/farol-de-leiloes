@@ -39,7 +39,6 @@ function signIn(providers: string[], authenticated = true) {
 }
 
 beforeEach(() => {
-  window.localStorage.setItem('token', 'jwt-1');
   env.loadUser.mockReset();
   env.report.mockReset();
   answers = { '/api/auth/profile/full': { status: 200, body: fullProfile } };
@@ -53,7 +52,6 @@ beforeEach(() => {
 
 afterEach(() => {
   fetchMock.mockReset();
-  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -77,13 +75,13 @@ describe('ProfilePage loading', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('fills the personal data from the full profile, sending the token', async () => {
+  it('fills the personal data from the full profile', async () => {
     signIn(['local']);
     render(<ProfilePage />);
 
     await waitFor(() => expect(screen.getByLabelText('Telefone')).toHaveValue('(00) 00000-0000'));
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/profile/full', {
-      headers: { Authorization: 'Bearer jwt-1' },
+      credentials: 'same-origin',
     });
     expect(screen.getByLabelText('CPF')).toHaveValue('000.000.000-00');
     // the time part of the ISO instant is dropped
@@ -145,7 +143,8 @@ describe('ProfilePage account data', () => {
     expect(await screen.findByText(messages.profile.success.profile)).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/profile', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer jwt-1' },
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Ana Nova', email: 'ana@exemplo.test' }),
     });
   });

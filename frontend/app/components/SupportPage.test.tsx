@@ -9,13 +9,11 @@ import SupportPage from './SupportPage';
 const fetchMock = vi.fn();
 
 beforeEach(() => {
-  window.localStorage.setItem('token', 'jwt-1');
   vi.stubGlobal('fetch', fetchMock);
 });
 
 afterEach(() => {
   fetchMock.mockReset();
-  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -118,7 +116,7 @@ describe('SupportPage', () => {
     expect(screen.getByRole('button', { name: 'Enviar solicitação' })).toBeDisabled();
   });
 
-  it('sends the request with the token, confirms and clears the form', async () => {
+  it('sends the request with the session cookie, confirms and clears the form', async () => {
     answer(201);
     const user = await fillForm();
 
@@ -127,7 +125,8 @@ describe('SupportPage', () => {
     expect(await screen.findByText(messages.support.form.success)).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith('/api/support', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer jwt-1' },
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: 'Erro ao favoritar',
         description: 'Não consigo favoritar nenhum imóvel.',
@@ -147,14 +146,13 @@ describe('SupportPage', () => {
     expect(screen.getByLabelText(/^Título/)).toHaveValue('Erro ao favoritar');
   });
 
-  it('says the session expired, without calling the API, when there is no token', async () => {
-    window.localStorage.clear();
+  it('says the session expired when the API answers that nobody is signed in', async () => {
+    answer(401, { code: 'UNAUTHENTICATED', context: {} });
     const user = await fillForm();
 
     await user.click(screen.getByRole('button', { name: 'Enviar solicitação' }));
 
     expect(await screen.findByText(messages.errors.UNAUTHENTICATED)).toBeVisible();
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('shows the generic message when the API cannot be reached', async () => {

@@ -30,21 +30,22 @@ describe('fetchAllPages', () => {
       .mockResolvedValueOnce(page(range(0, 100), 101))
       .mockResolvedValueOnce(page([100], 101));
 
-    const items = await fetchAllPages<number>('/api/x', { headers: { Authorization: 'Bearer t' } });
+    const items = await fetchAllPages<number>('/api/x');
 
     expect(items).toEqual(range(0, 101));
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       '/api/x?page=1&pageSize=100',
       '/api/x?page=2&pageSize=100',
     ]);
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual({ headers: { Authorization: 'Bearer t' } });
+    // SC-02: the session cookie rides along; no Authorization header is ever built in the browser
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual({ credentials: 'same-origin' });
   });
 
   it('appends to a path that already has a query', async () => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockResolvedValueOnce(page([], 0));
 
-    await fetchAllPages<number>('/api/x?kind=a', {});
+    await fetchAllPages<number>('/api/x?kind=a');
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/x?kind=a&page=1&pageSize=100');
   });
@@ -53,7 +54,7 @@ describe('fetchAllPages', () => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockResolvedValueOnce(page([1], 5)).mockResolvedValueOnce(page([], 5));
 
-    expect(await fetchAllPages<number>('/api/x', {})).toEqual([1]);
+    expect(await fetchAllPages<number>('/api/x')).toEqual([1]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -68,7 +69,7 @@ describe('fetchAllPages', () => {
       );
     });
 
-    const items = await fetchAllPages<number>('/api/x', {});
+    const items = await fetchAllPages<number>('/api/x');
 
     expect(fetchMock).toHaveBeenCalledTimes(21);
     expect(items).toEqual(range(0, total));
@@ -80,7 +81,7 @@ describe('fetchAllPages', () => {
       .mockResolvedValueOnce(page(range(0, 100), 200))
       .mockResolvedValueOnce(page(range(100, 100), 200));
 
-    expect(await fetchAllPages<number>('/api/x', {})).toHaveLength(200);
+    expect(await fetchAllPages<number>('/api/x')).toHaveLength(200);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -91,7 +92,7 @@ describe('fetchAllPages', () => {
       .mockResolvedValueOnce(page([3], 5))
       .mockResolvedValueOnce(page([], 5));
 
-    expect(await fetchAllPages<number>('/api/x', {})).toEqual([1, 2, 3]);
+    expect(await fetchAllPages<number>('/api/x')).toEqual([1, 2, 3]);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -99,7 +100,7 @@ describe('fetchAllPages', () => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockResolvedValue(page([1], 500));
 
-    await expect(fetchAllPages<number>('/api/x', {}, () => false)).rejects.toBeInstanceOf(
+    await expect(fetchAllPages<number>('/api/x', () => false)).rejects.toBeInstanceOf(
       PaginationCancelledError,
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -110,7 +111,7 @@ describe('fetchAllPages', () => {
     fetchMock.mockImplementation(async () => page(range(0, 100), 500));
     let calls = 0;
 
-    await expect(fetchAllPages<number>('/api/x', {}, () => ++calls < 2)).rejects.toBeInstanceOf(
+    await expect(fetchAllPages<number>('/api/x', () => ++calls < 2)).rejects.toBeInstanceOf(
       PaginationCancelledError,
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -124,7 +125,7 @@ describe('fetchAllPages', () => {
         new Response(JSON.stringify({ code: 'INTERNAL_ERROR' }), { status: 500 }),
       );
 
-    await expect(fetchAllPages<number>('/api/x', {})).rejects.toMatchObject({
+    await expect(fetchAllPages<number>('/api/x')).rejects.toMatchObject({
       constructor: ApiError,
       status: 500,
     });
@@ -141,7 +142,7 @@ describe('fetchAllPages', () => {
       ),
     );
 
-    await expect(fetchAllPages<number>('/api/x', {})).rejects.toMatchObject({
+    await expect(fetchAllPages<number>('/api/x')).rejects.toMatchObject({
       constructor: ApiError,
       code: 'VALIDATION_FAILED',
       status: 400,

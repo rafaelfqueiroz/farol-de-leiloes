@@ -20,7 +20,8 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SendIcon from '@mui/icons-material/Send';
 import PageHeader from '@/app/components/patterns/PageHeader';
 import PageShell from '@/app/components/patterns/PageShell';
-import { ApiError, readApiError, useApiErrorMessage } from '@/lib/api-error';
+import { apiJson } from '@/lib/api-client';
+import { useApiErrorMessage } from '@/lib/api-error';
 
 const FAQ_KEYS = [
   'howAuctionsWork',
@@ -48,23 +49,8 @@ export default function SupportPage() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new ApiError('UNAUTHENTICATED', {}, 401);
-      }
-
-      const response = await fetch('/api/support', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ title, description }),
-      });
-
-      if (!response.ok) {
-        throw await readApiError(response);
-      }
+      // SC-02: the session cookie goes with the request; a signed-out visitor gets UNAUTHENTICATED
+      await apiJson('/api/support', { method: 'POST', json: { title, description } });
 
       setSnackbar({
         open: true,

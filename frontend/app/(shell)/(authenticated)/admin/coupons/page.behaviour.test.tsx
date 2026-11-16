@@ -50,7 +50,6 @@ beforeEach(() => {
   env.push.mockReset();
   env.report.mockReset();
   env.auth = { role: 'admin', loading: false };
-  window.localStorage.setItem('token', 'jwt-1');
   listAnswer = () => ({
     status: 200,
     body: { items: [coupon('1')], total: 1, page: 1, pageSize: 20 },
@@ -69,7 +68,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
-  window.localStorage.clear();
 });
 
 describe('AdminCouponsPage access', () => {
@@ -93,13 +91,13 @@ describe('AdminCouponsPage access', () => {
 });
 
 describe('AdminCouponsPage list', () => {
-  it('asks for the first page with the token', async () => {
+  it('asks for the first page with the session cookie and no Authorization header', async () => {
     render(<AdminCouponsPage />);
 
     await screen.findByText('CUPOM1');
 
     expect(fetchMock).toHaveBeenCalledWith('/api/coupons?page=1&pageSize=20', {
-      headers: { Authorization: 'Bearer jwt-1' },
+      credentials: 'same-origin',
     });
   });
 
@@ -227,7 +225,7 @@ describe('AdminCouponsPage invalidate', () => {
     expect(await screen.findByText(messages.adminCoupons.snackbar.invalidated)).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith('/api/coupons/1/invalidate', {
       method: 'PATCH',
-      headers: { Authorization: 'Bearer jwt-1' },
+      credentials: 'same-origin',
     });
     await waitFor(() => expect(calledWith('GET')).toHaveLength(2));
   });

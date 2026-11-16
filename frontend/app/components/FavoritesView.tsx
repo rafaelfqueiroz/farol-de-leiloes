@@ -13,7 +13,8 @@ import AuctionCard from './AuctionCard';
 import EmptyState from './patterns/EmptyState';
 import ErrorState from './patterns/ErrorState';
 import PageHeader from './patterns/PageHeader';
-import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import { apiJson } from '@/lib/api-client';
+import { useApiErrorMessage } from '@/lib/api-error';
 import { formatCount } from '@/lib/numbers';
 import { pageCount, type Paginated } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
@@ -41,12 +42,9 @@ export default function FavoritesView() {
     let current = true;
     const load = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`/api/favorites?page=${page}&pageSize=${PAGE_SIZE}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!response.ok) throw await readApiError(response);
-        const body: Paginated<Auction> = await response.json();
+        const body = await apiJson<Paginated<Auction>>(
+          `/api/favorites?page=${page}&pageSize=${PAGE_SIZE}`,
+        );
         if (!current) return;
         if (body.items.length === 0 && page > 1) {
           // the last favourite of the last page was removed: step back

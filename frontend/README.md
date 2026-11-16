@@ -87,10 +87,21 @@ development diagnostics require eval; production enforces `Content-Security-Poli
 `lib/backend.ts` is server-only. It is the one place route handlers reach the backend.
 
 - `backendFetch(path, init)` calls `${BACKEND_API_URL}/api${path}`. The path must start with `/`.
-- `proxyToBackend(request, path, { auth, query })` forwards the request method and raw body (none for GET and DELETE) and only the `Authorization` header. It sends `Content-Type: application/json` when there is a body.
-- `auth: true` without an `Authorization` header answers 401 `UNAUTHENTICATED` without calling the backend.
+- `proxyToBackend(request, path, { auth, query, startsSession })` forwards the request method and raw body (none for GET and DELETE) and one header, `Authorization: Bearer`, which it builds from the session cookie. The browser's own `Authorization` header and cookies are never forwarded. It sends `Content-Type: application/json` when there is a body.
+- `auth: true` without a session cookie answers 401 `UNAUTHENTICATED` without calling the backend. A backend 401 `UNAUTHENTICATED` to a request that carried the cookie clears the cookie on the way out (the session is dead).
+- `startsSession: true` (login, register, the Google exchange) moves the backend's `accessToken` into the session cookie and answers the browser without it (`{ user }`, or `{ status, user }`). A first Google sign-in (`terms_required`) sets no cookie.
+- A state-changing request (POST, PUT, PATCH, DELETE) from another origin is answered 403 `FORBIDDEN` before anything else, without calling the backend (see Session cookie).
 - The backend's JSON answer passes through with its status, unchanged (AR-38). A non-JSON error status (a gateway page, an empty 5xx) becomes 502 `BACKEND_UNAVAILABLE`. A network failure also becomes 502 `BACKEND_UNAVAILABLE`.
 - Logs carry the route, the error name and the message only, never a body, header or token (SC-15).
+
+### Session cookie (SC-02)
+
+The session token lives only in an `httpOnly`, `SameSite=Lax`, `Path=/` cookie that the route handlers set; browser JavaScript never sees it, and nothing in `localStorage`, `sessionStorage` or a URL holds it (`test/structural/session-token.test.ts` enforces this).
+
+- `lib/session-cookie.ts`: the cookie is `__Host-farol_session` (with `Secure`) in production and `farol_session` otherwise, because a `__Host-` cookie cannot be set over plain http. It lasts 7 days, like the session (BR-001-18). Production reads only the `__Host-` name; development reads either.
+- `POST /api/auth/logout` ends the session on the backend (best effort) and always clears the cookie.
+- `lib/request-origin.ts`: for POST, PUT, PATCH and DELETE, `Origin` must equal the origin of `NEXT_PUBLIC_SITE_URL`, or `Sec-Fetch-Site` must be `same-origin` when `Origin` is absent. GET is exempt. **Set `NEXT_PUBLIC_SITE_URL=http://localhost:3001` locally**, otherwise every state-changing call from the dev server answers 403 `FORBIDDEN`.
+- `lib/api-client.ts` (browser): `apiFetch` and `apiJson` call the same-origin `/api/*` routes with the cookie, turn a failure into an `ApiError` (AR-39) and tell `AuthContext` when a call answers 401 `UNAUTHENTICATED`, so the app signs the user out in one place. `AuthContext` derives "signed in" from `GET /api/auth/me`; favourites and reminders load once a user is known.
 
 Example: `app/api/search/route.ts` keeps the known filter parameters and calls `proxyToBackend(request, '/auctions', { query })`.
 
@@ -120,7 +131,7 @@ AI search: `app/api/chat/route.ts` calls the backend's `/ai/extract-params`, the
 | `app/components/patterns/`     | Shared UI patterns (`AppShell`, `PageHeader`, `EmptyState`, `Money`, and others)                                |
 | `app/contexts/`                | React contexts: auth, favorites, reminders, saved filters                                                       |
 | `app/theme/`                   | MUI theme, colour tokens, fonts and the colour-scheme control                                                   |
-| `lib/`                         | Server and shared helpers: `env.ts`, `backend.ts`, `api-error.ts`, money and date utilities                     |
+| `lib/`                         | Server and shared helpers: `env.ts`, `backend.ts`, `session-cookie.ts`, `api-client.ts`, money and dates        |
 | `i18n/`                        | next-intl configuration and request setup (pt-BR only)                                                          |
 | `messages/`                    | `pt-BR.json`, the only message catalogue                                                                        |
 | `public/brand/`                | Logo and brand SVGs                                                                                             |

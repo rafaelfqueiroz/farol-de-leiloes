@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { ApiError, readApiError } from '@/lib/api-error';
+import { apiFetch, apiJson, onSessionEnded } from '@/lib/api-client';
 import { reportClientError } from '@/lib/report-client-error';
 
 interface User {
@@ -46,125 +46,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // SC-02: there is no token in the browser to read. "Signed in" is whatever `GET /api/auth/me`
+  // answers for the session cookie the browser sends by itself.
   const loadUser = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      const response = await fetch('/api/auth/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
+      const response = await apiFetch('/api/auth/me');
       if (response.ok) {
         // GET /auth/me answers with `userId` (CurrentUserResponseDto), the sign-in answers with
         // `_id` (UserProfileResponseDto): the app keys its per-account state on `_id`.
         const { userId, ...rest }: { userId: string } & Omit<User, '_id'> = await response.json();
         setUser({ ...rest, _id: userId });
-      } else {
-        // Token is invalid, clear it
-        localStorage.removeItem('token');
       }
+      // a 401 UNAUTHENTICATED reaches `onSessionEnded` below; any other failure keeps the user
     } catch (error) {
       reportClientError(error, { where: 'AuthContext.loadUser' });
-      localStorage.removeItem('token');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // The session ended anywhere in the app (expired, revoked, signed out elsewhere): drop the user.
+  useEffect(() => onSessionEnded(() => setUser(null)), []);
+
   // Load user on mount
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the session lives in storage and the API (external systems); the first read can only happen after mount
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the session lives in a cookie and the API (external systems); the first read can only happen after mount
     void loadUser();
   }, [loadUser]);
 
+  // The BFF has set the cookie from the backend's token; the answer carries the user only.
   const login = async (email: string, password: string) => {
-    const response = await fetch('/api/auth/login', {
+    const data = await apiJson<{ user: User }>('/api/auth/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
+      json: { email, password },
     });
-
-    if (!response.ok) {
-      throw await readApiError(response);
-    }
-
-    const data = await response.json();
-    localStorage.setItem('token', data.accessToken);
     setUser(data.user);
   };
 
   const register = async (email: string, password: string, name: string) => {
-    const response = await fetch('/api/auth/register', {
+    const data = await apiJson<{ user: User }>('/api/auth/register', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password, name }),
+      json: { email, password, name },
     });
-
-    if (!response.ok) {
-      throw await readApiError(response);
-    }
-
-    const data = await response.json();
-    localStorage.setItem('token', data.accessToken);
     setUser(data.user);
   };
 
   const logout = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (token) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-      }
+      // the BFF ends the session on the server and always clears the cookie
+      await apiFetch('/api/auth/logout', { method: 'POST' });
     } catch (error) {
       reportClientError(error, { where: 'AuthContext.logout' });
     } finally {
-      localStorage.removeItem('token');
       setUser(null);
     }
   };
 
   const resendVerificationEmail = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new ApiError('UNAUTHENTICATED', {}, 401);
-    }
-
-    const response = await fetch('/api/auth/resend-verification', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw await readApiError(response);
-    }
+    await apiJson('/api/auth/resend-verification', { method: 'POST' });
   };
 
   const checkVerificationStatus = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    const response = await fetch('/api/auth/verification-status', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await apiFetch('/api/auth/verification-status');
 
     if (response.ok) {
       const data = await response.json();

@@ -1,10 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from './AuthContext';
 
-// The session lifecycle of AuthProvider: reading the stored token, signing out and the
-// email-verification calls. The error codes of login/register/resend are in AuthContext.test.tsx.
+// The session lifecycle of AuthProvider (SC-02): the session is a cookie the browser sends by
+// itself, so "signed in" is whatever GET /api/auth/me answers; signing out and the
+// email-verification calls follow. The error codes of login/register/resend are in AuthContext.test.tsx.
 vi.mock('@/lib/report-client-error', () => ({ reportClientError: vi.fn() }));
 
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>;
@@ -25,18 +26,17 @@ function stubApi(answers: Record<string, Answer>) {
   const fetchMock = vi.fn(async (url: string) => {
     const answer = answers[url];
     if (!answer) throw new Error(`unexpected request ${url}`);
-    return { ok: answer.status < 400, status: answer.status, json: async () => answer.body };
+    return new Response(JSON.stringify(answer.body), { status: answer.status });
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
 
-const signedInWith = (extra: Record<string, Answer> = {}) => {
-  window.localStorage.setItem('token', 'jwt');
-  return stubApi({ '/api/auth/me': { status: 200, body: meBody }, ...extra });
-};
+const signedInWith = (extra: Record<string, Answer> = {}) =>
+  stubApi({ '/api/auth/me': { status: 200, body: meBody }, ...extra });
 
-beforeEach(() => window.localStorage.clear());
+const unauthenticated: Answer = { status: 401, body: { code: 'UNAUTHENTICATED', context: {} } };
+
 afterEach(() => vi.unstubAllGlobals());
 
 async function rejectionOf(run: Promise<unknown>): Promise<unknown> {
@@ -49,13 +49,13 @@ async function rejectionOf(run: Promise<unknown>): Promise<unknown> {
 }
 
 describe('AuthProvider session', () => {
-  it('finishes loading signed out, without calling the API, when there is no token', async () => {
-    const fetchMock = stubApi({});
+  it('finishes loading signed out when /api/auth/me says nobody is signed in', async () => {
+    const fetchMock = stubApi({ '/api/auth/me': unauthenticated });
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.current).toMatchObject({
       user: null,
       isAuthenticated: false,
@@ -65,30 +65,27 @@ describe('AuthProvider session', () => {
     });
   });
 
-  it('sends the stored token to /api/auth/me', async () => {
+  it('asks /api/auth/me with the session cookie and no Authorization header', async () => {
     const fetchMock = signedInWith();
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', {
-      headers: { Authorization: 'Bearer jwt' },
-    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', { credentials: 'same-origin' });
+    expect(result.current.user).toMatchObject({ _id: 'u1', email: 'a@b.com' });
   });
 
-  it('drops a token the API no longer accepts', async () => {
-    window.localStorage.setItem('token', 'expired');
-    stubApi({ '/api/auth/me': { status: 401, body: { code: 'UNAUTHENTICATED', context: {} } } });
+  it('keeps no token anywhere in the browser', async () => {
+    signedInWith();
     const { result } = renderHook(() => useAuth(), { wrapper });
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
 
-    expect(window.localStorage.getItem('token')).toBeNull();
-    expect(result.current.user).toBeNull();
+    expect(window.localStorage.length).toBe(0);
+    expect(window.sessionStorage.length).toBe(0);
   });
 
-  it('drops the token and stays signed out when the API cannot be reached', async () => {
-    window.localStorage.setItem('token', 'jwt');
+  it('stays signed out when the API cannot be reached', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -99,8 +96,35 @@ describe('AuthProvider session', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(window.localStorage.getItem('token')).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
+  });
+
+  it('signs the user out when any call learns the session ended (401 UNAUTHENTICATED)', async () => {
+    stubApi({
+      '/api/auth/me': { status: 200, body: meBody },
+      '/api/auth/verification-status': unauthenticated,
+    });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    await act(() => result.current.checkVerificationStatus());
+
+    expect(result.current.user).toBeNull();
+    expect(result.current.isAuthenticated).toBe(false);
+  });
+
+  it('keeps the user when the API only has a hiccup (a 500 on /api/auth/me)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(meBody), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    await act(() => result.current.refreshUser());
+
+    expect(result.current.isAuthenticated).toBe(true);
   });
 
   it('refreshUser reads the account again', async () => {
@@ -113,9 +137,9 @@ describe('AuthProvider session', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('stores the token and the user after a successful registration', async () => {
+  it('keeps the user from a successful registration, with no token in the answer or the browser', async () => {
     const fetchMock = stubApi({
-      '/api/auth/register': { status: 201, body: { accessToken: 'new-jwt', user: { _id: 'u2' } } },
+      '/api/auth/register': { status: 201, body: { user: { _id: 'u2' } } },
     });
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -123,16 +147,17 @@ describe('AuthProvider session', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/register', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'a@b.com', password: 'secret1', name: 'A' }),
     });
-    expect(window.localStorage.getItem('token')).toBe('new-jwt');
+    expect(window.localStorage.length).toBe(0);
     expect(result.current.user).toMatchObject({ _id: 'u2' });
   });
 });
 
 describe('AuthProvider logout', () => {
-  it('tells the API, then clears the token and the user', async () => {
+  it('tells the API (the BFF clears the cookie), then clears the user', async () => {
     const fetchMock = signedInWith({ '/api/auth/logout': { status: 200, body: {} } });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
@@ -141,9 +166,8 @@ describe('AuthProvider logout', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', {
       method: 'POST',
-      headers: { Authorization: 'Bearer jwt' },
+      credentials: 'same-origin',
     });
-    expect(window.localStorage.getItem('token')).toBeNull();
     expect(result.current.user).toBeNull();
   });
 
@@ -155,23 +179,22 @@ describe('AuthProvider logout', () => {
     // /api/auth/logout has no stubbed answer, so the stub throws like an unreachable API
     await act(() => result.current.logout());
 
-    expect(window.localStorage.getItem('token')).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
   });
 
-  it('does not call the API when there is no token', async () => {
-    const fetchMock = stubApi({});
+  it('is signed out afterwards even when the session was already gone', async () => {
+    stubApi({ '/api/auth/me': unauthenticated, '/api/auth/logout': { status: 204, body: null } });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     await act(() => result.current.logout());
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.user).toBeNull();
   });
 });
 
 describe('AuthProvider email verification', () => {
-  it('asks the API to resend the verification email with the token', async () => {
+  it('asks the API to resend the verification email with the session cookie', async () => {
     const fetchMock = signedInWith({ '/api/auth/resend-verification': { status: 200, body: {} } });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
@@ -180,7 +203,7 @@ describe('AuthProvider email verification', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/resend-verification', {
       method: 'POST',
-      headers: { Authorization: 'Bearer jwt' },
+      credentials: 'same-origin',
     });
   });
 
@@ -215,7 +238,7 @@ describe('AuthProvider email verification', () => {
     expect(result.current.emailVerified).toBe(true);
     expect(result.current.user?.providers).toEqual(['local', 'google']);
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/verification-status', {
-      headers: { Authorization: 'Bearer jwt' },
+      credentials: 'same-origin',
     });
   });
 
@@ -233,16 +256,6 @@ describe('AuthProvider email verification', () => {
     await act(() => result.current.checkVerificationStatus());
 
     expect(result.current.user).toBe(before);
-  });
-
-  it('does nothing without a token', async () => {
-    const fetchMock = stubApi({});
-    const { result } = renderHook(() => useAuth(), { wrapper });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    await act(() => result.current.checkVerificationStatus());
-
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('leaves the user as is when the API refuses the status call', async () => {

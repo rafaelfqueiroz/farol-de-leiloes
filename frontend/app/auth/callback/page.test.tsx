@@ -5,7 +5,7 @@ import { axe, renderWithProviders as render } from '@/test/render';
 import AuthCallbackPage from './page';
 
 // SPEC-001 BR-001-20: the landing of the Google sign-in. The backend redirects here with a one-time
-// `?code=`, never a session; the page trades it through the BFF, stores the session it gets, loads
+// `?code=`, never a session; the page trades it through the BFF, the BFF keeps the session in a cookie, loads
 // the account and goes home, or goes back to the login (with the error code) when it cannot.
 const env = vi.hoisted(() => ({
   replace: vi.fn(),
@@ -24,7 +24,6 @@ vi.mock('@/app/contexts/AuthContext', () => ({ useAuth: () => ({ loadUser: env.l
 vi.mock('@/lib/report-client-error', () => ({ reportClientError: env.report }));
 
 beforeEach(() => {
-  window.localStorage.clear();
   env.push.mockReset();
   env.replace.mockReset();
   env.loadUser.mockReset().mockResolvedValue(undefined);
@@ -64,9 +63,9 @@ describe('AuthCallbackPage', () => {
     expect(screen.getByText('Autenticando...')).toBeVisible();
   });
 
-  it('trades the code for the session, stores the token, loads the user and goes home', async () => {
+  it('trades the code for the session (a cookie the BFF sets), loads the user and goes home', async () => {
     env.search = 'code=abc123';
-    env.fetch.mockResolvedValue(json({ status: 'signed_in', accessToken: 'jwt-1', user: {} }));
+    env.fetch.mockResolvedValue(json({ status: 'signed_in', user: {} }));
     render(<AuthCallbackPage />);
 
     await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/'));
@@ -75,7 +74,10 @@ describe('AuthCallbackPage', () => {
     expect(url).toBe('/api/auth/google/exchange');
     expect(init.method).toBe('POST');
     expect(init.body).toBe(JSON.stringify({ code: 'abc123' }));
-    expect(localStorage.getItem('token')).toBe('jwt-1');
+    // SC-02: the answer carries no token and the page keeps none anywhere
+    expect(window.localStorage.length).toBe(0);
+    expect(window.sessionStorage.length).toBe(0);
+    expect(init.credentials).toBe('same-origin');
     expect(env.loadUser).toHaveBeenCalledTimes(1);
   });
 
@@ -84,7 +86,7 @@ describe('AuthCallbackPage', () => {
     render(<AuthCallbackPage />);
 
     await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/login'));
-    expect(localStorage.getItem('token')).toBeNull();
+    expect(window.localStorage.length).toBe(0);
     expect(env.fetch).not.toHaveBeenCalled();
   });
 
@@ -96,7 +98,7 @@ describe('AuthCallbackPage', () => {
     await waitFor(() =>
       expect(env.replace).toHaveBeenCalledWith('/login?error=INVALID_GOOGLE_CODE'),
     );
-    expect(localStorage.getItem('token')).toBeNull();
+    expect(window.localStorage.length).toBe(0);
     expect(env.loadUser).not.toHaveBeenCalled();
   });
 
@@ -121,7 +123,7 @@ describe('AuthCallbackPage', () => {
     ]);
     expect(calls[1]?.[1].method).toBe('POST');
     expect(calls[1]?.[1].body).toBe(JSON.stringify({ code: 'new-person' }));
-    expect(localStorage.getItem('token')).toBeNull();
+    expect(window.localStorage.length).toBe(0);
     expect(env.loadUser).not.toHaveBeenCalled();
     expect(env.push).not.toHaveBeenCalled();
   });
@@ -153,7 +155,7 @@ describe('AuthCallbackPage', () => {
 
   it('never pushes a history entry: every redirect replaces the callback', async () => {
     env.search = 'code=abc123';
-    env.fetch.mockResolvedValue(json({ status: 'signed_in', accessToken: 'jwt-1', user: {} }));
+    env.fetch.mockResolvedValue(json({ status: 'signed_in', user: {} }));
     render(<AuthCallbackPage />);
 
     await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/'));
@@ -172,7 +174,7 @@ describe('AuthCallbackPage', () => {
 
   it('reports the failure and goes to the login when the account cannot be loaded', async () => {
     env.search = 'code=abc';
-    env.fetch.mockResolvedValue(json({ status: 'signed_in', accessToken: 'jwt-1', user: {} }));
+    env.fetch.mockResolvedValue(json({ status: 'signed_in', user: {} }));
     const failure = new Error('boom');
     env.loadUser.mockRejectedValue(failure);
     render(<AuthCallbackPage />);

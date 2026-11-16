@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useCallback, useContext, useState, useEffect, ReactNode } from 'react';
+import { useAuth } from './AuthContext';
+import { apiFetch } from '@/lib/api-client';
 import { ApiError, readApiError } from '@/lib/api-error';
 import { fetchAllPages } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
@@ -34,44 +36,25 @@ interface SavedFiltersContextType {
   refreshFilters: () => Promise<void>;
 }
 
-function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('token');
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
-}
-
 const SavedFiltersContext = createContext<SavedFiltersContextType | undefined>(undefined);
 
 export function SavedFiltersProvider({ children }: { children: ReactNode }) {
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  const checkAuthentication = useCallback((): boolean => {
-    const token = localStorage.getItem('token');
-    const authenticated = !!token;
-    setIsAuthenticated(authenticated);
-    return authenticated;
-  }, []);
+  // SC-02: "signed in" is the user AuthContext loaded; the session cookie is not readable here
+  const { user, loading: authLoading } = useAuth();
+  const isAuthenticated = !!user;
 
   const loadSavedFilters = useCallback(async () => {
     try {
-      if (!checkAuthentication()) {
-        setLoading(false);
-        return;
-      }
-
       setLoadFailed(false);
       // AR-35: the endpoint is paginated and the filter picker needs every filter, so they are
       // read page by page
-      setSavedFilters(
-        await fetchAllPages<SavedFilter>('/api/saved-filters', { headers: getAuthHeaders() }),
-      );
+      setSavedFilters(await fetchAllPages<SavedFilter>('/api/saved-filters'));
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         setSavedFilters([]);
-        setIsAuthenticated(false);
       } else {
         setLoadFailed(true);
         reportClientError(error, { where: 'SavedFiltersContext.load' });
@@ -79,26 +62,29 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [checkAuthentication]);
+  }, []);
 
+  const userId = user?._id ?? null;
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the token lives in storage and the filters in the API (external systems); the first read can only happen after mount
+    if (authLoading) return;
+    if (userId === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- nobody is signed in (or just signed out): the previous account's filters must not stay on screen
+      setSavedFilters([]);
+      setLoading(false);
+      return;
+    }
     void loadSavedFilters();
-  }, [loadSavedFilters]);
+  }, [authLoading, userId, loadSavedFilters]);
 
   const saveFilter = async (name: string, filters: FilterData): Promise<SavedFilter | null> => {
-    if (!checkAuthentication()) {
+    if (!user) {
       return null;
     }
 
     try {
-      const response = await fetch('/api/saved-filters', {
+      const response = await apiFetch('/api/saved-filters', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ name, filters }),
+        json: { name, filters },
       });
 
       if (response.ok) {
@@ -117,15 +103,12 @@ export function SavedFiltersProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteFilter = async (id: string): Promise<boolean> => {
-    if (!checkAuthentication()) {
+    if (!user) {
       return false;
     }
 
     try {
-      const response = await fetch(`/api/saved-filters/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
+      const response = await apiFetch(`/api/saved-filters/${id}`, { method: 'DELETE' });
 
       if (response.ok || response.status === 204) {
         setSavedFilters((prev) => prev.filter((f) => f._id !== id));

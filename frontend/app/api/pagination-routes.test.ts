@@ -8,6 +8,7 @@ import { GET as favoriteCodes } from './favorites/codes/route';
 import { GET as reminders } from './reminders/route';
 import { GET as savedFilters } from './saved-filters/route';
 import { GET as search } from './search/route';
+import { sessionCookie } from '@/test/bff-requests';
 
 // AR-35: the BFF forwards `page` and `pageSize` to the backend as sent and nothing else (the old
 // `limit`/`offset` are rejected by the backend, so they must never reach it).
@@ -33,7 +34,8 @@ afterEach(() => {
 
 const request = (path: string, init?: ConstructorParameters<typeof NextRequest>[1]) =>
   new NextRequest(`http://localhost:3001${path}`, init);
-const signedIn = { headers: { Authorization: 'Bearer token-a' } };
+// SC-02: signed in means the session cookie; the BFF builds the Authorization header from it
+const signedIn = { headers: sessionCookie('token-a') };
 const calledUrl = (call = 0) => String(fetchMock.mock.calls[call]?.[0]);
 
 describe('GET /api/search', () => {

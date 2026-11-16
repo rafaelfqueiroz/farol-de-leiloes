@@ -36,7 +36,8 @@ import PageShell from '@/app/components/patterns/PageShell';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { TIME_ZONE } from '@/i18n/config';
 import { parseMoneyInput } from '@/lib/money';
-import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import { apiJson } from '@/lib/api-client';
+import { useApiErrorMessage } from '@/lib/api-error';
 import { pageCount, type Paginated } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
 
@@ -87,22 +88,16 @@ export default function AdminCouponsPage() {
 
   const loadCoupons = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/coupons?page=${page}&pageSize=${PAGE_SIZE}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const data: Paginated<Coupon> = await response.json();
-        // the last coupon of the last page was removed or the list shrank: step back
-        if (data.items.length === 0 && page > 1) {
-          setPage(pageCount(data.total, PAGE_SIZE));
-          return;
-        }
-        setCoupons(data.items);
-        setTotal(data.total);
-      } else {
-        throw await readApiError(response);
+      const data = await apiJson<Paginated<Coupon>>(
+        `/api/coupons?page=${page}&pageSize=${PAGE_SIZE}`,
+      );
+      // the last coupon of the last page was removed or the list shrank: step back
+      if (data.items.length === 0 && page > 1) {
+        setPage(pageCount(data.total, PAGE_SIZE));
+        return;
       }
+      setCoupons(data.items);
+      setTotal(data.total);
     } catch (err) {
       reportClientError(err, { where: 'admin/coupons page' });
     } finally {
@@ -136,32 +131,22 @@ export default function AdminCouponsPage() {
     setSaving(true);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/coupons', {
+      await apiJson('/api/coupons', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+        json: {
           code: newCode.toUpperCase(),
           discountValue,
           validTo: newValidTo,
           description: newDescription || undefined,
-        }),
+        },
       });
-
-      if (response.ok) {
-        setSnackbar({ open: true, message: t('snackbar.created'), severity: 'success' });
-        setDialogOpen(false);
-        setNewCode('');
-        setNewDiscountValue('');
-        setNewValidTo('');
-        setNewDescription('');
-        void loadCoupons();
-      } else {
-        throw await readApiError(response);
-      }
+      setSnackbar({ open: true, message: t('snackbar.created'), severity: 'success' });
+      setDialogOpen(false);
+      setNewCode('');
+      setNewDiscountValue('');
+      setNewValidTo('');
+      setNewDescription('');
+      void loadCoupons();
     } catch (error: unknown) {
       setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
     } finally {
@@ -171,18 +156,9 @@ export default function AdminCouponsPage() {
 
   const handleInvalidate = async (couponId: string) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/coupons/${couponId}/invalidate`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        setSnackbar({ open: true, message: t('snackbar.invalidated'), severity: 'success' });
-        void loadCoupons();
-      } else {
-        throw await readApiError(response);
-      }
+      await apiJson(`/api/coupons/${couponId}/invalidate`, { method: 'PATCH' });
+      setSnackbar({ open: true, message: t('snackbar.invalidated'), severity: 'success' });
+      void loadCoupons();
     } catch (error: unknown) {
       setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
     }

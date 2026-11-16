@@ -5,9 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FavoritesProvider, useFavorites } from './FavoritesContext';
 import { RemindersProvider, useReminders } from './RemindersContext';
 
-// #42: favourites and reminders follow who is signed in — fetched at once when a token exists,
-// reloaded on a change of user, cleared on sign-out — and a late response for a previous user
-// never overwrites the current data. Auth and the router have no port to fake (TS-03).
+// #42: favourites and reminders follow who is signed in — fetched once auth resolves to a user
+// (SC-02: the session cookie cannot be read, so nothing loads before that), reloaded on a change
+// of user, cleared on sign-out — and a late response for a previous user never overwrites the
+// current data. Auth and the router have no port to fake (TS-03).
 const env = vi.hoisted(() => ({
   auth: { user: null as { _id: string } | null, loading: true },
   listeners: new Set<() => void>(),
@@ -77,7 +78,6 @@ beforeEach(() => {
   env.auth = { user: null, loading: true };
   env.listeners.clear();
   pending = [];
-  window.localStorage.clear();
   vi.stubGlobal(
     'fetch',
     vi.fn(
@@ -112,9 +112,7 @@ async function answer(index: number, count: number) {
 
 // A signs in with a request in flight, signs out, B signs in and loads `bBody`.
 async function switchAccountTo(bBody: unknown, bLoadIndex: number) {
-  window.localStorage.removeItem('token');
   setAuth(resolvedAs(null));
-  window.localStorage.setItem('token', 'token-b');
   setAuth(resolvedAs('user-b'));
   expect(pending[bLoadIndex]?.method).toBe('GET');
   await answerWith(bLoadIndex, bBody);
@@ -132,11 +130,11 @@ describe.each(providers)('%s', (_name, url, body, Provider, Probe) => {
       </Provider>,
     );
 
-  it('fetches at once when a token exists, in parallel with auth, and not again for that user', async () => {
-    window.localStorage.setItem('token', 'token-a');
+  it('waits for auth, then fetches once for the user, and not again for that same user', async () => {
     renderProvider();
+    expect(pending).toHaveLength(0);
 
-    // auth has not resolved yet, and the request is already out
+    setAuth(resolvedAs('user-a'));
     expect(pending).toHaveLength(1);
     expect(pending[0]?.url).toContain(url);
     await answer(0, 1);
@@ -147,12 +145,10 @@ describe.each(providers)('%s', (_name, url, body, Provider, Probe) => {
   });
 
   it('fetches again when the user changes', async () => {
-    window.localStorage.setItem('token', 'token-a');
     renderProvider();
-    await answer(0, 1);
     setAuth(resolvedAs('user-a'));
+    await answer(0, 1);
 
-    window.localStorage.setItem('token', 'token-b');
     setAuth(resolvedAs('user-b'));
     expect(pending).toHaveLength(2);
     await answer(1, 2);
@@ -160,18 +156,16 @@ describe.each(providers)('%s', (_name, url, body, Provider, Probe) => {
   });
 
   it('clears on sign-out', async () => {
-    window.localStorage.setItem('token', 'token-a');
     renderProvider();
-    await answer(0, 3);
     setAuth(resolvedAs('user-a'));
+    await answer(0, 3);
 
-    window.localStorage.removeItem('token');
     setAuth(resolvedAs(null));
     expect(screen.getByText('itens 0')).toBeInTheDocument();
     expect(pending).toHaveLength(1);
   });
 
-  it('does not fetch without a token', () => {
+  it('does not fetch when nobody is signed in', () => {
     renderProvider();
     setAuth(resolvedAs(null));
 
@@ -180,10 +174,8 @@ describe.each(providers)('%s', (_name, url, body, Provider, Probe) => {
   });
 
   it('ignores a late response for the previous user', async () => {
-    window.localStorage.setItem('token', 'token-a');
     renderProvider();
     setAuth(resolvedAs('user-a'));
-    window.localStorage.setItem('token', 'token-b');
     setAuth(resolvedAs('user-b'));
     expect(pending).toHaveLength(2);
 
@@ -193,8 +185,8 @@ describe.each(providers)('%s', (_name, url, body, Provider, Probe) => {
   });
 
   it('ignores a response that arrives after sign-out', async () => {
-    window.localStorage.setItem('token', 'token-a');
     renderProvider();
+    setAuth(resolvedAs('user-a'));
     setAuth(resolvedAs(null));
 
     await answer(0, 4);
@@ -206,7 +198,6 @@ describe.each(providers)('%s', (_name, url, body, Provider, Probe) => {
 describe('mutations across an account change', () => {
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    window.localStorage.setItem('token', 'token-a');
   });
 
   afterEach(() => {
@@ -262,8 +253,8 @@ describe('mutations across an account change', () => {
         <FavoritesActions />
       </FavoritesProvider>,
     );
-    await answerWith(0, { codes: [] });
     setAuth(resolvedAs('user-a'));
+    await answerWith(0, { codes: [] });
 
     await user.click(screen.getByRole('button', { name: 'Favoritar' }));
     expect(pending[1]?.method).toBe('POST');
@@ -282,8 +273,8 @@ describe('mutations across an account change', () => {
         <FavoritesActions />
       </FavoritesProvider>,
     );
-    await answerWith(0, { codes: ['0'] });
     setAuth(resolvedAs('user-a'));
+    await answerWith(0, { codes: ['0'] });
 
     await user.click(screen.getByRole('button', { name: 'Remover' }));
     expect(pending[1]?.method).toBe('DELETE');
@@ -305,8 +296,8 @@ describe('mutations across an account change', () => {
         <RemindersActions />
       </RemindersProvider>,
     );
-    await answerWith(0, paged([{ _id: 'r0', description: 'de A' }]));
     setAuth(resolvedAs('user-a'));
+    await answerWith(0, paged([{ _id: 'r0', description: 'de A' }]));
 
     await user.click(screen.getByRole('button', { name: button }));
     expect(pending[1]?.method).toBe(method);
@@ -324,8 +315,8 @@ describe('mutations across an account change', () => {
         <FavoritesActions />
       </FavoritesProvider>,
     );
-    await answerWith(0, { codes: [] });
     setAuth(resolvedAs('user-a'));
+    await answerWith(0, { codes: [] });
 
     await user.click(screen.getByRole('button', { name: 'Favoritar' }));
     await answerWith(1, { code: 'X' });

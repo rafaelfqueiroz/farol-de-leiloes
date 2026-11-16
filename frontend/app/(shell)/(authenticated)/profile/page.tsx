@@ -23,7 +23,8 @@ import PageHeader from '@/app/components/patterns/PageHeader';
 import PageShell from '@/app/components/patterns/PageShell';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 import { reportClientError } from '@/lib/report-client-error';
-import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import { apiFetch, apiJson } from '@/lib/api-client';
+import { useApiErrorMessage } from '@/lib/api-error';
 
 // DS-15: the card titles are the page's h2s; DS-11: h5 is the card-title variant
 function CardHeading({ icon, title }: { icon: ReactNode; title: string }) {
@@ -89,10 +90,7 @@ export default function ProfilePage() {
     if (!isAuthenticated) return;
     const loadFullProfile = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch('/api/auth/profile/full', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await apiFetch('/api/auth/profile/full');
         if (response.ok) {
           const data = await response.json();
           setPhone(data.phone || '');
@@ -118,14 +116,9 @@ export default function ProfilePage() {
     setProfileLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/auth/profile/complete', {
+      await apiJson('/api/auth/profile/complete', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+        json: {
           phone: phone || undefined,
           cpf: cpf || undefined,
           dateOfBirth: dateOfBirth || undefined,
@@ -136,12 +129,8 @@ export default function ProfilePage() {
             state: state || undefined,
             zipCode: zipCode || undefined,
           },
-        }),
+        },
       });
-
-      if (!response.ok) {
-        throw await readApiError(response);
-      }
 
       setSuccess(t('success.personalData'));
     } catch (err: unknown) {
@@ -158,19 +147,7 @@ export default function ProfilePage() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/auth/profile', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, email }),
-      });
-
-      if (!response.ok) {
-        throw await readApiError(response);
-      }
+      await apiJson('/api/auth/profile', { method: 'PATCH', json: { name, email } });
 
       setSuccess(t('success.profile'));
     } catch (err: unknown) {
@@ -198,19 +175,10 @@ export default function ProfilePage() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/auth/change-password', {
+      await apiJson('/api/auth/change-password', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        json: { currentPassword, newPassword },
       });
-
-      if (!response.ok) {
-        throw await readApiError(response);
-      }
 
       setSuccess(t('success.passwordChanged'));
       setCurrentPassword('');
@@ -241,19 +209,7 @@ export default function ProfilePage() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/auth/set-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ newPassword }),
-      });
-
-      if (!response.ok) {
-        throw await readApiError(response);
-      }
+      await apiJson('/api/auth/set-password', { method: 'POST', json: { newPassword } });
 
       setSuccess(t('success.passwordSet'));
       setNewPassword('');
