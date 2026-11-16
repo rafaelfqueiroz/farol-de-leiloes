@@ -2,17 +2,19 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, type QueryFilter } from 'mongoose';
 import { UserEntity, UserDocument } from './schemas/user.schema.js';
-import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import { DomainError } from '../common/errors/domain-error.js';
 import { normalizeEmail } from '../common/normalize-email.js';
 import { serverOperators } from '../common/mongo/query-safety.js';
+import { decideGoogleLink } from './domain/google-link.js';
 
-// SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34).
+// SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34). Nothing that
+// decides how the account signs in is here (`password`, `providers`, `googleId`): those change only
+// through the fenced, version-bumping methods (setPassword, changePassword, linkGoogleIdentity),
+// so no write of a credential can skip the credential version (DL-001-02, BR-001-31).
 const TEXT_FIELDS = [
   'name',
-  'googleId',
   'role',
   'stripeCustomerId',
   'stripeSubscriptionId',
@@ -27,6 +29,15 @@ const ADDRESS_FIELDS = ['street', 'city', 'state', 'zipCode'] as const;
 const BCRYPT_COST = 10;
 // 11000: MongoDB's duplicate-key error code.
 const DUPLICATE_KEY = 11000;
+
+/**
+ * What `linkGoogleIdentity` did (BR-001-10). `linked_*` carry the account after the write;
+ * `linked_unconfirmed` tells the caller the account was taken over from a possible pre-hijacker, so
+ * it must end the sessions and outstanding links the password could have produced.
+ */
+export type GoogleLinkOutcome =
+  | { result: 'linked_confirmed' | 'linked_unconfirmed'; account: UserDocument }
+  | { result: 'inactive' | 'google_conflict' | 'not_found' };
 
 /** The legacy contact details `updateContactDetails` writes; the shape of CompleteProfileDto. */
 export interface ContactDetails {
@@ -44,31 +55,6 @@ export class UsersService {
   private dummyHash: Promise<string> | undefined;
 
   constructor(@InjectModel(UserEntity.name) private readonly userRepository: Model<UserDocument>) {}
-
-  /**
-   * Creates an account from a provider flow (Google, PR3). Email/password sign-up uses
-   * `createLocalAccount`, which accepts no provider or identifier from the caller (BR-001-31).
-   */
-  async create(createUserDto: CreateUserDto): Promise<UserDocument> {
-    const email = normalizeEmail(createUserDto.email);
-    if (await this.findByEmail(email)) {
-      throw new DomainError('EMAIL_ALREADY_REGISTERED');
-    }
-
-    let hashedPassword: string | undefined;
-    if (createUserDto.password) {
-      hashedPassword = await this.hashPassword(createUserDto.password);
-    }
-
-    return this.save(
-      new this.userRepository({
-        ...createUserDto,
-        email,
-        password: hashedPassword,
-        emailVerified: createUserDto.providers?.includes('google') ?? false,
-      }),
-    );
-  }
 
   /**
    * BR-001-03 / BR-001-31: sign-up with email and password. Only these three values come from the
@@ -139,24 +125,139 @@ export class UsersService {
     return this.userRepository.findById(id).select('-password').exec();
   }
 
-  async linkGoogleAccount(userId: string, googleId: string): Promise<UserDocument> {
-    const updatedUser = await this.userRepository
-      .findByIdAndUpdate(
-        userId,
-        {
-          googleId,
-          emailVerified: true,
-          $addToSet: { providers: 'google' },
-        },
-        { returnDocument: 'after' },
-      )
-      .exec();
-
-    if (!updatedUser) {
-      throw new DomainError('USER_NOT_FOUND');
+  /**
+   * BR-001-09 / BR-001-31: the account of a person who signed in with Google and accepted the
+   * terms. Only these three values come from the caller; the provider, the confirmed email, the
+   * role (searcher only, BR-001-03) and the status are fixed here, and no password is stored.
+   */
+  async createGoogleAccount(input: {
+    googleId: string;
+    email: string;
+    name: string;
+  }): Promise<UserDocument> {
+    const email = normalizeEmail(input.email);
+    // BR-001-01: unique without regard to case or surrounding spaces.
+    if (await this.findByEmail(email)) {
+      throw new DomainError('EMAIL_ALREADY_REGISTERED');
     }
+    return this.save(
+      new this.userRepository({
+        email,
+        name: input.name.trim(),
+        googleId: input.googleId,
+        providers: ['google'],
+        emailVerified: true, // Google vouched for the address (BR-001-08, BR-001-09)
+      }),
+    );
+  }
 
-    return updatedUser;
+  /**
+   * BR-001-10 / DL-001-02: links a Google identity to an existing account. The decision is part of
+   * the update, never read-then-write, so a confirmation or a sign-in racing with it cannot slip
+   * between the check and the write:
+   *
+   * - not active (BR-001-16), or already linked to another Google identity (BR-001-11): no write;
+   * - email confirmed: `googleId` is set and `google` joins the providers; the password and the
+   *   local provider stay;
+   * - email not confirmed: the same, and the email becomes confirmed, the password is deleted,
+   *   `local` leaves the providers (whoever set that password never proved they own the address)
+   *   and the credential version goes up by one, which ends every session issued for the old
+   *   credential, even one a sign-in that already checked the password opens afterwards.
+   *
+   * The unique index on `googleId` makes a second account unable to take the same identity even
+   * under a race (DUPLICATE_KEY is a conflict). Ending the sessions and links of a taken-over
+   * account is the caller's job (`linked_unconfirmed`).
+   */
+  async linkGoogleIdentity(userId: string, googleId: string): Promise<GoogleLinkOutcome> {
+    // Two attempts: the first can miss only because a concurrent write changed the account between
+    // the filter and the explanation below (e.g. an unlinked-then-linked race); more is not needed.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let before;
+      try {
+        before = await this.applyGoogleLink(userId, googleId);
+      } catch (error) {
+        if ((error as { code?: number }).code === DUPLICATE_KEY) {
+          return { result: 'google_conflict' };
+        }
+        throw error;
+      }
+
+      if (before) {
+        const account = await this.findById(userId);
+        if (!account) return { result: 'not_found' };
+        return {
+          result: before.emailVerified === true ? 'linked_confirmed' : 'linked_unconfirmed',
+          account,
+        };
+      }
+
+      // The filter matched nothing and nothing was written: say why.
+      const current = await this.userRepository
+        .findOne({ _id: { $eq: userId } })
+        .select('status googleId')
+        .lean()
+        .exec();
+      if (!current) return { result: 'not_found' };
+      const decision = decideGoogleLink(current, googleId);
+      if (decision === 'inactive' || decision === 'google_conflict') return { result: decision };
+    }
+    return { result: 'google_conflict' };
+  }
+
+  /** The conditional pipeline update of `linkGoogleIdentity`; the document as it was, or null. */
+  private applyGoogleLink(userId: string, googleId: string) {
+    const confirmed = { $eq: ['$emailVerified', true] };
+    const providersWithGoogle = (without: string[]) => ({
+      $concatArrays: [
+        {
+          $filter: {
+            input: { $ifNull: ['$providers', []] },
+            cond: { $not: [{ $in: ['$$this', without] }] },
+          },
+        },
+        [{ $literal: 'google' }],
+      ],
+    });
+    const filter: QueryFilter<UserDocument> = {
+      _id: { $eq: userId },
+      // A missing status counts as active (BR-001-16, AR-28).
+      status: serverOperators({ $in: ['active' as const, null] }),
+      $or: [{ googleId: null }, { googleId: { $eq: googleId } }],
+    };
+    return this.userRepository
+      .findOneAndUpdate(
+        filter,
+        [
+          {
+            $set: {
+              googleId: { $literal: googleId },
+              emailVerified: true,
+              providers: {
+                $cond: [
+                  confirmed,
+                  providersWithGoogle(['google']),
+                  providersWithGoogle(['local', 'google']),
+                ],
+              },
+              // Confirmed: keep the password. Unconfirmed: delete it.
+              password: { $cond: [confirmed, '$password', '$$REMOVE'] },
+              // DL-001-02: unconfirmed takes over the credentials, so the version moves in this
+              // same update; a session opened for the old one never matches again, whatever
+              // revocation write fails or races afterwards (see credentialVersionAfterLink).
+              credentialVersion: {
+                $cond: [
+                  confirmed,
+                  '$credentialVersion',
+                  { $add: [{ $ifNull: ['$credentialVersion', 0] }, 1] },
+                ],
+              },
+            },
+          },
+        ],
+        { returnDocument: 'before', updatePipeline: true },
+      )
+      .lean()
+      .exec();
   }
 
   /**
@@ -348,11 +449,6 @@ export class UsersService {
     // Stripe's status is cleared with an explicit null, which is a value here, not "absent".
     const status: unknown = dto.subscriptionStatus;
     if (typeof status === 'string' || status === null) fields.subscriptionStatus = status;
-
-    const providers: unknown = dto.providers;
-    if (Array.isArray(providers) && providers.every((p) => typeof p === 'string')) {
-      fields.providers = providers;
-    }
 
     const address: unknown = dto.address;
     if (typeof address === 'object' && address !== null) {

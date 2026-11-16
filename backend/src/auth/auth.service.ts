@@ -7,13 +7,19 @@ import { LoginDto } from './dto/login.dto.js';
 import { CompleteProfileDto } from './dto/complete-profile.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import type { UserAccount } from '../users/user-account.js';
-import { UserProfile, AuthResult, JwtPayload } from './interfaces/auth.interface.js';
+import {
+  UserProfile,
+  AuthResult,
+  JwtPayload,
+  GoogleExchangeResult,
+} from './interfaces/auth.interface.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { normalizeEmail } from '../common/normalize-email.js';
 import { AccountTokenService } from './tokens/account-token.service.js';
 import { SessionsService } from './sessions/sessions.service.js';
 import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
 import { credentialVersionOf } from '../users/domain/credential-version.js';
+import type { GoogleIdentity } from './google/google-identity.js';
 
 function idOf(user: UserAccount): string {
   return typeof user._id === 'string' ? user._id : user._id.toHexString();
@@ -69,8 +75,136 @@ export class AuthService implements BeforeApplicationShutdown {
     return this.startSession(user);
   }
 
-  async googleLogin(user: UserAccount): Promise<AuthResult> {
-    return this.startSession(user);
+  /**
+   * The return from Google (the callback): applies the Google sign-in rules and answers with a
+   * one-time code for the frontend, never a session (BR-001-20). The code is a `google_exchange`
+   * for an account that exists (60 s) or a `google_signup` for a person who must still accept the
+   * terms (15 min); `exchangeGoogleCode` tells them apart.
+   */
+  async beginGoogleSignIn(identity: GoogleIdentity): Promise<string> {
+    // BR-001-08: Google must vouch for the address, whatever else is true of the account.
+    if (!identity.emailVerified) {
+      throw new DomainError('GOOGLE_EMAIL_NOT_VERIFIED');
+    }
+    const account = await this.resolveGoogleAccount(identity);
+    if (account) {
+      return this.accountTokens.issue(idOf(account), 'google_exchange');
+    }
+    // BR-001-09, BR-010-01: no account exists until the terms are accepted, and nothing but this
+    // short-lived record of what Google said is stored meanwhile.
+    return this.accountTokens.issueGoogleSignup({
+      googleId: identity.googleId,
+      email: normalizeEmail(identity.email),
+      name: identity.name,
+    });
+  }
+
+  /**
+   * POST /auth/google/exchange: trades the code of the redirect for a session, or says the terms
+   * must be accepted first. An existing account's code is spent here (single use, BR-001-20); a
+   * signup code is only looked at, because `completeGoogleSignup` spends it.
+   */
+  async exchangeGoogleCode(code: string): Promise<GoogleExchangeResult> {
+    const record = await this.accountTokens.consume(code, 'google_exchange');
+    if (record) {
+      const user = await this.usersService.findById(record.userId);
+      // BR-001-16: closed or deactivated between the redirect and the exchange.
+      if (!user || (user.status ?? 'active') !== 'active') {
+        throw new DomainError('GOOGLE_SIGN_IN_FAILED');
+      }
+      return { status: 'signed_in', ...(await this.startSession(user)) };
+    }
+    const signup = await this.accountTokens.peekGoogleSignup(code);
+    if (signup) {
+      return { status: 'terms_required', email: signup.email, name: signup.name };
+    }
+    throw new DomainError('INVALID_GOOGLE_CODE');
+  }
+
+  /**
+   * POST /auth/google/complete: the person accepted the terms (the DTO requires `true`). The code
+   * is spent atomically, then the account is created: searcher only, email already confirmed, no
+   * password (BR-001-03, BR-001-09).
+   */
+  async completeGoogleSignup(code: string): Promise<AuthResult> {
+    const profile = await this.accountTokens.consumeGoogleSignup(code);
+    if (!profile) {
+      throw new DomainError('INVALID_GOOGLE_CODE');
+    }
+    // TODO(#10): SPEC-010 records the acceptance (versions, time, method) with the account.
+    const identity: GoogleIdentity = { ...profile, emailVerified: true };
+
+    // Someone may have registered this email, or linked this Google identity, since the redirect:
+    // that is then simply the sign-in of an existing account, with the same rules.
+    let account = await this.resolveGoogleAccount(identity);
+    if (!account) {
+      try {
+        account = await this.usersService.createGoogleAccount(profile);
+      } catch (error) {
+        if (!(error instanceof DomainError) || error.code !== 'EMAIL_ALREADY_REGISTERED') {
+          throw error;
+        }
+        account = await this.resolveGoogleAccount(identity);
+        if (!account) throw error;
+      }
+    }
+    return this.startSession(account);
+  }
+
+  /** POST /auth/google/cancel: declining leaves no stored personal data (BR-010-01). */
+  async cancelGoogleSignup(code: string): Promise<void> {
+    await this.accountTokens.discardGoogleSignup(code);
+  }
+
+  /**
+   * The existing account a verified Google identity signs in to, or null when there is none:
+   * matched by Google's permanent id first (BR-001-11), then by email, linking Google (BR-001-10).
+   * An account that is not active is refused by any route (BR-001-16).
+   */
+  private async resolveGoogleAccount(identity: GoogleIdentity): Promise<UserAccount | null> {
+    const linked = await this.usersService.findByGoogleId(identity.googleId);
+    if (linked) {
+      if ((linked.status ?? 'active') !== 'active') {
+        throw new DomainError('GOOGLE_SIGN_IN_FAILED');
+      }
+      return linked;
+    }
+
+    const existing = await this.usersService.findByEmail(identity.email);
+    if (!existing) return null;
+
+    const userId = idOf(existing);
+    const outcome = await this.usersService.linkGoogleIdentity(userId, identity.googleId);
+    if (outcome.result !== 'linked_confirmed' && outcome.result !== 'linked_unconfirmed') {
+      // Not active (BR-001-16), another Google identity already linked (BR-001-11), or gone.
+      throw new DomainError('GOOGLE_SIGN_IN_FAILED');
+    }
+    if (outcome.result === 'linked_unconfirmed') {
+      // DL-001-02: the email was never confirmed, so whoever set the password never proved they
+      // own it. The same update that deleted the password also moved the credential version, so
+      // every session issued for the old credential is already refused (JwtStrategy), including
+      // one a sign-in that had passed the password check opens after this point. Revoking them
+      // and the outstanding links is the tidy-up on top; each step is idempotent and both are
+      // attempted even when one fails, so the failure is reported only after neither was skipped.
+      await this.endTakenOverCredentials(userId);
+    }
+    return outcome.account;
+  }
+
+  private async endTakenOverCredentials(userId: string): Promise<void> {
+    const steps = [
+      this.sessions.revokeAllForUser(userId),
+      this.accountTokens.revokeAllUnused(userId),
+    ];
+    const results = await Promise.allSettled(steps);
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed) {
+      // SC-15: kind of failure only, never the provider's message.
+      this.logger.warn(
+        `Google link clean-up incomplete (${failed.reason instanceof Error ? failed.reason.name : 'error'})`,
+      );
+      throw failed.reason;
+    }
   }
 
   /** BR-001-18: sign-out ends this session on the server, so a copy of the token stops working. */

@@ -1,6 +1,17 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 import { ACCOUNT_TOKEN_PURPOSES, type AccountTokenPurpose } from './account-token-purposes.js';
+
+// A sub-document, not a nested path: a nested path's `required` members would fail every other
+// purpose's token, which has no profile.
+const GoogleSignupProfileSchema = new MongooseSchema(
+  {
+    googleId: { type: String, required: true },
+    email: { type: String, required: true },
+    name: { type: String, required: true },
+  },
+  { _id: false },
+);
 
 /**
  * BR-001-23 / SC-06: a single-use link token. Only the SHA-256 of the token is stored, so a
@@ -9,8 +20,9 @@ import { ACCOUNT_TOKEN_PURPOSES, type AccountTokenPurpose } from './account-toke
  */
 @Schema({ collection: 'accountTokens', timestamps: true })
 export class AccountTokenEntity {
-  @Prop({ type: Types.ObjectId, required: true })
-  userId!: Types.ObjectId;
+  /** Absent on `google_signup`: that token exists before the account does (BR-001-09). */
+  @Prop({ type: Types.ObjectId, required: false })
+  userId?: Types.ObjectId;
 
   @Prop({ type: String, required: true, enum: ACCOUNT_TOKEN_PURPOSES })
   purpose!: AccountTokenPurpose;
@@ -24,6 +36,14 @@ export class AccountTokenEntity {
    */
   @Prop({ type: String, required: false })
   newEmail?: string;
+
+  /**
+   * `google_signup` only: the verified Google profile of a person who has no account yet, kept
+   * until they accept the terms or the token expires (BR-001-09, BR-010-01). Personal data
+   * (SC-25 inventory): never logged (SC-15), at most 15 minutes, deleted when declined or spent.
+   */
+  @Prop({ type: GoogleSignupProfileSchema, required: false })
+  profile?: { googleId: string; email: string; name: string };
 
   @Prop({ type: Date, required: true })
   expiresAt!: Date;

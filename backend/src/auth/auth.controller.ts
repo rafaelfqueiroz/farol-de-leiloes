@@ -5,6 +5,7 @@ import {
   Get,
   Patch,
   Body,
+  UseFilters,
   UseGuards,
   Ip,
   Req,
@@ -34,6 +35,7 @@ import { ChangePasswordDto } from './dto/change-password.dto.js';
 import {
   AuthResponseDto,
   CurrentUserResponseDto,
+  GoogleExchangeResponseDto,
   UserProfileResponseDto,
   VerificationStatusResponseDto,
 } from './dto/auth-response.dto.js';
@@ -46,9 +48,13 @@ import { CurrentUser } from './decorators/current-user.decorator.js';
 import { AuthenticatedUser } from './interfaces/auth.interface.js';
 import { Request, Response } from 'express';
 import type { Env } from '../config/env.js';
+import { GoogleCallbackRedirectFilter } from './google/google-callback-redirect.filter.js';
+import type { GoogleIdentity } from './google/google-identity.js';
+import { GoogleCodeDto, GoogleCompleteDto } from './dto/google-code.dto.js';
 
-// GoogleStrategy.validate hands the signed-in user to passport, which sets it on the request.
-type GoogleCallbackRequest = Request & { user: Parameters<AuthService['googleLogin']>[0] };
+// GoogleStrategy.validate hands the verified Google identity to passport, which sets it on the
+// request.
+type GoogleCallbackRequest = Request & { user: GoogleIdentity };
 
 @ApiTags('auth')
 @ApiErrorResponses()
@@ -96,7 +102,13 @@ export class AuthController {
   @Public()
   @Get('google')
   @UseGuards(GoogleAuthGuard)
-  @ApiOperation({ summary: 'Start Google sign-in (browser redirect to Google)' })
+  @ApiOperation({
+    summary: 'Start Google sign-in (browser redirect to Google)',
+    description:
+      'Sends OAuth `state` and a PKCE (S256) challenge to Google and keeps the state and the code ' +
+      'verifier in a signed, HttpOnly, SameSite=Lax cookie (10 minutes, Path /api/auth/google), ' +
+      'so the callback only goes on in the browser that started the flow (issue #152).',
+  })
   @ApiFoundResponse({ description: 'Redirect to Google consent' })
   async googleAuth() {
     // Initiates Google OAuth flow
@@ -105,14 +117,80 @@ export class AuthController {
   @Public()
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
-  @ApiOperation({ summary: 'Google sign-in callback (browser redirect to the frontend)' })
-  @ApiFoundResponse({ description: 'Redirect to {FRONTEND_URL}/auth/callback with the token' })
+  @UseFilters(GoogleCallbackRedirectFilter)
+  @ApiOperation({
+    summary: 'Google sign-in callback (browser redirect to the frontend)',
+    description:
+      'Never answers JSON and never puts a session in the URL (BR-001-20). Success redirects to ' +
+      '{FRONTEND_URL}/auth/callback?code=<one-time code>, which POST /auth/google/exchange trades ' +
+      'for a session. A refusal (GOOGLE_EMAIL_NOT_VERIFIED, GOOGLE_SIGN_IN_FAILED...) redirects to ' +
+      '{FRONTEND_URL}/login?error=<CODE>. A callback whose state is missing, different, expired ' +
+      'or without the cookie of the start is refused as GOOGLE_SIGN_IN_FAILED.',
+  })
+  @ApiFoundResponse({
+    description: 'Redirect to the frontend with a one-time code or an error code',
+  })
   async googleAuthRedirect(@Req() req: GoogleCallbackRequest, @Res() res: Response) {
-    const result = await this.authService.googleLogin(req.user);
-
-    // Redirect to frontend with token
+    const code = await this.authService.beginGoogleSignIn(req.user);
     const frontendUrl = this.config.get('FRONTEND_URL', { infer: true }); // AR-42
-    res.redirect(`${frontendUrl}/auth/callback?token=${result.accessToken}`);
+    res.redirect(`${frontendUrl}/auth/callback?code=${code}`);
+  }
+
+  @Public()
+  @Post('google/exchange')
+  @UseGuards(ThrottlerGuard) // SC-04
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Trade the one-time code of the Google redirect for a session',
+    description:
+      'status `signed_in` answers like a login (accessToken and user); the code is single use and ' +
+      'lasts 60 seconds (BR-001-20). status `terms_required` means the person has no account yet ' +
+      'and must accept the terms through POST /auth/google/complete (BR-001-09); it spends ' +
+      'nothing. INVALID_GOOGLE_CODE (400) for an unknown, used or expired code; ' +
+      'GOOGLE_SIGN_IN_FAILED (401) when the account is no longer active (BR-001-16).',
+  })
+  @ApiOkResponse({ type: GoogleExchangeResponseDto })
+  @ApiTooManyRequestsResponse({ description: 'TOO_MANY_REQUESTS', type: ErrorResponseDto })
+  async googleExchange(@Body() dto: GoogleCodeDto): Promise<GoogleExchangeResponseDto> {
+    const result = await this.authService.exchangeGoogleCode(dto.code);
+    return new GoogleExchangeResponseDto(result);
+  }
+
+  @Public()
+  @Post('google/complete')
+  @UseGuards(ThrottlerGuard) // SC-04
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Accept the terms and create the account of a first Google sign-in',
+    description:
+      'acceptTerms must be true (VALIDATION_FAILED otherwise, and nothing is created or spent). ' +
+      'The code is spent, the account is created with only the searcher persona, its email ' +
+      'confirmed and no password, and a session opens (BR-001-03, BR-001-09, SPEC-010 BR-010-01). ' +
+      'INVALID_GOOGLE_CODE (400) for an unknown, used or expired code.',
+  })
+  @ApiOkResponse({ type: AuthResponseDto })
+  @ApiTooManyRequestsResponse({ description: 'TOO_MANY_REQUESTS', type: ErrorResponseDto })
+  async googleComplete(@Body() dto: GoogleCompleteDto): Promise<AuthResponseDto> {
+    const result = await this.authService.completeGoogleSignup(dto.code);
+    return new AuthResponseDto(result);
+  }
+
+  @Public()
+  @Post('google/cancel')
+  @UseGuards(ThrottlerGuard) // SC-04
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Decline the terms of a first Google sign-in',
+    description:
+      'Deletes the unused code and the Google profile it holds, so declining leaves no account ' +
+      'and no stored personal data (SPEC-010 BR-010-01). Always 200, whether or not the code ' +
+      'existed.',
+  })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @ApiTooManyRequestsResponse({ description: 'TOO_MANY_REQUESTS', type: ErrorResponseDto })
+  async googleCancel(@Body() dto: GoogleCodeDto): Promise<MessageResponseDto> {
+    await this.authService.cancelGoogleSignup(dto.code);
+    return new MessageResponseDto('Google sign-up cancelled');
   }
 
   @Public()

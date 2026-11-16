@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -17,7 +17,7 @@ import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthFormPage } from '@/app/components/patterns/PublicScreens';
 import { publicEnv } from '@/lib/env';
-import { useApiErrorMessage } from '@/lib/api-error';
+import { ApiError, useApiErrorMessage } from '@/lib/api-error';
 
 const API_URL = publicEnv.apiUrl;
 
@@ -31,6 +31,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // The Google callback sends a refusal back as /login?error=<CODE> (BR-001-08); show its message.
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get('error');
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the query string is an external system, readable only after mount
+    if (code) setError(apiErrorMessage(new ApiError(code)));
+  }, [apiErrorMessage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -10,6 +10,8 @@ import { AuthService } from './auth.service.js';
 import { UsersModule } from '../users/users.module.js';
 import { JwtStrategy } from './strategies/jwt.strategy.js';
 import { GoogleStrategy } from './strategies/google.strategy.js';
+import { GoogleCallbackRedirectFilter } from './google/google-callback-redirect.filter.js';
+import { GoogleOAuthStateStore } from './google/google-oauth-state.store.js';
 import { EmailModule } from '../email/email.module.js';
 import { CommonModule } from '../common/common.module.js';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -61,7 +63,9 @@ import { LoginAttemptsService } from './login-attempts/login-attempts.service.js
     LoginAttemptsRepository,
     LoginAttemptsService,
     JwtStrategy,
+    GoogleOAuthStateStore,
     GoogleStrategy,
+    GoogleCallbackRedirectFilter,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
   exports: [AuthService],

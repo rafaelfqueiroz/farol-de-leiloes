@@ -366,12 +366,11 @@ describe('SC-10: Mongo operator injection (integration)', () => {
 
   describe('UsersService', () => {
     it('findByEmail, findByGoogleId and findByStripeCustomerId never match an operator object', async () => {
-      await users.create({
+      await users.createLocalAccount({
         email: 'ana.teste@example.test',
         name: 'Ana Teste',
         password: 'senha-de-teste-1',
-        providers: ['local'],
-      } as Parameters<UsersService['create']>[0]);
+      });
 
       await expect(users.findByGoogleId(NE_NULL)).resolves.toBeNull();
       await expect(users.findByStripeCustomerId(NE_NULL)).resolves.toBeNull();

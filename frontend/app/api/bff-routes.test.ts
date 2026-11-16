@@ -3,6 +3,8 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as auctionByCode } from './auctions/[code]/route';
 import { POST as changePassword } from './auth/change-password/route';
+import { POST as googleCancel } from './auth/google/cancel/route';
+import { POST as googleExchange } from './auth/google/exchange/route';
 import { POST as login } from './auth/login/route';
 import { POST as logout } from './auth/logout/route';
 import { GET as me } from './auth/me/route';
@@ -99,6 +101,8 @@ const signedInRoute = (
 const routes: RouteCase[] = [
   publicRoute('GET', '/api/auctions/1444400000001', auctionByCode, { code: '1444400000001' }),
   publicRoute('POST', '/api/auth/login', login),
+  publicRoute('POST', '/api/auth/google/exchange', googleExchange),
+  publicRoute('POST', '/api/auth/google/cancel', googleCancel),
   publicRoute('POST', '/api/auth/register', register),
   publicRoute('POST', '/api/auth/reset-password-request', resetPasswordRequest),
   publicRoute('POST', '/api/auth/reset-password', resetPassword),

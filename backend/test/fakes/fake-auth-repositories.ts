@@ -2,7 +2,10 @@
 // surface (a mapped type drops the private model), so a signature change breaks them at compile
 // time. The MongoDB behaviour itself (atomic consume, the throttle pipeline, TTL indexes) is proven
 // against a real database in test/integration/auth-sessions-tokens.spec.ts (TS-02).
-import type { AccountTokenPurpose } from '../../src/auth/tokens/account-token-purposes.js';
+import type {
+  AccountTokenPurpose,
+  UserTokenPurpose,
+} from '../../src/auth/tokens/account-token-purposes.js';
 import type { AccountTokenRepository } from '../../src/auth/tokens/account-token.repository.js';
 import type { LoginAttemptsRepository } from '../../src/auth/login-attempts/login-attempts.repository.js';
 import type { SessionsRepository } from '../../src/auth/sessions/sessions.repository.js';
@@ -11,11 +14,12 @@ type Port<T> = { [K in keyof T]: T[K] };
 
 interface StoredToken {
   seq: number;
-  userId: string;
+  userId?: string;
   purpose: AccountTokenPurpose;
   tokenHash: string;
   expiresAt: Date;
   newEmail?: string;
+  profile?: { googleId: string; email: string; name: string };
   usedAt?: Date;
 }
 
@@ -23,7 +27,7 @@ export class FakeAccountTokenRepository implements Port<AccountTokenRepository> 
   readonly stored: StoredToken[] = [];
   private nextSeq = 1;
 
-  async deleteUnused(userId: string, purpose: AccountTokenPurpose): Promise<void> {
+  async deleteUnused(userId: string, purpose: UserTokenPurpose): Promise<void> {
     const keep = this.stored.filter(
       (t) => !(t.userId === userId && t.purpose === purpose && !t.usedAt),
     );
@@ -34,7 +38,7 @@ export class FakeAccountTokenRepository implements Port<AccountTokenRepository> 
     this.stored.push({ ...token, seq: this.nextSeq++ });
   }
 
-  async deleteAllButNewestUnused(userId: string, purpose: AccountTokenPurpose): Promise<void> {
+  async deleteAllButNewestUnused(userId: string, purpose: UserTokenPurpose): Promise<void> {
     const unused = this.stored.filter(
       (t) => t.userId === userId && t.purpose === purpose && !t.usedAt,
     );
@@ -43,17 +47,56 @@ export class FakeAccountTokenRepository implements Port<AccountTokenRepository> 
     this.stored.splice(0, this.stored.length, ...keep);
   }
 
-  async consume(tokenHash: string, purpose: AccountTokenPurpose, now: Date) {
+  async consume(tokenHash: string, purpose: UserTokenPurpose, now: Date) {
     const token = this.stored.find(
       (t) => t.tokenHash === tokenHash && t.purpose === purpose && !t.usedAt && t.expiresAt > now,
     );
-    if (!token) return null;
+    if (!token?.userId) return null;
     token.usedAt = now;
     return {
       userId: token.userId,
-      purpose: token.purpose,
+      purpose,
       ...(token.newEmail === undefined ? {} : { newEmail: token.newEmail }),
     };
+  }
+
+  async deleteAllUnusedForUser(userId: string): Promise<void> {
+    const keep = this.stored.filter((t) => !(t.userId === userId && !t.usedAt));
+    this.stored.splice(0, this.stored.length, ...keep);
+  }
+
+  async insertGoogleSignup(token: Parameters<AccountTokenRepository['insertGoogleSignup']>[0]) {
+    this.stored.push({ ...token, purpose: 'google_signup', seq: this.nextSeq++ });
+  }
+
+  async findGoogleSignup(tokenHash: string, now: Date) {
+    const token = this.stored.find(
+      (t) =>
+        t.tokenHash === tokenHash &&
+        t.purpose === 'google_signup' &&
+        !t.usedAt &&
+        t.expiresAt > now,
+    );
+    return token?.profile ? { ...token.profile } : null;
+  }
+
+  async consumeGoogleSignup(tokenHash: string, now: Date) {
+    const index = this.stored.findIndex(
+      (t) =>
+        t.tokenHash === tokenHash &&
+        t.purpose === 'google_signup' &&
+        !t.usedAt &&
+        t.expiresAt > now,
+    );
+    const [token] = index === -1 ? [] : this.stored.splice(index, 1);
+    return token?.profile ? { ...token.profile } : null;
+  }
+
+  async deleteGoogleSignup(tokenHash: string): Promise<void> {
+    const keep = this.stored.filter(
+      (t) => !(t.tokenHash === tokenHash && t.purpose === 'google_signup' && !t.usedAt),
+    );
+    this.stored.splice(0, this.stored.length, ...keep);
   }
 }
 

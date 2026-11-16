@@ -66,7 +66,7 @@ describe('AuthService account contract (AR-09)', () => {
   it('preserves token claims and profile defaults without document methods', async () => {
     const { service, sign } = build();
 
-    const result = await service.googleLogin(account());
+    const result = await service.startSession(account());
 
     // BR-001-17: the token carries the account and the session, nothing else.
     expect(sign).toHaveBeenCalledWith({ sub: ID, jti: expect.any(String) as string });
@@ -95,7 +95,7 @@ describe('AuthService account contract (AR-09)', () => {
   it('normalizes ObjectId-like account ids through their explicit hex conversion', async () => {
     const { service, sign } = build();
 
-    const result = await service.googleLogin(account({ _id: { toHexString: () => ID } }));
+    const result = await service.startSession(account({ _id: { toHexString: () => ID } }));
 
     expect(result.user._id).toBe(ID);
     expect(sign).toHaveBeenCalledWith({ sub: ID, jti: expect.any(String) as string });
@@ -116,7 +116,7 @@ describe('AuthService account contract (AR-09)', () => {
     };
     const user = { ...account(profile), password: 'fake-hash' };
 
-    const result = await service.googleLogin(user);
+    const result = await service.startSession(user);
 
     expect(result.user).toEqual({
       _id: ID,
@@ -147,7 +147,7 @@ describe('AuthService.toUserProfile mapping (AR-09, SC-15)', () => {
   }
 
   async function profileOf(user: UserAccount) {
-    return (await service.googleLogin(user)).user;
+    return (await service.startSession(user)).user;
   }
 
   it.each([...SUBSCRIPTION_STATUSES])(
@@ -355,6 +355,21 @@ describe('AuthService with fake collaborators', () => {
       expect(attemptRepo.cleared).toEqual(['email:local@example.test']);
       expect(attemptRepo.released).toEqual([`ip:${IP}`]);
     });
+
+    it.each<[string, number | undefined, number]>([
+      ['a version the account holds', 3, 3],
+      ['an account without a version (counts as 0)', undefined, 0],
+    ])(
+      'DL-001-02: the session records the credential version of the validated account: %s',
+      async (_label, stored, expected) => {
+        const { service, users, sessionRepo } = build();
+        users.seed(localAccount({ credentialVersion: stored }));
+
+        await service.login({ email: 'local@example.test', password: 'correct-password' }, IP);
+
+        expect(sessionRepo.stored.map((s) => s.credentialVersion)).toEqual([expected]);
+      },
+    );
 
     it.each([
       ['wrong password', 'local@example.test', 'wrong-password'],
@@ -949,8 +964,8 @@ describe('AuthService with fake collaborators', () => {
     it('set-password bumps the version, binds the current session and ends the others', async () => {
       const { service, users, sessionRepo } = build();
       users.seed(localAccount({ providers: ['google'], password: undefined }));
-      const first = await service.googleLogin(users.accounts.get(ID) as UserAccount);
-      await service.googleLogin(users.accounts.get(ID) as UserAccount);
+      const first = await service.startSession(users.accounts.get(ID) as UserAccount);
+      await service.startSession(users.accounts.get(ID) as UserAccount);
       expect(first.accessToken).toBe(`token-for-${ID}`);
       const [current, other] = sessionRepo.stored;
 
