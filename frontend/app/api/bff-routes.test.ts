@@ -34,7 +34,8 @@ import { POST as sendSupport } from './support/route';
 // AR-02, AR-42: every route handler under app/api is a thin BFF over the backend. It forwards the
 // method, the JSON body and (on signed-in routes only) the Authorization header to the matching
 // backend path, and answers 401 UNAUTHENTICATED itself, without calling the backend, when a
-// signed-in route gets no token. The paged list handlers (GET) have their own spec,
+// signed-in route gets no token. It also passes Caddy's validated X-Forwarded-For chain on, so the
+// backend's per-origin limits (SC-04, BR-001-15) see the browser and not the BFF. The paged list handlers (GET) have their own spec,
 // pagination-routes.test.ts.
 const fetchMock = vi.fn();
 
@@ -185,6 +186,41 @@ describe.each(routes)('$name', (route) => {
       expect(init.headers).not.toHaveProperty('Authorization');
     });
   }
+
+  it("forwards the caller's X-Forwarded-For chain, validated and unchanged (SC-04)", async () => {
+    await call(route, requestFor(route, { ...signedIn, 'X-Forwarded-For': '203.0.113.10' }));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.headers).toMatchObject({ 'X-Forwarded-For': '203.0.113.10' });
+  });
+
+  it('forwards no X-Forwarded-For when the chain is absent or has an invalid entry', async () => {
+    await call(route, requestFor(route, signedIn));
+    await call(route, requestFor(route, { ...signedIn, 'X-Forwarded-For': '203.0.113.10, nope' }));
+
+    for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) {
+      expect(init.headers).not.toHaveProperty('X-Forwarded-For');
+    }
+  });
+
+  it('forwards no cookie and no other header beyond Authorization and X-Forwarded-For', async () => {
+    await call(
+      route,
+      requestFor(route, {
+        ...signedIn,
+        'X-Forwarded-For': '203.0.113.10',
+        Cookie: 'session=secret',
+        'X-Real-IP': '198.51.100.1',
+        Forwarded: 'for=198.51.100.1',
+      }),
+    );
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const names = Object.keys(init.headers as object).map((name) => name.toLowerCase());
+    expect(
+      names.filter((name) => !['authorization', 'content-type', 'x-forwarded-for'].includes(name)),
+    ).toEqual([]);
+  });
 
   it("passes the backend's error body and status through untouched (AR-38)", async () => {
     fetchMock.mockResolvedValueOnce(
