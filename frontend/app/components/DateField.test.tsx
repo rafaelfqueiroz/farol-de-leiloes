@@ -87,10 +87,23 @@ describe('DateField (datetime)', () => {
       // 02:59 UTC on the 11th is 23:59 on the 10th in Brasília, whatever the browser zone
       expect(screen.getByRole('group', { name: 'Data e hora' })).toBeInTheDocument();
       expect(container.querySelector('input')).toHaveValue('10/03/2026 23:59');
-      expect(screen.getByText('Antes do leilão')).toBeInTheDocument();
+      expect(screen.getByText('Horário de Brasília. Antes do leilão')).toBeInTheDocument();
       expect(await axe(container)).toHaveNoViolations();
     },
   );
+
+  it('says a time of day is Brasília time even without a helper text (BR-003-23/24)', () => {
+    renderWithProviders(<Host type="datetime" initial="2026-03-10T15:30:00.000Z" />);
+
+    expect(screen.getByText('Horário de Brasília')).toBeInTheDocument();
+  });
+
+  it('names no zone on a date without a time', () => {
+    renderWithProviders(<Host type="date" initial="2026-03-10" helperText="Até o fim do mês" />);
+
+    expect(screen.getByText('Até o fim do mês')).toBeInTheDocument();
+    expect(screen.queryByText(/Brasília/)).toBeNull();
+  });
 
   it('shows midnight in Brasília as 00:00 of the same day', () => {
     const { container } = renderWithProviders(

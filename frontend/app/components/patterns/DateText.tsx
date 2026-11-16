@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import {
   formatDate,
   formatDateTime,
+  parseDate,
   relativeParts,
   toDateTimeAttribute,
   type RelativeParts,
@@ -38,7 +39,8 @@ function RelativeText({ parts }: { parts: RelativeParts }) {
   );
 }
 
-// DS-29, AR-23: the only place dates are rendered, in Brasília time, inside <time>.
+// DS-29, AR-23: the only place dates are rendered, in Brasília time, inside <time>. A time of day
+// is followed by "(horário de Brasília)" (BR-003-23); a date alone needs no zone.
 export default function DateText({
   value,
   withTime = false,
@@ -48,9 +50,12 @@ export default function DateText({
   const t = useTranslations('patterns.dateText');
   let dateTime: string;
   let label: string;
+  let showsTimeOfDay: boolean;
   try {
     dateTime = toDateTimeAttribute(value);
     label = withTime ? formatDateTime(value) : formatDate(value);
+    // a calendar date has no time of day, so there is no clock to name (AR-22)
+    showsTimeOfDay = withTime && parseDate(value).kind === 'instant';
   } catch (error: unknown) {
     // AR-22, DS-29: one malformed legacy timestamp must not take down a whole list.
     if (!(error instanceof RangeError)) throw error;
@@ -64,6 +69,7 @@ export default function DateText({
   return (
     <Typography component="span" variant="inherit" sx={{ fontVariantNumeric: 'tabular-nums' }}>
       <time dateTime={dateTime}>{label}</time>
+      {showsTimeOfDay ? t('timeZoneMarker') : null}
       {relative ? <RelativeText parts={relativeParts(value, now ?? new Date())} /> : null}
     </Typography>
   );
