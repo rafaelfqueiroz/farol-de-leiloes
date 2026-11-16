@@ -28,8 +28,14 @@ const json = (body: unknown, status = 200) =>
     headers: { 'content-type': 'application/json' },
   });
 
-const chat = (body = JSON.stringify({ message: 'casa em Natal' })) =>
-  POST(new NextRequest('http://localhost:3001/api/chat', { method: 'POST', body }));
+const chat = (body = JSON.stringify({ message: 'casa em Natal' }), headers?: HeadersInit) =>
+  POST(
+    new NextRequest('http://localhost:3001/api/chat', {
+      method: 'POST',
+      body,
+      ...(headers ? { headers } : {}),
+    }),
+  );
 
 describe('POST /api/chat', () => {
   it('hands the raw body to the extraction, so the backend alone validates it (AR-38)', async () => {
@@ -44,6 +50,16 @@ describe('POST /api/chat', () => {
       headers: { 'Content-Type': 'application/json' },
       body: '{"message":"casa"}',
     });
+  });
+
+  it("forwards the caller's validated X-Forwarded-For on both backend calls (SC-04)", async () => {
+    fetchMock.mockResolvedValueOnce(json({ city: 'Natal' })).mockResolvedValueOnce(json({}));
+
+    await chat(undefined, { 'X-Forwarded-For': '203.0.113.10' });
+
+    const [extract, search] = fetchMock.mock.calls as [string, RequestInit][];
+    expect(extract?.[1].headers).toMatchObject({ 'X-Forwarded-For': '203.0.113.10' });
+    expect(search?.[1].headers).toEqual({ 'X-Forwarded-For': '203.0.113.10' });
   });
 
   it('searches the auctions with every filter the extraction found', async () => {

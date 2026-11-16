@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { backendFetch, backendUnavailable, forwardBackendResponse } from '@/lib/backend';
+import { clientAddressHeaders } from '@/lib/forwarded-for';
 import type { AuctionQueryParams } from '@/lib/constants';
 import { reportClientError } from '@/lib/report-client-error';
 
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
     // so the backend alone validates `message` and answers with its own code (AR-38).
     const extractResponse = await backendFetch('/ai/extract-params', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...clientAddressHeaders(request) },
       body,
     });
     if (!extractResponse.ok) return forwardBackendResponse(extractResponse);
@@ -30,7 +31,9 @@ export async function POST(request: NextRequest) {
     if (params.page) queryParams.set('page', params.page.toString());
     if (params.pageSize) queryParams.set('pageSize', params.pageSize.toString());
 
-    return forwardBackendResponse(await backendFetch(`/auctions?${queryParams}`));
+    return forwardBackendResponse(
+      await backendFetch(`/auctions?${queryParams}`, { headers: clientAddressHeaders(request) }),
+    );
   } catch (error: unknown) {
     reportClientError(error, { where: 'api/chat POST' });
     return backendUnavailable();

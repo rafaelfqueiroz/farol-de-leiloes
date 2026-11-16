@@ -7,7 +7,8 @@ import type { AppConfigService } from '../config/env.js';
  * recovery request, reset, confirmation resend). It is a flood guard only; the precise
  * rules of BR-001-15 for sign-in are LoginAttemptsService's. Applied per route with
  * `@UseGuards(ThrottlerGuard)`, not globally, so /api/health and the rest are never throttled.
- * The origin is `req.ip`, correct behind Caddy because of TRUST_PROXY_HOPS (app.setup.ts).
+ * The origin is `req.ip`, the real client behind Caddy and behind the BFF (which forwards Caddy's
+ * X-Forwarded-For) because of TRUST_PROXY_HOPS (app.setup.ts).
  */
 export const AUTH_RATE_LIMIT = { limit: 20, ttl: 15 * 60 * 1000 } as const;
 

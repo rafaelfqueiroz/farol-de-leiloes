@@ -201,6 +201,37 @@ describe('proxyToBackend', () => {
     });
   });
 
+  it('forwards the validated X-Forwarded-For chain and drops one with an invalid entry (SC-04)', async () => {
+    fetchMock.mockResolvedValue(json({}));
+
+    await proxyToBackend(
+      requestTo('/api/auth/login', {
+        method: 'POST',
+        headers: { ...sameSite, 'X-Forwarded-For': '203.0.113.10, 198.51.100.2' },
+        body: '{}',
+      }),
+      '/auth/login',
+    );
+    await proxyToBackend(
+      requestTo('/api/auth/login', {
+        method: 'POST',
+        headers: { ...sameSite, 'X-Forwarded-For': '198.51.100.99, evil' },
+        body: '{}',
+      }),
+      '/auth/login',
+    );
+
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: { 'X-Forwarded-For': '203.0.113.10, 198.51.100.2' },
+    });
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect((fetchMock.mock.calls[1]?.[1] as RequestInit).headers).not.toHaveProperty(
+      'X-Forwarded-For',
+    );
+  });
+
   it('answers UNAUTHENTICATED without calling the backend when the cookie is missing', async () => {
     const res = await proxyToBackend(requestTo('/api/favorites'), '/favorites', { auth: true });
     expect(res.status).toBe(401);

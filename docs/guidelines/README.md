@@ -27,7 +27,7 @@ Alongside: [`docs/adr/`](../adr/README.md) for technical decisions, [`docs/runbo
 | Integrations | Stripe · OpenAI · Cloudflare R2 · SMTP · Google sign-in · Caixa |
 | Observability | `nestjs-pino` · Sentry (scrubbed) · `/api/health` |
 | Testing | Vitest + Testcontainers (backend) · Vitest + Testing Library (frontend) · Playwright |
-| Quality gates | ESLint · Prettier · husky (pre-commit lint-staged, pre-push `check` per changed package) · GitHub Actions · CodeQL — hooks and lint in place (#29); CI, CodeQL and the protected `main` in place (#33); E2E with #3 |
+| Quality gates | ESLint · Prettier · husky (pre-commit lint-staged, pre-push `check` per changed package) · GitHub Actions · CodeQL — hooks and lint in place (#29); CI, CodeQL and the protected `main` in place (#33); E2E (Playwright, axe, 360 px) in place with #3 |
 | Package manager | npm, one lockfile per package |
 | Hosting | Hostinger VPS in Brazil, MongoDB Atlas ([ADR-002](../adr/002-hosting-and-environments.md)) — deploy gated off until live (BL-001) |
 

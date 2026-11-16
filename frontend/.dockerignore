@@ -7,3 +7,6 @@ coverage
 .DS_Store
 Dockerfile
 .dockerignore
+e2e
+playwright-report
+test-results

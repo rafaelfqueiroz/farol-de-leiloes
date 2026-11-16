@@ -38,7 +38,8 @@ import { sameSite, sessionCookie } from '@/test/bff-requests';
 // AR-02, AR-42, SC-02: every route handler under app/api is a thin BFF over the backend. It
 // forwards the method and the JSON body to the matching backend path, builds the Authorization
 // header from the session cookie on signed-in routes only (the browser's own Authorization header
-// is ignored), refuses a state-changing request from another origin with 403 FORBIDDEN, and
+// is ignored), passes Caddy's validated X-Forwarded-For chain on (SC-04, BR-001-15: the
+// backend's per-origin limits see the browser and not the BFF), refuses a state-changing request from another origin with 403 FORBIDDEN, and
 // answers 401 UNAUTHENTICATED itself, without calling the backend, when a signed-in route gets no
 // cookie. The paged list handlers (GET) have their own spec, pagination-routes.test.ts; login,
 // register, the Google exchange and logout, which set or clear the cookie, are at the end.
@@ -249,6 +250,46 @@ describe.each(routes)('$name', (route) => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
   }
+
+  it("forwards the caller's X-Forwarded-For chain, validated and unchanged (SC-04)", async () => {
+    await call(route, requestFor(route, { ...signedIn, 'X-Forwarded-For': '203.0.113.10' }));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.headers).toMatchObject({ 'X-Forwarded-For': '203.0.113.10' });
+  });
+
+  it('forwards no X-Forwarded-For when the chain is absent or has an invalid entry', async () => {
+    await call(route, requestFor(route, signedIn));
+    await call(route, requestFor(route, { ...signedIn, 'X-Forwarded-For': '203.0.113.10, nope' }));
+
+    for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) {
+      expect(init.headers).not.toHaveProperty('X-Forwarded-For');
+    }
+  });
+
+  it('forwards the cookie-built Authorization and the X-Forwarded-For chain together, and nothing else', async () => {
+    await call(
+      route,
+      requestFor(route, {
+        ...signedIn,
+        // other cookies ride along in the same header; none of them may reach the backend
+        Cookie: `${signedIn.Cookie}; analytics=secret`,
+        'X-Forwarded-For': '203.0.113.10',
+        Authorization: 'Bearer from-the-browser',
+        'X-Real-IP': '198.51.100.1',
+        Forwarded: 'for=198.51.100.1',
+      }),
+    );
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.headers).toMatchObject({ 'X-Forwarded-For': '203.0.113.10' });
+    if (route.auth) expect(init.headers).toMatchObject({ Authorization: 'Bearer token-a' });
+    const names = Object.keys(init.headers as object).map((name) => name.toLowerCase());
+    expect(
+      names.filter((name) => !['authorization', 'content-type', 'x-forwarded-for'].includes(name)),
+    ).toEqual([]);
+    expect(JSON.stringify(init.headers)).not.toMatch(/secret|from-the-browser/);
+  });
 
   it("passes the backend's error body and status through untouched (AR-38)", async () => {
     fetchMock.mockResolvedValueOnce(

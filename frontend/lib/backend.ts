@@ -7,6 +7,7 @@
 // never rewrites an error body into `{ error }` or `{ message }`.
 import { NextRequest, NextResponse } from 'next/server';
 import { serverEnv } from '@/lib/env';
+import { clientAddressHeaders } from '@/lib/forwarded-for';
 import { reportClientError } from '@/lib/report-client-error';
 import { isTrustedOrigin } from '@/lib/request-origin';
 import { clearSessionCookie, sessionTokenOf, setSessionCookie } from '@/lib/session-cookie';
@@ -166,9 +167,11 @@ async function isSessionEnded(res: Response): Promise<boolean> {
  *
  * SC-02: a state-changing request from another origin is refused first (403 FORBIDDEN). On a
  * signed-in route the BFF builds `Authorization: Bearer` from the session cookie; the browser's
- * own `Authorization` header is never read or forwarded, and neither are its cookies or any other
- * header. A backend 401 UNAUTHENTICATED to a request that carried the cookie clears the cookie on
- * the way out: the session is dead.
+ * own `Authorization` header is never read or forwarded. The only headers that reach the backend
+ * are that `Authorization`, `Content-Type` and the validated `X-Forwarded-For` chain (the
+ * caller's address for the per-origin limits, SC-04; lib/forwarded-for.ts): no cookies, no other
+ * headers. A backend 401 UNAUTHENTICATED to a request that carried the cookie clears the cookie
+ * on the way out: the session is dead.
  *
  * SC-15: the only thing logged is the route label, the error name and its message; never a body,
  * a header or a token.
@@ -181,7 +184,7 @@ export async function proxyToBackend(
   const refused = refuseForeignOrigin(request);
   if (refused) return refused;
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...clientAddressHeaders(request) };
   const token = auth ? sessionTokenOf(request) : null;
   if (auth) {
     if (!token) return unauthenticated();

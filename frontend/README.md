@@ -42,7 +42,7 @@ Agents never start the applications (DV-18); the developer runs them.
 
 `npm run check` is the definition of done (DV-20). The pre-push hook runs it in every package a push changes (DV-37), so it is also the gate before a push.
 
-E2E tests (Playwright, `npm run test:e2e`) are not set up yet; they arrive with [#3](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/3) (TESTING §6).
+E2E tests: `npm run test:e2e` runs Playwright (`e2e/`, `playwright.config.ts`) against its own Compose stack (`e2e/compose.e2e.yml`), which it builds, seeds and tears down; Docker must be running, and `npx playwright install chromium` once. See TESTING §6.
 
 ## Environment
 
@@ -87,7 +87,7 @@ development diagnostics require eval; production enforces `Content-Security-Poli
 `lib/backend.ts` is server-only. It is the one place route handlers reach the backend.
 
 - `backendFetch(path, init)` calls `${BACKEND_API_URL}/api${path}`. The path must start with `/`.
-- `proxyToBackend(request, path, { auth, query, startsSession })` forwards the request method and raw body (none for GET and DELETE) and one header, `Authorization: Bearer`, which it builds from the session cookie. The browser's own `Authorization` header and cookies are never forwarded. It sends `Content-Type: application/json` when there is a body.
+- `proxyToBackend(request, path, { auth, query, startsSession })` forwards the request method and raw body (none for GET and DELETE) and only the `Authorization: Bearer` header, which it builds from the session cookie (the browser's own `Authorization` header and cookies are never forwarded), and the caller's `X-Forwarded-For` chain (`lib/forwarded-for.ts`: Caddy's chain unchanged when every entry is a valid IP address and there are at most 5, otherwise none), so the backend's per-origin limits (SC-04) see the browser and not the BFF. The AI search route (`app/api/chat`) forwards the chain the same way; the sitemap and the cached auction page are not per-caller and forward none. It sends `Content-Type: application/json` when there is a body.
 - `auth: true` without a session cookie answers 401 `UNAUTHENTICATED` without calling the backend. A backend 401 `UNAUTHENTICATED` to a request that carried the cookie clears the cookie on the way out (the session is dead).
 - `startsSession: true` (login, register, the Google exchange) moves the backend's `accessToken` into the session cookie and answers the browser without it (`{ user }`, or `{ status, user }`). A first Google sign-in (`terms_required`) sets no cookie.
 - A state-changing request (POST, PUT, PATCH, DELETE) from another origin is answered 403 `FORBIDDEN` before anything else, without calling the backend (see Session cookie).
