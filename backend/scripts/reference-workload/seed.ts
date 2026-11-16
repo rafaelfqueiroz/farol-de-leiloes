@@ -110,10 +110,10 @@ async function upsertAccounts(model: Model<UserEntity>): Promise<number> {
           name: account.name,
           password: await bcrypt.hash(account.password, BCRYPT_ROUNDS),
           providers: ['local'],
-          emailVerified: true,
+          emailVerified: account.emailVerified,
           role: account.role,
           // The top plan without Stripe: no customer or subscription id (TS-07, TS-22).
-          subscriptionStatus: account.role === 'admin' ? null : 'active',
+          subscriptionStatus: account.role === 'premium' ? 'active' : null,
         },
       },
       { upsert: true, runValidators: true },

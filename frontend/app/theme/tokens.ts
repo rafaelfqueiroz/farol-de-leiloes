@@ -146,6 +146,9 @@ export interface TypeToken {
 
 // px values from DESIGN.md §5; the theme converts them to rem.
 export const typeScale = {
+  // the landing hero's headline: the one size above h1 (DESIGN.md §5)
+  display: { size: 48, lineHeight: 56, weight: 700, letterSpacing: '-0.02em' },
+  displayCompact: { size: 32, lineHeight: 40, weight: 700, letterSpacing: '-0.02em' },
   h1: { size: 32, lineHeight: 40, weight: 700, letterSpacing: '-0.02em' },
   h1Compact: { size: 28, lineHeight: 36, weight: 700, letterSpacing: '-0.02em' },
   h2: { size: 24, lineHeight: 32, weight: 700, letterSpacing: '-0.015em' },
