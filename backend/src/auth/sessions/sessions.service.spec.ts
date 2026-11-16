@@ -77,6 +77,33 @@ describe('SessionsService', () => {
     await expect(service.isActive(other, USER)).resolves.toBe(false);
   });
 
+  it('rebind binds a live session to a new version, and the others keep theirs', async () => {
+    const { service } = build();
+    const mine = await service.create(USER, 1);
+    const other = await service.create(USER, 1);
+
+    await expect(service.rebind(mine, USER, 2)).resolves.toBe(true);
+
+    await expect(service.activeCredentialVersion(mine, USER)).resolves.toBe(2);
+    await expect(service.activeCredentialVersion(other, USER)).resolves.toBe(1);
+  });
+
+  it('rebind leaves a revoked, expired, foreign or malformed session alone', async () => {
+    const { service, clock } = build();
+    const revoked = await service.create(USER, 1);
+    await service.revoke(revoked);
+    const expired = await service.create(USER, 1);
+    clock.advance(7 * DAY + MINUTE);
+    const foreign = await service.create(OTHER, 1);
+
+    await expect(service.rebind(revoked, USER, 2)).resolves.toBe(false);
+    await expect(service.rebind(expired, USER, 2)).resolves.toBe(false);
+    await expect(service.rebind(foreign, USER, 2)).resolves.toBe(false);
+    await expect(service.rebind('', USER, 2)).resolves.toBe(false);
+    await expect(service.rebind(foreign, 'not-an-object-id', 2)).resolves.toBe(false);
+    await expect(service.rebind(7 as unknown as string, USER, 2)).resolves.toBe(false);
+  });
+
   it.each([
     ['an empty jti', '', USER],
     ['a non-string jti', 7 as unknown as string, USER],

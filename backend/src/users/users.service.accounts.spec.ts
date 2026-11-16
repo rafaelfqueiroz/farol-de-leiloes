@@ -44,6 +44,11 @@ function aModel(returns: Record<string, unknown> = {}) {
   return { Model, created };
 }
 
+/** Drops the symbol `serverOperators` marks an operator object with, so a spec can compare it. */
+function plain(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value)) as unknown;
+}
+
 function aService(model: unknown) {
   return new UsersService(model as Deps[0]);
 }
@@ -238,7 +243,7 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
 });
 
 describe('UsersService.setPassword and changePassword', () => {
-  it('sets a hashed password, adds the local provider and does not return the hash', async () => {
+  it('DL-001-02: setPassword by recovery stores a hashed password, adds the local provider and bumps the credential version in the same write', async () => {
     const query = new FakeQuery({ _id: 'u1' });
     const { Model } = aModel();
     Model.findOneAndUpdate.mockReturnValue(query);
@@ -246,33 +251,62 @@ describe('UsersService.setPassword and changePassword', () => {
     await aService(Model).setPassword('u1', 'newsecret');
 
     expect(Model.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: { $eq: 'u1' } },
-      { $set: { password: 'hashed:newsecret' }, $addToSet: { providers: 'local' } },
+      { _id: { $eq: 'u1' } }, // unfenced: a spent recovery token is the authority
+      {
+        $set: { password: 'hashed:newsecret' },
+        $inc: { credentialVersion: 1 },
+        $addToSet: { providers: 'local' },
+      },
       { returnDocument: 'after' },
     );
     expect(query.calls['select']).toEqual([['-password']]);
   });
 
-  it('BR-001-28: changePassword stores the new hash and leaves the providers alone', async () => {
+  it.each([
+    [0, [0, null]], // an account without the field is at 0
+    [3, [3]],
+  ])('DL-001-02: setPassword fenced on version %i matches %j', async (expected, accepted) => {
     const { Model } = aModel();
     Model.findOneAndUpdate.mockReturnValue(new FakeQuery({ _id: 'u1' }));
 
-    await aService(Model).changePassword('u1', 'newsecret');
+    await aService(Model).setPassword('u1', 'newsecret', expected);
 
-    expect(Model.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: { $eq: 'u1' } },
-      { $set: { password: 'hashed:newsecret' } },
-      { returnDocument: 'after' },
-    );
+    const filter = plain(Model.findOneAndUpdate.mock.calls[0]?.[0]) as Record<string, unknown>;
+    expect(filter['_id']).toEqual({ $eq: 'u1' });
+    expect(filter['credentialVersion']).toEqual({ $in: accepted });
   });
 
-  it('reports USER_NOT_FOUND when the account to set a password on is gone', async () => {
+  it('BR-001-28, DL-001-02: changePassword is fenced on the version and on the local provider, and bumps the version', async () => {
     const { Model } = aModel();
-    await expect(aService(Model).setPassword('u1', 'newsecret')).rejects.toEqual(
+    Model.findOneAndUpdate.mockReturnValue(new FakeQuery({ _id: 'u1' }));
+
+    await aService(Model).changePassword('u1', 'newsecret', 2);
+
+    const [filter, update, options] = plain(Model.findOneAndUpdate.mock.calls[0]) as unknown[];
+    expect(filter).toEqual({
+      _id: { $eq: 'u1' },
+      credentialVersion: { $in: [2] },
+      providers: { $eq: 'local' },
+    });
+    expect(update).toEqual({
+      $set: { password: 'hashed:newsecret' },
+      $inc: { credentialVersion: 1 },
+    });
+    expect(options).toEqual({ returnDocument: 'after' });
+  });
+
+  it('DL-001-02: a fenced write that matches nothing is UNAUTHENTICATED, an unfenced one USER_NOT_FOUND', async () => {
+    const { Model } = aModel();
+    const service = aService(Model);
+
+    await expect(service.setPassword('u1', 'newsecret')).rejects.toEqual(
       new DomainError('USER_NOT_FOUND'),
     );
-    await expect(aService(Model).changePassword('u1', 'newsecret')).rejects.toEqual(
-      new DomainError('USER_NOT_FOUND'),
+    await expect(service.setPassword('u1', 'newsecret', 0)).rejects.toEqual(
+      new DomainError('UNAUTHENTICATED'),
+    );
+    await expect(service.changePassword('u1', 'newsecret', 0)).rejects.toEqual(
+      new DomainError('UNAUTHENTICATED'),
     );
   });
 });
@@ -291,6 +325,19 @@ describe('UsersService.remove', () => {
 });
 
 describe('UsersService.validatePassword (BR-001-14, BR-001-16, SC-05)', () => {
+  it('BR-001-24, DL-001-02: the lookup requires the local provider and a stored hash', async () => {
+    const { Model } = aModel();
+
+    await aService(Model).validatePassword(' A@Example.test ', 'x');
+
+    // An account that lost `local`, or has no hash, is not found: as unknown as a missing email.
+    expect(plain(Model.findOne.mock.calls[0]?.[0])).toEqual({
+      email: { $eq: 'a@example.test' },
+      providers: { $eq: 'local' },
+      password: { $type: 'string' },
+    });
+  });
+
   it('returns the user when the password matches the stored hash', async () => {
     const user = { _id: 'u1', password: 'hashed:secret1' };
     const { Model } = aModel({ findOne: user });

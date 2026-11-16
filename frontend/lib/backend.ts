@@ -10,7 +10,7 @@ import { serverEnv } from '@/lib/env';
 import { clientAddressHeaders } from '@/lib/forwarded-for';
 import { reportClientError } from '@/lib/report-client-error';
 import { isTrustedOrigin } from '@/lib/request-origin';
-import { clearSessionCookie, sessionTokenOf, setSessionCookie } from '@/lib/session-cookie';
+import { sessionTokenOf, setSessionCookie } from '@/lib/session-cookie';
 
 /** The BFF's own error codes. Every other code comes from the backend, verbatim (AR-38). */
 export const BFF_ERROR_CODES = {
@@ -148,19 +148,6 @@ async function startSession(res: Response): Promise<NextResponse> {
   return response;
 }
 
-/** Whether the backend answered 401 UNAUTHENTICATED: the session the cookie carried is dead. */
-async function isSessionEnded(res: Response): Promise<boolean> {
-  if (res.status !== 401) return false;
-  try {
-    const body: unknown = await res.clone().json();
-    return (
-      typeof body === 'object' && body !== null && Reflect.get(body, 'code') === 'UNAUTHENTICATED'
-    );
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Forwards a BFF request to the backend and returns the backend's answer. The method and the raw
  * body are passed through, so the backend alone validates them and answers with its own code.
@@ -170,8 +157,10 @@ async function isSessionEnded(res: Response): Promise<boolean> {
  * own `Authorization` header is never read or forwarded. The only headers that reach the backend
  * are that `Authorization`, `Content-Type` and the validated `X-Forwarded-For` chain (the
  * caller's address for the per-origin limits, SC-04; lib/forwarded-for.ts): no cookies, no other
- * headers. A backend 401 UNAUTHENTICATED to a request that carried the cookie clears the cookie
- * on the way out: the session is dead.
+ * headers. A 401 never clears the cookie: this BFF is stateless, so it cannot know which cookie
+ * the browser holds now, and a slow 401 for an old session would wipe the cookie of a newer
+ * sign-in (BR-001-18). The dead cookie is httpOnly and harmless (the backend refuses it, the next
+ * sign-in overwrites it); only `POST /api/auth/logout` clears it.
  *
  * SC-15: the only thing logged is the route label, the error name and its message; never a body,
  * a header or a token.
@@ -206,8 +195,5 @@ export async function proxyToBackend(
     return backendUnavailable();
   }
 
-  const ended = token !== null && (await isSessionEnded(res));
-  const response = await (startsSession ? startSession(res) : forwardBackendResponse(res));
-  if (ended) clearSessionCookie(response);
-  return response;
+  return startsSession ? startSession(res) : forwardBackendResponse(res);
 }

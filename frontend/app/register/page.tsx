@@ -27,7 +27,7 @@ type FieldErrors = Partial<Record<'email' | 'password' | 'confirmPassword', stri
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register } = useAuth();
+  const { register, loading: authLoading } = useAuth();
   const t = useTranslations('register');
   const tLogin = useTranslations('login');
   const apiErrorMessage = useApiErrorMessage();
@@ -43,6 +43,8 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // BR-001-18: no registration while the first session lookup is pending (Enter in a field included)
+    if (authLoading) return;
     setError('');
     const invalid: FieldErrors = {};
 
@@ -141,7 +143,13 @@ export default function RegisterPage() {
           error={termsMissing}
         />
 
-        <Button fullWidth size="large" variant="contained" type="submit" disabled={loading}>
+        <Button
+          fullWidth
+          size="large"
+          variant="contained"
+          type="submit"
+          disabled={loading || authLoading}
+        >
           {loading ? t('submitting') : t('submit')}
         </Button>
       </Stack>

@@ -130,20 +130,16 @@ describe('UsersService.update (SC-10)', () => {
     expect(setOf(bad.model)).toEqual({});
   });
 
-  it('keeps providers only when every entry is a string', async () => {
-    const good = build();
-    await good.service.update('u1', { providers: ['local', 'google'] } as UpdateUserDto);
-    expect(setOf(good.model)).toEqual({ providers: ['local', 'google'] });
+  it('BR-001-31, DL-001-02: update cannot write the providers or the Google id, whatever the body carries', async () => {
+    const { service, model } = build();
 
-    const bad = build();
-    await bad.service.update('u1', {
-      providers: ['local', { $ne: 1 }],
+    await service.update('u1', {
+      name: 'Ana',
+      providers: ['local', 'google'],
+      googleId: 'g-hostile',
     } as unknown as UpdateUserDto);
-    expect(setOf(bad.model)).toEqual({});
 
-    const notAnArray = build();
-    await notAnArray.service.update('u1', { providers: 'local' } as unknown as UpdateUserDto);
-    expect(setOf(notAnArray.model)).toEqual({});
+    expect(setOf(model)).toEqual({ name: 'Ana' });
   });
 
   it('SC-26: update no longer writes the legacy cpf, date of birth, sex and address', async () => {

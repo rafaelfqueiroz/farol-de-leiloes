@@ -57,7 +57,7 @@ export class AuthService implements BeforeApplicationShutdown {
     // BR-001-15: the attempt is counted, atomically, before the password is looked at, so parallel
     // guesses cannot all reach the comparison; over the limit it is refused even with the right
     // password.
-    await this.loginAttempts.reserve(email, ip);
+    const reservation = await this.loginAttempts.reserve(email, ip);
 
     const user = await this.usersService.validatePassword(email, loginDto.password);
     if (!user) {
@@ -66,7 +66,11 @@ export class AuthService implements BeforeApplicationShutdown {
       throw new DomainError('INVALID_CREDENTIALS');
     }
 
-    await this.loginAttempts.recordSuccess(email, ip);
+    await this.loginAttempts.recordSuccess(email, ip, reservation);
+
+    // DL-001-02: `user` is the document whose password was just verified; the session is bound to
+    // its credential version, so a reset or any other credential change that completed after the
+    // comparison leaves this session refused.
     return this.startSession(user);
   }
 
@@ -242,7 +246,7 @@ export class AuthService implements BeforeApplicationShutdown {
     // BR-001-26 / D-63: the email cannot be changed. The profile form still sends it back with the
     // name, so the current address is accepted as a no-op and any other is refused as a whole,
     // before anything is written (BR-001-29).
-    if (updateData.email !== undefined) {
+    if (typeof updateData.email === 'string') {
       const current = await this.usersService.findById(userId);
       if (!current) {
         throw new DomainError('USER_NOT_FOUND');
@@ -286,16 +290,23 @@ export class AuthService implements BeforeApplicationShutdown {
     // SC-04: a stolen session must not be able to guess the current password at bcrypt speed, so
     // this check shares sign-in's counters: the attempt is reserved first, a wrong password keeps
     // it, a right one gives it back.
-    await this.loginAttempts.reserve(user.email, ip);
-    const validPassword = await this.usersService.validatePassword(user.email, currentPassword);
-    if (!validPassword) {
+    const reservation = await this.loginAttempts.reserve(user.email, ip);
+
+    const verified = await this.usersService.validatePassword(user.email, currentPassword);
+    if (!verified) {
       throw new DomainError('CURRENT_PASSWORD_INCORRECT');
     }
-    await this.loginAttempts.recordSuccess(user.email, ip);
+    await this.loginAttempts.recordSuccess(user.email, ip, reservation);
 
-    await this.usersService.changePassword(userId, newPassword);
-    // BR-001-19: every other session ends; the one that changed the password stays.
-    await this.sessions.revokeAllForUser(userId, sessionId);
+    // DL-001-02: the write applies only while the account still has the credential version the
+    // current password was verified against; if a reset or another change got in between, nothing
+    // is written and the answer is UNAUTHENTICATED. It bumps the version in the same write.
+    const updated = await this.usersService.changePassword(
+      userId,
+      newPassword,
+      credentialVersionOf(verified),
+    );
+    await this.endOtherSessions(userId, sessionId, updated);
   }
 
   async setPassword(userId: string, sessionId: string, newPassword: string): Promise<void> {
@@ -303,14 +314,30 @@ export class AuthService implements BeforeApplicationShutdown {
     if (!user) {
       throw new DomainError('USER_NOT_FOUND');
     }
-
     if (user.providers?.includes('local')) {
       throw new DomainError('PASSWORD_ALREADY_SET');
     }
+    // DL-001-02: fenced on the version read together with "no local provider", so a credential
+    // change in between (a recovery that already added a password) cannot be overwritten.
+    const updated = await this.usersService.setPassword(
+      userId,
+      newPassword,
+      credentialVersionOf(user),
+    );
+    await this.endOtherSessions(userId, sessionId, updated);
+  }
 
-    await this.usersService.setPassword(userId, newPassword);
-    // BR-001-19: adding a way to sign in ends every other session, like a change does; the one
-    // that created the password stays (the profile page promises it).
+  /**
+   * BR-001-19, DL-001-02: after the holder changes their own credential, the session that did it
+   * is bound to the new version and stays; every other session is revoked (and, being stamped with
+   * the old version, is refused anyway should the revocation fail).
+   */
+  private async endOtherSessions(
+    userId: string,
+    sessionId: string,
+    updated: UserAccount,
+  ): Promise<void> {
+    await this.sessions.rebind(sessionId, userId, credentialVersionOf(updated));
     await this.sessions.revokeAllForUser(userId, sessionId);
   }
 

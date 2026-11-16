@@ -119,6 +119,27 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
     expect(await users.countDocuments({ email: 'someone-else@example.test' })).toBe(0);
   });
 
+  it.each([
+    ['null', null],
+    ['a number', 5],
+    ['an object', { $ne: null }],
+    ['an array', ['a@example.test']],
+    ['an empty string', ''],
+    ['not an address', 'not-an-address'],
+  ])(
+    'SC-10, AR-34: an email that is %s is a controlled 400 VALIDATION_FAILED, never a 500, and nothing changes',
+    async (_label, email) => {
+      const account1 = await account();
+      const before = await stored(account1.email);
+
+      const response = await patch(account1.token, { name: 'X', email }).expect(400);
+
+      expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+      expect(response.body.context.fields).toContain('email');
+      expect(await stored(account1.email)).toEqual(before);
+    },
+  );
+
   it('BR-001-27, AC: (84) 99999-1234 is accepted and stored as +5584999991234', async () => {
     const { email, token } = await account();
 

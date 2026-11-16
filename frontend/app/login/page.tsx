@@ -20,7 +20,7 @@ import { ApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, loading: authLoading } = useAuth();
   const t = useTranslations('login');
   const tCommon = useTranslations('common');
   const apiErrorMessage = useApiErrorMessage();
@@ -44,6 +44,8 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // BR-001-18: no sign-in while the first session lookup is pending (Enter in a field included)
+    if (authLoading) return;
     setError('');
     setLoading(true);
 
@@ -86,7 +88,13 @@ export default function LoginPage() {
           autoComplete="current-password"
         />
 
-        <Button fullWidth size="large" variant="contained" type="submit" disabled={loading}>
+        <Button
+          fullWidth
+          size="large"
+          variant="contained"
+          type="submit"
+          disabled={loading || authLoading}
+        >
           {loading ? t('submitting') : tCommon('signIn')}
         </Button>
       </Stack>

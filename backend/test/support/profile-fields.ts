@@ -23,11 +23,11 @@ export const PROTECTED = [
   'providers',
   'emailVerified',
   'status',
-  'credentialVersion',
   'role',
   'stripeCustomerId',
   'stripeSubscriptionId',
   'subscriptionStatus',
+  'credentialVersion',
 ] as const;
 
 /** Mongoose bookkeeping, not account attributes. */
@@ -53,9 +53,9 @@ export const HOSTILE_VALUES: Record<string, unknown> = {
   providers: ['google', 'local'],
   emailVerified: true,
   status: 'closed',
-  credentialVersion: 99,
   role: 'admin',
   stripeCustomerId: 'cus_hostile',
   stripeSubscriptionId: 'sub_hostile',
   subscriptionStatus: 'active',
+  credentialVersion: 99,
 };

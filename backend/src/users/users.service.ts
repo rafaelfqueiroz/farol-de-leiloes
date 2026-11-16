@@ -9,15 +9,11 @@ import { normalizeEmail } from '../common/normalize-email.js';
 import { serverOperators } from '../common/mongo/query-safety.js';
 import { decideGoogleLink } from './domain/google-link.js';
 
-// SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34).
-const TEXT_FIELDS = [
-  'name',
-  'googleId',
-  'role',
-  'stripeCustomerId',
-  'stripeSubscriptionId',
-  'phone',
-] as const;
+// SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34). Nothing that
+// decides how the account signs in is here (`password`, `providers`, `googleId`): those change only
+// through the fenced, version-bumping methods (setPassword, changePassword, linkGoogleIdentity),
+// so no write of a credential can skip the credential version (DL-001-02, BR-001-31).
+const TEXT_FIELDS = ['name', 'role', 'stripeCustomerId', 'stripeSubscriptionId', 'phone'] as const;
 
 // SC-01: bcrypt, cost >= 10. The one place a password is hashed.
 const BCRYPT_COST = 10;
@@ -248,29 +244,76 @@ export class UsersService {
   /**
    * Sets the password and makes sure email/password sign-in exists on the account (BR-001-24: a
    * Google-only account gains it through recovery or set-password).
+   *
+   * DL-001-02: the credential version goes up by one in the same atomic write as the hash, so a
+   * session opened for the old credential is refused from this instant. Without
+   * `expectedCredentialVersion` (recovery, which holds a spent one-time token) the write is
+   * unconditional. With it (set-password) the write applies only while the account still has that
+   * version, the one read when the caller checked that no password existed; otherwise nothing is
+   * written and the answer is UNAUTHENTICATED.
    */
-  async setPassword(userId: string, newPassword: string): Promise<UserDocument> {
-    return this.writePassword(userId, newPassword, { addLocalProvider: true });
+  async setPassword(
+    userId: string,
+    newPassword: string,
+    expectedCredentialVersion?: number,
+  ): Promise<UserDocument> {
+    return this.writePassword(userId, newPassword, {
+      addLocalProvider: true,
+      expectedCredentialVersion,
+    });
   }
 
-  /** BR-001-28 is checked by the caller; this only stores the new hash on an existing password. */
-  async changePassword(userId: string, newPassword: string): Promise<UserDocument> {
-    return this.writePassword(userId, newPassword, { addLocalProvider: false });
+  /**
+   * BR-001-28 is checked by the caller; this stores the new hash on an existing password, and only
+   * while the account still has the credential version that authorised the change and still signs
+   * in by password (DL-001-02). When a competing credential change got there first nothing is
+   * written and the answer is UNAUTHENTICATED. The version goes up by one in the same write.
+   */
+  async changePassword(
+    userId: string,
+    newPassword: string,
+    expectedCredentialVersion: number,
+  ): Promise<UserDocument> {
+    return this.writePassword(userId, newPassword, {
+      addLocalProvider: false,
+      expectedCredentialVersion,
+    });
   }
 
   // BR-001-31: passwords reach the account only through these named methods, never `update`.
   private async writePassword(
     userId: string,
     newPassword: string,
-    { addLocalProvider }: { addLocalProvider: boolean },
+    {
+      addLocalProvider,
+      expectedCredentialVersion,
+    }: { addLocalProvider: boolean; expectedCredentialVersion: number | undefined },
   ): Promise<UserDocument> {
     const hashedPassword = await this.hashPassword(newPassword);
 
+    const fence = expectedCredentialVersion !== undefined;
+    const filter: QueryFilter<UserDocument> = {
+      _id: { $eq: userId },
+      // DL-001-02: the version the caller's decision was based on. An account without the field
+      // is at 0 (the same rule as `credentialVersionOf`).
+      ...(fence
+        ? {
+            credentialVersion: serverOperators({
+              $in: expectedCredentialVersion === 0 ? [0, null] : [expectedCredentialVersion],
+            }),
+          }
+        : {}),
+      // A change needs a password to change.
+      ...(addLocalProvider ? {} : { providers: { $eq: 'local' } }),
+    };
+
     const updatedUser = await this.userRepository
       .findOneAndUpdate(
-        { _id: { $eq: userId } },
+        filter,
         {
           $set: { password: hashedPassword },
+          // DL-001-02: in the same atomic write as the hash.
+          $inc: { credentialVersion: 1 },
           ...(addLocalProvider ? { $addToSet: { providers: 'local' } } : {}),
         },
         { returnDocument: 'after' },
@@ -279,7 +322,9 @@ export class UsersService {
       .exec();
 
     if (!updatedUser) {
-      throw new DomainError('USER_NOT_FOUND');
+      // Fenced: the account changed (or went) since the caller looked, so the decision it made is
+      // stale. Unfenced: the account does not exist.
+      throw new DomainError(fence ? 'UNAUTHENTICATED' : 'USER_NOT_FOUND');
     }
 
     return updatedUser;
@@ -368,11 +413,6 @@ export class UsersService {
     const status: unknown = dto.subscriptionStatus;
     if (typeof status === 'string' || status === null) fields.subscriptionStatus = status;
 
-    const providers: unknown = dto.providers;
-    if (Array.isArray(providers) && providers.every((p) => typeof p === 'string')) {
-      fields.providers = providers;
-    }
-
     return fields;
   }
 
@@ -388,9 +428,19 @@ export class UsersService {
    * a throwaway hash when there is no account or no password, so an unknown email and a wrong
    * password answer alike and in similar time (BR-001-14, SC-05). A deactivated or closed account
    * is refused after the comparison, with the same null (BR-001-16).
+   *
+   * Only an account that signs in by password qualifies: `local` among its providers AND a stored
+   * hash, both part of the lookup. An account that lost `local` (Google took it over, DL-001-02)
+   * is as unknown as a missing email even if a hash is still in the document.
    */
   async validatePassword(email: string, password: string): Promise<UserDocument | null> {
-    const user = await this.findByEmail(email);
+    const user = await this.userRepository
+      .findOne({
+        email: { $eq: normalizeEmail(email) },
+        providers: { $eq: 'local' },
+        password: serverOperators({ $type: 'string' as const }),
+      })
+      .exec();
     const hash = user?.password ?? (await this.getDummyHash());
     const matches = await bcrypt.compare(password, hash);
     if (!user?.password || !matches) return null;

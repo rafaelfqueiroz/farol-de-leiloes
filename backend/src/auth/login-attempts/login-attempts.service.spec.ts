@@ -11,11 +11,9 @@ import { LOGIN_ATTEMPT_RULE, LoginAttemptsService } from './login-attempts.servi
 
 function build() {
   const repo = new FakeLoginAttemptsRepository();
-  const service = new LoginAttemptsService(
-    repo as unknown as LoginAttemptsRepository,
-    new FakeClock(),
-  );
-  return { service, repo };
+  const clock = new FakeClock();
+  const service = new LoginAttemptsService(repo as unknown as LoginAttemptsRepository, clock);
+  return { service, repo, clock };
 }
 
 describe('LoginAttemptsService', () => {
@@ -65,20 +63,29 @@ describe('LoginAttemptsService', () => {
   });
 
   it('allows when neither the email nor the origin is banned', async () => {
-    const { service, repo } = build();
+    const { service, repo, clock } = build();
     repo.block('email:someone-else@example.test');
 
-    await expect(service.reserve('ana@example.test', '203.0.113.7')).resolves.toBeUndefined();
+    // The reservation names the instant it was counted at.
+    await expect(service.reserve('ana@example.test', '203.0.113.7')).resolves.toEqual({
+      at: clock.now(),
+    });
   });
 
   it('BR-001-15: success clears the email counter and gives back one origin reservation', async () => {
-    const { service, repo } = build();
-    await service.reserve('ana@example.test', '203.0.113.7');
+    const { service, repo, clock } = build();
+    const first = await service.reserve('ana@example.test', '203.0.113.7');
+    clock.advance(MINUTE);
     await service.reserve('ana@example.test', '203.0.113.7');
 
-    await service.recordSuccess('Ana@Example.test', '203.0.113.7');
+    clock.advance(MINUTE);
+    await service.recordSuccess('Ana@Example.test', '203.0.113.7', first);
 
     expect(repo.reserved.has('email:ana@example.test')).toBe(false);
     expect(repo.reserved.get('ip:203.0.113.7')).toBe(1);
+    // It is the attempt's own reservation that goes back (made 2 minutes earlier), not "the
+    // latest": the instant travels from reserve to recordSuccess.
+    expect(repo.released).toEqual(['ip:203.0.113.7']);
+    expect(repo.releasedAt).toEqual([first.at]);
   });
 });

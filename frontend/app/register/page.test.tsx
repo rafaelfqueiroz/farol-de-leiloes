@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api-error';
@@ -6,7 +6,7 @@ import messages from '@/messages/pt-BR.json';
 import { axe, renderWithProviders as render } from '@/test/render';
 import RegisterPage from './page';
 
-const env = vi.hoisted(() => ({ register: vi.fn(), push: vi.fn() }));
+const env = vi.hoisted(() => ({ register: vi.fn(), push: vi.fn(), authLoading: false }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: env.push }) }));
 vi.mock('next/link', () => ({
@@ -16,11 +16,14 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
-vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ register: env.register }) }));
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ register: env.register, loading: env.authLoading }),
+}));
 
 beforeEach(() => {
   env.register.mockReset();
   env.push.mockReset();
+  env.authLoading = false;
 });
 
 const TERMS = 'Li e aceito os Termos de uso e a Política de privacidade';
@@ -39,6 +42,36 @@ async function fill({
   if (accept) await user.click(screen.getByRole('checkbox', { name: TERMS }));
   await user.click(screen.getByRole('button', { name: /^criar conta$/i }));
 }
+
+describe('RegisterPage while the first session lookup is pending (BR-001-18)', () => {
+  // A registration that raced the lookup would be undone by the lookup's anonymous answer.
+  it('disables the submit button, with the same label, until the lookup is done', () => {
+    env.authLoading = true;
+    render(<RegisterPage />);
+
+    expect(screen.getByRole('button', { name: /^criar conta$/i })).toBeDisabled();
+  });
+
+  it('does not submit a valid form (Enter in a field) while the lookup is pending', async () => {
+    env.authLoading = true;
+    const user = userEvent.setup();
+    render(<RegisterPage />);
+    await user.type(screen.getByLabelText(/nome/i), 'Ana');
+    await user.type(screen.getByLabelText(/e-?mail/i), 'a@b.com');
+    await user.type(screen.getByLabelText(/^senha/i), 'secret123');
+    await user.type(screen.getByLabelText(/confirmar senha/i), 'secret123');
+
+    fireEvent.submit(screen.getByRole('button', { name: /^criar conta$/i }));
+
+    expect(env.register).not.toHaveBeenCalled();
+  });
+
+  it('enables the submit button once the lookup is done', () => {
+    render(<RegisterPage />);
+
+    expect(screen.getByRole('button', { name: /^criar conta$/i })).toBeEnabled();
+  });
+});
 
 describe('RegisterPage', () => {
   it('frame 1: has one h1 "Criar conta" in a main, the fields, the terms, Google and the sign-in link', async () => {
