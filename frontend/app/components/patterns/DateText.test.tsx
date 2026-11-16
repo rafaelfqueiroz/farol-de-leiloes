@@ -37,7 +37,36 @@ describe('DateText', () => {
   it('formats date and time in Brasília', () => {
     renderWithProviders(<DateText value="2026-03-10T15:30:00Z" withTime />);
 
-    expect(screen.getByText('10/03/2026 12:30')).toBeInTheDocument();
+    const time = screen.getByText('10/03/2026 12:30');
+    expect(time.tagName).toBe('TIME');
+  });
+
+  // BR-003-23, BR-003-26: this file runs under several device zones (vitest.config.ts); the text
+  // is the Brasília one in each.
+  it('marks a time of day as Brasília time', () => {
+    const { container } = renderWithProviders(<DateText value="2026-01-26T13:00:00Z" withTime />);
+
+    expect(container.textContent).toBe('26/01/2026 10:00 (horário de Brasília)');
+  });
+
+  it('shows the Brasília day for 02:30 UTC, which is still the evening before', () => {
+    const { container } = renderWithProviders(<DateText value="2026-02-01T02:30:00Z" withTime />);
+
+    expect(container.textContent).toBe('31/01/2026 23:30 (horário de Brasília)');
+  });
+
+  it('puts the marker before the relative phrase', () => {
+    const { container } = renderWithProviders(
+      <DateText value="2026-03-10T13:00:00Z" withTime relative now={now} />,
+    );
+
+    expect(container.textContent).toBe('10/03/2026 10:00 (horário de Brasília) · há 2 horas');
+  });
+
+  it('does not name a zone next to a date without a time', () => {
+    const { container } = renderWithProviders(<DateText value="2026-01-26T13:00:00Z" />);
+
+    expect(container.textContent).toBe('26/01/2026');
   });
 
   it('does not shift a calendar date', () => {
@@ -45,6 +74,8 @@ describe('DateText', () => {
 
     const time = screen.getByText('10/03/2026');
     expect(time).toHaveAttribute('datetime', '2026-03-10');
+    // a calendar date has no time of day, so no clock to name
+    expect(screen.queryByText(/horário de Brasília/)).toBeNull();
   });
 
   it('appends a future relative phrase and keeps the absolute date', () => {

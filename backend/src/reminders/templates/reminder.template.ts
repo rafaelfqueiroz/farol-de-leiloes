@@ -1,3 +1,5 @@
+import { formatBrasiliaDateTimeMarked } from '../../common/clock/brasilia-time.js';
+
 export interface ReminderEmailPayload {
   userName: string;
   auctionTitle: string | null;
@@ -6,28 +8,30 @@ export interface ReminderEmailPayload {
   auctionState: string | null;
   auctionDetailsUrl: string | null;
   description: string | null;
+  /** The instant the reminder was scheduled for; shown in Brasília time (BR-003-23). */
+  scheduledAt: Date;
 }
 
 export const getAuctionReminderEmailTemplate = (payload: ReminderEmailPayload): string => {
   const location =
-    [payload.auctionCity, payload.auctionState].filter(Boolean).join(', ') || 'Local nao informado';
+    [payload.auctionCity, payload.auctionState].filter(Boolean).join(', ') || 'Local não informado';
 
   const detailsButton = payload.auctionDetailsUrl
     ? `<div style="text-align: center;">
-        <a href="${payload.auctionDetailsUrl}" class="button">Ver Detalhes do Leilao</a>
+        <a href="${payload.auctionDetailsUrl}" class="button">Ver detalhes do leilão</a>
       </div>`
     : '';
 
   const descriptionSection = payload.description
     ? `<div class="note">
-        <strong>Sua anotacao:</strong>
+        <strong>Sua anotação:</strong>
         <p>${payload.description}</p>
       </div>`
     : '';
 
   return `
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -103,14 +107,15 @@ export const getAuctionReminderEmailTemplate = (payload: ReminderEmailPayload): 
 <body>
   <div class="container">
     <div class="card">
-      <h2>Lembrete de Leilao</h2>
-      <p>Ola, <strong>${payload.userName}</strong>!</p>
-      <p>Este e um lembrete sobre um leilao que voce marcou para acompanhar:</p>
+      <h2>Lembrete de leilão</h2>
+      <p>Olá, <strong>${payload.userName}</strong>!</p>
+      <p>Este é um lembrete sobre um leilão que você marcou para acompanhar:</p>
 
       <div class="auction-info">
         <h3>${payload.auctionTitle || payload.auctionCode}</h3>
-        <p class="auction-detail"><strong>Codigo:</strong> ${payload.auctionCode}</p>
+        <p class="auction-detail"><strong>Código:</strong> ${payload.auctionCode}</p>
         <p class="auction-detail"><strong>Local:</strong> ${location}</p>
+        <p class="auction-detail"><strong>Lembrete para:</strong> ${formatBrasiliaDateTimeMarked(payload.scheduledAt)}</p>
       </div>
 
       ${descriptionSection}
@@ -118,8 +123,8 @@ export const getAuctionReminderEmailTemplate = (payload: ReminderEmailPayload): 
       ${detailsButton}
 
       <div class="footer">
-        <p>Voce recebeu este email porque configurou um lembrete no Farol dos Leiloes.</p>
-        <p>Este email foi enviado automaticamente, por favor nao responda.</p>
+        <p>Você recebeu este e-mail porque configurou um lembrete no Farol dos Leilões.</p>
+        <p>Este e-mail foi enviado automaticamente, por favor não responda.</p>
       </div>
     </div>
   </div>

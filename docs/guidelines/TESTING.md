@@ -68,7 +68,7 @@ The `domain/` code listed in AR-06: viability calculator, match score and Radar,
 | **TS-08** | Every business rule of the spec behind a critical module has at least one test, named after the rule: `it('BR-014-07: ITBI is charged on the higher of bid and appraisal')`. A rule with no test is a rule that is not implemented. |
 | **TS-09** | Calculations are tested with hand-computed expectations, the arithmetic in a comment (TS-04), and at their edges: zero, missing optional inputs, maximum values, a single-cent remainder. |
 | **TS-10** | Precision is tested adversarially: long sequences of costs and contributions with repeating decimals, asserting no drift against the hand total. This is the test that catches a `number` leaking into a money path (AR-17). |
-| **TS-11** | Calendar logic is tested on its boundaries: 23:59 and 00:00 in Brasília vs UTC, month ends, 29 February anniversaries (SPEC-010 BR-010-19), and a rule-based zone rather than a fixed offset (SPEC-003 BR-003-28). |
+| **TS-11** | Calendar logic is tested on its boundaries: 23:59 and 00:00 in Brasília vs UTC, month ends, 29 February anniversaries (SPEC-010 BR-010-19), and a rule-based zone rather than a fixed offset (SPEC-003 BR-003-28). Specs whose answer must not depend on the host zone run once per zone: on the backend as the `tz-UTC`, `tz-Asia/Tokyo` and `tz-America/Sao_Paulo` Vitest projects (`vitest.config.mts`, `timeZoneSpecs`), on the frontend as the `dates:*` projects (`vitest.config.ts`). |
 | **TS-12** | The Caixa parser is tested on fixtures covering the awkward cases: BOM, metadata rows, reordered or missing columns, malformed prices, an empty list, and the bot-protection page — which must stop the run, not be parsed (SPEC-004 BR-004-20). |
 
 ## 4. Isolation tests — the blocking gate
@@ -167,6 +167,7 @@ ESLint rules that carry weight (beyond the recommended sets):
 | `@typescript-eslint/no-explicit-any`, `no-non-null-assertion` | DV-02, DV-03 |
 | `no-console` | DV-11 |
 | `no-restricted-syntax` for argument-less `new Date()` / `Date.now()` outside `common/clock/` | AR-24 — "now" comes from the injected `Clock` |
+| `no-restricted-syntax` for `new Date(y, m, d…)`, `toLocale*String` and `Intl.DateTimeFormat` outside the time/number helpers and specs (both apps) | AR-23, DS-29 — one rule for time: zone and locale come from the helpers |
 | `@typescript-eslint/no-floating-promises` | an un-awaited write is a silent data loss |
 | `no-restricted-syntax` for hex colours and `px` literals in `sx` (frontend) | DS-01 |
 | `react/jsx-no-literals` on components (frontend) | DS-20 |
