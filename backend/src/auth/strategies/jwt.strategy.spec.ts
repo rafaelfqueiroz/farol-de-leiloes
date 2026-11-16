@@ -11,9 +11,16 @@ afterEach(() => vi.restoreAllMocks());
 
 // Issue #75: the frontend derives hasSubscription from subscriptionStatus on /auth/me.
 describe('JwtStrategy.validate', () => {
-  function build(user: unknown, logHashSecret?: string, sessionActive = true) {
+  function build(
+    user: unknown,
+    logHashSecret?: string,
+    sessionActive = true,
+    sessionVersion: number = 0,
+  ) {
     const usersService = { findById: vi.fn().mockResolvedValue(user) };
-    const sessions = { isActive: vi.fn().mockResolvedValue(sessionActive) };
+    const sessions = {
+      activeCredentialVersion: vi.fn().mockResolvedValue(sessionActive ? sessionVersion : null),
+    };
     // Built without the passport constructor, which needs a real secret and Nest wiring.
     const strategy: JwtStrategy = Object.assign(Object.create(JwtStrategy.prototype), {
       usersService,
@@ -60,6 +67,43 @@ describe('JwtStrategy.validate', () => {
   it("BR-001-18: refuses a token whose session is revoked, expired or not this account's", async () => {
     const strategy = build({ ...base }, undefined, false);
     await expect(strategy.validate(payload)).rejects.toEqual(new DomainError('UNAUTHENTICATED'));
+  });
+
+  describe('DL-001-02: the session is bound to the credential version', () => {
+    it.each<[string, number | undefined, number]>([
+      ['the account was taken over after the session opened', 1, 0],
+      ['the session was issued for a later version than the account has', 0, 2],
+      ['an account without a version counts as 0, a session of version 1 is refused', undefined, 1],
+    ])('refuses it when %s', async (_label, accountVersion, sessionVersion) => {
+      const strategy = build(
+        { ...base, credentialVersion: accountVersion },
+        undefined,
+        true,
+        sessionVersion,
+      );
+      await expect(strategy.validate(payload)).rejects.toEqual(new DomainError('UNAUTHENTICATED'));
+    });
+
+    it.each<[string, number | undefined, number]>([
+      ['equal versions', 2, 2],
+      ['a missing version on the account and 0 on the session', undefined, 0],
+    ])('accepts it for %s', async (_label, accountVersion, sessionVersion) => {
+      const strategy = build(
+        { ...base, credentialVersion: accountVersion },
+        undefined,
+        true,
+        sessionVersion,
+      );
+      await expect(strategy.validate(payload)).resolves.toMatchObject({ userId: 'u1' });
+    });
+
+    it('SC-15: the refusal is logged without the user id or the versions', async () => {
+      const strategy = build({ ...base, credentialVersion: 5 }, undefined, true, 4);
+      await expect(strategy.validate(payload)).rejects.toBeInstanceOf(DomainError);
+      const warn = (strategy as unknown as { logger: { warn: ReturnType<typeof vi.fn> } }).logger
+        .warn;
+      expect(warn).toHaveBeenCalledWith('JWT validation - session predates a credential change');
+    });
   });
 
   it.each([

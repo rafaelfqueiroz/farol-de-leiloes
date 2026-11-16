@@ -8,6 +8,7 @@ import { SessionsService } from '../sessions/sessions.service.js';
 import { AuthenticatedUser, JwtPayload } from '../interfaces/auth.interface.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import { setLogUserHash } from '../../common/observability/log-context.js';
+import { credentialVersionOf } from '../../users/domain/credential-version.js';
 import { hashUserId } from '../../common/observability/user-hash.js';
 
 @Injectable()
@@ -43,7 +44,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     // SC-03 / BR-001-18: a valid signature is not enough. The session must exist, belong to this
     // account, be unrevoked and unexpired, so sign-out, password change and reset bite at once.
-    if (!(await this.sessions.isActive(payload.jti, payload.sub))) {
+    const sessionVersion = await this.sessions.activeCredentialVersion(payload.jti, payload.sub);
+    if (sessionVersion === null) {
       this.logger.warn('JWT validation - session not active');
       throw new DomainError('UNAUTHENTICATED');
     }
@@ -53,6 +55,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // SC-15: the line carries the user hash from the context, never the raw id.
       this.logger.warn('JWT validation - user not found');
       // A token for an account that no longer exists authenticates nobody.
+      throw new DomainError('UNAUTHENTICATED');
+    }
+    // DL-001-02: the session belongs to the credential it was issued for. If the credentials were
+    // taken over since (Google link of an unconfirmed account), it is refused even when nothing
+    // revoked it: a revocation write that failed or a sign-in that raced the link cannot leave a
+    // live session on the account. A missing version is 0 on both sides.
+    if (sessionVersion !== credentialVersionOf(user)) {
+      this.logger.warn('JWT validation - session predates a credential change');
       throw new DomainError('UNAUTHENTICATED');
     }
     // BR-001-16: a deactivated or closed account is refused on its next request. An account

@@ -23,6 +23,7 @@ export const PROTECTED = [
   'stripeCustomerId',
   'stripeSubscriptionId',
   'subscriptionStatus',
+  'credentialVersion',
 ] as const;
 
 /** Mongoose bookkeeping, not account attributes. */
@@ -52,4 +53,5 @@ export const HOSTILE_VALUES: Record<string, unknown> = {
   stripeCustomerId: 'cus_hostile',
   stripeSubscriptionId: 'sub_hostile',
   subscriptionStatus: 'active',
+  credentialVersion: 99,
 };

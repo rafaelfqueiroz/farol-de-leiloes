@@ -835,7 +835,7 @@ describe('AuthService with fake collaborators', () => {
       const { service, users } = build();
       users.seed(localAccount({ providers: ['google'], password: undefined }));
 
-      await service.setPassword(ID, 'new-password');
+      await service.setPassword(ID, 'current-session', 'new-password');
 
       expect(users.accounts.get(ID)).toMatchObject({
         password: 'new-password',
@@ -850,7 +850,142 @@ describe('AuthService with fake collaborators', () => {
       const { service, users } = build();
       if (seeded) users.seed(seeded);
 
-      await expectDomainError(service.setPassword(ID, 'new-password'), code);
+      await expectDomainError(service.setPassword(ID, 'current-session', 'new-password'), code);
+    });
+  });
+
+  // DL-001-02: a session carries the credential version of the document that proved the
+  // credential; every credential change moves the version in the write that stores the password.
+  describe('credential version (DL-001-02)', () => {
+    const credentials = { email: 'local@example.test', password: 'correct-password' };
+
+    it('stamps the session with the version of the document the password check returned', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount({ credentialVersion: 4 }));
+
+      await service.login(credentials, IP);
+
+      expect(sessionRepo.stored.map((s) => s.credentialVersion)).toEqual([4]);
+    });
+
+    it('stamps 0 for an account that predates the field', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount());
+
+      await service.login(credentials, IP);
+
+      expect(sessionRepo.stored.map((s) => s.credentialVersion)).toEqual([0]);
+    });
+
+    it('a reset that completes between the password check and the session leaves a session of the OLD version', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount({ credentialVersion: 1 }));
+      const check = users.validatePassword.bind(users);
+      vi.spyOn(users, 'validatePassword').mockImplementation(async (mail, password) => {
+        const verified = await check(mail, password);
+        await users.setPassword(ID, 'reset-password'); // the whole reset lands in the gap
+        return verified;
+      });
+
+      await service.login(credentials, IP);
+
+      // The account is at version 2 now; the session says 1, which JwtStrategy refuses.
+      expect(users.accounts.get(ID)?.credentialVersion).toBe(2);
+      expect(sessionRepo.stored.map((s) => s.credentialVersion)).toEqual([1]);
+    });
+
+    it('a reset bumps the version once and revokes every session', async () => {
+      const ctx = build();
+      ctx.users.seed(localAccount({ credentialVersion: 2 }));
+      await ctx.service.login(credentials, IP);
+      await ctx.service.requestPasswordReset('local@example.test');
+      await ctx.service.flushDeliveries();
+      const token = ctx.email.passwordResetEmails.slice(-1)[0]?.token ?? '';
+
+      await ctx.service.resetPassword(token, 'new-password');
+
+      expect(ctx.users.accounts.get(ID)?.credentialVersion).toBe(3);
+      expect(ctx.sessionRepo.stored.every((s) => s.revokedAt)).toBe(true);
+    });
+
+    it('BR-001-19: change-password binds the current session to the new version and ends the others', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount({ credentialVersion: 2 }));
+      await service.login(credentials, IP);
+      await service.login(credentials, IP);
+      const [current, other] = sessionRepo.stored;
+
+      await service.changePassword(ID, current?.id ?? '', 'correct-password', 'new-password', IP);
+
+      expect(users.accounts.get(ID)?.credentialVersion).toBe(3);
+      expect(current).toMatchObject({ credentialVersion: 3 });
+      expect(current?.revokedAt).toBeUndefined();
+      expect(other).toMatchObject({ credentialVersion: 2 });
+      expect(other?.revokedAt).toBeInstanceOf(Date);
+    });
+
+    it('BR-001-28: change-password refuses with UNAUTHENTICATED and writes nothing when the credential changed after the check', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount({ credentialVersion: 2 }));
+      await service.login(credentials, IP);
+      const check = users.validatePassword.bind(users);
+      vi.spyOn(users, 'validatePassword').mockImplementation(async (mail, password) => {
+        const verified = await check(mail, password);
+        await users.setPassword(ID, 'reset-password'); // a competing change: version 3
+        return verified;
+      });
+
+      await expectDomainError(
+        service.changePassword(ID, sessionRepo.stored[0]?.id ?? '', 'correct-password', 'mine', IP),
+        'UNAUTHENTICATED',
+      );
+
+      expect(users.accounts.get(ID)).toMatchObject({
+        password: 'reset-password',
+        credentialVersion: 3,
+      });
+    });
+
+    it('set-password bumps the version, binds the current session and ends the others', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount({ providers: ['google'], password: undefined }));
+      const first = await service.googleLogin(users.accounts.get(ID) as UserAccount);
+      await service.googleLogin(users.accounts.get(ID) as UserAccount);
+      expect(first.accessToken).toBe(`token-for-${ID}`);
+      const [current, other] = sessionRepo.stored;
+
+      await service.setPassword(ID, current?.id ?? '', 'new-password');
+
+      expect(users.accounts.get(ID)?.credentialVersion).toBe(1);
+      expect(current).toMatchObject({ credentialVersion: 1 });
+      expect(current?.revokedAt).toBeUndefined();
+      expect(other?.revokedAt).toBeInstanceOf(Date);
+    });
+
+    it('set-password refuses with UNAUTHENTICATED and writes nothing when the credential changed after the check', async () => {
+      const { service, users } = build();
+      users.seed(localAccount({ providers: ['google'], password: undefined }));
+      const find = users.findById.bind(users);
+      vi.spyOn(users, 'findById').mockImplementation(async (id) => {
+        const found = find(id);
+        const current = (await found) as FakeAccount;
+        const snapshot = { ...current, providers: [...current.providers] };
+        await users.setPassword(ID, 'recovered-password'); // recovery got there first
+        return snapshot;
+      });
+
+      await expectDomainError(service.setPassword(ID, 's', 'mine'), 'UNAUTHENTICATED');
+
+      expect(users.accounts.get(ID)?.password).toBe('recovered-password');
+    });
+
+    it('a Google-style account without the local provider cannot sign in by password', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount({ providers: ['google'] })); // a hash is still in the document
+
+      await expectDomainError(service.login(credentials, IP), 'INVALID_CREDENTIALS');
+
+      expect(sessionRepo.stored).toEqual([]);
     });
   });
 });
