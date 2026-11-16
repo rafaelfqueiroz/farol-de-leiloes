@@ -17,7 +17,6 @@ vi.mock('@/app/contexts/AuthContext', () => ({ useAuth: () => env.auth }));
 
 beforeEach(() => {
   env.auth = { role: 'free', hasSubscription: false };
-  window.localStorage.setItem('token', 'jwt-1');
   vi.stubGlobal('fetch', fetchMock);
   vi.stubGlobal('location', { assign, reload });
 });
@@ -26,7 +25,6 @@ afterEach(() => {
   fetchMock.mockReset();
   assign.mockReset();
   reload.mockReset();
-  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -48,7 +46,7 @@ describe('PlansPage coupon', () => {
     expect(screen.getByRole('button', { name: 'Aplicar' })).toBeEnabled();
   });
 
-  it('validates the code with the token and shows the discount', async () => {
+  it('validates the code with the session cookie and shows the discount', async () => {
     answer(200, { discountValue: '10.00' });
     const user = userEvent.setup();
     render(<PlansPage />);
@@ -61,7 +59,8 @@ describe('PlansPage coupon', () => {
     );
     expect(fetchMock).toHaveBeenCalledWith('/api/coupons/validate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer jwt-1' },
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: 'VERAO10' }),
     });
   });
@@ -112,7 +111,8 @@ describe('PlansPage subscribing', () => {
     );
     expect(fetchMock).toHaveBeenCalledWith('/api/payments/create-checkout-session', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer jwt-1' },
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ planId: 'standard' }),
     });
   });
@@ -220,7 +220,7 @@ describe('PlansPage cancelling', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('cancels with the token, confirms and reloads the account', async () => {
+  it('cancels with the session cookie, confirms and reloads the account', async () => {
     answer(200);
     const { user, dialog } = await openDialog();
 
@@ -229,7 +229,7 @@ describe('PlansPage cancelling', () => {
     await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith('/api/payments/cancel-subscription', {
       method: 'POST',
-      headers: { Authorization: 'Bearer jwt-1' },
+      credentials: 'same-origin',
     });
     expect(await screen.findByText(messages.plans.cancelSuccess)).toBeVisible();
   });

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { LoadingScreen } from '@/app/components/patterns/PublicScreens';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { apiFetch } from '@/lib/api-client';
 import { readApiError } from '@/lib/api-error';
 import { reportClientError } from '@/lib/report-client-error';
 
@@ -35,12 +36,7 @@ function AuthCallbackContent() {
     // history entry and any later copy of the URL) as soon as it is read.
     window.history.replaceState(null, '', window.location.pathname);
 
-    const post = (path: string) =>
-      fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      });
+    const post = (path: string) => apiFetch(path, { method: 'POST', json: { code } });
 
     const exchange = async () => {
       const response = await post('/api/auth/google/exchange');
@@ -51,9 +47,9 @@ function AuthCallbackContent() {
         return;
       }
 
-      const data: { status: string; accessToken?: string } = await response.json();
-      if (data.status === 'signed_in' && data.accessToken) {
-        localStorage.setItem('token', data.accessToken);
+      // SC-02: the BFF has set the session cookie; the answer carries no token
+      const data: { status: string } = await response.json();
+      if (data.status === 'signed_in') {
         await loadUser();
         router.replace('/');
         return;

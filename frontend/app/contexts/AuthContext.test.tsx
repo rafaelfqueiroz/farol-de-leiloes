@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api-error';
 import { AuthProvider, useAuth } from './AuthContext';
 
@@ -13,11 +13,10 @@ const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{childr
 function answerWith(status: number, body: unknown) {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => ({ ok: status < 400, status, json: async () => body })),
+    vi.fn(async () => new Response(JSON.stringify(body), { status })),
   );
 }
 
-beforeEach(() => window.localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
 
 async function rejectionOf(run: Promise<unknown>): Promise<unknown> {
@@ -38,7 +37,7 @@ describe('AuthProvider', () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: 'INVALID_CREDENTIALS', status: 401 });
-    expect(window.localStorage.getItem('token')).toBeNull();
+    expect(result.current.user).toBeNull();
   });
 
   it('rejects a failed registration with the code the API answered with', async () => {
@@ -59,7 +58,8 @@ describe('AuthProvider', () => {
     expect(error).toMatchObject({ code: 'UNKNOWN', status: 500 });
   });
 
-  it('rejects UNAUTHENTICATED when resending without a token', async () => {
+  it('rejects UNAUTHENTICATED when the API says nobody is signed in on a resend', async () => {
+    answerWith(401, { code: 'UNAUTHENTICATED', context: {} });
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     const error = await act(() => rejectionOf(result.current.resendVerificationEmail()));
@@ -67,18 +67,19 @@ describe('AuthProvider', () => {
     expect(error).toMatchObject({ code: 'UNAUTHENTICATED' });
   });
 
-  it('stores the token and the user after a successful login', async () => {
-    answerWith(200, { accessToken: 'jwt', user: { _id: 'u1' } });
+  it('keeps the user from the sign-in answer and stores nothing in the browser (SC-02)', async () => {
+    // the BFF has already turned the backend token into a cookie: the answer carries the user only
+    answerWith(200, { user: { _id: 'u1' } });
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await act(() => result.current.login('a@b.com', 'x'));
 
-    expect(window.localStorage.getItem('token')).toBe('jwt');
+    expect(window.localStorage.length).toBe(0);
+    expect(window.sessionStorage.length).toBe(0);
     expect(result.current.user).toMatchObject({ _id: 'u1' });
   });
 
   it('keys the user on _id when GET /auth/me answers with userId', async () => {
-    window.localStorage.setItem('token', 'jwt');
     answerWith(200, { userId: 'u1', email: 'a@b.com', name: 'A', providers: [], role: 'free' });
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -95,7 +96,6 @@ describe('AuthProvider', () => {
     ['past_due', false],
     [null, false],
   ])('hasSubscription for /auth/me subscriptionStatus %s is %s', async (status, expected) => {
-    window.localStorage.setItem('token', 'jwt');
     answerWith(200, {
       userId: 'u1',
       email: 'a@b.com',

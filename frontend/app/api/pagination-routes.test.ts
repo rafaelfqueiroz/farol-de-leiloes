@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { sameSite } from '@/test/bff-requests';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as chat } from './chat/route';
@@ -8,6 +9,7 @@ import { GET as favoriteCodes } from './favorites/codes/route';
 import { GET as reminders } from './reminders/route';
 import { GET as savedFilters } from './saved-filters/route';
 import { GET as search } from './search/route';
+import { sessionCookie } from '@/test/bff-requests';
 
 // AR-35: the BFF forwards `page` and `pageSize` to the backend as sent and nothing else (the old
 // `limit`/`offset` are rejected by the backend, so they must never reach it).
@@ -33,7 +35,8 @@ afterEach(() => {
 
 const request = (path: string, init?: ConstructorParameters<typeof NextRequest>[1]) =>
   new NextRequest(`http://localhost:3001${path}`, init);
-const signedIn = { headers: { Authorization: 'Bearer token-a' } };
+// SC-02: signed in means the session cookie; the BFF builds the Authorization header from it
+const signedIn = { headers: sessionCookie('token-a') };
 const calledUrl = (call = 0) => String(fetchMock.mock.calls[call]?.[0]);
 
 describe('GET /api/search', () => {
@@ -116,7 +119,11 @@ describe('POST /api/chat', () => {
       );
 
     const response = await chat(
-      request('/api/chat', { method: 'POST', body: JSON.stringify({ message: 'casa em Natal' }) }),
+      request('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: 'casa em Natal' }),
+        headers: sameSite,
+      }),
     );
 
     expect(calledUrl(0)).toBe('http://backend:3000/api/ai/extract-params');
@@ -138,7 +145,7 @@ describe('POST /api/chat', () => {
       )
       .mockResolvedValueOnce(new Response('{}', { status: 200 }));
 
-    await chat(request('/api/chat', { method: 'POST', body: '{}' }));
+    await chat(request('/api/chat', { method: 'POST', body: '{}', headers: sameSite }));
 
     expect(Object.fromEntries(new URL(calledUrl(1)).searchParams)).toEqual({ state: 'RN' });
   });
@@ -154,7 +161,9 @@ describe('POST /api/chat', () => {
       ),
     );
 
-    const response = await chat(request('/api/chat', { method: 'POST', body: '{}' }));
+    const response = await chat(
+      request('/api/chat', { method: 'POST', body: '{}', headers: sameSite }),
+    );
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({

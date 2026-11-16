@@ -8,31 +8,40 @@ import { RemindersProvider, useReminders, type Reminder } from './RemindersConte
 import { SavedFiltersProvider, useSavedFilters, type SavedFilter } from './SavedFiltersContext';
 
 // What the favourites, reminders and saved-filters contexts do with each answer of the API: the
-// optimistic list updates, the redirect to /login on a 401 (the token is dropped), the ApiError
+// optimistic list updates, the redirect to /login on a 401 (the session cookie is gone), the ApiError
 // that reaches the caller (AR-38) and what is reported (SC-15). The reload on an account change
 // is in user-scoped-providers.test.tsx and the paging in list-contexts.test.tsx.
 const env = vi.hoisted(() => {
   const push = vi.fn();
-  return { push, router: { push }, report: vi.fn() };
+  type Auth = { user: { _id: string } | null; loading: boolean };
+  const signedIn: Auth = { user: { _id: 'u1' }, loading: false };
+  return { push, router: { push }, report: vi.fn(), signedIn, auth: signedIn };
 });
+const signedOut = { user: null, loading: false };
 
 vi.mock('next/navigation', () => ({ useRouter: () => env.router }));
-// no account change happens here: auth stays "still loading", so only the mount load runs
-vi.mock('./AuthContext', () => ({ useAuth: () => ({ user: null, loading: true }) }));
+// SC-02: nothing in the browser can read the session; "signed in" is the user AuthContext holds
+vi.mock('./AuthContext', () => ({ useAuth: () => env.auth }));
 vi.mock('@/lib/report-client-error', () => ({ reportClientError: env.report }));
 
 type Answer = { status: number; body?: unknown } | Error;
 type Router = (url: string, method: string) => Answer | undefined;
 
 let route: Router;
-let calls: Array<{ url: string; method: string; body?: string; authorization?: string }>;
+let calls: Array<{
+  url: string;
+  method: string;
+  body?: string;
+  credentials?: string;
+  authorization?: string;
+}>;
 
 beforeEach(() => {
   env.push.mockReset();
   env.report.mockReset();
   calls = [];
   route = () => undefined;
-  window.localStorage.setItem('token', 'token-a');
+  env.auth = env.signedIn;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -41,6 +50,7 @@ beforeEach(() => {
         url,
         method,
         body: init?.body as string | undefined,
+        credentials: init?.credentials,
         authorization: (init?.headers as Record<string, string> | undefined)?.Authorization,
       });
       const answer = route(url, method);
@@ -52,8 +62,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // SC-02: browser code never builds an Authorization header; the cookie rides along
+  expect(calls.filter((call) => call.authorization !== undefined)).toEqual([]);
+  expect(window.localStorage.length).toBe(0);
   vi.unstubAllGlobals();
-  window.localStorage.clear();
 });
 
 const page = (items: unknown[]) => ({ items, total: items.length, page: 1, pageSize: 100 });
@@ -74,19 +86,16 @@ describe('FavoritesProvider', () => {
     return hook;
   }
 
-  it('loads the favourite codes with the token and answers isFavorite from them', async () => {
+  it('loads the favourite codes once a user is signed in and answers isFavorite from them', async () => {
     const { result } = await mounted(['A', 'B']);
 
-    expect(calls[0]).toMatchObject({
-      url: '/api/favorites/codes',
-      authorization: 'Bearer token-a',
-    });
+    expect(calls[0]).toMatchObject({ url: '/api/favorites/codes', credentials: 'same-origin' });
     expect(result.current.isFavorite('A')).toBe(true);
     expect(result.current.isFavorite('Z')).toBe(false);
   });
 
-  it('has no favourites, and asks for none, without a token', async () => {
-    window.localStorage.clear();
+  it('has no favourites, and asks for none, when nobody is signed in', async () => {
+    env.auth = signedOut;
     const { result } = renderHook(() => useFavorites(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -95,7 +104,7 @@ describe('FavoritesProvider', () => {
     expect(result.current.favoriteCodes).toEqual([]);
   });
 
-  it('clears the favourites when the API says the token is no longer valid', async () => {
+  it('clears the favourites when the API says the session is no longer valid', async () => {
     route = () => ({ status: 401, body: { code: 'UNAUTHENTICATED', context: {} } });
     const { result } = renderHook(() => useFavorites(), { wrapper });
 
@@ -117,8 +126,9 @@ describe('FavoritesProvider', () => {
   });
 
   it('sends a visitor who favourites a property to the login, calling nothing', async () => {
-    const { result } = await mounted();
-    window.localStorage.clear();
+    const { result, rerender } = await mounted();
+    env.auth = signedOut;
+    rerender();
     calls = [];
 
     await act(() => result.current.toggleFavorite(auction('A')));
@@ -138,7 +148,7 @@ describe('FavoritesProvider', () => {
 
     expect(calls.at(-1)).toMatchObject({
       method: 'POST',
-      authorization: 'Bearer token-a',
+      credentials: 'same-origin',
       body: JSON.stringify({ code: 'A' }),
     });
     expect(result.current.isFavorite('A')).toBe(true);
@@ -155,25 +165,23 @@ describe('FavoritesProvider', () => {
     expect(result.current.favoriteCodes).toEqual(['B']);
   });
 
-  it('sends the user to the login, dropping the token, when an add is refused as unauthenticated', async () => {
+  it('sends the user to the login when an add is refused as unauthenticated', async () => {
     const { result } = await mounted();
     route = () => ({ status: 401, body: { code: 'UNAUTHENTICATED', context: {} } });
 
     await act(() => result.current.toggleFavorite(auction('A')));
 
     expect(env.push).toHaveBeenCalledWith('/login');
-    expect(window.localStorage.getItem('token')).toBeNull();
     expect(result.current.isFavorite('A')).toBe(false);
   });
 
-  it('sends the user to the login, dropping the token, when a removal is refused as unauthenticated', async () => {
+  it('sends the user to the login when a removal is refused as unauthenticated', async () => {
     const { result } = await mounted(['A']);
     route = () => ({ status: 401, body: { code: 'UNAUTHENTICATED', context: {} } });
 
     await act(() => result.current.toggleFavorite(auction('A')));
 
     expect(env.push).toHaveBeenCalledWith('/login');
-    expect(window.localStorage.getItem('token')).toBeNull();
     expect(result.current.isFavorite('A')).toBe(true);
   });
 
@@ -213,7 +221,7 @@ describe('FavoritesProvider', () => {
 
     await act(() => result.current.removeFavorite('A'));
 
-    expect(calls.at(-1)).toMatchObject({ method: 'DELETE', authorization: 'Bearer token-a' });
+    expect(calls.at(-1)).toMatchObject({ method: 'DELETE', credentials: 'same-origin' });
     expect(result.current.favoriteCodes).toEqual(['B']);
   });
 
@@ -287,7 +295,7 @@ describe('RemindersProvider mutations', () => {
     expect(result.current.getReminderForAuction('Z')).toBeUndefined();
   });
 
-  it('clears the list, without flagging a failure, when the token is no longer valid', async () => {
+  it('clears the list, without flagging a failure, when the session is no longer valid', async () => {
     route = () => ({ status: 401, body: { code: 'UNAUTHENTICATED', context: {} } });
     const { result } = renderHook(() => useReminders(), { wrapper });
 
@@ -297,8 +305,8 @@ describe('RemindersProvider mutations', () => {
     expect(result.current.loadFailed).toBe(false);
   });
 
-  it('has nothing, and asks for nothing, without a token', async () => {
-    window.localStorage.clear();
+  it('has nothing, and asks for nothing, when nobody is signed in', async () => {
+    env.auth = signedOut;
     const { result } = renderHook(() => useReminders(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -332,12 +340,13 @@ describe('RemindersProvider mutations', () => {
     ['deleteReminder', (r) => r.deleteReminder('r1'), false],
   ];
 
-  describe('without a token', () => {
+  describe('when nobody is signed in', () => {
     it.each(mutations)(
       '%s sends the visitor to the login and calls nothing',
       async (_name, run, expected) => {
-        const { result } = await mounted();
-        window.localStorage.clear();
+        const { result, rerender } = await mounted();
+        env.auth = signedOut;
+        rerender();
         calls = [];
 
         const outcome = await act(() => run(result.current));
@@ -359,7 +368,7 @@ describe('RemindersProvider mutations', () => {
 
     expect(outcome).toEqual(created);
     expect(calls.at(-1)).toMatchObject({
-      authorization: 'Bearer token-a',
+      credentials: 'same-origin',
       body: JSON.stringify(newReminder),
     });
     expect(result.current.reminders).toEqual([created]);
@@ -392,21 +401,17 @@ describe('RemindersProvider mutations', () => {
     expect(result.current.reminders.map((r) => r._id)).toEqual(['r2']);
   });
 
-  describe('when the token is refused', () => {
-    it.each(mutations)(
-      '%s drops the token and sends the user to the login',
-      async (_name, run, expected) => {
-        const { result } = await mounted([reminder('r1', 'A')]);
-        route = () => ({ status: 401, body: { code: 'UNAUTHENTICATED', context: {} } });
+  describe('when the session is refused', () => {
+    it.each(mutations)('%s sends the user to the login', async (_name, run, expected) => {
+      const { result } = await mounted([reminder('r1', 'A')]);
+      route = () => ({ status: 401, body: { code: 'UNAUTHENTICATED', context: {} } });
 
-        const outcome = await act(() => run(result.current));
+      const outcome = await act(() => run(result.current));
 
-        expect(outcome).toBe(expected);
-        expect(env.push).toHaveBeenCalledWith('/login');
-        expect(window.localStorage.getItem('token')).toBeNull();
-        expect(result.current.reminders).toHaveLength(1);
-      },
-    );
+      expect(outcome).toBe(expected);
+      expect(env.push).toHaveBeenCalledWith('/login');
+      expect(result.current.reminders).toHaveLength(1);
+    });
   });
 
   describe('when the API refuses', () => {
@@ -479,17 +484,17 @@ describe('SavedFiltersProvider mutations', () => {
     return hook;
   }
 
-  it('is signed in, with its filters, when the token works', async () => {
+  it('is signed in, with its filters, when a user is signed in', async () => {
     const { result } = await mounted([filter('f1', 'Natal')]);
 
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.loadFailed).toBe(false);
     expect(result.current.savedFilters.map((f) => f.name)).toEqual(['Natal']);
-    expect(calls[0]).toMatchObject({ authorization: 'Bearer token-a' });
+    expect(calls[0]).toMatchObject({ credentials: 'same-origin' });
   });
 
-  it('is signed out, and asks for nothing, without a token', async () => {
-    window.localStorage.clear();
+  it('is signed out, and asks for nothing, when nobody is signed in', async () => {
+    env.auth = signedOut;
     const { result } = renderHook(() => useSavedFilters(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -501,13 +506,12 @@ describe('SavedFiltersProvider mutations', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('is signed out with no filters when the API says the token is no longer valid', async () => {
+  it('has no filters, and does not flag a failure, when the API says the session is no longer valid', async () => {
     route = () => ({ status: 401, body: { code: 'UNAUTHENTICATED', context: {} } });
     const { result } = renderHook(() => useSavedFilters(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.savedFilters).toEqual([]);
     expect(result.current.loadFailed).toBe(false);
   });

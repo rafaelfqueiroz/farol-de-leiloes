@@ -2,7 +2,9 @@
 
 import { createContext, useContext, useState, useRef, ReactNode, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from './AuthContext';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
+import { apiFetch } from '@/lib/api-client';
 import { ApiError, readApiError } from '@/lib/api-error';
 import { fetchAllPages } from '@/lib/pagination';
 import { reportClientError } from '@/lib/report-client-error';
@@ -65,12 +67,8 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const router = useRouter();
-
-  const getAuthHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    if (!token) return {};
-    return { Authorization: `Bearer ${token}` };
-  };
+  // SC-02: "signed in" is the user AuthContext loaded; the session cookie is not readable here
+  const { user } = useAuth();
 
   // #42: only the latest load (or clear) may write, so a slow response for a previous user
   // cannot overwrite the current one's reminders
@@ -83,22 +81,11 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     const request = ++latestRequest.current;
     const isLatest = () => request === latestRequest.current;
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setReminders([]);
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
       setLoadFailed(false);
       // AR-35: the endpoint is paginated; the sidebar count and the "has a reminder" check need
       // them all, so they are read page by page
-      const items = await fetchAllPages<Reminder>(
-        '/api/reminders',
-        { headers: { Authorization: `Bearer ${token}` } },
-        isLatest,
-      );
+      const items = await fetchAllPages<Reminder>('/api/reminders', isLatest);
       // fetchAllPages rejects instead of returning part of the list, so `items` is complete
       if (isLatest()) setReminders(items);
     } catch (error) {
@@ -122,7 +109,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  // #42: fetch at once when a token exists, reload on a change of user, clear on sign-out, so
+  // #42: fetch once a user is signed in, reload on a change of user, clear on sign-out, so
   // the AppShell's Lembretes count matches the page
   useReloadOnUserChange(loadReminders, clearReminders);
 
@@ -135,8 +122,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   };
 
   const createReminder = async (data: CreateReminderData): Promise<Reminder | null> => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!user) {
       router.push('/login');
       return null;
     }
@@ -144,14 +130,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     const sameAccount = () => generation === accountGeneration.current;
 
     try {
-      const response = await fetch('/api/reminders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify(data),
-      });
+      const response = await apiFetch('/api/reminders', { method: 'POST', json: data });
 
       // #42: started by an account that has since signed out — its response is not this one's
       if (!sameAccount()) return null;
@@ -162,7 +141,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         setReminders((prev) => [...prev, newReminder]);
         return newReminder;
       } else if (response.status === 401) {
-        localStorage.removeItem('token');
+        // the session ended (apiFetch told the app)
         router.push('/login');
       } else {
         // AR-39: the caller turns the code into text (PHONE_REQUIRED, REMINDER_DATE_IN_PAST...)
@@ -177,8 +156,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   };
 
   const updateReminder = async (id: string, data: UpdateReminderData): Promise<boolean> => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!user) {
       router.push('/login');
       return false;
     }
@@ -186,14 +164,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     const sameAccount = () => generation === accountGeneration.current;
 
     try {
-      const response = await fetch(`/api/reminders/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify(data),
-      });
+      const response = await apiFetch(`/api/reminders/${id}`, { method: 'PATCH', json: data });
 
       // #42: started by an account that has since signed out — its response is not this one's
       if (!sameAccount()) return false;
@@ -204,7 +175,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         setReminders((prev) => prev.map((r) => (r._id === id ? updatedReminder : r)));
         return true;
       } else if (response.status === 401) {
-        localStorage.removeItem('token');
+        // the session ended (apiFetch told the app)
         router.push('/login');
       } else {
         throw await readApiError(response);
@@ -218,8 +189,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteReminder = async (id: string): Promise<boolean> => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!user) {
       router.push('/login');
       return false;
     }
@@ -227,10 +197,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     const sameAccount = () => generation === accountGeneration.current;
 
     try {
-      const response = await fetch(`/api/reminders/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
+      const response = await apiFetch(`/api/reminders/${id}`, { method: 'DELETE' });
 
       // #42: started by an account that has since signed out — its response is not this one's
       if (!sameAccount()) return false;
@@ -239,7 +206,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         setReminders((prev) => prev.filter((r) => r._id !== id));
         return true;
       } else if (response.status === 401) {
-        localStorage.removeItem('token');
+        // the session ended (apiFetch told the app)
         router.push('/login');
       } else {
         throw await readApiError(response);

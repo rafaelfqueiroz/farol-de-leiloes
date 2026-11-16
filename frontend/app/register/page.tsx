@@ -14,7 +14,7 @@ const MIN_PASSWORD_LENGTH = 8; // SPEC-001 BR-001-13
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register } = useAuth();
+  const { register, loading: authLoading } = useAuth();
   const t = useTranslations('register');
   const apiErrorMessage = useApiErrorMessage();
   const [name, setName] = useState('');
@@ -26,6 +26,8 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // BR-001-18: no registration while the first session lookup is pending (Enter in a field included)
+    if (authLoading) return;
     setError('');
 
     if (password !== confirmPassword) {
@@ -95,7 +97,13 @@ export default function RegisterPage() {
           autoComplete="new-password"
         />
 
-        <Button fullWidth size="large" variant="contained" type="submit" disabled={loading}>
+        <Button
+          fullWidth
+          size="large"
+          variant="contained"
+          type="submit"
+          disabled={loading || authLoading}
+        >
           {loading ? t('submitting') : t('submit')}
         </Button>
 

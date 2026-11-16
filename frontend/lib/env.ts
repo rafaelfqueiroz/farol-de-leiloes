@@ -83,6 +83,13 @@ export function serverEnv(): ServerEnv {
 // configuration, so it is not part of the documented schema.
 export const isTestRuntime: boolean = process.env.NODE_ENV === 'test';
 
+// SC-02: the session cookie is `Secure` (and so can be `__Host-` prefixed) only in production; plain
+// http local development could not set it otherwise. A function, not a constant, so a test can
+// switch the runtime with `vi.stubEnv` after the module is loaded.
+export function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
 // SC-17: Next's development diagnostics need eval. Keep the strict policy report-only
 // there instead of weakening the production policy with unsafe-eval.
 export const cspHeaderName: 'Content-Security-Policy' | 'Content-Security-Policy-Report-Only' =

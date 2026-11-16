@@ -10,7 +10,9 @@ import {
   ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from './AuthContext';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
+import { apiFetch } from '@/lib/api-client';
 import { readApiError } from '@/lib/api-error';
 import { reportClientError } from '@/lib/report-client-error';
 import type { Auction } from '@/lib/auction';
@@ -35,11 +37,8 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const codeSet = useMemo(() => new Set(favoriteCodes), [favoriteCodes]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const getAuthHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    if (!token) return {};
-    return { Authorization: `Bearer ${token}` };
-  };
+  // SC-02: "signed in" is the user AuthContext loaded; the session cookie is not readable here
+  const { user } = useAuth();
 
   // #42: only the latest load (or clear) may write, so a slow response for a previous user
   // cannot overwrite the current one's favourites
@@ -52,17 +51,8 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     const request = ++latestRequest.current;
     const isLatest = () => request === latestRequest.current;
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setFavoriteCodes([]);
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
-      const response = await fetch('/api/favorites/codes', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiFetch('/api/favorites/codes');
       if (response.ok) {
         const data: { codes: string[] } = await response.json();
         if (isLatest()) setFavoriteCodes(data.codes);
@@ -86,7 +76,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  // #42: fetch at once when a token exists, reload on a change of user, clear on sign-out, so
+  // #42: fetch once a user is signed in, reload on a change of user, clear on sign-out, so
   // the AppShell's Favoritos count matches the page
   useReloadOnUserChange(loadFavorites, clearFavorites);
 
@@ -96,8 +86,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
 
   const toggleFavorite = async (auction: Auction) => {
     // Check if user is authenticated
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!user) {
       // Redirect to login if not authenticated
       router.push('/login');
       return;
@@ -110,17 +99,12 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     if (exists) {
       // Remove from favorites
       try {
-        const headers = getAuthHeaders();
-        const response = await fetch(`/api/favorites/${auction.code}`, {
-          method: 'DELETE',
-          headers,
-        });
+        const response = await apiFetch(`/api/favorites/${auction.code}`, { method: 'DELETE' });
         if (!sameAccount()) return; // #42: started by an account that has since signed out
         if (response.ok || response.status === 204) {
           setFavoriteCodes((prev) => prev.filter((code) => code !== auction.code));
         } else if (response.status === 401) {
-          // Token expired or invalid, redirect to login
-          localStorage.removeItem('token');
+          // Session ended (apiFetch told the app), redirect to login
           router.push('/login');
         }
       } catch (error) {
@@ -129,17 +113,10 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     } else {
       // Add to favorites
       try {
-        const authHeaders = getAuthHeaders();
-        const headers = {
-          'Content-Type': 'application/json',
-          ...authHeaders,
-        };
-
-        const response = await fetch('/api/favorites', {
+        const response = await apiFetch('/api/favorites', {
           method: 'POST',
-          headers,
           // AR-34: the API takes the code alone and refuses any other field with a 400
-          body: JSON.stringify({ code: auction.code }),
+          json: { code: auction.code },
         });
 
         if (!sameAccount()) return; // #42: started by an account that has since signed out
@@ -151,8 +128,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
             prev.includes(auction.code) ? prev : [...prev, auction.code],
           );
         } else if (response.status === 401) {
-          // Token expired or invalid, redirect to login
-          localStorage.removeItem('token');
+          // Session ended (apiFetch told the app), redirect to login
           router.push('/login');
         } else {
           reportClientError(await readApiError(response), {
@@ -168,10 +144,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const removeFavorite = async (code: string) => {
     const generation = accountGeneration.current;
     try {
-      const response = await fetch(`/api/favorites/${code}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
+      const response = await apiFetch(`/api/favorites/${code}`, { method: 'DELETE' });
       // #42: started by an account that has since signed out
       if (generation !== accountGeneration.current) return;
       if (response.ok || response.status === 204) {

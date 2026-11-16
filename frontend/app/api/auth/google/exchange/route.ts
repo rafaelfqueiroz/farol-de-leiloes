@@ -2,5 +2,5 @@ import { NextRequest } from 'next/server';
 import { proxyToBackend } from '@/lib/backend';
 
 export async function POST(request: NextRequest) {
-  return proxyToBackend(request, '/auth/google/exchange');
+  return proxyToBackend(request, '/auth/google/exchange', { startsSession: true });
 }

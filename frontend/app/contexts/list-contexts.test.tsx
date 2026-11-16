@@ -11,7 +11,9 @@ import { SavedFiltersProvider, useSavedFilters } from './SavedFiltersContext';
 const env = vi.hoisted(() => ({ push: vi.fn() }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: env.push }) }));
-vi.mock('./AuthContext', () => ({ useAuth: () => ({ user: null, loading: true }) }));
+// SC-02: signed in means AuthContext holds a user; the session cookie is not readable here
+const auth = { user: { _id: 'u1' }, loading: false };
+vi.mock('./AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('@/lib/report-client-error', () => ({ reportClientError: vi.fn() }));
 
 type Answer = { status: number; body: unknown };
@@ -22,7 +24,6 @@ beforeEach(() => {
   answers = [];
   requests = [];
   env.push.mockReset();
-  window.localStorage.setItem('token', 'token-a');
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -36,7 +37,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  window.localStorage.clear();
 });
 
 const page = (items: unknown[], total: number, pageNumber: number) => ({

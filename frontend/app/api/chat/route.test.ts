@@ -28,16 +28,31 @@ const json = (body: unknown, status = 200) =>
     headers: { 'content-type': 'application/json' },
   });
 
+// SC-02: the browser sends `Sec-Fetch-Site: same-origin` from the site's own pages.
 const chat = (body = JSON.stringify({ message: 'casa em Natal' }), headers?: HeadersInit) =>
   POST(
     new NextRequest('http://localhost:3001/api/chat', {
       method: 'POST',
       body,
-      ...(headers ? { headers } : {}),
+      headers: { 'Sec-Fetch-Site': 'same-origin', ...(headers as Record<string, string>) },
     }),
   );
 
 describe('POST /api/chat', () => {
+  it('SC-02: refuses a foreign origin with 403 FORBIDDEN and calls no backend', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost:3001/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: 'casa em Natal' }),
+        headers: { Origin: 'https://attacker.example' },
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'FORBIDDEN' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('hands the raw body to the extraction, so the backend alone validates it (AR-38)', async () => {
     fetchMock.mockResolvedValueOnce(json({})).mockResolvedValueOnce(json({ items: [] }));
 

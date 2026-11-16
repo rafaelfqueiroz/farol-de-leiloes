@@ -30,7 +30,8 @@ import Money from '@/app/components/patterns/Money';
 import PageHeader from '@/app/components/patterns/PageHeader';
 import PageShell from '@/app/components/patterns/PageShell';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import { apiJson } from '@/lib/api-client';
+import { useApiErrorMessage } from '@/lib/api-error';
 import { formatCount } from '@/lib/numbers';
 
 const SAVED_FILTERS_LIMIT = 10;
@@ -109,23 +110,12 @@ export default function PlansPage() {
     setCouponValid(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/coupons/validate', {
+      const data = await apiJson<{ discountValue: string }>('/api/coupons/validate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ code: couponCode }),
+        json: { code: couponCode },
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCouponValid(true);
-        setCouponDiscount(data.discountValue);
-      } else {
-        throw await readApiError(response);
-      }
+      setCouponValid(true);
+      setCouponDiscount(data.discountValue);
     } catch (error: unknown) {
       setCouponValid(false);
       setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
@@ -139,27 +129,16 @@ export default function PlansPage() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
       const body: { planId: string; couponCode?: string } = { planId };
       if (couponCode.trim() && couponValid) {
         body.couponCode = couponCode.trim();
       }
 
-      const response = await fetch('/api/payments/create-checkout-session', {
+      const data = await apiJson<{ url: string }>('/api/payments/create-checkout-session', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
+        json: body,
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        window.location.assign(data.url);
-      } else {
-        throw await readApiError(response);
-      }
+      window.location.assign(data.url);
     } catch (error: unknown) {
       setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
     } finally {
@@ -170,24 +149,15 @@ export default function PlansPage() {
   const handleCancelSubscription = async () => {
     setCanceling(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/payments/cancel-subscription', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+      await apiJson('/api/payments/cancel-subscription', { method: 'POST' });
+      setSnackbar({
+        open: true,
+        message: t('cancelSuccess'),
+        severity: 'success',
       });
-
-      if (response.ok) {
-        setSnackbar({
-          open: true,
-          message: t('cancelSuccess'),
-          severity: 'success',
-        });
-        setCancelDialogOpen(false);
-        // Reload user data
-        window.location.reload();
-      } else {
-        throw await readApiError(response);
-      }
+      setCancelDialogOpen(false);
+      // Reload user data
+      window.location.reload();
     } catch (error: unknown) {
       setSnackbar({ open: true, message: apiErrorMessage(error), severity: 'error' });
     } finally {

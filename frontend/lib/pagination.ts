@@ -1,5 +1,6 @@
 // AR-35: list endpoints answer `{ items, total, page, pageSize }`; `page` starts at 1 and `pageSize`
 // is at most 100. This is the one place the browser knows that shape.
+import { apiFetch } from '@/lib/api-client';
 import { readApiError } from '@/lib/api-error';
 
 export interface Paginated<T> {
@@ -38,13 +39,12 @@ export class PaginationCancelledError extends Error {
  */
 export async function fetchAllPages<T>(
   path: string,
-  init: RequestInit,
   isCurrent: () => boolean = () => true,
 ): Promise<T[]> {
   const items: T[] = [];
   const separator = path.includes('?') ? '&' : '?';
   for (let page = 1; ; page++) {
-    const response = await fetch(`${path}${separator}page=${page}&pageSize=${MAX_PAGE_SIZE}`, init);
+    const response = await apiFetch(`${path}${separator}page=${page}&pageSize=${MAX_PAGE_SIZE}`);
     if (!response.ok) throw await readApiError(response);
     const body: Paginated<T> = await response.json();
     if (!isCurrent()) throw new PaginationCancelledError();
