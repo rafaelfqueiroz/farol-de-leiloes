@@ -1,17 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { Profile, Strategy, VerifyCallback } from 'passport-google-oauth20';
-import { UsersService } from '../../users/users.service.js';
+import { Profile, Strategy } from 'passport-google-oauth20';
 import type { Env } from '../../config/env.js';
 import { DomainError } from '../../common/errors/domain-error.js';
+import { toGoogleIdentity, type GoogleIdentity } from '../google/google-identity.js';
 
+/**
+ * The boundary with Google (TS-07): it turns the profile Google returned into a `GoogleIdentity`
+ * and nothing else. It does not look up, link or create an account; those rules (BR-001-08 to
+ * BR-001-11) live in AuthService, which the callback calls with this identity.
+ */
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
-  constructor(
-    private usersService: UsersService,
-    configService: ConfigService<Env, true>,
-  ) {
+  constructor(configService: ConfigService<Env, true>) {
     // AR-42: typed config, validated at boot (AR-41).
     super({
       clientID: configService.get('GOOGLE_CLIENT_ID', { infer: true }),
@@ -21,40 +23,14 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     });
   }
 
-  async validate(
-    accessToken: string,
-    refreshToken: string,
-    profile: Profile,
-    done: VerifyCallback,
-  ): Promise<void> {
-    const { id, emails, displayName } = profile;
-    const email = emails?.[0]?.value;
+  // @nestjs/passport hands the returned value to passport as the signed-in user, so it lands on
+  // `request.user` as a GoogleIdentity; a thrown error reaches the callback's redirect filter.
+  validate(_accessToken: string, _refreshToken: string, profile: Profile): GoogleIdentity {
+    const identity = toGoogleIdentity(profile);
     // The 'email' scope is requested, so Google always sends one; refuse the sign-in if not.
-    if (!email) {
+    if (!identity) {
       throw new DomainError('GOOGLE_ACCOUNT_WITHOUT_EMAIL');
     }
-
-    // Try to find user by Google ID (already linked)
-    let user = await this.usersService.findByGoogleId(id);
-
-    if (!user) {
-      // Try to find by email (existing local account)
-      user = await this.usersService.findByEmail(email);
-
-      if (user) {
-        // Link Google identity to existing account
-        user = await this.usersService.linkGoogleAccount(user._id.toString(), id);
-      } else {
-        // Create brand new Google user
-        user = await this.usersService.create({
-          email,
-          name: displayName,
-          googleId: id,
-          providers: ['google'],
-        });
-      }
-    }
-
-    done(null, user);
+    return identity;
   }
 }

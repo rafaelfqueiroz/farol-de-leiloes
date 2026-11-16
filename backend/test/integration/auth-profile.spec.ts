@@ -57,7 +57,7 @@ describe('AuthService hydrated account profiles (integration)', () => {
       {} as AuthDeps[5],
     );
 
-    const { user: profile } = await service.googleLogin(user);
+    const { user: profile } = await service.startSession(user);
 
     expect(profile._id).toBe(saved._id.toHexString());
     expect(Object.getPrototypeOf(profile)).toBe(Object.prototype);

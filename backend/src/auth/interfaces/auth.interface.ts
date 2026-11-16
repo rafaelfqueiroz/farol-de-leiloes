@@ -45,3 +45,8 @@ export interface AuthResult {
   accessToken: string;
   user: UserProfile;
 }
+
+/** The answer of the Google code exchange: a session, or the terms still to accept (BR-001-09). */
+export type GoogleExchangeResult =
+  | ({ status: 'signed_in' } & AuthResult)
+  | { status: 'terms_required'; email: string; name: string };

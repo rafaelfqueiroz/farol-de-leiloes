@@ -3,7 +3,6 @@ import * as bcrypt from 'bcrypt';
 import { DomainError } from '../common/errors/domain-error.js';
 import { UsersService } from './users.service.js';
 import { FakeQuery } from '../../test/fakes/fake-query.js';
-import type { CreateUserDto } from './dto/create-user.dto.js';
 
 type Deps = ConstructorParameters<typeof UsersService>;
 
@@ -54,40 +53,38 @@ beforeEach(() => {
   vi.mocked(bcrypt.compare).mockClear();
 });
 
-describe('UsersService.create', () => {
-  it('stores a hashed password and a local account as unverified', async () => {
+describe('UsersService.createGoogleAccount', () => {
+  it('BR-001-09, BR-001-03, BR-001-31: a confirmed Google-only account with exactly these fields', async () => {
     const { Model, created } = aModel();
 
-    await aService(Model).create({
-      email: 'ana@example.test',
-      name: 'Ana',
-      password: 'secret1',
-    } as CreateUserDto);
-
-    expect(created).toEqual([
-      { email: 'ana@example.test', name: 'Ana', password: 'hashed:secret1', emailVerified: false },
-    ]);
-  });
-
-  it('marks a Google sign-up as verified and stores no password', async () => {
-    const { Model, created } = aModel();
-
-    await aService(Model).create({
-      email: 'ana@example.test',
-      name: 'Ana',
+    await aService(Model).createGoogleAccount({
       googleId: 'g-1',
-      providers: ['google'],
-    } as CreateUserDto);
+      email: ' Ana@Example.test ',
+      name: ' Ana ',
+    });
 
-    expect(created[0]).toMatchObject({ password: undefined, emailVerified: true });
+    // No password, no role, no plan, no status: the schema defaults make it a free searcher.
+    expect(created).toEqual([
+      {
+        email: 'ana@example.test',
+        name: 'Ana',
+        googleId: 'g-1',
+        providers: ['google'],
+        emailVerified: true,
+      },
+    ]);
     expect(bcrypt.hash).not.toHaveBeenCalled();
   });
 
-  it('refuses an e-mail that is already registered, without hashing or saving', async () => {
+  it('BR-001-01: refuses an e-mail that is already registered, without saving', async () => {
     const { Model, created } = aModel({ findOne: { _id: 'u1' } });
 
     await expect(
-      aService(Model).create({ email: 'Ana@Example.test', name: 'Ana' } as CreateUserDto),
+      aService(Model).createGoogleAccount({
+        googleId: 'g-1',
+        email: 'Ana@Example.test',
+        name: 'Ana',
+      }),
     ).rejects.toEqual(new DomainError('EMAIL_ALREADY_REGISTERED'));
     expect(Model.findOne).toHaveBeenCalledWith({ email: { $eq: 'ana@example.test' } });
     expect(created).toEqual([]);
@@ -121,26 +118,126 @@ describe('UsersService finders', () => {
   });
 });
 
-describe('UsersService.linkGoogleAccount and setPassword', () => {
-  it('links Google, verifies the e-mail and adds the provider once', async () => {
-    const { Model } = aModel({ findByIdAndUpdate: { _id: 'u1' } });
-
-    await expect(aService(Model).linkGoogleAccount('u1', 'g-1')).resolves.toEqual({ _id: 'u1' });
-
-    expect(Model.findByIdAndUpdate).toHaveBeenCalledWith(
-      'u1',
-      { googleId: 'g-1', emailVerified: true, $addToSet: { providers: 'google' } },
-      { returnDocument: 'after' },
-    );
-  });
-
-  it('reports USER_NOT_FOUND when the account to link is gone', async () => {
+describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', () => {
+  /** Queues what the update returns (the account as it was), then the account read after it. */
+  function link(before: unknown, after: unknown = { _id: 'u1' }) {
     const { Model } = aModel();
-    await expect(aService(Model).linkGoogleAccount('u1', 'g-1')).rejects.toEqual(
-      new DomainError('USER_NOT_FOUND'),
-    );
+    Model.findOneAndUpdate.mockReturnValueOnce(new FakeQuery(before));
+    Model.findById.mockReturnValue(new FakeQuery(after));
+    return { Model, service: aService(Model) };
+  }
+
+  it('writes one conditional pipeline update keyed by the account, active status and free identity', async () => {
+    const { Model, service } = link({ emailVerified: true });
+
+    await service.linkGoogleIdentity('u1', 'g-1');
+
+    expect(Model.findOneAndUpdate).toHaveBeenCalledTimes(1);
+    const [filter, update, options] = Model.findOneAndUpdate.mock.calls[0] as [
+      Record<string, unknown>,
+      unknown[],
+      Record<string, unknown>,
+    ];
+    expect(filter).toMatchObject({
+      _id: { $eq: 'u1' },
+      $or: [{ googleId: null }, { googleId: { $eq: 'g-1' } }],
+    });
+    expect(Array.isArray(update)).toBe(true);
+    expect(options).toMatchObject({ returnDocument: 'before', updatePipeline: true });
   });
 
+  it('a confirmed account is linked and the password stays (linked_confirmed)', async () => {
+    const { service } = link(
+      { emailVerified: true },
+      { _id: 'u1', providers: ['local', 'google'] },
+    );
+
+    await expect(service.linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({
+      result: 'linked_confirmed',
+      account: { _id: 'u1', providers: ['local', 'google'] },
+    });
+  });
+
+  it.each([{ emailVerified: false }, {}])(
+    'an account whose email was not confirmed (%j) is taken over (linked_unconfirmed)',
+    async (before) => {
+      const { service } = link(before);
+
+      await expect(service.linkGoogleIdentity('u1', 'g-1')).resolves.toMatchObject({
+        result: 'linked_unconfirmed',
+      });
+    },
+  );
+
+  it.each([
+    ['is deactivated', { status: 'deactivated' }, 'inactive'],
+    ['is closed', { status: 'closed' }, 'inactive'],
+    ['is linked to another Google identity', { googleId: 'g-other' }, 'google_conflict'],
+  ])('refuses without writing when the account %s', async (_label, current, result) => {
+    const { Model } = aModel({ findOne: current });
+    Model.findOneAndUpdate.mockReturnValue(new FakeQuery(null));
+
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({ result });
+    expect(Model.findOneAndUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers not_found when the account is gone', async () => {
+    const { Model } = aModel();
+    Model.findOneAndUpdate.mockReturnValue(new FakeQuery(null));
+
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({
+      result: 'not_found',
+    });
+  });
+
+  it('tries once more when the account became linkable between the update and the explanation', async () => {
+    const { Model } = aModel({ findOne: { status: 'active' } });
+    Model.findOneAndUpdate
+      .mockReturnValueOnce(new FakeQuery(null))
+      .mockReturnValueOnce(new FakeQuery({ emailVerified: true }));
+    Model.findById.mockReturnValue(new FakeQuery({ _id: 'u1' }));
+
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toMatchObject({
+      result: 'linked_confirmed',
+    });
+    expect(Model.findOneAndUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up as a conflict when the account keeps slipping away', async () => {
+    const { Model } = aModel({ findOne: { status: 'active' } });
+    Model.findOneAndUpdate.mockReturnValue(new FakeQuery(null));
+
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({
+      result: 'google_conflict',
+    });
+  });
+
+  it('BR-001-11: the unique index makes an identity taken by another account a conflict', async () => {
+    const { Model } = aModel();
+    Model.findOneAndUpdate.mockReturnValue(
+      new FakeQuery(Object.assign(new Error('dup'), { code: 11000 })),
+    );
+
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({
+      result: 'google_conflict',
+    });
+  });
+
+  it('rethrows any other database failure', async () => {
+    const { Model } = aModel();
+    Model.findOneAndUpdate.mockReturnValue(new FakeQuery(new Error('network')));
+
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).rejects.toThrow('network');
+  });
+
+  it('answers not_found when the account disappears after the update', async () => {
+    const { service } = link({ emailVerified: true }, null);
+
+    await expect(service.linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({ result: 'not_found' });
+  });
+});
+
+describe('UsersService.setPassword and changePassword', () => {
   it('sets a hashed password, adds the local provider and does not return the hash', async () => {
     const query = new FakeQuery({ _id: 'u1' });
     const { Model } = aModel();

@@ -66,7 +66,7 @@ describe('AuthService account contract (AR-09)', () => {
   it('preserves token claims and profile defaults without document methods', async () => {
     const { service, sign } = build();
 
-    const result = await service.googleLogin(account());
+    const result = await service.startSession(account());
 
     // BR-001-17: the token carries the account and the session, nothing else.
     expect(sign).toHaveBeenCalledWith({ sub: ID, jti: expect.any(String) as string });
@@ -95,7 +95,7 @@ describe('AuthService account contract (AR-09)', () => {
   it('normalizes ObjectId-like account ids through their explicit hex conversion', async () => {
     const { service, sign } = build();
 
-    const result = await service.googleLogin(account({ _id: { toHexString: () => ID } }));
+    const result = await service.startSession(account({ _id: { toHexString: () => ID } }));
 
     expect(result.user._id).toBe(ID);
     expect(sign).toHaveBeenCalledWith({ sub: ID, jti: expect.any(String) as string });
@@ -116,7 +116,7 @@ describe('AuthService account contract (AR-09)', () => {
     };
     const user = { ...account(profile), password: 'fake-hash' };
 
-    const result = await service.googleLogin(user);
+    const result = await service.startSession(user);
 
     expect(result.user).toEqual({
       _id: ID,
@@ -147,7 +147,7 @@ describe('AuthService.toUserProfile mapping (AR-09, SC-15)', () => {
   }
 
   async function profileOf(user: UserAccount) {
-    return (await service.googleLogin(user)).user;
+    return (await service.startSession(user)).user;
   }
 
   it.each([...SUBSCRIPTION_STATUSES])(

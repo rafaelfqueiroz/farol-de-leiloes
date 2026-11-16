@@ -4,9 +4,13 @@ import { Clock } from '../../common/clock/clock.js';
 import {
   ACCOUNT_TOKEN_BYTES,
   ACCOUNT_TOKEN_TTL_MS,
-  type AccountTokenPurpose,
+  type UserTokenPurpose,
 } from './account-token-purposes.js';
-import { AccountTokenRepository, type AccountTokenRecord } from './account-token.repository.js';
+import {
+  AccountTokenRepository,
+  type AccountTokenRecord,
+  type GoogleSignupProfile,
+} from './account-token.repository.js';
 
 /** SC-06: the hash is what is stored and looked up; the plain token exists only in the email. */
 export function hashAccountToken(plain: string): string {
@@ -34,7 +38,7 @@ export class AccountTokenService {
    */
   async issue(
     userId: string,
-    purpose: AccountTokenPurpose,
+    purpose: UserTokenPurpose,
     options: { newEmail?: string } = {},
   ): Promise<string> {
     // BR-001-23: 256 bits from a CSPRNG.
@@ -54,13 +58,54 @@ export class AccountTokenService {
    * Spends a token: the record when it is valid, null when it is unknown, of another purpose,
    * already used or expired. Callers answer all four the same way (no oracle).
    */
-  async consume(plain: string, purpose: AccountTokenPurpose): Promise<AccountTokenRecord | null> {
+  async consume(plain: string, purpose: UserTokenPurpose): Promise<AccountTokenRecord | null> {
     if (typeof plain !== 'string' || plain.length === 0) return null;
     return this.tokens.consume(hashAccountToken(plain), purpose, this.clock.now());
   }
 
+  /**
+   * BR-001-10: when Google takes over an account whose email was never confirmed, every link that
+   * account still has outstanding (confirmation, recovery, Google exchange) is dead.
+   */
+  async revokeAllUnused(userId: string): Promise<void> {
+    await this.tokens.deleteAllUnusedForUser(userId);
+  }
+
+  /**
+   * BR-001-09: keeps the verified Google profile of a person with no account until they accept the
+   * terms (15 minutes). It belongs to no user, so a new code never replaces another's. Returns the
+   * plain code, once.
+   */
+  async issueGoogleSignup(profile: GoogleSignupProfile): Promise<string> {
+    const plain = randomBytes(ACCOUNT_TOKEN_BYTES).toString('hex');
+    await this.tokens.insertGoogleSignup({
+      tokenHash: hashAccountToken(plain),
+      expiresAt: new Date(this.clock.now().getTime() + ACCOUNT_TOKEN_TTL_MS.google_signup),
+      profile,
+    });
+    return plain;
+  }
+
+  /** The profile behind a live signup code, without spending it; null when unknown or expired. */
+  async peekGoogleSignup(plain: string): Promise<GoogleSignupProfile | null> {
+    if (typeof plain !== 'string' || plain.length === 0) return null;
+    return this.tokens.findGoogleSignup(hashAccountToken(plain), this.clock.now());
+  }
+
+  /** Spends a signup code atomically and returns the profile it held (BR-001-09). */
+  async consumeGoogleSignup(plain: string): Promise<GoogleSignupProfile | null> {
+    if (typeof plain !== 'string' || plain.length === 0) return null;
+    return this.tokens.consumeGoogleSignup(hashAccountToken(plain), this.clock.now());
+  }
+
+  /** BR-010-01: declining deletes the unused code and the personal data in it. */
+  async discardGoogleSignup(plain: string): Promise<void> {
+    if (typeof plain !== 'string' || plain.length === 0) return;
+    await this.tokens.deleteGoogleSignup(hashAccountToken(plain));
+  }
+
   /** BR-001-22: after a reset, every outstanding link of that purpose is dead. */
-  async revokeUnused(userId: string, purpose: AccountTokenPurpose): Promise<void> {
+  async revokeUnused(userId: string, purpose: UserTokenPurpose): Promise<void> {
     await this.tokens.deleteUnused(userId, purpose);
   }
 }

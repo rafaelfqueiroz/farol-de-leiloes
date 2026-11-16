@@ -58,4 +58,26 @@ describe('LoginPage', () => {
 
     expect(env.push).toHaveBeenCalledWith('/');
   });
+
+  it('BR-001-08: shows the message of the error code the Google callback redirected with', async () => {
+    window.history.pushState({}, '', '/login?error=GOOGLE_EMAIL_NOT_VERIFIED');
+    render(<LoginPage />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      messages.errors.GOOGLE_EMAIL_NOT_VERIFIED,
+    );
+    window.history.pushState({}, '', '/');
+  });
+
+  it('shows the generic message for an error code it does not know, and nothing without one', async () => {
+    window.history.pushState({}, '', '/login?error=not-a-code');
+    const { unmount } = render(<LoginPage />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(messages.errors.UNKNOWN);
+    unmount();
+
+    window.history.pushState({}, '', '/login');
+    render(<LoginPage />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    window.history.pushState({}, '', '/');
+  });
 });

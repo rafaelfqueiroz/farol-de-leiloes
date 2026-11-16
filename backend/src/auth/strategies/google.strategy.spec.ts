@@ -1,35 +1,37 @@
-import { describe, expect, it, vi } from 'vitest';
-import { Profile } from 'passport-google-oauth20';
+import { describe, expect, it } from 'vitest';
+import type { Profile } from 'passport-google-oauth20';
 import { GoogleStrategy } from './google.strategy.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 
 describe('GoogleStrategy.validate', () => {
-  function build() {
-    const usersService = {
-      findByGoogleId: vi.fn(),
-      findByEmail: vi.fn(),
-      linkGoogleAccount: vi.fn(),
-      create: vi.fn(),
-    };
-    // Built without the passport constructor, which needs real OAuth client options.
-    const strategy: GoogleStrategy = Object.assign(Object.create(GoogleStrategy.prototype), {
-      usersService,
-    });
-    return { strategy, usersService };
-  }
+  // Built without the passport constructor, which needs real OAuth client options.
+  const strategy: GoogleStrategy = Object.create(GoogleStrategy.prototype) as GoogleStrategy;
 
   it.each([
     ['no emails', undefined],
     ['an empty email list', []],
-  ])('refuses a Google profile with %s (DV-03)', async (_label, emails) => {
-    const { strategy, usersService } = build();
+  ])('refuses a Google profile with %s (DV-03)', (_label, emails) => {
     const profile = { id: 'google-1', displayName: 'Test User', emails } as unknown as Profile;
-    const done = vi.fn();
 
-    await expect(strategy.validate('access', 'refresh', profile, done)).rejects.toEqual(
+    expect(() => strategy.validate('access', 'refresh', profile)).toThrow(
       new DomainError('GOOGLE_ACCOUNT_WITHOUT_EMAIL'),
     );
-    expect(usersService.findByGoogleId).not.toHaveBeenCalled();
-    expect(done).not.toHaveBeenCalled();
+  });
+
+  it('BR-001-08: hands on the verified claim as Google reported it, and only the identity', () => {
+    const profile = {
+      id: 'google-1',
+      displayName: 'Ana Teste',
+      emails: [{ value: 'ana@example.test', verified: true }],
+      _json: { email_verified: true },
+      photos: [{ value: 'https://example.test/p.png' }],
+    } as unknown as Profile;
+
+    expect(strategy.validate('access', 'refresh', profile)).toEqual({
+      googleId: 'google-1',
+      email: 'ana@example.test',
+      emailVerified: true,
+      name: 'Ana Teste',
+    });
   });
 });

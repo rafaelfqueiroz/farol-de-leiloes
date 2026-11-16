@@ -11,6 +11,7 @@ import { RegisterDto } from './register.dto.js';
 import { RequestResetPasswordDto, ResetPasswordDto } from './reset-password.dto.js';
 import { SetPasswordDto } from './set-password.dto.js';
 import { VerifyEmailDto } from './verify-email.dto.js';
+import { GoogleCodeDto, GoogleCompleteDto } from './google-code.dto.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import { propertyPaths } from '../../app.setup.js';
 
@@ -199,5 +200,40 @@ describe('CompleteProfileDto phone (BR-001-27)', () => {
     );
     expect((await parse(CompleteProfileDto, { phone: '' })).phone).toBeNull();
     expect(await failedFields(CompleteProfileDto, { phone: '99999-1234' })).toEqual(['phone']);
+  });
+});
+
+describe('GoogleCodeDto and GoogleCompleteDto (BR-001-09, BR-001-20, SPEC-010 BR-010-01)', () => {
+  it('accepts a code of 1 to 256 characters', async () => {
+    await expect(parse(GoogleCodeDto, { code: 'a' })).resolves.toMatchObject({ code: 'a' });
+    await expect(parse(GoogleCodeDto, { code: 'a'.repeat(256) })).resolves.toBeDefined();
+  });
+
+  it.each([
+    ['empty', ''],
+    ['too long', 'a'.repeat(257)],
+    ['a number', 12345],
+    ['an operator object', { $ne: null }],
+    ['missing', undefined],
+  ])('refuses a code that is %s', async (_label, code) => {
+    expect(await failedFields(GoogleCodeDto, { code })).toEqual(['code']);
+  });
+
+  it('refuses any other property', async () => {
+    expect(await failedFields(GoogleCodeDto, { code: 'a', userId: 'x' })).toEqual(['userId']);
+  });
+
+  it('SPEC-010 BR-010-01: completing requires acceptTerms to be exactly true', async () => {
+    await expect(parse(GoogleCompleteDto, { code: 'a', acceptTerms: true })).resolves.toBeDefined();
+    for (const acceptTerms of [false, 'true', 1, null, undefined]) {
+      expect(await failedFields(GoogleCompleteDto, { code: 'a', acceptTerms })).toEqual([
+        'acceptTerms',
+      ]);
+    }
+  });
+
+  it('BR-001-31: completing carries no role, plan or provider', async () => {
+    const extra = { code: 'a', acceptTerms: true, role: 'admin', providers: ['local'] };
+    expect(await failedFields(GoogleCompleteDto, extra)).toEqual(['role', 'providers']);
   });
 });

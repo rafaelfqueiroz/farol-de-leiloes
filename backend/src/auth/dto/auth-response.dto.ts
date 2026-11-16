@@ -1,7 +1,12 @@
 // AR-36: what the API says about an account, each field copied explicitly from the service's
 // UserProfile: the password hash, tokens and Stripe ids never reach a response.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AuthenticatedUser, AuthResult, UserProfile } from '../interfaces/auth.interface.js';
+import {
+  AuthenticatedUser,
+  AuthResult,
+  GoogleExchangeResult,
+  UserProfile,
+} from '../interfaces/auth.interface.js';
 import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status.js';
 import { SEX_VALUES } from './complete-profile.dto.js';
 
@@ -100,6 +105,41 @@ export class AuthResponseDto {
   constructor(result: AuthResult) {
     this.accessToken = result.accessToken;
     this.user = new UserProfileResponseDto(result.user);
+  }
+}
+
+export const GOOGLE_EXCHANGE_STATUSES = ['signed_in', 'terms_required'] as const;
+
+/**
+ * POST /auth/google/exchange. The two answers differ only by `status`: `signed_in` carries the
+ * session like a login does; `terms_required` carries what Google said, so the terms screen can
+ * greet the person, and no session (BR-001-09).
+ */
+export class GoogleExchangeResponseDto {
+  @ApiProperty({ enum: GOOGLE_EXCHANGE_STATUSES, enumName: 'GoogleExchangeStatus' })
+  status: (typeof GOOGLE_EXCHANGE_STATUSES)[number];
+
+  @ApiPropertyOptional({ type: String, description: 'status signed_in: JWT for Bearer' })
+  accessToken?: string;
+
+  @ApiPropertyOptional({ type: () => UserProfileResponseDto, description: 'status signed_in' })
+  user?: UserProfileResponseDto;
+
+  @ApiPropertyOptional({ type: String, format: 'email', description: 'status terms_required' })
+  email?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'status terms_required' })
+  name?: string;
+
+  constructor(result: GoogleExchangeResult) {
+    this.status = result.status;
+    if (result.status === 'signed_in') {
+      this.accessToken = result.accessToken;
+      this.user = new UserProfileResponseDto(result.user);
+    } else {
+      this.email = result.email;
+      this.name = result.name;
+    }
   }
 }
 

@@ -5,7 +5,7 @@
 import type { INestApplication, ModuleMetadata } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Test, type TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule, type TestingModuleBuilder } from '@nestjs/testing';
 import { configureApp } from '../../src/app.setup.js';
 import { AuthModule } from '../../src/auth/auth.module.js';
 import { Clock } from '../../src/common/clock/clock.js';
@@ -29,11 +29,13 @@ export async function createAuthTestApp(
   db: TestDatabase,
   extraImports: NonNullable<ModuleMetadata['imports']> = [],
   env: Record<string, string> = {},
+  /** Replaces more providers or guards (e.g. the Google guard, the boundary with Google; TS-07). */
+  customize: (builder: TestingModuleBuilder) => TestingModuleBuilder = (builder) => builder,
 ): Promise<AuthTestApp> {
   applyMongooseDefaults();
   const clock = new FakeClock(AUTH_TEST_START);
   const mailbox = new FakeEmailSender();
-  const moduleRef = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({
         isGlobal: true,
@@ -49,8 +51,8 @@ export async function createAuthTestApp(
     .overrideProvider(Clock)
     .useValue(clock)
     .overrideProvider(EmailService)
-    .useValue(mailbox)
-    .compile();
+    .useValue(mailbox);
+  const moduleRef = await customize(builder).compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
   // Listening once (loopback, ephemeral port) keeps supertest from adding listeners to the server

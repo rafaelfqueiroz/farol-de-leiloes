@@ -34,6 +34,13 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   INVALID_VERIFICATION_TOKEN: HttpStatus.BAD_REQUEST,
   INVALID_RESET_TOKEN: HttpStatus.BAD_REQUEST,
   GOOGLE_ACCOUNT_WITHOUT_EMAIL: HttpStatus.UNAUTHORIZED,
+  // BR-001-08: Google did not vouch for the address.
+  GOOGLE_EMAIL_NOT_VERIFIED: HttpStatus.UNAUTHORIZED,
+  // BR-001-16, BR-001-11: the account is not active, or Google's identity belongs to another
+  // account; also an aborted or failed Google consent.
+  GOOGLE_SIGN_IN_FAILED: HttpStatus.UNAUTHORIZED,
+  // BR-001-20: the one-time code of the return from Google is unknown, used or expired.
+  INVALID_GOOGLE_CODE: HttpStatus.BAD_REQUEST,
   // BR-001-15: too many failed sign-ins; the throttle answers even when the password is right.
   TOO_MANY_ATTEMPTS: HttpStatus.TOO_MANY_REQUESTS,
 

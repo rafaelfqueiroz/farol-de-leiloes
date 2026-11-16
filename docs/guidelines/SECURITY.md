@@ -108,6 +108,7 @@ The inventory is the source the privacy policy is written from (SPEC-010 BR-010-
 | Admin access log | access log | Accountability for support grants (BR-002-27) | Legitimate interest / accountability — art. 7º IX | Lawyer-set (BR-010-23) |
 | Sessions (ids and instants only) | `sessions` | Revocable 7-day sign-in (BR-001-18) | Contract — art. 7º V | Expires 7 days after sign-in (TTL index) |
 | Confirmation and recovery token hashes (no plain token, no email) | `accountTokens` | One-time account links (BR-001-05, BR-001-22) | Contract — art. 7º V | Expires with the link (24 h or 1 h, TTL index); deleted on use or replacement |
+| Google profile of a person who has no account yet: name, email, Google id (`profile`, token stored as a hash) | `accountTokens` (`google_signup`) | Holds the verified Google identity until the person accepts the terms (BR-001-09, SPEC-010 BR-010-01) | Pre-contractual steps at the person's request — art. 7º V | At most 15 minutes (TTL index); deleted on acceptance and on decline, so declining leaves no stored personal data; never logged |
 | Sign-in attempt counters keyed by normalised email or origin (IP address, IPv6 as its /64) | `loginAttempts` | Brute-force throttling (BR-001-15, SC-04) | Legitimate interest, security — art. 7º IX | At most 30 minutes (15-minute window plus 15-minute ban, TTL index); an email key is cleared on success; never logged |
 | Caixa listings | `auctions` | Search | Public data, not personal | — |
 

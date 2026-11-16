@@ -1,16 +1,23 @@
 import { normalizeEmail } from '../../src/common/normalize-email.js';
 import { DomainError } from '../../src/common/errors/domain-error.js';
+import { decideGoogleLink } from '../../src/users/domain/google-link.js';
 import type { UserAccount } from '../../src/users/user-account.js';
 import type { UsersService } from '../../src/users/users.service.js';
 
 /** An account as the fake stores it: the public contract plus the secrets the real document holds. */
-export type FakeAccount = UserAccount & { password?: string };
+export type FakeAccount = UserAccount & { password?: string; googleId?: string };
+
+type FakeLinkOutcome =
+  | { result: 'linked_confirmed' | 'linked_unconfirmed'; account: FakeAccount }
+  | { result: 'inactive' | 'google_conflict' | 'not_found' };
 
 type Args<K extends keyof UsersService> = Parameters<UsersService[K]>;
 
 /** The slice of `UsersService` that `AuthService` calls, with the real parameter types (TS-03). */
 interface UsersPort {
-  create(...args: Args<'create'>): Promise<FakeAccount>;
+  findByGoogleId(...args: Args<'findByGoogleId'>): Promise<FakeAccount | null>;
+  createGoogleAccount(...args: Args<'createGoogleAccount'>): Promise<FakeAccount>;
+  linkGoogleIdentity(...args: Args<'linkGoogleIdentity'>): Promise<FakeLinkOutcome>;
   findById(...args: Args<'findById'>): Promise<FakeAccount | null>;
   findByIdFull(...args: Args<'findByIdFull'>): Promise<FakeAccount | null>;
   findByEmail(...args: Args<'findByEmail'>): Promise<FakeAccount | null>;
@@ -41,23 +48,55 @@ export class FakeUsersService implements UsersPort {
   }
 
   async createLocalAccount(input: Args<'createLocalAccount'>[0]): Promise<FakeAccount> {
-    return this.create({ ...input, providers: ['local'] });
+    return this.add({ ...input, providers: ['local'], emailVerified: false });
   }
 
-  async create(dto: Args<'create'>[0]): Promise<FakeAccount> {
-    if (await this.findByEmail(dto.email)) throw new DomainError('EMAIL_ALREADY_REGISTERED');
+  async createGoogleAccount(input: Args<'createGoogleAccount'>[0]): Promise<FakeAccount> {
+    return this.add({
+      email: input.email,
+      name: input.name,
+      googleId: input.googleId,
+      providers: ['google'],
+      emailVerified: true,
+    });
+  }
+
+  private async add(
+    input: { email: string; name: string; password?: string } & Pick<
+      FakeAccount,
+      'providers' | 'emailVerified' | 'googleId'
+    >,
+  ): Promise<FakeAccount> {
+    if (await this.findByEmail(input.email)) throw new DomainError('EMAIL_ALREADY_REGISTERED');
     const now = new Date('2026-01-15T12:00:00.000Z');
-    const account: FakeAccount = {
+    return this.seed({
+      ...input,
       _id: `64b0000000000000000000${String(this.nextId++).padStart(2, '0')}`,
-      email: normalizeEmail(dto.email),
-      name: dto.name,
-      password: dto.password,
-      providers: [...(dto.providers ?? [])],
-      emailVerified: dto.providers?.includes('google') ?? false,
+      email: normalizeEmail(input.email),
+      providers: [...input.providers],
       createdAt: now,
       updatedAt: now,
-    };
-    return this.seed(account);
+    });
+  }
+
+  async findByGoogleId(googleId: string): Promise<FakeAccount | null> {
+    return [...this.accounts.values()].find((a) => a.googleId === googleId) ?? null;
+  }
+
+  /** The same table as `UsersService.linkGoogleIdentity`, read through `decideGoogleLink`. */
+  async linkGoogleIdentity(userId: string, googleId: string): Promise<FakeLinkOutcome> {
+    const account = this.accounts.get(userId);
+    if (!account) return { result: 'not_found' };
+    const decision = decideGoogleLink(account, googleId);
+    if (decision === 'inactive' || decision === 'google_conflict') return { result: decision };
+    account.googleId = googleId;
+    account.emailVerified = true;
+    if (decision === 'linked_unconfirmed') {
+      delete account.password;
+      account.providers = account.providers.filter((p) => p !== 'local');
+    }
+    if (!account.providers.includes('google')) account.providers.push('google');
+    return { result: decision, account };
   }
 
   async findById(id: string): Promise<FakeAccount | null> {

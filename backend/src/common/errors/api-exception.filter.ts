@@ -42,7 +42,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     http.getResponse<Response>().status(ERROR_STATUS[body.code]).json(body);
   }
 
-  private toBody(exception: unknown, request: Request): ErrorBody {
+  /** Public for the Google callback's redirect filter, which answers the same codes by redirect. */
+  toBody(exception: unknown, request: Request): ErrorBody {
     if (exception instanceof DomainError) {
       return { code: exception.code, context: exception.context };
     }
