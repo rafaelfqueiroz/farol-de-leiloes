@@ -4,7 +4,12 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Profile, Strategy } from 'passport-google-oauth20';
 import type { Env } from '../../config/env.js';
 import { DomainError } from '../../common/errors/domain-error.js';
+import { GoogleOAuthStateStore } from '../google/google-oauth-state.store.js';
 import { toGoogleIdentity, type GoogleIdentity } from '../google/google-identity.js';
+
+// The typings of passport-oauth2 know neither the five-argument `store` nor the string verifier
+// `verify` answers that PKCE needs, though the installed library (1.8) supports both.
+type StateStoreOption = NonNullable<ConstructorParameters<typeof Strategy>[0]['store']>;
 
 /**
  * The boundary with Google (TS-07): it turns the profile Google returned into a `GoogleIdentity`
@@ -13,13 +18,17 @@ import { toGoogleIdentity, type GoogleIdentity } from '../google/google-identity
  */
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
-  constructor(configService: ConfigService<Env, true>) {
+  constructor(configService: ConfigService<Env, true>, stateStore: GoogleOAuthStateStore) {
     // AR-42: typed config, validated at boot (AR-41).
     super({
       clientID: configService.get('GOOGLE_CLIENT_ID', { infer: true }),
       clientSecret: configService.get('GOOGLE_CLIENT_SECRET', { infer: true }),
       callbackURL: configService.get('GOOGLE_CALLBACK_URL', { infer: true }),
       scope: ['email', 'profile'],
+      // Issue #152, SC-02: `state` and PKCE (S256) on every sign-in, kept in a signed short-lived
+      // cookie rather than a server session, so a callback this browser did not start is refused.
+      pkce: true,
+      store: stateStore as unknown as StateStoreOption,
     });
   }
 

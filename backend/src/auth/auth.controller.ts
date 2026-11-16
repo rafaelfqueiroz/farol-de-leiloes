@@ -102,7 +102,13 @@ export class AuthController {
   @Public()
   @Get('google')
   @UseGuards(GoogleAuthGuard)
-  @ApiOperation({ summary: 'Start Google sign-in (browser redirect to Google)' })
+  @ApiOperation({
+    summary: 'Start Google sign-in (browser redirect to Google)',
+    description:
+      'Sends OAuth `state` and a PKCE (S256) challenge to Google and keeps the state and the code ' +
+      'verifier in a signed, HttpOnly, SameSite=Lax cookie (10 minutes, Path /api/auth/google), ' +
+      'so the callback only goes on in the browser that started the flow (issue #152).',
+  })
   @ApiFoundResponse({ description: 'Redirect to Google consent' })
   async googleAuth() {
     // Initiates Google OAuth flow
@@ -118,7 +124,8 @@ export class AuthController {
       'Never answers JSON and never puts a session in the URL (BR-001-20). Success redirects to ' +
       '{FRONTEND_URL}/auth/callback?code=<one-time code>, which POST /auth/google/exchange trades ' +
       'for a session. A refusal (GOOGLE_EMAIL_NOT_VERIFIED, GOOGLE_SIGN_IN_FAILED...) redirects to ' +
-      '{FRONTEND_URL}/login?error=<CODE>.',
+      '{FRONTEND_URL}/login?error=<CODE>. A callback whose state is missing, different, expired ' +
+      'or without the cookie of the start is refused as GOOGLE_SIGN_IN_FAILED.',
   })
   @ApiFoundResponse({
     description: 'Redirect to the frontend with a one-time code or an error code',
