@@ -75,9 +75,10 @@ async function findChrome(env) {
 const MAX_CATALOG = 10_000_000;
 
 /**
- * The number of active auctions the run measured against, for the record. The answer is data
- * from the network, so it is parsed as the one shape expected (`{ total: <count> }`), bounded,
- * and only the validated integer is returned: nothing of the response body is kept (SC-15).
+ * The number of active auctions the run measured against. The answer is data from the network,
+ * so it is parsed as the one shape expected (`{ total: <count> }`) and bounded. It is only logged
+ * and compared (`>= FULL_CATALOG_FLOOR`); no file carries it, so nothing the network said is
+ * written to disk: the files hold the comparison's answer and fixed text (SC-15).
  */
 async function catalogSize(env) {
   const api = env.PERF_API_URL || `http://localhost:${env.E2E_API_PORT || '38100'}`;
@@ -153,13 +154,15 @@ async function measure(env, runs, requests) {
     reports.map((name) => JSON.parse(readFileSync(join(REPORTS, name), 'utf8'))),
   );
   const auctions = await catalogSize(env);
+  log(`Catalog: ${auctions} active auctions`);
+  const fullCatalog = auctions >= FULL_CATALOG_FLOOR;
   const failures = [
     ...(lighthousePassed
       ? []
       : ['Lighthouse CI: a page missed its budget (see the assertion output)']),
     ...apiResult.failures,
   ];
-  const verdict = { passed: failures.length === 0, runs, auctions, failures };
+  const verdict = { passed: failures.length === 0, runs, fullCatalog, failures };
   writeFileSync(join(RESULTS, 'verdict.json'), `${JSON.stringify(verdict, null, 2)}\n`);
 
   const { throttling, formFactor } = REFERENCE_PROFILE;
@@ -169,10 +172,10 @@ async function measure(env, runs, requests) {
     [
       `## Performance budgets: ${verdict.passed ? 'met' : 'MISSED'}`,
       '',
-      `Reference workload: ${auctions} active auctions (BR-003-08). Profile ` +
+      `Reference workload (BR-003-08): ${fullCatalog ? 'the full catalog, 30 000 auctions or more' : 'NOT the full catalog'}. Profile ` +
         `(BR-003-07): ${formFactor}, ${throttling.throughputKbps / 1000} Mbps down, ` +
         `${throttling.uploadThroughputKbps / 1000} Mbps up, ${throttling.rttMs} ms round trip, ` +
-        `CPU slowdown ${throttling.cpuSlowdownMultiplier}x. ${auctions < FULL_CATALOG_FLOOR ? 'NOT the full catalog: this is a harness check, not a measurement. ' : ''}${runs} runs per page` +
+        `CPU slowdown ${throttling.cpuSlowdownMultiplier}x. ${fullCatalog ? '' : 'This is a harness check, not a measurement. '}${runs} runs per page` +
         `${runs < RUNS_PER_URL ? ` (fewer than the ${RUNS_PER_URL} the spec asks for: a check of the harness, not a measurement)` : ''}.`,
       '',
       summaryTable(pages, budgetOf),
