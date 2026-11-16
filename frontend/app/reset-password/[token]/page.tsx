@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Stack, TextField, Button, Alert, CircularProgress } from '@mui/material';
@@ -21,6 +21,13 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // the redirect belongs to the success state, so leaving the page clears it
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => router.push('/login'), 2000);
+    return () => clearTimeout(timer);
+  }, [success, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,9 +60,6 @@ export default function ResetPasswordPage() {
       }
 
       setSuccess(true);
-      setTimeout(() => {
-        router.push('/login');
-      }, 2000);
     } catch (err: unknown) {
       setError(apiErrorMessage(err));
     } finally {
