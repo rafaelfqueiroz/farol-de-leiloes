@@ -1,10 +1,9 @@
-// BR-001-05/22/26 and DL-001-06: how long each kind of one-time link lives. They are rules of the
+// BR-001-05/22 and DL-001-06: how long each kind of one-time link lives. They are rules of the
 // spec, not tunables, so they sit here once instead of in the services that issue them. The
 // `google_exchange` code (BR-001-20) only bridges the Google redirect, hence 60 seconds.
 export const ACCOUNT_TOKEN_PURPOSES = [
   'email_confirmation',
-  'password_reset',
-  'email_change',
+  'account_recovery',
   'google_exchange',
 ] as const;
 
@@ -15,8 +14,7 @@ const HOUR_MS = 60 * 60 * SECOND_MS;
 
 export const ACCOUNT_TOKEN_TTL_MS: Record<AccountTokenPurpose, number> = {
   email_confirmation: 24 * HOUR_MS, // BR-001-05
-  password_reset: HOUR_MS, // BR-001-22
-  email_change: 24 * HOUR_MS, // BR-001-26 (same rules as BR-001-05)
+  account_recovery: HOUR_MS, // BR-001-22
   google_exchange: 60 * SECOND_MS, // BR-001-20
 };
 

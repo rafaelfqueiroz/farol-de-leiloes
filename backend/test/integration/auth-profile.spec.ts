@@ -75,7 +75,7 @@ describe('AuthService hydrated account profiles (integration)', () => {
     expect(profile.dateOfBirth).not.toBe(user.dateOfBirth);
     expect(profile.createdAt).not.toBe(user.createdAt);
     expect(profile.updatedAt).not.toBe(user.updatedAt);
-    for (const privateField of ['password', 'status', 'pendingEmail', '$__']) {
+    for (const privateField of ['password', 'status', '$__']) {
       expect(profile).not.toHaveProperty(privateField);
     }
 

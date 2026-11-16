@@ -80,14 +80,14 @@ export class AuthService implements BeforeApplicationShutdown {
     // logged by kind only (SC-15). BR-001-24: works for Google-only accounts too. BR-001-22: the
     // new token replaces older ones.
     this.detach('Password reset email', async () => {
-      const token = await this.accountTokens.issue(user._id.toString(), 'password_reset');
+      const token = await this.accountTokens.issue(user._id.toString(), 'account_recovery');
       await this.emailService.sendPasswordResetEmail(user.email, token, user.name);
     });
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
     // BR-001-22: single use, 1 hour; unknown, used and expired are the same answer.
-    const record = await this.accountTokens.consume(token, 'password_reset');
+    const record = await this.accountTokens.consume(token, 'account_recovery');
     if (!record) {
       throw new DomainError('INVALID_RESET_TOKEN');
     }
@@ -95,7 +95,7 @@ export class AuthService implements BeforeApplicationShutdown {
     // BR-001-24: finishing recovery adds email-and-password sign-in to a Google-only account.
     await this.usersService.setPassword(record.userId, newPassword);
     // BR-001-22: a successful reset kills every outstanding recovery link.
-    await this.accountTokens.revokeUnused(record.userId, 'password_reset');
+    await this.accountTokens.revokeUnused(record.userId, 'account_recovery');
     // BR-001-19: and every session; the reset does not sign anyone in.
     await this.sessions.revokeAllForUser(record.userId);
   }
@@ -230,7 +230,8 @@ export class AuthService implements BeforeApplicationShutdown {
       throw new DomainError('INVALID_VERIFICATION_TOKEN');
     }
     // The link confirms the address it was mailed to, only while that is still the account's
-    // address; a changed email leaves the account unconfirmed (BR-001-04, BR-001-26).
+    // address. The email is immutable (BR-001-26, D-63), so this is defence in depth against any
+    // write path that would change it (BR-001-04).
     if (
       !record.newEmail ||
       !(await this.usersService.confirmEmail(record.userId, record.newEmail))

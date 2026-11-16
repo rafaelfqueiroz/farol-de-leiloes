@@ -14,8 +14,8 @@ export function hashAccountToken(plain: string): string {
 }
 
 /**
- * One-time tokens behind the confirmation, recovery, email-change and Google-exchange links
- * (BR-001-05, BR-001-22, BR-001-23, BR-001-26). Replaces the per-user token fields, whose
+ * One-time tokens behind the confirmation, recovery and Google-exchange links
+ * (BR-001-05, BR-001-22, BR-001-23). Replaces the per-user token fields, whose
  * lookup compared every user's bcrypt hash and whose reset token came from Math.random (#125).
  */
 @Injectable()
@@ -30,8 +30,7 @@ export class AccountTokenService {
    * same user and purpose stop working (BR-001-05, BR-001-22), also when two requests issue at the
    * same moment: exactly one link stays valid.
    *
-   * `newEmail` binds the token to an address: the address a confirmation was sent to
-   * (`email_confirmation`), or the one an `email_change` moves to.
+   * `newEmail` binds a confirmation link to the address it was mailed to (`email_confirmation`).
    */
   async issue(
     userId: string,

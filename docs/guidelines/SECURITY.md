@@ -107,7 +107,7 @@ The inventory is the source the privacy policy is written from (SPEC-010 BR-010-
 | Support requests | support | Support (SPEC-009) | Contract — art. 7º V | Lawyer-set |
 | Admin access log | access log | Accountability for support grants (BR-002-27) | Legitimate interest / accountability — art. 7º IX | Lawyer-set (BR-010-23) |
 | Sessions (ids and instants only) | `sessions` | Revocable 7-day sign-in (BR-001-18) | Contract — art. 7º V | Expires 7 days after sign-in (TTL index) |
-| Confirmation, recovery and email-change token hashes (no plain token, no email) | `accountTokens` | One-time account links (BR-001-05, BR-001-22) | Contract — art. 7º V | Expires with the link (24 h or 1 h, TTL index); deleted on use or replacement |
+| Confirmation and recovery token hashes (no plain token, no email) | `accountTokens` | One-time account links (BR-001-05, BR-001-22) | Contract — art. 7º V | Expires with the link (24 h or 1 h, TTL index); deleted on use or replacement |
 | Sign-in attempt counters keyed by normalised email or origin (IP address, IPv6 as its /64) | `loginAttempts` | Brute-force throttling (BR-001-15, SC-04) | Legitimate interest, security — art. 7º IX | At most 30 minutes (15-minute window plus 15-minute ban, TTL index); an email key is cleared on success; never logged |
 | Caixa listings | `auctions` | Search | Public data, not personal | — |
 

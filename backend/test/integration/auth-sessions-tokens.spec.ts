@@ -786,10 +786,10 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
     const USER = '64b000000000000000000009';
 
     it('consume is atomic: of ten concurrent uses of one link exactly one wins', async () => {
-      const plain = await tokens.issue(USER, 'password_reset');
+      const plain = await tokens.issue(USER, 'account_recovery');
 
       const results = await Promise.all(
-        Array.from({ length: 10 }, () => tokens.consume(plain, 'password_reset')),
+        Array.from({ length: 10 }, () => tokens.consume(plain, 'account_recovery')),
       );
 
       expect(results.filter((result) => result !== null)).toHaveLength(1);
@@ -803,19 +803,6 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       const late = await tokens.issue(USER, 'google_exchange');
       clock.advance(60_000);
       await expect(tokens.consume(late, 'google_exchange')).resolves.toBeNull();
-    });
-
-    it('issue replaces the earlier unused token but not a used one', async () => {
-      const first = await tokens.issue(USER, 'email_change', { newEmail: 'new@example.test' });
-      await tokens.consume(first, 'email_change');
-      const second = await tokens.issue(USER, 'email_change', { newEmail: 'newer@example.test' });
-
-      expect(
-        await collection('accountTokens').countDocuments({ userId: { $exists: true } }),
-      ).toBeGreaterThan(1);
-      await expect(tokens.consume(second, 'email_change')).resolves.toMatchObject({
-        newEmail: 'newer@example.test',
-      });
     });
 
     it('concurrent issuers leave exactly one valid link', async () => {

@@ -24,7 +24,7 @@ describe('AccountTokenService', () => {
     const { service } = build();
 
     const first = await service.issue(USER, 'email_confirmation');
-    const second = await service.issue(USER, 'password_reset');
+    const second = await service.issue(USER, 'account_recovery');
 
     // 32 bytes = 256 bits = 64 hex characters, at least the 128 bits the spec asks for.
     expect(first).toMatch(/^[0-9a-f]{64}$/);
@@ -35,7 +35,7 @@ describe('AccountTokenService', () => {
   it('SC-06: stores the SHA-256 of the token and never the token', async () => {
     const { service, repo } = build();
 
-    const plain = await service.issue(USER, 'password_reset');
+    const plain = await service.issue(USER, 'account_recovery');
 
     const stored = repo.stored[0];
     expect(stored?.tokenHash).toBe(createHash('sha256').update(plain).digest('hex'));
@@ -45,8 +45,7 @@ describe('AccountTokenService', () => {
 
   it.each([
     ['email_confirmation', 24 * HOUR],
-    ['password_reset', HOUR],
-    ['email_change', 24 * HOUR],
+    ['account_recovery', HOUR],
     ['google_exchange', 60 * SECOND],
   ] as const)('%s expires %d ms after it is issued', async (purpose, lifetime) => {
     const { service, repo, clock } = build();
@@ -81,77 +80,66 @@ describe('AccountTokenService', () => {
 
   it('BR-001-22: a recovery link works at 59 minutes and fails at 61 minutes', async () => {
     const inside = build();
-    const early = await inside.service.issue(USER, 'password_reset');
+    const early = await inside.service.issue(USER, 'account_recovery');
     inside.clock.advance(59 * MINUTE);
-    await expect(inside.service.consume(early, 'password_reset')).resolves.not.toBeNull();
+    await expect(inside.service.consume(early, 'account_recovery')).resolves.not.toBeNull();
 
     const outside = build();
-    const late = await outside.service.issue(USER, 'password_reset');
+    const late = await outside.service.issue(USER, 'account_recovery');
     outside.clock.advance(61 * MINUTE);
-    await expect(outside.service.consume(late, 'password_reset')).resolves.toBeNull();
+    await expect(outside.service.consume(late, 'account_recovery')).resolves.toBeNull();
   });
 
   it('a token is refused for a purpose other than the one it was issued for', async () => {
     const { service } = build();
     const plain = await service.issue(USER, 'email_confirmation');
 
-    await expect(service.consume(plain, 'password_reset')).resolves.toBeNull();
+    await expect(service.consume(plain, 'account_recovery')).resolves.toBeNull();
     // ...and the wrong-purpose attempt did not spend it.
     await expect(service.consume(plain, 'email_confirmation')).resolves.not.toBeNull();
   });
 
   it('BR-001-05/22: a new token of the same user and purpose kills the earlier unused one', async () => {
     const { service } = build();
-    const first = await service.issue(USER, 'password_reset');
-    const second = await service.issue(USER, 'password_reset');
+    const first = await service.issue(USER, 'account_recovery');
+    const second = await service.issue(USER, 'account_recovery');
 
-    await expect(service.consume(first, 'password_reset')).resolves.toBeNull();
-    await expect(service.consume(second, 'password_reset')).resolves.not.toBeNull();
+    await expect(service.consume(first, 'account_recovery')).resolves.toBeNull();
+    await expect(service.consume(second, 'account_recovery')).resolves.not.toBeNull();
   });
 
   it('issuing for one user or purpose leaves the others alone', async () => {
     const { service } = build();
-    const mine = await service.issue(USER, 'password_reset');
-    const theirs = await service.issue(OTHER_USER, 'password_reset');
+    const mine = await service.issue(USER, 'account_recovery');
+    const theirs = await service.issue(OTHER_USER, 'account_recovery');
     const confirmation = await service.issue(USER, 'email_confirmation');
 
-    await expect(service.consume(mine, 'password_reset')).resolves.not.toBeNull();
-    await expect(service.consume(theirs, 'password_reset')).resolves.not.toBeNull();
+    await expect(service.consume(mine, 'account_recovery')).resolves.not.toBeNull();
+    await expect(service.consume(theirs, 'account_recovery')).resolves.not.toBeNull();
     await expect(service.consume(confirmation, 'email_confirmation')).resolves.not.toBeNull();
-  });
-
-  it('BR-001-26: an email-change token carries the new address', async () => {
-    const { service } = build();
-    const plain = await service.issue(USER, 'email_change', { newEmail: 'new@example.test' });
-
-    await expect(service.consume(plain, 'email_change')).resolves.toEqual({
-      userId: USER,
-      purpose: 'email_change',
-      newEmail: 'new@example.test',
-    });
   });
 
   it('BR-001-22: revokeUnused makes every outstanding link of the purpose stop working', async () => {
     const { service } = build();
-    const plain = await service.issue(USER, 'password_reset');
+    const plain = await service.issue(USER, 'account_recovery');
 
-    await service.revokeUnused(USER, 'password_reset');
+    await service.revokeUnused(USER, 'account_recovery');
 
-    await expect(service.consume(plain, 'password_reset')).resolves.toBeNull();
+    await expect(service.consume(plain, 'account_recovery')).resolves.toBeNull();
   });
 
   it.each(['', 'not-a-token', 'z'.repeat(64)])('refuses %j as unknown', async (junk) => {
     const { service } = build();
-    await service.issue(USER, 'password_reset');
+    await service.issue(USER, 'account_recovery');
 
-    await expect(service.consume(junk, 'password_reset')).resolves.toBeNull();
+    await expect(service.consume(junk, 'account_recovery')).resolves.toBeNull();
   });
 
   it('refuses a non-string token without touching the repository', async () => {
     const { service } = build();
 
     await expect(
-      service.consume({ $ne: null } as unknown as string, 'password_reset'),
+      service.consume({ $ne: null } as unknown as string, 'account_recovery'),
     ).resolves.toBeNull();
   });
 });
