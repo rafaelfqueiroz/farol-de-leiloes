@@ -54,7 +54,7 @@ Everything else is convention. These are the ones where a violation causes damag
 | Structural checks — Node pin, tokens in both schemes, env example | ✅ |
 | `npm audit` high+ · CodeQL high+ | ✅ |
 | Build, both packages | ✅ |
-| Performance budgets | Release candidates (SPEC-003 BR-003-10), deferred (BL-002) |
+| Performance budgets | Release candidates, `performance.yml` on `v*` tags; a miss blocks the release unless a waiver is recorded (SPEC-003 BR-003-10, TESTING §10) |
 
 ## Deferred work
 
@@ -63,7 +63,7 @@ Decided, not built, each with the trigger that ends the deferral.
 | ID | Item | Trigger |
 |---|---|---|
 | [BL-001](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/40) | Provision the hosting chosen in [ADR-002](../adr/002-hosting-and-environments.md) (app, MongoDB, backups, staging); turn on `deploy.yml` (DEVELOPMENT §12) | Before the first external user |
-| BL-002 | Performance harness: reference workload + budgets on release candidates (TESTING §10), planned in [#3](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/3) | With BL-001, before the first release candidate |
+| BL-002 | Performance harness, the rest: the harness itself is built (catalog workload, Lighthouse CI budgets, release gate; TESTING §10, [#3](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/3)). Still deferred: the journeys part of the reference workload and the 3 s dashboards group, which need pages that do not exist yet | SPEC-011 (#11), SPEC-016 (#16), SPEC-021 (#21) |
 | [BL-003](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/38) | Design-system code — theme folder, patterns, logo files, migration of screens. The brand itself is decided (DESIGN v1.1, DS-01–DS-30) | Second PR of #38 |
 
 ## Amendments to spec issue plans

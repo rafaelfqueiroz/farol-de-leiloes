@@ -10,3 +10,7 @@ Dockerfile
 e2e
 playwright-report
 test-results
+perf
+perf-results
+.lighthouseci
+lighthouserc.cjs

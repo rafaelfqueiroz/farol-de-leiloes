@@ -5,6 +5,8 @@ out/
 build/
 coverage/
 playwright-report/
+.lighthouseci/
+perf-results/
 test-results/
 package-lock.json
 *.tsbuildinfo
