@@ -9,8 +9,12 @@ export const PROFILE_EDITABLE = ['name', 'phone'] as const;
 /** The email is read-only for everyone (BR-001-26, D-63). */
 export const EMAIL_READ_ONLY = ['email'] as const;
 
-/** Legacy "complete profile" details, written only by UsersService.updateContactDetails. */
-export const CONTACT_DETAILS = ['cpf', 'dateOfBirth', 'sex', 'address'] as const;
+/**
+ * Legacy, stored and unused until SPEC-010 (issue #1 owner decision, 16/11/2026): the profile no
+ * longer shows or collects them and no path writes them, `UsersService.update` included. Data
+ * already stored stays as it is (no migration, no deletion); SPEC-010 BR-010-06 decides its fate.
+ */
+export const LEGACY_UNUSED = ['cpf', 'dateOfBirth', 'sex', 'address'] as const;
 
 /** Written only by the server flow that owns them, never from a profile request (BR-001-30). */
 export const PROTECTED = [
@@ -32,7 +36,7 @@ export const BOOKKEEPING = ['_id', '__v', 'createdAt', 'updatedAt'] as const;
 export const ALL_CLASSIFIED: readonly string[] = [
   ...PROFILE_EDITABLE,
   ...EMAIL_READ_ONLY,
-  ...CONTACT_DETAILS,
+  ...LEGACY_UNUSED,
   ...PROTECTED,
   ...BOOKKEEPING,
 ];

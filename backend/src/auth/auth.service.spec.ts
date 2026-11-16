@@ -82,10 +82,6 @@ describe('AuthService account contract (AR-09)', () => {
         role: 'free',
         subscriptionStatus: null,
         phone: undefined,
-        cpf: undefined,
-        dateOfBirth: undefined,
-        sex: undefined,
-        address: undefined,
         createdAt: CREATED,
         updatedAt: UPDATED,
       },
@@ -109,10 +105,6 @@ describe('AuthService account contract (AR-09)', () => {
       subscriptionStatus: 'active' as const,
       providers: ['local', 'google'],
       phone: '00000000000',
-      cpf: '00000000000',
-      dateOfBirth: new Date('1990-01-01T00:00:00.000Z'),
-      sex: 'other',
-      address: { street: 'Test Street', city: 'Test City', state: 'SP', zipCode: '00000000' },
     };
     const user = { ...account(profile), password: 'fake-hash' };
 
@@ -191,37 +183,34 @@ describe('AuthService.toUserProfile mapping (AR-09, SC-15)', () => {
         'role',
         'subscriptionStatus',
         'phone',
-        'cpf',
-        'dateOfBirth',
-        'sex',
-        'address',
         'createdAt',
         'updatedAt',
       ].sort(),
     );
   });
 
-  it('copies the address fields and drops anything else on the address', async () => {
-    const address = { street: 'Rua A', city: 'Santos', state: 'SP', zipCode: '11000000' };
-    const user = account({ address: { ...address, _id: 'internal' } as UserAccount['address'] });
+  it('does not return the legacy cpf, date of birth, sex and address, even when stored', async () => {
+    const stored = {
+      cpf: '00000000000',
+      dateOfBirth: new Date('1990-05-06T00:00:00.000Z'),
+      sex: 'female',
+      address: { street: 'Rua A', city: 'Santos', state: 'SP', zipCode: '11000000' },
+    };
 
-    expect((await profileOf(user)).address).toEqual(address);
+    const profile = await profileOf({ ...account(), ...stored });
+
+    for (const key of Object.keys(stored)) expect(profile).not.toHaveProperty(key);
   });
 
-  it('returns detached values: new array, dates and address objects', async () => {
+  it('returns detached values: a new array and new dates', async () => {
     const providers = ['local'];
-    const address = { street: 'Rua A', city: 'Santos', state: 'SP', zipCode: '11000000' };
-    const dateOfBirth = new Date('1990-05-06T00:00:00.000Z');
-    const user = account({ providers, address, dateOfBirth });
+    const user = account({ providers });
 
     const profile = await profileOf(user);
 
     expect(profile.providers).not.toBe(providers);
-    expect(profile.address).not.toBe(address);
     expect(profile.createdAt).not.toBe(CREATED);
     expect(profile.updatedAt).not.toBe(UPDATED);
-    expect(profile.dateOfBirth).not.toBe(dateOfBirth);
-    expect(profile.dateOfBirth?.toISOString()).toBe('1990-05-06T00:00:00.000Z');
   });
 
   it('defaults emailVerified to false and role to free, and keeps explicit values', async () => {
@@ -748,16 +737,15 @@ describe('AuthService with fake collaborators', () => {
       );
     });
 
-    it('updateProfile and completeProfile return the updated, mapped profile', async () => {
+    it('updateProfile returns the updated, mapped profile', async () => {
       const { service, users } = build();
       users.seed(localAccount());
 
-      const updated = await service.updateProfile(ID, { name: 'Renamed' });
-      const completed = await service.completeProfile(ID, { phone: '11999990000' } as never);
+      const updated = await service.updateProfile(ID, { name: 'Renamed', phone: '11999990000' });
 
       expect(updated.name).toBe('Renamed');
-      expect(completed.phone).toBe('11999990000');
-      expect(completed).not.toHaveProperty('password');
+      expect(updated.phone).toBe('11999990000');
+      expect(updated).not.toHaveProperty('password');
     });
   });
 
@@ -850,12 +838,27 @@ describe('AuthService with fake collaborators', () => {
       const { service, users } = build();
       users.seed(localAccount({ providers: ['google'], password: undefined }));
 
-      await service.setPassword(ID, 'new-password');
+      await service.setPassword(ID, 'current-session', 'new-password');
 
       expect(users.accounts.get(ID)).toMatchObject({
         password: 'new-password',
         providers: ['google', 'local'],
       });
+    });
+
+    it('BR-001-19: ends every other session and keeps the current one', async () => {
+      const { service, users, sessionRepo } = build();
+      users.seed(localAccount({ providers: ['google'], password: undefined }));
+      const seeded = users.accounts.get(ID);
+      if (!seeded) throw new Error('the account was just seeded');
+      await service.startSession(seeded);
+      await service.startSession(seeded);
+      const [current, other] = sessionRepo.stored;
+
+      await service.setPassword(ID, current?.id ?? '', 'new-password');
+
+      expect(current?.revokedAt).toBeUndefined();
+      expect(other?.revokedAt).toBeInstanceOf(Date);
     });
 
     it.each([
@@ -865,7 +868,7 @@ describe('AuthService with fake collaborators', () => {
       const { service, users } = build();
       if (seeded) users.seed(seeded);
 
-      await expectDomainError(service.setPassword(ID, 'new-password'), code);
+      await expectDomainError(service.setPassword(ID, 's', 'new-password'), code);
     });
   });
 });

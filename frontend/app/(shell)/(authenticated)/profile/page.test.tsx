@@ -21,12 +21,12 @@ beforeEach(() => {
 });
 
 describe('ProfilePage', () => {
-  it('fills the name and e-mail of a user already signed in on the first render', () => {
+  it('fills the name and shows the e-mail of a user already signed in on the first render', () => {
     env.user = { name: 'Ana', email: 'ana@exemplo.com' };
     render(<ProfilePage />);
 
     expect(screen.getByLabelText(/^nome/i)).toHaveValue('Ana');
-    expect(screen.getByLabelText(/e-?mail/i)).toHaveValue('ana@exemplo.com');
+    expect(screen.getByLabelText(/^e-?mail/i)).toHaveValue('ana@exemplo.com');
   });
 
   it('follows the user when it arrives after the first render', async () => {
@@ -37,18 +37,19 @@ describe('ProfilePage', () => {
     rerender(<ProfilePage />);
 
     await waitFor(() => expect(screen.getByLabelText(/^nome/i)).toHaveValue('Bia'));
-    expect(screen.getByLabelText(/e-?mail/i)).toHaveValue('bia@exemplo.com');
+    expect(screen.getByLabelText(/^e-?mail/i)).toHaveValue('bia@exemplo.com');
   });
 
-  it('has one h1 and the cards as h2 sections (DS-15)', () => {
+  it('frame 3: has one h1 and the two cards as h2 sections (DS-15)', () => {
     env.user = { name: 'Ana', email: 'ana@exemplo.com', providers: ['local'] };
     render(<ProfilePage />);
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole('heading', { level: 1, name: 'Meu Perfil' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Meu perfil' })).toBeInTheDocument();
+    expect(screen.getByText('Gerencie seus dados de acesso e segurança')).toBeInTheDocument();
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent),
-    ).toEqual(['Informações do Perfil', 'Dados Pessoais', 'Alterar Senha']);
+    ).toEqual(['Dados da conta', 'Senha']);
     expect(screen.queryByRole('main')).not.toBeInTheDocument();
   });
 
@@ -59,6 +60,17 @@ describe('ProfilePage', () => {
       <main>
         <ProfilePage />
       </main>,
+    );
+    expect(await axe(baseElement)).toHaveNoViolations();
+  });
+
+  it('has no accessibility violations in the dark scheme', async () => {
+    env.user = { name: 'Ana', email: 'ana@exemplo.com', providers: ['google'] };
+    const { baseElement } = render(
+      <main>
+        <ProfilePage />
+      </main>,
+      { scheme: 'dark' },
     );
     expect(await axe(baseElement)).toHaveNoViolations();
   });

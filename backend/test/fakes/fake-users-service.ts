@@ -27,7 +27,6 @@ interface UsersPort {
   validatePassword(...args: Args<'validatePassword'>): Promise<FakeAccount | null>;
   update(...args: Args<'update'>): Promise<FakeAccount>;
   updateProfile(...args: Args<'updateProfile'>): Promise<FakeAccount>;
-  updateContactDetails(...args: Args<'updateContactDetails'>): Promise<FakeAccount>;
   setPassword(...args: Args<'setPassword'>): Promise<FakeAccount>;
   createLocalAccount(...args: Args<'createLocalAccount'>): Promise<FakeAccount>;
   changePassword(...args: Args<'changePassword'>): Promise<FakeAccount>;
@@ -136,17 +135,6 @@ export class FakeUsersService implements UsersPort {
     if (profile.name !== undefined) account.name = profile.name;
     if (profile.phone === null) delete account.phone;
     else if (profile.phone !== undefined) account.phone = profile.phone;
-    return account;
-  }
-
-  async updateContactDetails(
-    id: string,
-    details: Args<'updateContactDetails'>[1],
-  ): Promise<FakeAccount> {
-    const account = this.accounts.get(id);
-    if (!account) throw new DomainError('USER_NOT_FOUND');
-    if (details.phone === null) delete account.phone;
-    else if (details.phone !== undefined) account.phone = details.phone;
     return account;
   }
 

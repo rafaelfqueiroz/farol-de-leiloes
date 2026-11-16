@@ -149,7 +149,12 @@ describe('AuthProvider session', () => {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'a@b.com', password: 'secret1', name: 'A' }),
+      body: JSON.stringify({
+        email: 'a@b.com',
+        password: 'secret1',
+        name: 'A',
+        acceptTerms: true,
+      }),
     });
     expect(window.localStorage.length).toBe(0);
     expect(result.current.user).toMatchObject({ _id: 'u2' });

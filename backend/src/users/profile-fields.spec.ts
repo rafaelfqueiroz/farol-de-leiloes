@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_CLASSIFIED,
   BOOKKEEPING,
-  CONTACT_DETAILS,
   EMAIL_READ_ONLY,
   HOSTILE_VALUES,
+  LEGACY_UNUSED,
   PROFILE_EDITABLE,
   PROTECTED,
 } from '../../test/support/profile-fields.js';
@@ -36,7 +36,7 @@ describe('BR-001-29: every user schema path is classified', () => {
   });
 
   it('has a hostile value for every path that is not editable', () => {
-    const nonEditable = [...EMAIL_READ_ONLY, ...CONTACT_DETAILS, ...PROTECTED];
+    const nonEditable = [...EMAIL_READ_ONLY, ...LEGACY_UNUSED, ...PROTECTED];
     expect(nonEditable.filter((path) => !(path in HOSTILE_VALUES))).toEqual([]);
     expect(BOOKKEEPING).toContain('_id');
   });

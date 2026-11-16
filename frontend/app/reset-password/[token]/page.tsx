@@ -9,6 +9,7 @@ import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 // The shortest password the form accepts
 const MIN_PASSWORD_LENGTH = 8; // SPEC-001 BR-001-13
+const MAX_PASSWORD_LENGTH = 128; // SPEC-001 BR-001-13
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (password.length < MIN_PASSWORD_LENGTH) {
+    if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
       setError(t('errors.passwordTooShort', { min: MIN_PASSWORD_LENGTH }));
       return;
     }
@@ -82,6 +83,12 @@ export default function ResetPasswordPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="new-password"
+            slotProps={{ htmlInput: { maxLength: MAX_PASSWORD_LENGTH } }}
+            helperText={t('passwordHelper', {
+              min: MIN_PASSWORD_LENGTH,
+              max: MAX_PASSWORD_LENGTH,
+            })}
           />
 
           <TextField

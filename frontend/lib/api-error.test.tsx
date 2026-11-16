@@ -3,7 +3,12 @@ import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import messages from '@/messages/pt-BR.json';
-import { ApiError, readApiError, useApiErrorMessage } from './api-error';
+import {
+  ApiError,
+  isEmailVerificationRequired,
+  readApiError,
+  useApiErrorMessage,
+} from './api-error';
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -113,5 +118,22 @@ describe('useApiErrorMessage', () => {
     const first = result.current;
     rerender();
     expect(result.current).toBe(first);
+  });
+});
+
+describe('isEmailVerificationRequired (BR-001-04)', () => {
+  it('is true only for the ApiError of that code', () => {
+    expect(isEmailVerificationRequired(new ApiError('EMAIL_VERIFICATION_REQUIRED', {}, 403))).toBe(
+      true,
+    );
+    expect(isEmailVerificationRequired(new ApiError('FORBIDDEN', {}, 403))).toBe(false);
+    expect(isEmailVerificationRequired(new Error('EMAIL_VERIFICATION_REQUIRED'))).toBe(false);
+    expect(isEmailVerificationRequired(undefined)).toBe(false);
+  });
+
+  it('reads as the confirm-your-e-mail text in the catalogue', () => {
+    expect(messageFn()(new ApiError('EMAIL_VERIFICATION_REQUIRED', {}, 403))).toBe(
+      'Confirme seu e-mail para continuar.',
+    );
   });
 });

@@ -4,11 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as auctionByCode } from './auctions/[code]/route';
 import { POST as changePassword } from './auth/change-password/route';
 import { POST as googleCancel } from './auth/google/cancel/route';
+import { POST as googleComplete } from './auth/google/complete/route';
 import { POST as googleExchange } from './auth/google/exchange/route';
 import { POST as login } from './auth/login/route';
 import { POST as logout } from './auth/logout/route';
 import { GET as me } from './auth/me/route';
-import { PATCH as completeProfile } from './auth/profile/complete/route';
 import { GET as fullProfile } from './auth/profile/full/route';
 import { PATCH as updateProfile } from './auth/profile/route';
 import { POST as register } from './auth/register/route';
@@ -106,6 +106,7 @@ const routes: RouteCase[] = [
   publicRoute('GET', '/api/auctions/1444400000001', auctionByCode, { code: '1444400000001' }),
   publicRoute('POST', '/api/auth/login', login),
   publicRoute('POST', '/api/auth/google/exchange', googleExchange),
+  publicRoute('POST', '/api/auth/google/complete', googleComplete),
   publicRoute('POST', '/api/auth/google/cancel', googleCancel),
   publicRoute('POST', '/api/auth/register', register),
   publicRoute('POST', '/api/auth/reset-password-request', resetPasswordRequest),
@@ -118,7 +119,6 @@ const routes: RouteCase[] = [
   signedInRoute('GET', '/api/auth/verification-status', verificationStatus),
   signedInRoute('PATCH', '/api/auth/profile', updateProfile),
   signedInRoute('GET', '/api/auth/profile/full', fullProfile),
-  signedInRoute('PATCH', '/api/auth/profile/complete', completeProfile),
   signedInRoute('POST', '/api/coupons', createCoupon),
   signedInRoute('POST', '/api/coupons/validate', validateCoupon),
   signedInRoute('PATCH', '/api/coupons/c1/invalidate', invalidateCoupon, { id: 'c1' }),
@@ -372,6 +372,7 @@ describe('the routes that start the session (SC-02, BR-001-17)', () => {
     ['login', login, '/api/auth/login', '/auth/login'],
     ['register', register, '/api/auth/register', '/auth/register'],
     ['Google exchange', googleExchange, '/api/auth/google/exchange', '/auth/google/exchange'],
+    ['Google complete', googleComplete, '/api/auth/google/complete', '/auth/google/complete'],
   ] as const)(
     '%s sets the httpOnly cookie from the backend token and answers without the token',
     async (_name, handler, url, backendPath) => {

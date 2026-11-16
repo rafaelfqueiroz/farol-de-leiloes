@@ -1,7 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Button } from '@mui/material';
 import { axe, renderWithProviders } from '@/test/render';
+import ShellBanner from './ShellBanner';
 import RequireAuthentication from '@/app/components/RequireAuthentication';
 import AppShell, { MAIN_CONTENT_ID, RAIL_PINNED_STORAGE_KEY } from './AppShell';
 
@@ -252,6 +254,72 @@ describe('AppShell — frame', () => {
     for (const name of ['Claro', 'Escuro', 'Sistema']) {
       expect(within(group).getByRole('button', { name })).toBeInTheDocument();
     }
+  });
+});
+
+describe('AppShell — banner slot (frame 5)', () => {
+  const withBanner = (scheme: 'light' | 'dark' = 'light') =>
+    renderWithProviders(
+      <AppShell banner={<div role="status">Aviso do banner</div>}>
+        <h1>Conteúdo da página</h1>
+      </AppShell>,
+      { scheme },
+    );
+
+  it.each([
+    ['desktop', DESKTOP],
+    ['rail', RAIL],
+    ['phone', PHONE],
+  ])('puts the banner between the top bar and the page, outside <main> (%s)', (_name, width) => {
+    setViewport(width);
+    withBanner();
+
+    const banner = screen.getByRole('status');
+    const main = screen.getByRole('main');
+    expect(main).not.toContainElement(banner);
+    // document order: top bar, banner, page
+    expect(
+      screen.getByRole('banner').compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(banner.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keeps the sidebar and its navigation when the banner shows', () => {
+    setViewport(DESKTOP);
+    withBanner();
+
+    expect(mainNav()).toBeInTheDocument();
+  });
+
+  it('shows it to nobody who is not signed in, nor while auth loads', () => {
+    setViewport(DESKTOP);
+    signOut();
+    const guest = withBanner();
+    expect(screen.queryByText('Aviso do banner')).not.toBeInTheDocument();
+    guest.unmount();
+
+    env.setAuth({ user: null, loading: true, isAuthenticated: false, role: '', logout });
+    withBanner();
+    expect(screen.queryByText('Aviso do banner')).not.toBeInTheDocument();
+  });
+
+  it.each(['light', 'dark'] as const)('passes axe with the real banner (%s)', async (scheme) => {
+    setViewport(DESKTOP);
+    const { container } = renderWithProviders(
+      <AppShell
+        banner={
+          <ShellBanner severity="warning" action={<Button color="inherit">Reenviar link</Button>}>
+            Confirme seu e-mail para usar favoritos, filtros, lembretes e a calculadora.
+          </ShellBanner>
+        }
+      >
+        <h1>Conteúdo da página</h1>
+      </AppShell>,
+      { scheme },
+    );
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
   });
 });
 

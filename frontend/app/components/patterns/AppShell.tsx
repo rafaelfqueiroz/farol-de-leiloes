@@ -492,6 +492,11 @@ function SkipLink() {
 
 export interface AppShellProps {
   children: ReactNode;
+  /**
+   * The banner slot between the top bar and the content (DESIGN.md §6). Only a signed-in visitor
+   * gets it; the shell knows nothing about what the banner says (a `ShellBanner`).
+   */
+  banner?: ReactNode;
 }
 
 /**
@@ -499,7 +504,7 @@ export interface AppShellProps {
  * sidebar / rail / drawer navigation and the single `<main>`. Signed out it is the guest top bar
  * (logo, theme, "Entrar") with no navigation.
  */
-export default function AppShell({ children }: AppShellProps) {
+export default function AppShell({ children, banner }: AppShellProps) {
   const t = useTranslations('patterns.appShell');
   const theme = useTheme();
   const router = useRouter();
@@ -696,8 +701,12 @@ export default function AppShell({ children }: AppShellProps) {
           </Box>
         )}
 
-        <Box component="main" id={MAIN_CONTENT_ID} tabIndex={-1} sx={{ flex: 1, minWidth: 0 }}>
-          {signingOut ? null : children}
+        {/* the banner sits in the content column, beside a sidebar that keeps its full height */}
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          {status === 'member' && !signingOut ? banner : null}
+          <Box component="main" id={MAIN_CONTENT_ID} tabIndex={-1} sx={{ flex: 1, minWidth: 0 }}>
+            {signingOut ? null : children}
+          </Box>
         </Box>
       </Box>
 

@@ -51,6 +51,21 @@ describe('ResetPasswordPage', () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it('hints the 8 to 128 characters under the new password and stops typing at 128', () => {
+    render(<ResetPasswordPage />);
+
+    const field = screen.getByLabelText(/^Nova Senha/);
+    expect(field).toHaveAccessibleDescription('De 8 a 128 caracteres');
+    expect(field).toHaveAttribute('maxlength', '128');
+  });
+
+  it('frame "sem quadro": an used or expired link reads "Link usado ou expirado"', async () => {
+    answer(400, { code: 'INVALID_RESET_TOKEN', context: {} });
+    await fillAndSubmit('secret-one', 'secret-one');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Link usado ou expirado$/);
+  });
+
   it('refuses passwords that differ without calling the API', async () => {
     const user = userEvent.setup();
     render(<ResetPasswordPage />);

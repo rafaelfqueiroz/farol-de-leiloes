@@ -13,15 +13,6 @@ interface User {
   role: string;
   subscriptionStatus?: string | null;
   phone?: string;
-  cpf?: string;
-  dateOfBirth?: string;
-  sex?: string;
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zipCode?: string;
-  };
 }
 
 interface AuthContextType {
@@ -86,7 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (email: string, password: string, name: string) => {
     const data = await apiJson<{ user: User }>('/api/auth/register', {
       method: 'POST',
-      json: { email, password, name },
+      // BR-001-02: the form only submits once the terms are accepted
+      json: { email, password, name, acceptTerms: true },
     });
     setUser(data.user);
   };

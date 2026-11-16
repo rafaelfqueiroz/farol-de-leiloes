@@ -7,10 +7,12 @@ export type Status = 'onTime' | 'late' | 'done' | 'cancelled' | 'neutral';
 
 export interface StatusBadgeProps {
   status: Status;
+  /** The text of a state the shared labels do not name ("Não confirmado"); it comes from the catalogue. */
+  label?: string;
 }
 
 // DS-10: the label always shows; the colour and the dot are never the only signal.
-export default function StatusBadge({ status }: StatusBadgeProps) {
+export default function StatusBadge({ status, label }: StatusBadgeProps) {
   const t = useTranslations('patterns.statusBadge');
   const hollow = status === 'cancelled';
 
@@ -51,7 +53,7 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
             : { bgcolor: 'currentColor' }),
         })}
       />
-      {t(status)}
+      {label ?? t(status)}
     </Box>
   );
 }

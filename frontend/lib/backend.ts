@@ -123,7 +123,7 @@ interface ProxyOptions {
   /** Query string for the backend call, without the leading `?`. */
   query?: string;
   /**
-   * The route signs the caller in (login, register, the Google exchange): an `accessToken` in the
+   * The route signs the caller in (login, register, the Google exchange and complete): an `accessToken` in the
    * backend's answer becomes the session cookie and is removed from the body (SC-02).
    */
   startsSession?: boolean;

@@ -8,10 +8,12 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Link from 'next/link';
 import { ResultScreen } from '@/app/components/patterns/PublicScreens';
+import { useAuth } from '@/app/contexts/AuthContext';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 
 export default function VerifyEmailTokenPage() {
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const t = useTranslations('verifyEmail.token');
   const apiErrorMessage = useApiErrorMessage();
   const params = useParams();
@@ -32,6 +34,8 @@ export default function VerifyEmailTokenPage() {
           throw await readApiError(response);
         }
 
+        // a signed-in visitor of this browser is confirmed now: the shell's banner must go
+        await refreshUser();
         setStatus('success');
       } catch (err: unknown) {
         setStatus('error');
@@ -42,7 +46,7 @@ export default function VerifyEmailTokenPage() {
     if (token) {
       void verifyEmail();
     }
-  }, [token, apiErrorMessage]);
+  }, [token, apiErrorMessage, refreshUser]);
 
   // the redirect belongs to the success state, so leaving the page clears it
   useEffect(() => {

@@ -181,24 +181,59 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
     expect(await stored(email)).toEqual(before);
   });
 
-  it('BR-001-31: the legacy complete-profile route has its own allowlist and the same phone rule', async () => {
+  it('the legacy complete-profile route is gone and writes nothing', async () => {
     const { email, token } = await account();
-    const complete = (body: object) =>
-      request(server())
-        .patch('/api/auth/profile/complete')
-        .set('Authorization', `Bearer ${token}`)
-        .send(body);
+    const before = await stored(email);
 
-    await complete({ role: 'admin' }).expect(400);
-    await complete({ phone: '99999-1234' }).expect(400);
-    await complete({ phone: '(84) 99999-1234', cpf: '00000000000', sex: 'other' }).expect(200);
+    await request(server())
+      .patch('/api/auth/profile/complete')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ phone: '(84) 99999-1234', cpf: '00000000000', sex: 'other' })
+      .expect(404);
 
-    expect(await stored(email)).toMatchObject({
-      phone: '+5584999991234',
-      cpf: '00000000000',
-      sex: 'other',
-      role: 'free',
-    });
+    expect(await stored(email)).toEqual(before);
+  });
+
+  it('PATCH /auth/profile refuses the legacy cpf, birth date, sex and address as a whole', async () => {
+    const { email, token } = await account();
+    const before = await stored(email);
+
+    for (const legacy of [
+      { cpf: '00000000000' },
+      { dateOfBirth: '1990-01-01' },
+      { sex: 'female' },
+      { address: { city: 'Natal' } },
+    ]) {
+      await patch(token, { name: 'X', ...legacy }).expect(400);
+    }
+
+    expect(await stored(email)).toEqual(before);
+  });
+
+  it('GET /auth/profile/full does not return the legacy details a stored account still holds', async () => {
+    const { email, token } = await account();
+    await users.collection.updateOne(
+      { email },
+      {
+        $set: {
+          cpf: '00000000000',
+          dateOfBirth: new Date('1990-01-01T00:00:00.000Z'),
+          sex: 'female',
+          address: { city: 'Natal' },
+        },
+      },
+    );
+    const before = await stored(email);
+
+    const response = await request(server())
+      .get('/api/auth/profile/full')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    for (const legacy of ['cpf', 'dateOfBirth', 'sex', 'address']) {
+      expect(response.body).not.toHaveProperty(legacy);
+    }
+    expect(await stored(email)).toEqual(before);
   });
 
   it('the profile response carries no credential or token field', async () => {

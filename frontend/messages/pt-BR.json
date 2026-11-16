@@ -120,21 +120,21 @@
     "COUPON_NOT_FOUND": "Não encontramos este cupom.",
     "SUBSCRIPTION_NOT_FOUND": "Você não tem uma assinatura ativa.",
     "MAINTENANCE_WINDOW_NOT_FOUND": "Esta manutenção programada não existe mais.",
-    "INVALID_CREDENTIALS": "E-mail ou senha incorretos. Confira os dados e tente novamente.",
+    "INVALID_CREDENTIALS": "E-mail ou senha incorretos",
     "CURRENT_PASSWORD_INCORRECT": "A senha atual está incorreta. Confira e tente novamente.",
     "PASSWORD_ALREADY_SET": "Esta conta já tem uma senha. Use a opção de alterar senha.",
     "OAUTH_ACCOUNT_HAS_NO_PASSWORD": "Esta conta entra com o Google e não tem senha. Entre com o Google ou defina uma senha no perfil.",
-    "EMAIL_ALREADY_REGISTERED": "Já existe uma conta com este e-mail. Entre ou redefina sua senha.",
+    "EMAIL_ALREADY_REGISTERED": "Este e-mail já tem cadastro",
     "EMAIL_ALREADY_VERIFIED": "Este e-mail já foi confirmado.",
     "EMAIL_CHANGE_UNAVAILABLE": "O e-mail da conta não pode ser alterado.",
     "OAUTH_ACCOUNT_NEEDS_NO_VERIFICATION": "Contas do Google não precisam confirmar o e-mail.",
     "INVALID_VERIFICATION_TOKEN": "O link de confirmação é inválido ou expirou. Peça um novo e-mail de confirmação.",
-    "INVALID_RESET_TOKEN": "O link de redefinição é inválido ou expirou. Solicite um novo.",
+    "INVALID_RESET_TOKEN": "Link usado ou expirado",
     "GOOGLE_ACCOUNT_WITHOUT_EMAIL": "Sua conta do Google não informou um e-mail. Use outra conta ou cadastre-se com e-mail e senha.",
     "GOOGLE_EMAIL_NOT_VERIFIED": "O Google não confirmou este e-mail. Entre com e-mail e senha.",
     "GOOGLE_SIGN_IN_FAILED": "Não foi possível entrar com o Google. Tente novamente ou entre com e-mail e senha.",
     "INVALID_GOOGLE_CODE": "Link de acesso inválido ou expirado",
-    "TOO_MANY_ATTEMPTS": "Muitas tentativas de entrada. Aguarde 15 minutos e tente novamente.",
+    "TOO_MANY_ATTEMPTS": "Muitas tentativas. Tente de novo em 15 minutos",
     "PLAN_NOT_ALLOWED": "Seu plano não inclui este recurso. Veja os planos para liberar o acesso.",
     "INVALID_PLAN": "O plano escolhido não existe. Escolha um dos planos disponíveis.",
     "CHECKOUT_SESSION_FAILED": "Não foi possível iniciar o pagamento. Tente novamente em instantes.",
@@ -288,9 +288,8 @@
     "subtitle": "Entre para acessar sua conta",
     "email": "E-mail",
     "password": "Senha",
-    "submitting": "Entrando...",
+    "submitting": "Entrando…",
     "or": "ou",
-    "google": "Entrar com Google",
     "noAccount": "Não tem uma conta? <link>Criar conta</link>"
   },
   "register": {
@@ -299,14 +298,14 @@
     "name": "Nome",
     "email": "E-mail",
     "password": "Senha",
-    "passwordHelper": "Mínimo de {min} caracteres",
-    "confirmPassword": "Confirmar Senha",
+    "passwordHelper": "De {min} a {max} caracteres",
+    "confirmPassword": "Confirmar senha",
     "submit": "Criar conta",
-    "submitting": "Criando conta...",
-    "hasAccount": "Já tem uma conta? <link>Entrar</link>",
+    "submitting": "Criando conta…",
+    "hasAccount": "Já tenho conta",
     "errors": {
       "passwordMismatch": "As senhas não coincidem",
-      "passwordTooShort": "A senha deve ter pelo menos {min} caracteres"
+      "passwordLength": "Use de {min} a {max} caracteres"
     }
   },
   "resetPassword": {
@@ -328,7 +327,8 @@
       "errors": {
         "passwordMismatch": "As senhas não coincidem",
         "passwordTooShort": "A senha deve ter pelo menos {min} caracteres"
-      }
+      },
+      "passwordHelper": "De {min} a {max} caracteres"
     }
   },
   "verifyEmail": {
@@ -351,8 +351,20 @@
     }
   },
   "authCallback": {
-    "authenticating": "Autenticando...",
-    "fallback": "Carregando..."
+    "authenticating": "Entrando…",
+    "fallback": "Carregando…",
+    "terms": {
+      "title": "Falta pouco",
+      "summary": "Entrando como {email}",
+      "submit": "Criar conta",
+      "submitting": "Criando conta…",
+      "decline": "Cancelar"
+    },
+    "error": {
+      "title": "Não foi possível entrar com o Google",
+      "hint": "Tente de novo ou entre com e-mail e senha.",
+      "backToLogin": "Voltar para o login"
+    }
   },
   "plansResult": {
     "cancel": {
@@ -655,61 +667,32 @@
     }
   },
   "profile": {
-    "title": "Meu Perfil",
-    "subtitle": "Gerencie suas informações pessoais e segurança",
-    "success": {
-      "profile": "Perfil atualizado com sucesso!",
-      "personalData": "Dados pessoais salvos com sucesso!",
-      "passwordChanged": "Senha alterada com sucesso!",
-      "passwordSet": "Senha definida com sucesso! Agora você pode entrar com e-mail e senha."
-    },
-    "errors": {
-      "passwordMismatch": "As senhas não coincidem",
-      "passwordTooShort": "A senha deve ter pelo menos 8 caracteres"
-    },
-    "profileInfo": {
-      "title": "Informações do Perfil",
+    "title": "Meu perfil",
+    "subtitle": "Gerencie seus dados de acesso e segurança",
+    "account": {
+      "title": "Dados da conta",
       "name": "Nome",
       "email": "E-mail",
-      "emailLockedForGoogle": "E-mail não pode ser alterado para contas Google",
-      "submit": "Atualizar Perfil"
-    },
-    "personalData": {
-      "title": "Dados Pessoais",
+      "emailHelper": "O e-mail é o seu acesso e não pode ser alterado",
+      "unconfirmed": "Não confirmado",
       "phone": "Telefone",
-      "phonePlaceholder": "(00) 00000-0000",
-      "cpf": "CPF",
-      "cpfPlaceholder": "000.000.000-00",
-      "dateOfBirth": "Data de Nascimento",
-      "sex": "Sexo",
-      "sexOptions": {
-        "none": "Selecione",
-        "male": "Masculino",
-        "female": "Feminino",
-        "other": "Outro"
-      },
-      "address": "Endereço",
-      "street": "Rua",
-      "city": "Cidade",
-      "state": "Estado",
-      "statePlaceholder": "UF",
-      "zipCode": "CEP",
-      "zipCodePlaceholder": "00000-000",
-      "submit": "Salvar Dados Pessoais"
+      "phoneHelper": "Com DDD, ex.: (84) 99999-1234",
+      "phoneInvalid": "Informe o telefone com DDD",
+      "saved": "Perfil salvo"
     },
     "password": {
-      "new": "Nova Senha",
-      "confirm": "Confirmar Nova Senha"
-    },
-    "changePassword": {
-      "title": "Alterar Senha",
-      "current": "Senha Atual",
-      "submit": "Alterar Senha"
-    },
-    "setPassword": {
-      "title": "Definir Senha",
-      "intro": "Você entrou com o Google. Defina uma senha para também poder entrar com e-mail e senha.",
-      "submit": "Definir Senha"
+      "title": "Senha",
+      "current": "Senha atual",
+      "new": "Nova senha",
+      "newHelper": "De {min} a {max} caracteres",
+      "tooShort": "Use de {min} a {max} caracteres",
+      "devicesOnChange": "Ao alterar a senha, você sai dos outros dispositivos.",
+      "devicesOnCreate": "Ao criar a senha, você sai dos outros dispositivos.",
+      "googleIntro": "Você entrou com o Google. Crie uma senha para também entrar com e-mail e senha.",
+      "change": "Alterar senha",
+      "create": "Criar senha",
+      "changed": "Senha alterada",
+      "created": "Senha criada"
     }
   },
   "adminCoupons": {
@@ -768,5 +751,18 @@
       "customAlerts": "Alertas personalizados",
       "advancedReports": "Relatórios avançados"
     }
+  },
+  "account": {
+    "terms": {
+      "label": "Li e aceito os Termos de uso e a Política de privacidade",
+      "required": "Aceite os termos para criar a conta"
+    },
+    "emailBanner": {
+      "unconfirmed": "Confirme seu e-mail para usar favoritos, filtros, lembretes e a calculadora.",
+      "resend": "Reenviar link",
+      "resending": "Enviando…",
+      "sent": "Enviamos um novo link para {email}."
+    },
+    "googleSignIn": "Entrar com Google"
   }
 }

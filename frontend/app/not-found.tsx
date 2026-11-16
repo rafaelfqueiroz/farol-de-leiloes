@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ErrorOutlineOutlined from '@mui/icons-material/ErrorOutlineOutlined';
+import EmailVerificationBanner from '@/app/components/account/EmailVerificationBanner';
 import AppShell from '@/app/components/patterns/AppShell';
 import EmptyState from '@/app/components/patterns/EmptyState';
 import PageShell from '@/app/components/patterns/PageShell';
@@ -16,7 +17,7 @@ export default function NotFound() {
   return (
     // #42: the root not-found cannot sit in a route group, so it mounts the AppShell itself
     // (guest or signed in). DS-15: a full-page state has no PageHeader, so its title is the h1
-    <AppShell>
+    <AppShell banner={<EmailVerificationBanner />}>
       <PageShell width="reading">
         <EmptyState
           icon={ErrorOutlineOutlined}

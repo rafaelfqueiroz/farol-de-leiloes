@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from './AuthContext';
 import { useReloadOnUserChange } from './use-reload-on-user-change';
 import { apiFetch } from '@/lib/api-client';
-import { readApiError } from '@/lib/api-error';
+import { isEmailVerificationRequired, readApiError } from '@/lib/api-error';
 import { reportClientError } from '@/lib/report-client-error';
 import type { Auction } from '@/lib/auction';
 
@@ -63,7 +63,10 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         throw await readApiError(response);
       }
     } catch (error) {
-      if (isLatest()) reportClientError(error, { where: 'FavoritesContext.load' });
+      if (!isLatest()) return;
+      // BR-001-04: an unconfirmed account has no favourites to read; the shell banner says why
+      if (isEmailVerificationRequired(error)) setFavoriteCodes([]);
+      else reportClientError(error, { where: 'FavoritesContext.load' });
     } finally {
       if (isLatest()) setLoading(false);
     }
@@ -131,9 +134,11 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
           // Session ended (apiFetch told the app), redirect to login
           router.push('/login');
         } else {
-          reportClientError(await readApiError(response), {
-            where: 'FavoritesContext.toggleFavorite',
-          });
+          const error = await readApiError(response);
+          // BR-001-04: the action is not done and the banner already says why: no second alert
+          if (!isEmailVerificationRequired(error)) {
+            reportClientError(error, { where: 'FavoritesContext.toggleFavorite' });
+          }
         }
       } catch (error) {
         reportClientError(error, { where: 'FavoritesContext.toggleFavorite' });
