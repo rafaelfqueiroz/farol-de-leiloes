@@ -42,7 +42,7 @@ Agents never start the applications (DV-18); the developer runs them.
 
 `npm run check` is the definition of done (DV-20). The pre-push hook runs it in every package a push changes (DV-37), so it is also the gate before a push.
 
-E2E tests (Playwright, `npm run test:e2e`) are not set up yet; they arrive with [#3](https://github.com/rafaelfqueiroz/farol-de-leiloes/issues/3) (TESTING §6).
+E2E tests: `npm run test:e2e` runs Playwright (`e2e/`, `playwright.config.ts`) against its own Compose stack (`e2e/compose.e2e.yml`), which it builds, seeds and tears down; Docker must be running, and `npx playwright install chromium` once. See TESTING §6.
 
 ## Environment
 
