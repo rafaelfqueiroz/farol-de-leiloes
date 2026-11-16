@@ -104,6 +104,8 @@ describe('VerifyEmailTokenPage', () => {
     answer(200, {});
     render(<VerifyEmailTokenPage />);
     await screen.findByRole('heading', { name: 'E-mail verificado!' });
+    // the redirect is scheduled by an effect: let it commit before moving the clock
+    await act(async () => {});
 
     // the polling of findByRole already moved the clock a little, so keep a margin
     act(() => {
@@ -115,6 +117,22 @@ describe('VerifyEmailTokenPage', () => {
     });
 
     expect(env.push).toHaveBeenCalledWith('/login');
+  });
+
+  it('does not redirect after the page is left before the three seconds', async () => {
+    // a timer outliving the component would navigate a user who already left
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    answer(200, {});
+    const { unmount } = render(<VerifyEmailTokenPage />);
+    await screen.findByRole('heading', { name: 'E-mail verificado!' });
+    await act(async () => {});
+
+    unmount();
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(env.push).not.toHaveBeenCalled();
   });
 
   it('shows the catalogue message of the code when the link is invalid or expired', async () => {
