@@ -19,6 +19,7 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   SAVED_FILTER_NOT_FOUND: HttpStatus.NOT_FOUND,
   COUPON_NOT_FOUND: HttpStatus.NOT_FOUND,
   SUBSCRIPTION_NOT_FOUND: HttpStatus.NOT_FOUND,
+  MAINTENANCE_WINDOW_NOT_FOUND: HttpStatus.NOT_FOUND,
 
   // 401 means "not signed in" and the frontend treats it so; a wrong current password on a
   // signed-in request is a 400.
@@ -55,4 +56,7 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   EMAIL_VERIFICATION_REQUIRED: HttpStatus.FORBIDDEN,
   PHONE_REQUIRED: HttpStatus.UNPROCESSABLE_ENTITY,
   REMINDER_CHANNEL_NOT_IN_PLAN: HttpStatus.FORBIDDEN,
+
+  // BR-003-03: a started window is part of the availability record and stays.
+  MAINTENANCE_WINDOW_ALREADY_STARTED: HttpStatus.CONFLICT,
 };
