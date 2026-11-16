@@ -10,7 +10,8 @@
 #
 # No proxy is trusted, because Cloudflare is DNS-only (ADR-002): incoming X-Forwarded-For is discarded,
 # so a client cannot spoof its address (SC-04). Turning on Cloudflare's proxy needs trusted_proxies
-# here, see docs/runbooks/deploy-and-rollback.md.
+# here, see docs/runbooks/deploy-and-rollback.md. The frontend (BFF) forwards the chain Caddy sends
+# it to the backend unchanged, so TRUST_PROXY_HOPS counts the same for both paths (same runbook).
 
 (maintenance) {
 	# The backend is down while a deploy replaces it (ADR-002); the frontend may restart too.

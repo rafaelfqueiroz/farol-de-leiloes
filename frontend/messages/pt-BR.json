@@ -112,6 +112,7 @@
     "NOT_FOUND": "Não encontramos o que você procurou.",
     "PAYLOAD_TOO_LARGE": "O conteúdo enviado é grande demais. Reduza o tamanho e tente novamente.",
     "INTERNAL_ERROR": "Ocorreu um erro no servidor. Tente novamente em instantes.",
+    "TOO_MANY_REQUESTS": "Muitas solicitações em pouco tempo. Aguarde alguns minutos e tente novamente.",
     "AUCTION_NOT_FOUND": "Este leilão não está mais disponível.",
     "USER_NOT_FOUND": "Não encontramos esta conta.",
     "REMINDER_NOT_FOUND": "Este lembrete não existe mais.",
@@ -129,6 +130,7 @@
     "INVALID_VERIFICATION_TOKEN": "O link de confirmação é inválido ou expirou. Peça um novo e-mail de confirmação.",
     "INVALID_RESET_TOKEN": "O link de redefinição é inválido ou expirou. Solicite um novo.",
     "GOOGLE_ACCOUNT_WITHOUT_EMAIL": "Sua conta do Google não informou um e-mail. Use outra conta ou cadastre-se com e-mail e senha.",
+    "TOO_MANY_ATTEMPTS": "Muitas tentativas de entrada. Aguarde 15 minutos e tente novamente.",
     "PLAN_NOT_ALLOWED": "Seu plano não inclui este recurso. Veja os planos para liberar o acesso.",
     "INVALID_PLAN": "O plano escolhido não existe. Escolha um dos planos disponíveis.",
     "CHECKOUT_SESSION_FAILED": "Não foi possível iniciar o pagamento. Tente novamente em instantes.",
@@ -659,7 +661,7 @@
     },
     "errors": {
       "passwordMismatch": "As senhas não coincidem",
-      "passwordTooShort": "A senha deve ter pelo menos 6 caracteres"
+      "passwordTooShort": "A senha deve ter pelo menos 8 caracteres"
     },
     "profileInfo": {
       "title": "Informações do Perfil",

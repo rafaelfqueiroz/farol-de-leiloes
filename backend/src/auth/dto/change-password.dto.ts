@@ -1,16 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
+import { NewPasswordField } from './new-password.decorator.js';
 
 export class ChangePasswordDto {
+  // BR-001-28: the current password is required on accounts that have one.
   @ApiProperty({ type: String, format: 'password' })
   @IsString()
   @IsNotEmpty()
   currentPassword!: string;
 
-  // The same rule as registration and set-password.
-  @ApiProperty({ type: String, format: 'password', minLength: 6 })
-  @IsString()
-  @MinLength(6)
-  @IsNotEmpty()
+  @NewPasswordField()
   newPassword!: string;
 }

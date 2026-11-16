@@ -18,16 +18,21 @@ export interface UserProfile {
   updatedAt: Date;
 }
 
-/** The claims AuthService signs into the access token. */
+/**
+ * The claims AuthService signs into the access token: the account and the session, nothing else
+ * (BR-001-17). Role, plan and status are read from the database on every request.
+ */
 export interface JwtPayload {
   sub: string;
-  email: string;
-  name: string;
+  /** The session id (sessions collection `_id`). A token without it is refused. */
+  jti: string;
 }
 
 /** What JwtStrategy.validate puts on `request.user`, read through @CurrentUser(). */
 export interface AuthenticatedUser {
   userId: string;
+  /** The session this request belongs to (the token's `jti`), for sign-out and BR-001-19. */
+  sessionId: string;
   email: string;
   name: string;
   emailVerified: boolean;

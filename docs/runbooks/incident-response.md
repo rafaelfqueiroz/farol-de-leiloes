@@ -21,7 +21,7 @@ State these honestly when the runbook is used:
 
 ## Steps
 
-1. **Contain (first hour).** Stop the leak without destroying evidence: revoke the exposed credential or key, make the bucket private, disable the affected endpoint or feature flag, end sessions (bump session versions, SC-03). Write down what you did and when — Brasília time.
+1. **Contain (first hour).** Stop the leak without destroying evidence: revoke the exposed credential or key, make the bucket private, disable the affected endpoint or feature flag, end sessions (mark the account's rows in `sessions` revoked, SC-03; `JwtStrategy` refuses a revoked session on the next request). Write down what you did and when — Brasília time.
 2. **Open a private record.** A GitHub security advisory draft on the repository, holding a timeline of everything from discovery onward: who found it, when, how.
 3. **Establish the facts.**
    - What data categories (SECURITY §9 inventory)? Does it include sensitive data, financial data, documents, or third parties in documents?

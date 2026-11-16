@@ -10,7 +10,7 @@ import { AuthFormPage } from '@/app/components/patterns/PublicScreens';
 import { useApiErrorMessage } from '@/lib/api-error';
 
 // The shortest password the form accepts
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = 8; // SPEC-001 BR-001-13
 
 export default function RegisterPage() {
   const router = useRouter();

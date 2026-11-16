@@ -14,6 +14,7 @@ import { Public } from '../decorators/public.decorator.js';
 import { CurrentUser } from '../decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../interfaces/auth.interface.js';
 import { JwtStrategy } from '../strategies/jwt.strategy.js';
+import { SessionsService } from '../sessions/sessions.service.js';
 import { UsersService } from '../../users/users.service.js';
 import { testConfigService } from '../../../test/support/test-env.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
@@ -52,6 +53,10 @@ const productionGuards = (
   providers: [
     ...productionGuards,
     JwtStrategy,
+    {
+      provide: SessionsService,
+      useValue: { activeCredentialVersion: vi.fn().mockResolvedValue(0) },
+    },
     { provide: ConfigService, useValue: testConfigService() },
     {
       provide: UsersService,
@@ -79,8 +84,7 @@ describe('global JWT authentication (SC-07)', () => {
     await app.init();
     token = new JwtService({ secret: testConfigService().get('JWT_SECRET') }).sign({
       sub: 'test-user',
-      email: 'guard-test@example.test',
-      name: 'Guard Test',
+      jti: 'test-session',
     });
   });
 
@@ -93,6 +97,18 @@ describe('global JWT authentication (SC-07)', () => {
   it('denies an undecorated new endpoint without credentials', async () => {
     const response = await request(app.getHttpServer()).get('/api/guard-test/private').expect(401);
     expect(response.body).toEqual({ code: 'UNAUTHENTICATED', context: {} });
+  });
+
+  it('BR-001-17: denies a validly signed token that has no session id', async () => {
+    const legacy = new JwtService({ secret: testConfigService().get('JWT_SECRET') }).sign({
+      sub: 'test-user',
+      email: 'guard-test@example.test',
+      name: 'Guard Test',
+    });
+    await request(app.getHttpServer())
+      .get('/api/guard-test/private')
+      .set('Authorization', `Bearer ${legacy}`)
+      .expect(401);
   });
 
   it('denies an invalid bearer token', async () => {

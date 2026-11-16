@@ -254,8 +254,8 @@ describe('ProfilePage change password (email and password account)', () => {
     expect(callsTo('/api/auth/change-password')).toHaveLength(0);
   });
 
-  it('refuses a password shorter than six characters without calling the API', async () => {
-    await fill('old-secret', '12345', '12345');
+  it('refuses a password shorter than eight characters without calling the API', async () => {
+    await fill('old-secret', '1234567', '1234567');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       messages.profile.errors.passwordTooShort,
@@ -316,8 +316,8 @@ describe('ProfilePage set password (Google account)', () => {
     expect(callsTo('/api/auth/set-password')).toHaveLength(0);
   });
 
-  it('refuses a password shorter than six characters without calling the API', async () => {
-    await fill('12345', '12345');
+  it('refuses a password shorter than eight characters without calling the API', async () => {
+    await fill('1234567', '1234567');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       messages.profile.errors.passwordTooShort,

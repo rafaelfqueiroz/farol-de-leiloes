@@ -190,7 +190,7 @@ export default function ProfilePage() {
       return;
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
       setError(t('errors.passwordTooShort'));
       return;
     }
@@ -233,7 +233,7 @@ export default function ProfilePage() {
       return;
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
       setError(t('errors.passwordTooShort'));
       return;
     }

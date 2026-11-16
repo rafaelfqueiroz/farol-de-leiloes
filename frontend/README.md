@@ -87,7 +87,7 @@ development diagnostics require eval; production enforces `Content-Security-Poli
 `lib/backend.ts` is server-only. It is the one place route handlers reach the backend.
 
 - `backendFetch(path, init)` calls `${BACKEND_API_URL}/api${path}`. The path must start with `/`.
-- `proxyToBackend(request, path, { auth, query })` forwards the request method and raw body (none for GET and DELETE) and only the `Authorization` header. It sends `Content-Type: application/json` when there is a body.
+- `proxyToBackend(request, path, { auth, query })` forwards the request method and raw body (none for GET and DELETE) and only the `Authorization` header and the caller's `X-Forwarded-For` chain (`lib/forwarded-for.ts`: Caddy's chain unchanged when every entry is a valid IP address and there are at most 5, otherwise none), so the backend's per-origin limits (SC-04) see the browser and not the BFF; no cookies or other headers. The AI search route (`app/api/chat`) forwards the chain the same way; the sitemap and the cached auction page are not per-caller and forward none. It sends `Content-Type: application/json` when there is a body.
 - `auth: true` without an `Authorization` header answers 401 `UNAUTHENTICATED` without calling the backend.
 - The backend's JSON answer passes through with its status, unchanged (AR-38). A non-JSON error status (a gateway page, an empty 5xx) becomes 502 `BACKEND_UNAVAILABLE`. A network failure also becomes 502 `BACKEND_UNAVAILABLE`.
 - Logs carry the route, the error name and the message only, never a body, header or token (SC-15).

@@ -277,8 +277,8 @@ describe('Migrations (integration)', () => {
     });
   });
 
-  describe('0001 then 0002-saved-filter-price-bounds, through the runner (#81)', () => {
-    const ALL = ['0001-money-decimal128', '0002-saved-filter-price-bounds'];
+  describe('0001 to 0003 through the runner (#81)', () => {
+    const ALL = ['0001-money-decimal128', '0002-saved-filter-price-bounds', '0003-account-tokens'];
     let afterFirstRun: Awaited<ReturnType<typeof snapshot>>;
 
     beforeAll(async () => {
@@ -329,7 +329,7 @@ describe('Migrations (integration)', () => {
       });
     });
 
-    it('a second run skips both and changes nothing; 0002 alone rewrites 0 documents', async () => {
+    it('a second run skips all and changes nothing; 0002 alone rewrites 0 documents', async () => {
       await expect(
         runMigrations(db, MIGRATIONS, mongoMigrationLog(db), new FakeClock(LATER)),
       ).resolves.toEqual({ applied: [], skipped: ALL });

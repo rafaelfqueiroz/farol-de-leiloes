@@ -17,6 +17,7 @@ import { PATH_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { getOptionsToken } from '@nestjs/throttler';
 import { DECORATORS, type OpenAPIObject } from '@nestjs/swagger';
 import { getMetadataStorage } from 'class-validator';
 import request from 'supertest';
@@ -79,7 +80,11 @@ async function createApp(
 ): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     controllers,
-    providers: [{ provide: ConfigService, useValue: testConfigService(env) }],
+    providers: [
+      { provide: ConfigService, useValue: testConfigService(env) },
+      // SC-04: controllers use ThrottlerGuard; the mocker's empty object is not valid options.
+      { provide: getOptionsToken(), useValue: { throttlers: [] } },
+    ],
   })
     .useMocker(() => ({}))
     .compile();

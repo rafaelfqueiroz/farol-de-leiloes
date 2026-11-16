@@ -1,12 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
+import { EmailField } from './normalize-email.decorator.js';
 
 export class LoginDto {
-  @ApiProperty({ type: String, format: 'email' })
-  @IsEmail()
-  @IsNotEmpty()
+  @EmailField()
   email!: string;
 
+  // No length rule here: sign-in must accept whatever the account was created with (BR-001-14).
   @ApiProperty({ type: String, format: 'password' })
   @IsString()
   @IsNotEmpty()

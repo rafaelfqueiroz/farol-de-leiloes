@@ -38,8 +38,6 @@ describe('AuthService hydrated account profiles (integration)', () => {
       providers: ['local', 'google'],
       address: { street: 'Test Street', city: 'Test City', state: 'SP', zipCode: '00000000' },
       password: 'fake-password-hash',
-      resetPasswordToken: 'fake-reset-token',
-      emailVerificationToken: 'fake-verification-token',
       dateOfBirth: BIRTH_DATE,
       createdAt: CREATED,
     });
@@ -54,6 +52,9 @@ describe('AuthService hydrated account profiles (integration)', () => {
       {} as AuthDeps[0],
       { sign: () => 'signed-token' } as unknown as AuthDeps[1],
       {} as AuthDeps[2],
+      {} as AuthDeps[3],
+      { create: async () => 'test-session' } as unknown as AuthDeps[4],
+      {} as AuthDeps[5],
     );
 
     const { user: profile } = await service.googleLogin(user);
@@ -74,12 +75,7 @@ describe('AuthService hydrated account profiles (integration)', () => {
     expect(profile.dateOfBirth).not.toBe(user.dateOfBirth);
     expect(profile.createdAt).not.toBe(user.createdAt);
     expect(profile.updatedAt).not.toBe(user.updatedAt);
-    for (const privateField of [
-      'password',
-      'resetPasswordToken',
-      'emailVerificationToken',
-      '$__',
-    ]) {
+    for (const privateField of ['password', 'status', '$__']) {
       expect(profile).not.toHaveProperty(privateField);
     }
 

@@ -11,6 +11,7 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   NOT_FOUND: HttpStatus.NOT_FOUND,
   PAYLOAD_TOO_LARGE: HttpStatus.PAYLOAD_TOO_LARGE,
   INTERNAL_ERROR: HttpStatus.INTERNAL_SERVER_ERROR,
+  TOO_MANY_REQUESTS: HttpStatus.TOO_MANY_REQUESTS,
 
   AUCTION_NOT_FOUND: HttpStatus.NOT_FOUND,
   USER_NOT_FOUND: HttpStatus.NOT_FOUND,
@@ -32,6 +33,8 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   INVALID_VERIFICATION_TOKEN: HttpStatus.BAD_REQUEST,
   INVALID_RESET_TOKEN: HttpStatus.BAD_REQUEST,
   GOOGLE_ACCOUNT_WITHOUT_EMAIL: HttpStatus.UNAUTHORIZED,
+  // BR-001-15: too many failed sign-ins; the throttle answers even when the password is right.
+  TOO_MANY_ATTEMPTS: HttpStatus.TOO_MANY_REQUESTS,
 
   PLAN_NOT_ALLOWED: HttpStatus.FORBIDDEN,
   INVALID_PLAN: HttpStatus.BAD_REQUEST,
