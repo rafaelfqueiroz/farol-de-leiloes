@@ -1,0 +1,173 @@
+# SPEC-003 BR-003-06..BR-003-10, TESTING §10, DEVELOPMENT §12. The performance budgets, measured
+# on every release candidate against the reference workload (the full Caixa catalog, BR-003-08)
+# on the 4G phone profile (BR-003-07), and the release gate.
+#
+# - `push` of a `v*` tag and `workflow_dispatch` run the real measurement: 20 runs per page,
+#   exactly as `npm run test:perf` does locally (frontend/perf/run.mjs, the E2E Compose stack
+#   seeded with the full catalog). Never on a schedule: it is a heavy job (nightly.yml stays light).
+# - `pull_request`, path-filtered to the harness's own files, runs the same pipeline with 3 runs
+#   per page, report-only: it proves the workflow works before a release needs it (a dispatch
+#   needs the file on `main`), and its numbers are not a measurement.
+# - Release gate (BR-003-10): when a budget is missed, the `gate` job fails unless the release's
+#   notes carry a waiver line, `Performance waiver: <reason>` (frontend/perf/waiver.mjs); the
+#   waiver is echoed in the job summary. The gate is its own job so that, after the notes are
+#   edited, "Re-run failed jobs" re-reads them without measuring again.
+# - A dispatch names the release to read the waiver from with `release-tag`; a tag push reads its
+#   own. A release candidate with no release yet has no waiver, so a miss fails until the release
+#   exists with the waiver in its notes.
+#
+# SC-21: every action is pinned to a commit SHA, permissions are least privilege and there is no
+# `pull_request_target`. The structural suite (test/structural/workflows.spec.ts) enforces it.
+name: Performance
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release-tag:
+        description: 'Release whose notes may carry a "Performance waiver: <reason>" line (e.g. v1.4.0)'
+        required: false
+        type: string
+      runs:
+        description: 'Runs per page; the gate needs the 20 the spec asks for'
+        required: false
+        default: '20'
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/performance.yml'
+      - 'frontend/lighthouserc.cjs'
+      - 'frontend/perf/**'
+      - 'frontend/e2e/compose.e2e.yml'
+      - 'backend/scripts/reference-workload/**'
+      - 'backend/e2e.Dockerfile'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The only browser driven is the runner's Chrome, by Lighthouse CI; never puppeteer's download.
+  PUPPETEER_SKIP_DOWNLOAD: 'true'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      passed: ${{ steps.verdict.outputs.passed }}
+      runs: ${{ steps.verdict.outputs.runs }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # Always report-only here: the verdict is read by `gate`, which decides (and applies a
+      # waiver). A fault (stack, Chrome, no reports) still fails this job.
+      - name: Measure (full catalog, 4G phone profile)
+        env:
+          # Release candidates and dispatches measure 20 runs per page; a PR only checks the harness.
+          RUNS: ${{ github.event_name == 'pull_request' && '3' || github.event.inputs.runs || '20' }}
+        run: npm run test:perf -- --report-only --runs "$RUNS"
+      - name: Read the verdict
+        id: verdict
+        if: ${{ !cancelled() }}
+        run: |
+          echo "passed=$(node -p "require('./perf-results/verdict.json').passed")" >> "$GITHUB_OUTPUT"
+          echo "runs=$(node -p "require('./perf-results/verdict.json').runs")" >> "$GITHUB_OUTPUT"
+      - name: Job summary
+        if: ${{ !cancelled() }}
+        run: cat perf-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+      # The Lighthouse reports (JSON and HTML, one pair per run) and the verdict. They hold only
+      # the seed's fake data (TS-27).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: lighthouse-reports
+          path: |
+            frontend/.lighthouseci/
+            frontend/perf-results/
+          retention-days: 30
+          if-no-files-found: warn
+
+  gate:
+    # A pull request only checks that the harness runs; it gates nothing.
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: measure
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Release gate (BR-003-10)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PASSED: ${{ needs.measure.outputs.passed }}
+          RUNS: ${{ needs.measure.outputs.runs }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ github.event.inputs.release-tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -u
+          if [ "$RUNS" -lt 20 ]; then
+            echo "::error::The release gate needs 20 runs per page; this run had $RUNS."
+            exit 1
+          fi
+          if [ "$PASSED" = "true" ]; then
+            echo "Every budget was met; no waiver needed." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          tag="$INPUT_TAG"
+          if [ -z "$tag" ] && [ "$REF_TYPE" = "tag" ]; then tag="$REF_NAME"; fi
+          echo "::warning::A performance budget was missed (see the measurement job's summary)."
+          if [ -z "$tag" ]; then
+            echo "::error::Budget missed and no release to read a waiver from: dispatch with release-tag set."
+            echo "No release to read a waiver from: dispatch with release-tag set." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          notes="$(gh release view "$tag" --repo "$REPOSITORY" --json body --jq .body)" || {
+            echo "::error::Budget missed and release $tag was not found (a draft is not visible to this job). Publish it with a 'Performance waiver: <reason>' line in its notes, then re-run this job."
+            echo "Release $tag was not found (a draft is not visible to this job). Publish it with a 'Performance waiver: <reason>' line in its notes, then re-run this job." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          if reason="$(printf '%s' "$notes" | node frontend/perf/check-waiver.mjs)"; then
+            {
+              echo "### Release gate: budget missed, waived"
+              echo
+              echo "Release \`$tag\` records the waiver (BR-003-10):"
+              echo
+              echo "> Performance waiver: $reason"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "Performance waiver recorded with $tag: $reason"
+            exit 0
+          fi
+          {
+            echo "### Release gate: budget missed, no waiver"
+            echo
+            echo "The notes of release \`$tag\` have no \`Performance waiver: <reason>\` line (a non-empty reason). Add one and re-run this job to release anyway."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Budget missed and the notes of release $tag record no 'Performance waiver: <reason>'."
+          exit 1

@@ -197,7 +197,48 @@ ESLint rules that carry weight (beyond the recommended sets):
 
 ## 10. Performance
 
-SPEC-003 sets the budgets (BR-003-06 to BR-003-10): measured against the reference workload on every **release candidate**, and a missed budget blocks the release unless a waiver is recorded. The **reference workload** exists for the catalog part (#3): `backend/scripts/seed-reference-workload.ts` writes a deterministic catalog the size of the full Caixa catalog for all states (`FULL_CATALOG_SIZE`, 35 000 auctions over the 27 states, weighted like the Caixa list, through the application's schemas and their indexes) plus the seeded accounts, and refuses any database but the E2E stack's unless its host is named in `SEED_ALLOW_HOSTS` (Atlas never; DV-19). The office and investor part (100 in-progress and 500 closed journeys, 20 journeys across 3 offices) is a marked extension point in `reference-workload/seed.ts`, filled as SPEC-011 (#11), SPEC-016 (#16) and SPEC-021 (#21) land. To bring the stack up on the full catalog and leave it running for a measurement: `E2E_SEED_AUCTIONS=full E2E_KEEP_STACK=1 npx playwright test e2e/brasilia-time.spec.ts` in `frontend/` (the web app is then on `http://localhost:38101`; `docker compose -f e2e/compose.e2e.yml down --volumes` removes it). The timing harness — Lighthouse/Playwright on the 4G profile — is the next part of #3. Until then, the cheap structural check stays in the PR suite: list endpoints are paginated (AR-35) and every list query uses an index (an `explain()` assertion in integration tests for the main search).
+SPEC-003 sets the budgets (BR-003-06 to BR-003-10): **p95 of 2 s** for search results and property pages and **3 s** for dashboards and journey pages, on a phone with a 4G connection, against the reference workload, measured on every **release candidate**; a missed budget blocks the release unless a waiver is recorded with it. Merges are not measured: the full workload on every PR would soon be switched off (DL-003-06).
+
+**The reference workload** (BR-003-08) is the seed of §6: `backend/scripts/seed-reference-workload.ts` writes a deterministic catalog the size of the full Caixa catalog for all states (`FULL_CATALOG_SIZE`, 35 000 auctions over the 27 states, weighted like the Caixa list, through the application's schemas and their indexes) plus the seeded accounts, and refuses any database but the E2E stack's unless its host is named in `SEED_ALLOW_HOSTS` (Atlas never; DV-19). The office and investor part (100 in-progress and 500 closed journeys, 20 journeys across 3 offices) is a marked extension point in `reference-workload/seed.ts`, filled as SPEC-011 (#11), SPEC-016 (#16) and SPEC-021 (#21) land. Every run states the number of auctions it measured against (the summary's first line).
+
+**The harness** (`frontend/perf/`, `frontend/lighthouserc.cjs`; #3):
+
+| Part | Where | What |
+|---|---|---|
+| Profile and budgets | `perf/budgets.cjs` | The one place they are recorded (BR-003-07): `mobile`, simulated throttling, 9 Mbps down, 1.5 Mbps up, 170 ms round trip, **CPU slowdown 4x**, 20 runs per page, and the route groups with their budgets. `perf/budgets.test.ts` pins them to the spec's numbers, so changing one shows in review |
+| Lighthouse CI | `lighthouserc.cjs`, `perf/lighthouse-config.cjs` | `@lhci/cli` (exact version) collects 20 runs per URL on Chrome and asserts the budgets |
+| Sign-in | `perf/login.cjs` | The puppeteer script of `collect`: signs the seeded investor in the way the app does (the token in `localStorage`) for `/search`, removes it for the public property page, and makes one unmeasured visit so the runs see a warm server, not its cold start. Lighthouse still clears the HTTP cache before each run |
+| API check | `perf/api-latency.mjs` | BR-003-09: 200 requests per target with rotating filters (state, city, modality, price, paging) against `GET /api/auctions` and the BFF's `GET /api/search`, p95 against 2 s. A Node client cannot take the 4G profile, so this is the server's share; the page runs carry the network |
+| Wrapper | `perf/run.mjs`, `npm run test:perf` | Brings up the E2E stack on the **full catalog** (`E2E_SEED_AUCTIONS=full`, `E2E_KEEP_STACK`, `E2E_REUSE_STACK` as in §6), runs both checks, writes `perf-results/summary.md` (p50, p95 and the worst run per page) and `verdict.json`, tears the stack down. Exit 0 met, 3 missed, 1 a fault. The apps run in Compose only, never on the host (DV-18) |
+| Gate | `.github/workflows/performance.yml`, `perf/waiver.mjs` | See below |
+
+**Dependency.** `@lhci/cli` is a frontend dev dependency, pinned exactly. Its transitive `basic-ftp` (through `proxy-agent`, which the harness never uses for FTP) sits in a range with a high advisory, so `frontend/package.json` has an `overrides` entry pinning a patched version, which keeps `npm audit --audit-level=high` green (SC-19); drop it once `get-uri` depends on a fixed range.
+
+**The profile.** 4G is as BR-003-07 states it; Lighthouse's own mobile default is a slower 1.6 Mbps / 150 ms. The processor is the one judgement: Lighthouse's 4x slowdown stands for a mid-tier phone and 6x for a low-end one, so a budget met at 4x is met on a mid-range phone. It is one constant (`cpuSlowdownMultiplier`); raising it tightens every budget at once and needs a reason in the PR.
+
+**What is asserted.** "Main content visible and usable" (BR-003-07) is two metrics, each at most the page's budget: `largest-contentful-paint` (visible) and `interactive` (usable). BR-003-09 (an action that loads data meets its page's budget) is covered by measuring the search results with a filter in the URL (`/search?state=SP`), so the filter's data load is inside the measured navigation, and by the API check over many filters.
+
+**p95.** Lighthouse CI offers `optimistic`, `median`, `median-run` and `pessimistic` aggregation, no percentile. The assertions use `pessimistic` (the worst run of the URL): over the 20 runs the spec asks for, the nearest-rank p95 is the 19th sorted value, so the worst run is never below it and the gate is never looser than the spec; it differs from p95 only when the single worst run alone is over budget. `perf/stats.mjs` reports the exact p50 and p95 beside the worst run in the summary. Fewer than 20 runs is a check of the harness, not a measurement, and the summary says so.
+
+**Running it.** In `frontend/`, with Docker running (on Rancher Desktop the same `DOCKER_HOST` as §2) and a Chrome (`CHROME_PATH`, else the installed Chrome, else Playwright's Chromium from `npx playwright install chromium`):
+
+```
+npm run test:perf                              # 20 runs per page, full catalog, strict exit code
+npm run test:perf -- --report-only --runs 3    # a quick look; always exits 0 on a miss
+E2E_KEEP_STACK=1 npm run test:perf             # leave the stack up; E2E_REUSE_STACK=1 reuses it
+```
+
+**Routes.** The measured routes are in `perf/budgets.cjs`. The dashboards and journeys group (3 s: advisor journey dashboard, investor portal, *carteira*, journey page) is in the file, off, with its routes as comments: those pages do not exist yet. The PR that adds one adds its route and the account that opens it, switches the group on, and extends the seed's journey part so the page is measured at the workload of BR-003-08. `/search` is signed-in only today and is measured as the seeded investor; SPEC-005 (#5) opens it to the public.
+
+**The release gate** (BR-003-10). `performance.yml` runs on a `v*` tag push and on `workflow_dispatch`, never on a schedule and never in `nightly.yml` (it is a heavy job: an image build, a 35 000-document seed and about 40 Lighthouse runs). The `measure` job runs `test:perf --report-only` and uploads the Lighthouse reports (JSON and HTML per run) as the `lighthouse-reports` artifact; the `gate` job passes when every budget was met. When one was missed it fails **unless the notes of the release carry a waiver**: one line,
+
+```
+Performance waiver: <reason>
+```
+
+(a list item or bold is fine, the keyword is not case-sensitive, the reason is the rest of the line and must be a real one: empty, `<reason>`, `TBD` and the like are not waivers). The job reads the notes of the published release with `gh release view` (a draft is not visible to it), echoes the waiver in its summary, and passes. To waive: publish the release with that line, then **Re-run failed jobs**: only `gate` runs again, without measuring. A dispatch names the release with `release-tag`; with none, a miss fails. The gate also refuses a run of fewer than 20 runs per page. A pull request that touches the harness's files runs the same pipeline with 3 runs per page, report-only, so the workflow is verified before a release depends on it.
+
+The probe and the monthly availability report (BR-003-01, BR-003-02, BR-003-04) are not part of this harness; they are #115. The cheap structural check stays in the PR suite: list endpoints are paginated (AR-35) and every list query uses an index (an `explain()` assertion in integration tests for the main search).
 
 ## 11. What is not tested
 
@@ -222,4 +263,4 @@ SPEC-003 sets the budgets (BR-003-06 to BR-003-10): measured against the referen
 | Structural checks (Node pin, tokens, env example) | ✅ |
 | `npm audit` high+, CodeQL high+ | ✅ |
 | Build, both packages; the backend's compiled output loads under plain Node (dist smoke) | ✅ |
-| Performance budgets | Release candidates (deferred, BL-002) |
+| Performance budgets (p95, 4G phone profile, full catalog) | Release candidates: `performance.yml` on `v*` tags, waivable with a recorded reason (§10) |

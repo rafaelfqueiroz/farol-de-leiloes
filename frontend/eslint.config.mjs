@@ -96,9 +96,15 @@ export default defineConfig([
     'build/**',
     'next-env.d.ts',
     'public/**',
+    '.lighthouseci/**',
+    'perf-results/**',
   ]),
   ...warningsAsErrors([...nextCoreWebVitals, ...nextTypescript]),
   {
+    // The Next presets register their plugins for these extensions only, so a `.cjs` file (the
+    // Lighthouse CI config and its helpers, which that tool `require`s) is left to the CommonJS
+    // block below instead of meeting rules whose plugin is not loaded for it.
+    files: ['**/*.{js,jsx,mjs,ts,tsx,mts,cts}'],
     linterOptions: { reportUnusedDisableDirectives: 'error' },
     languageOptions: {
       parserOptions: {
@@ -136,6 +142,17 @@ export default defineConfig([
     // it reads its own E2E_* variables and CI (DV-18, playwright.config.ts).
     files: ['e2e/**/*.ts', 'playwright.config.ts'],
     rules: { 'no-restricted-properties': 'off' },
+  },
+  {
+    // The performance harness (SPEC-003 BR-003-06..10) is a Node tool like the E2E one: it reads
+    // its own PERF_*/E2E_*/CHROME_PATH variables (DV-18).
+    files: ['perf/**', 'lighthouserc.cjs'],
+    rules: { 'no-restricted-properties': 'off' },
+  },
+  {
+    // CommonJS by necessity: Lighthouse CI `require`s its config and its puppeteer script.
+    files: ['**/*.cjs'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
     // DS-20: user-facing strings come from the next-intl pt-BR catalogue, not JSX literals.
