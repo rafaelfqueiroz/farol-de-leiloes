@@ -158,6 +158,10 @@ describe('what is measured', () => {
 
 describe('the seeded accounts', () => {
   it('are the E2E suite’s, so the sign-in the run uses exists in the seed', () => {
-    expect(PERF_ACCOUNTS).toEqual(E2E_ACCOUNTS);
+    // The run signs in as these two; the E2E suite has more (the unverified one is not used here).
+    expect(PERF_ACCOUNTS).toEqual({
+      investor: E2E_ACCOUNTS.investor,
+      admin: E2E_ACCOUNTS.admin,
+    });
   });
 });

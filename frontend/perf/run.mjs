@@ -145,7 +145,7 @@ async function measure(env, runs, requests) {
     [
       `## Performance budgets: ${verdict.passed ? 'met' : 'MISSED'}`,
       '',
-      `Reference workload: ${auctions.toLocaleString('en-US')} active auctions (BR-003-08). Profile ` +
+      `Reference workload: ${auctions} active auctions (BR-003-08). Profile ` +
         `(BR-003-07): ${formFactor}, ${throttling.throughputKbps / 1000} Mbps down, ` +
         `${throttling.uploadThroughputKbps / 1000} Mbps up, ${throttling.rttMs} ms round trip, ` +
         `CPU slowdown ${throttling.cpuSlowdownMultiplier}x. ${auctions < FULL_CATALOG_FLOOR ? 'NOT the full catalog: this is a harness check, not a measurement. ' : ''}${runs} runs per page` +
