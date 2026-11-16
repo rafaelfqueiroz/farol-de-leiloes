@@ -95,6 +95,28 @@ const ambientClockSyntax = [
   },
 ];
 
+// AR-23, BR-003-23/24: one rule for time. A wall clock is built and read in Brasília only through
+// common/clock/brasilia-time.ts, so `new Date(y, m, d…)` (the server's own zone), `toLocale*String`
+// and `Intl.DateTimeFormat` (the server's locale and zone) are banned everywhere else in src/.
+// Specs build fixed instants and are exempt.
+const brasiliaTimeSyntax = [
+  {
+    selector: "NewExpression[callee.name='Date'][arguments.length>=2]",
+    message:
+      'AR-23: new Date(y, m, d…) reads the fields in the server zone. Use brasiliaWallClockToInstant (common/clock/brasilia-time.ts).',
+  },
+  {
+    selector: 'MemberExpression[property.name=/^toLocale(Date|Time)?String$/]',
+    message:
+      'AR-23: toLocale*String uses the server locale and zone. Use the formatters of common/clock/brasilia-time.ts.',
+  },
+  {
+    selector: "MemberExpression[object.name='Intl'][property.name='DateTimeFormat']",
+    message:
+      'AR-23: Intl.DateTimeFormat uses the server zone. Use the formatters of common/clock/brasilia-time.ts.',
+  },
+];
+
 export default defineConfig(
   {
     ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'data/**'],
@@ -144,11 +166,17 @@ export default defineConfig(
       ],
     },
   },
-  // AR-24 (the domain blocks below replace this rule's options with their stricter list).
+  // AR-24 + AR-23 (the domain blocks below replace this rule's options with their stricter list).
   {
     files: ['src/**/*.ts'],
     ignores: ['src/common/clock/**', 'src/**/*.spec.ts'],
-    rules: { 'no-restricted-syntax': ['error', ...ambientClockSyntax] },
+    rules: { 'no-restricted-syntax': ['error', ...ambientClockSyntax, ...brasiliaTimeSyntax] },
+  },
+  // common/clock/ may read the ambient clock (SystemClock) but only brasilia-time.ts owns the zone.
+  {
+    files: ['src/common/clock/**/*.ts'],
+    ignores: ['src/common/clock/brasilia-time.ts', 'src/**/*.spec.ts'],
+    rules: { 'no-restricted-syntax': ['error', ...brasiliaTimeSyntax] },
   },
   // AR-05 (later blocks win, so the domain blocks repeat the AR-09 patterns of their module).
   ...modules.map((self) => ({
@@ -162,8 +190,13 @@ export default defineConfig(
         },
       ],
       'no-restricted-properties': ['error', ...domainOnlyProperties],
-      'no-restricted-syntax': ['error', ...domainOnlySyntax],
+      'no-restricted-syntax': ['error', ...domainOnlySyntax, ...brasiliaTimeSyntax],
     },
+  })),
+  // Specs in domain/ keep AR-05/AR-24 but build fixed instants any way they need.
+  ...modules.map((self) => ({
+    files: [`src/${self}/**/domain/**/*.spec.ts`],
+    rules: { 'no-restricted-syntax': ['error', ...domainOnlySyntax] },
   })),
   {
     // Plain JS/MJS (this config) has no tsconfig project to type-check against.

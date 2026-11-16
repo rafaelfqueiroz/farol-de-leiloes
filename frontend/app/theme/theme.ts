@@ -92,6 +92,8 @@ const typography: TypographyVariantsOptions = {
   fontWeightRegular: 400,
   fontWeightMedium: 500,
   fontWeightBold: 700,
+  // 32/40 below md, 48/56 from md: the hero headline of the landing page (DESIGN.md §5)
+  display: { ...variant(typeScale.displayCompact), [mdUp]: variant(typeScale.display) },
   // 28/36 below md, 32/40 from md (DESIGN.md §5)
   h1: { ...variant(typeScale.h1Compact), [mdUp]: variant(typeScale.h1) },
   h2: variant(typeScale.h2),

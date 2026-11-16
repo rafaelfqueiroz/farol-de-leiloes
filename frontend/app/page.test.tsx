@@ -46,7 +46,7 @@ describe('Home', () => {
     signedOut();
     render(<Home />);
 
-    expect(screen.getByRole('heading', { level: 2, name: /^Encontre o imóvel/ })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: /^Encontre o imóvel/ })).toBeVisible();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(env.push).not.toHaveBeenCalled();
   });
