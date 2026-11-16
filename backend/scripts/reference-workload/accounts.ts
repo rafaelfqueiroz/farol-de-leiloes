@@ -9,7 +9,8 @@ export interface SeedAccount {
   email: string;
   password: string;
   name: string;
-  role: 'admin' | 'premium';
+  role: 'admin' | 'premium' | 'free';
+  emailVerified: boolean;
 }
 
 export const SEED_ACCOUNTS = {
@@ -19,6 +20,7 @@ export const SEED_ACCOUNTS = {
     password: 'Farol-E2E-investidor-2026',
     name: 'Investidora Teste E2E',
     role: 'premium',
+    emailVerified: true,
   },
   /** A verified admin, for the admin screens (/admin/coupons). */
   admin: {
@@ -26,5 +28,14 @@ export const SEED_ACCOUNTS = {
     password: 'Farol-E2E-admin-2026',
     name: 'Admin Teste E2E',
     role: 'admin',
+    emailVerified: true,
+  },
+  /** Signed up but never confirmed: the screen that asks to confirm the email (/verify-email). */
+  unverified: {
+    email: 'nao-verificado.e2e@farol.test',
+    password: 'Farol-E2E-nao-verificado-2026',
+    name: 'Cadastro Pendente E2E',
+    role: 'free',
+    emailVerified: false,
   },
 } as const satisfies Record<string, SeedAccount>;

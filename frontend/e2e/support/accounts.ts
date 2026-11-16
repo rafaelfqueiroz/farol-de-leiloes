@@ -11,6 +11,11 @@ export interface E2eAccount {
 export const ACCOUNTS = {
   investor: { email: 'investidor.e2e@farol.test', password: 'Farol-E2E-investidor-2026' },
   admin: { email: 'admin.e2e@farol.test', password: 'Farol-E2E-admin-2026' },
+  /** Never confirmed its email: what /verify-email is for. */
+  unverified: {
+    email: 'nao-verificado.e2e@farol.test',
+    password: 'Farol-E2E-nao-verificado-2026',
+  },
 } as const satisfies Record<string, E2eAccount>;
 
 /** Published as "26/01/2026 - 10h00", Brasília time. */

@@ -60,10 +60,10 @@ describe('BR-003-08: seedReferenceWorkload', () => {
     expect(auction.available).toBe(true);
   });
 
-  it('seeds verified accounts whose passwords verify as UsersService hashes them', async () => {
+  it('seeds the accounts, verified or not as stated, with passwords that verify as UsersService hashes them', async () => {
     for (const account of Object.values(SEED_ACCOUNTS)) {
       const user = await connection.collection('users').findOne({ email: account.email });
-      expect(user?.emailVerified).toBe(true);
+      expect(user?.emailVerified).toBe(account.emailVerified);
       expect(user?.role).toBe(account.role);
       expect(await bcrypt.compare(account.password, String(user?.password))).toBe(true);
     }
@@ -72,7 +72,7 @@ describe('BR-003-08: seedReferenceWorkload', () => {
   it('is idempotent: a second run leaves the same counts', async () => {
     await seedReferenceWorkload(options);
     expect(await connection.collection('auctions').countDocuments()).toBe(301);
-    expect(await connection.collection('users').countDocuments()).toBe(2);
+    expect(await connection.collection('users').countDocuments()).toBe(3);
   });
 
   it('refuses a host it was not told is a test database (DV-19)', async () => {
