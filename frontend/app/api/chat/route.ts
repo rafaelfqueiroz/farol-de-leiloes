@@ -1,10 +1,20 @@
 import { NextRequest } from 'next/server';
-import { backendFetch, backendUnavailable, forwardBackendResponse } from '@/lib/backend';
+import {
+  backendFetch,
+  backendUnavailable,
+  forwardBackendResponse,
+  refuseForeignOrigin,
+} from '@/lib/backend';
 import { clientAddressHeaders } from '@/lib/forwarded-for';
 import type { AuctionQueryParams } from '@/lib/constants';
 import { reportClientError } from '@/lib/report-client-error';
 
 export async function POST(request: NextRequest) {
+  // SC-02: a state-changing request needs a same-site Origin. This route sends no cookie, but a
+  // foreign page could otherwise make visitors' browsers spend the AI extraction quota.
+  const refused = refuseForeignOrigin(request);
+  if (refused) return refused;
+
   const body = await request.text();
 
   try {

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { sameSite } from '@/test/bff-requests';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as chat } from './chat/route';
@@ -118,7 +119,11 @@ describe('POST /api/chat', () => {
       );
 
     const response = await chat(
-      request('/api/chat', { method: 'POST', body: JSON.stringify({ message: 'casa em Natal' }) }),
+      request('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: 'casa em Natal' }),
+        headers: sameSite,
+      }),
     );
 
     expect(calledUrl(0)).toBe('http://backend:3000/api/ai/extract-params');
@@ -140,7 +145,7 @@ describe('POST /api/chat', () => {
       )
       .mockResolvedValueOnce(new Response('{}', { status: 200 }));
 
-    await chat(request('/api/chat', { method: 'POST', body: '{}' }));
+    await chat(request('/api/chat', { method: 'POST', body: '{}', headers: sameSite }));
 
     expect(Object.fromEntries(new URL(calledUrl(1)).searchParams)).toEqual({ state: 'RN' });
   });
@@ -156,7 +161,9 @@ describe('POST /api/chat', () => {
       ),
     );
 
-    const response = await chat(request('/api/chat', { method: 'POST', body: '{}' }));
+    const response = await chat(
+      request('/api/chat', { method: 'POST', body: '{}', headers: sameSite }),
+    );
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
