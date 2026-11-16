@@ -1,5 +1,6 @@
 import {
   Controller,
+  UseGuards,
   Get,
   Post,
   Patch,
@@ -25,6 +26,8 @@ import { CreateReminderDto } from './dto/create-reminder.dto.js';
 import { UpdateReminderDto } from './dto/update-reminder.dto.js';
 import { ReminderResponseDto } from './dto/reminder-response.dto.js';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { ApiConfirmedEmail } from '../auth/decorators/api-confirmed-email.decorator.js';
+import { ConfirmedEmailGuard } from '../auth/guards/confirmed-email.guard.js';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
 import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
 import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator.js';
@@ -36,6 +39,8 @@ const NOT_FOUND = { description: 'REMINDER_NOT_FOUND', type: ErrorResponseDto };
 @ApiTags('reminders')
 @ApiErrorResponses()
 @ApiJwtAuth()
+@ApiConfirmedEmail()
+@UseGuards(ConfirmedEmailGuard) // BR-001-04: server-side, not only the frontend banner
 @Controller('reminders')
 export class RemindersController {
   constructor(private readonly remindersService: RemindersService) {}

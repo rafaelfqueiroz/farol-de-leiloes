@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsDateString, IsEnum, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { PhoneField } from '../../users/dto/phone-field.decorator.js';
 
 export const SEX_VALUES = ['male', 'female', 'other'] as const;
 
@@ -27,10 +28,8 @@ export class ProfileAddressDto {
 }
 
 export class CompleteProfileDto {
-  @ApiPropertyOptional({ type: String })
-  @IsString()
-  @IsOptional()
-  phone?: string;
+  @PhoneField() // BR-001-27
+  phone?: string | null;
 
   @ApiPropertyOptional({ type: String })
   @IsString()

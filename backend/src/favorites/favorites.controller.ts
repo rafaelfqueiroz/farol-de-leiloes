@@ -1,5 +1,6 @@
 import {
   Controller,
+  UseGuards,
   Get,
   Post,
   Delete,
@@ -22,6 +23,8 @@ import { AddFavoriteDto } from './dto/add-favorite.dto.js';
 import { FavoriteCodesResponseDto } from './dto/favorite-codes-response.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
+import { ApiConfirmedEmail } from '../auth/decorators/api-confirmed-email.decorator.js';
+import { ConfirmedEmailGuard } from '../auth/guards/confirmed-email.guard.js';
 import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
 import { AuctionResponseDto } from '../auctions/dto/auction-response.dto.js';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
@@ -33,6 +36,8 @@ import { mapPage, type Paginated } from '../common/pagination/paginated.js';
 @ApiTags('favorites')
 @ApiErrorResponses()
 @ApiJwtAuth()
+@ApiConfirmedEmail()
+@UseGuards(ConfirmedEmailGuard) // BR-001-04: server-side, not only the frontend banner
 @Controller('favorites')
 export class FavoritesController {
   constructor(private readonly favoritesService: FavoritesService) {}
@@ -48,6 +53,8 @@ export class FavoritesController {
     return mapPage(page, (auction) => new AuctionResponseDto(auction));
   }
 
+  // BR-001-04: like the rest of this controller, 403 EMAIL_VERIFICATION_REQUIRED while the email is
+  // unconfirmed; the frontend answers with the global confirm-your-email banner.
   @Get('codes')
   @ApiOperation({ summary: 'Codes of every auction the signed-in user favorited' })
   @ApiOkResponse({ type: FavoriteCodesResponseDto })

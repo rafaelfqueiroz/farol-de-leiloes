@@ -1,5 +1,4 @@
 import {
-  IsEmail,
   IsOptional,
   IsString,
   IsArray,
@@ -30,10 +29,6 @@ class AddressDto {
 // BR-001-31: no `password` here; passwords change only through UsersService.setPassword /
 // changePassword (BR-001-31). BR-001-29 narrows the rest in the profile work.
 export class UpdateUserDto {
-  @IsEmail()
-  @IsOptional()
-  email?: string;
-
   @IsString()
   @IsOptional()
   name?: string;

@@ -119,6 +119,7 @@
     "OAUTH_ACCOUNT_HAS_NO_PASSWORD": "Esta conta entra com o Google e não tem senha. Entre com o Google ou defina uma senha no perfil.",
     "EMAIL_ALREADY_REGISTERED": "Já existe uma conta com este e-mail. Entre ou redefina sua senha.",
     "EMAIL_ALREADY_VERIFIED": "Este e-mail já foi confirmado.",
+    "EMAIL_CHANGE_UNAVAILABLE": "O e-mail da conta não pode ser alterado.",
     "OAUTH_ACCOUNT_NEEDS_NO_VERIFICATION": "Contas do Google não precisam confirmar o e-mail.",
     "INVALID_VERIFICATION_TOKEN": "O link de confirmação é inválido ou expirou. Peça um novo e-mail de confirmação.",
     "INVALID_RESET_TOKEN": "O link de redefinição é inválido ou expirou. Solicite um novo.",

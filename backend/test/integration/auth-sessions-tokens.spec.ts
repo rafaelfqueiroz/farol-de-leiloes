@@ -264,11 +264,9 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       const changed = freshEmail('second');
       const { accessToken } = await signUp(original);
       const oldLink = lastConfirmation();
-      await request(server())
-        .patch('/api/auth/profile')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ email: changed })
-        .expect(200);
+      // The profile no longer changes an email (BR-001-26, D-63), so the account's address is
+      // changed in the database, as a data fix or a future flow would.
+      await users.updateOne({ email: original }, { $set: { email: changed } });
 
       const refused = await confirm(oldLink).expect(400);
 

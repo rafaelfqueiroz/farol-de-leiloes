@@ -4,6 +4,8 @@ import 'reflect-metadata';
 import { ValidationPipe, type Type } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { ChangePasswordDto } from './change-password.dto.js';
+import { CompleteProfileDto } from './complete-profile.dto.js';
+import { UpdateProfileDto } from './update-profile.dto.js';
 import { LoginDto } from './login.dto.js';
 import { RegisterDto } from './register.dto.js';
 import { RequestResetPasswordDto, ResetPasswordDto } from './reset-password.dto.js';
@@ -123,5 +125,79 @@ describe('emails and tokens', () => {
     expect(await failedFields(ResetPasswordDto, { token: '', newPassword: 'abcdefgh' })).toEqual([
       'token',
     ]);
+  });
+});
+
+describe('UpdateProfileDto (BR-001-25, BR-001-27, BR-001-29)', () => {
+  it('accepts name, phone and email, normalising each', async () => {
+    const dto = await parse(UpdateProfileDto, {
+      name: '  Ana Teste ',
+      phone: '(84) 99999-1234',
+      email: ' Ana@Example.TEST ',
+    });
+
+    expect(dto).toMatchObject({
+      name: 'Ana Teste',
+      phone: '+5584999991234',
+      email: 'ana@example.test',
+    });
+  });
+
+  it('accepts an empty body (nothing to change)', async () => {
+    expect(await failedFields(UpdateProfileDto, {})).toEqual([]);
+  });
+
+  it.each([
+    ['role', 'admin'],
+    ['plan', 'premium'],
+    ['subscriptionStatus', 'active'],
+    ['providers', ['google']],
+    ['emailVerified', true],
+    ['status', 'closed'],
+    ['googleId', 'g-1'],
+    ['password', 'a new password'],
+    ['stripeCustomerId', 'cus_1'],
+    ['pendingEmail', 'x@example.test'],
+  ])('BR-001-29: a body with %s is refused as a whole', async (field, value) => {
+    expect(await failedFields(UpdateProfileDto, { name: 'X', [field]: value })).toEqual([field]);
+  });
+
+  it('refuses a blank, oversized or non-text name; 120 characters are fine', async () => {
+    expect(await failedFields(UpdateProfileDto, { name: '   ' })).toEqual(['name']);
+    expect(await failedFields(UpdateProfileDto, { name: 'a'.repeat(121) })).toEqual(['name']);
+    expect(await failedFields(UpdateProfileDto, { name: 7 })).toEqual(['name']);
+    expect(await failedFields(UpdateProfileDto, { name: 'a'.repeat(120) })).toEqual([]);
+  });
+
+  it.each([
+    ['(84) 99999-1234', '+5584999991234'],
+    ['+55 84 3222-1234', '+558432221234'],
+  ])('BR-001-27: phone %s is stored as %s', async (input, stored) => {
+    expect((await parse(UpdateProfileDto, { phone: input })).phone).toBe(stored);
+  });
+
+  it.each(['', '   ', null])('BR-001-27: phone %j clears the phone (null)', async (input) => {
+    expect((await parse(UpdateProfileDto, { phone: input })).phone).toBeNull();
+  });
+
+  it.each(['99999-1234', '(84) 9999-123', 'telefone', 5584999991234, { $ne: null }])(
+    'BR-001-27: phone %j is refused',
+    async (input) => {
+      expect(await failedFields(UpdateProfileDto, { phone: input })).toEqual(['phone']);
+    },
+  );
+
+  it('refuses an email that is not an email', async () => {
+    expect(await failedFields(UpdateProfileDto, { email: 'not-an-email' })).toEqual(['email']);
+  });
+});
+
+describe('CompleteProfileDto phone (BR-001-27)', () => {
+  it('normalises a valid phone, clears on empty, refuses a number without area code', async () => {
+    expect((await parse(CompleteProfileDto, { phone: '84999991234' })).phone).toBe(
+      '+5584999991234',
+    );
+    expect((await parse(CompleteProfileDto, { phone: '' })).phone).toBeNull();
+    expect(await failedFields(CompleteProfileDto, { phone: '99999-1234' })).toEqual(['phone']);
   });
 });
