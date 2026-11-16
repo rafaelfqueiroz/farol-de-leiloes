@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Stack, TextField, Button, Alert, CircularProgress } from '@mui/material';
@@ -18,6 +18,11 @@ export default function ResetPasswordPage() {
   const token = params.token as string;
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // The redirect to the login must not outlive the page: a timer left running fired a navigation
+  // after the person had left (and, in tests, into the next test).
+  useEffect(() => () => clearTimeout(redirectTimer.current), []);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,7 +58,7 @@ export default function ResetPasswordPage() {
       }
 
       setSuccess(true);
-      setTimeout(() => {
+      redirectTimer.current = setTimeout(() => {
         router.push('/login');
       }, 2000);
     } catch (err: unknown) {
