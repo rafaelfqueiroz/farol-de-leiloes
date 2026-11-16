@@ -44,6 +44,7 @@ const PAGINATED = [
   'get /api/reminders',
   'get /api/saved-filters',
   'get /api/coupons',
+  'get /api/maintenance',
 ];
 
 const BUILT_IN_TYPES: unknown[] = [String, Number, Boolean, Date, Object, Array];
