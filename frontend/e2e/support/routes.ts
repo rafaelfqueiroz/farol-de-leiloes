@@ -17,8 +17,6 @@ export interface AppRoute {
   name: string;
   /** The accessible name of the intended page's heading (pt-BR catalogue). */
   heading: string;
-  /** Its level; 1 unless the page has no h1 yet. */
-  headingLevel?: 1 | 2;
   /** The pathname the checks must run on; `path` unless the route redirects by design. */
   landsOn?: string;
   /** Hold the page's timers while it loads, for a page that moves on by itself after a delay. */
@@ -26,13 +24,11 @@ export interface AppRoute {
 }
 
 export const ROUTES: readonly AppRoute[] = [
-  // The hero is an h2 until #126 gives the page its h1.
   {
     name: 'landing',
     path: '/',
     as: 'public',
     heading: 'Encontre o imóvel dos seus sonhos com até 70% de desconto',
-    headingLevel: 2,
   },
   { name: 'login', path: '/login', as: 'public', heading: 'Entrar' },
   { name: 'register', path: '/register', as: 'public', heading: 'Criar conta' },

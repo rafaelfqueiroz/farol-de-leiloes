@@ -31,7 +31,7 @@ export async function expectOnRoute(page: Page, route: AppRoute): Promise<void> 
     page.getByRole('heading', {
       name: route.heading,
       exact: true,
-      level: route.headingLevel ?? 1,
+      level: 1,
     }),
   ).toBeVisible();
 }
