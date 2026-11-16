@@ -104,7 +104,7 @@ export class AuthService implements BeforeApplicationShutdown {
     // BR-001-26 / D-63: the email cannot be changed. The profile form still sends it back with the
     // name, so the current address is accepted as a no-op and any other is refused as a whole,
     // before anything is written (BR-001-29).
-    if (updateData.email !== undefined) {
+    if (typeof updateData.email === 'string') {
       const current = await this.usersService.findById(userId);
       if (!current) {
         throw new DomainError('USER_NOT_FOUND');
