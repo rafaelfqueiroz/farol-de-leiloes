@@ -11,6 +11,7 @@ import {
   CardContent,
   CircularProgress,
   Divider,
+  Skeleton,
   Snackbar,
   Stack,
   TextField,
@@ -20,11 +21,12 @@ import PersonOutlined from '@mui/icons-material/PersonOutlined';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import DevicesOutlined from '@mui/icons-material/DevicesOutlined';
 import PageHeader from '@/app/components/patterns/PageHeader';
+import ErrorState from '@/app/components/patterns/ErrorState';
 import PageShell from '@/app/components/patterns/PageShell';
 import StatusBadge from '@/app/components/patterns/StatusBadge';
 import { shellContentMinHeight } from '@/app/components/patterns/shell-content';
 import { reportClientError } from '@/lib/report-client-error';
-import { apiFetch, apiJson } from '@/lib/api-client';
+import { apiJson } from '@/lib/api-client';
 import { formatPhone } from '@/lib/phone';
 import { ApiError, useApiErrorMessage } from '@/lib/api-error';
 
@@ -64,9 +66,29 @@ function refusedFields(error: unknown): string[] {
   return Array.isArray(fields) ? fields : [];
 }
 
+// DS-19: the account form has a state per read of the stored phone. The form exists only in
+// `ready`, so no save can be sent before the phone is known (a save of the name must never unset a
+// phone the page has not read).
+type StoredPhone =
+  { status: 'loading' } | { status: 'failed'; error: unknown } | { status: 'ready'; value: string };
+
+// shaped like the account form: name, e-mail, phone, Salvar
+function AccountFormSkeleton({ label }: { label: string }) {
+  return (
+    <Stack role="status" aria-label={label} aria-busy="true" spacing={2}>
+      <Skeleton variant="rounded" height={56} />
+      <Skeleton variant="rounded" height={56} />
+      <Skeleton variant="rounded" height={56} />
+      <Skeleton variant="rounded" height={36} />
+    </Stack>
+  );
+}
+
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, loadUser } = useAuth();
   const [name, setName] = useState(user?.name || '');
+  const [stored, setStored] = useState<StoredPhone>({ status: 'loading' });
+  const [attempt, setAttempt] = useState(0);
   const [phone, setPhone] = useState('');
   const [phoneError, setPhoneError] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -74,6 +96,7 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState(false);
   const t = useTranslations('profile');
   const tCommon = useTranslations('common');
+  const tLoadFailed = useTranslations('loadFailed.profile');
   const apiErrorMessage = useApiErrorMessage();
   const [error, setError] = useState('');
   const [toast, setToast] = useState<string | null>(null);
@@ -88,34 +111,53 @@ export default function ProfilePage() {
     if (user) setName(user.name || '');
   }
 
-  // The phone is not in the session user: read it from the full profile
+  // The phone is not in the session user: read it from the full profile. A retry bumps `attempt`.
   useEffect(() => {
     if (!isAuthenticated) return;
+    let cancelled = false;
     const loadFullProfile = async () => {
       try {
-        const response = await apiFetch('/api/auth/profile/full');
-        if (response.ok) {
-          const data: { phone?: string } = await response.json();
-          // the API stores E.164; the person sees it as they would type it
-          setPhone(formatPhone(data.phone));
-        }
+        const data = await apiJson<{ phone?: string }>('/api/auth/profile/full');
+        if (cancelled) return;
+        // the API stores E.164; the person sees it as they would type it
+        const shown = formatPhone(data.phone);
+        setPhone(shown);
+        setStored({ status: 'ready', value: shown });
       } catch (err) {
+        if (cancelled) return;
         reportClientError(err, { where: 'profile page' });
+        setStored({ status: 'failed', error: err });
       }
     };
     void loadFullProfile();
-  }, [isAuthenticated]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, attempt]);
+
+  const retryFullProfile = () => {
+    setStored({ status: 'loading' });
+    setAttempt((current) => current + 1);
+  };
 
   const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (stored.status !== 'ready') return;
     setError('');
     setPhoneError(false);
     setSavingAccount(true);
 
     try {
-      // BR-001-25: the page sends name and phone only, never the e-mail; the phone goes as typed
-      // and the API normalises it (BR-001-27)
-      await apiJson('/api/auth/profile', { method: 'PATCH', json: { name, phone } });
+      // BR-001-25: the page sends name and phone only, never the e-mail. The phone goes only when
+      // the person changed it, exactly as typed (the API normalises it, BR-001-27); an emptied
+      // phone is sent as '' and removes it. An untouched phone is omitted, so saving the name never
+      // rewrites or unsets the stored one.
+      const phoneChanged = phone !== stored.value;
+      await apiJson('/api/auth/profile', {
+        method: 'PATCH',
+        json: phoneChanged ? { name, phone } : { name },
+      });
+      if (phoneChanged) setStored({ status: 'ready', value: phone });
       setToast(t('account.saved'));
       await loadUser();
     } catch (err: unknown) {
@@ -192,51 +234,62 @@ export default function ProfilePage() {
             <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
               <CardHeading icon={<PersonOutlined fontSize="small" />} title={t('account.title')} />
               <Divider sx={{ mb: 2 }} />
-              <Stack component="form" spacing={2} onSubmit={handleSaveAccount}>
-                <TextField
-                  fullWidth
-                  label={t('account.name')}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  autoComplete="name"
+              {stored.status === 'loading' && <AccountFormSkeleton label={tCommon('loading')} />}
+              {stored.status === 'failed' && (
+                <ErrorState
+                  title={tLoadFailed('title')}
+                  message={apiErrorMessage(stored.error)}
+                  titleComponent="h3"
+                  onRetry={retryFullProfile}
                 />
-                {/* BR-001-26, D-63: the e-mail is the account's identity and is read-only for every
-                  account; an unconfirmed one says so under the field */}
-                <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+              )}
+              {stored.status === 'ready' && (
+                <Stack component="form" spacing={2} onSubmit={handleSaveAccount}>
                   <TextField
                     fullWidth
-                    label={t('account.email')}
-                    type="email"
-                    value={user?.email ?? ''}
-                    disabled
-                    helperText={t('account.emailHelper')}
+                    label={t('account.name')}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    autoComplete="name"
                   />
-                  {user?.emailVerified === false && (
-                    <StatusBadge status="neutral" label={t('account.unconfirmed')} />
-                  )}
+                  {/* BR-001-26, D-63: the e-mail is the account's identity and is read-only for every
+                      account; an unconfirmed one says so under the field */}
+                  <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+                    <TextField
+                      fullWidth
+                      label={t('account.email')}
+                      type="email"
+                      value={user?.email ?? ''}
+                      disabled
+                      helperText={t('account.emailHelper')}
+                    />
+                    {user?.emailVerified === false && (
+                      <StatusBadge status="neutral" label={t('account.unconfirmed')} />
+                    )}
+                  </Stack>
+                  <TextField
+                    fullWidth
+                    label={t('account.phone')}
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      setPhoneError(false);
+                    }}
+                    type="tel"
+                    autoComplete="tel"
+                    error={phoneError}
+                    helperText={phoneError ? t('account.phoneInvalid') : t('account.phoneHelper')}
+                  />
+                  <Button type="submit" variant="contained" disabled={savingAccount}>
+                    {savingAccount ? (
+                      <CircularProgress size={24} aria-label={tCommon('loading')} />
+                    ) : (
+                      tCommon('save')
+                    )}
+                  </Button>
                 </Stack>
-                <TextField
-                  fullWidth
-                  label={t('account.phone')}
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    setPhoneError(false);
-                  }}
-                  type="tel"
-                  autoComplete="tel"
-                  error={phoneError}
-                  helperText={phoneError ? t('account.phoneInvalid') : t('account.phoneHelper')}
-                />
-                <Button type="submit" variant="contained" disabled={savingAccount}>
-                  {savingAccount ? (
-                    <CircularProgress size={24} aria-label={tCommon('loading')} />
-                  ) : (
-                    tCommon('save')
-                  )}
-                </Button>
-              </Stack>
+              )}
             </CardContent>
           </Card>
 

@@ -18,7 +18,8 @@ vi.mock('@/app/contexts/AuthContext', () => ({ useAuth: () => env.auth }));
 vi.mock('@/lib/report-client-error', () => ({ reportClientError: env.report }));
 
 type Answer = { status: number; body?: unknown };
-let answers: Record<string, Answer>;
+// an answer may be a promise, so a test can hold a request pending and release it later
+let answers: Record<string, Answer | Promise<Answer>>;
 
 // what a stored legacy account still answers: the page must ignore the four legacy fields
 const fullProfile = { phone: '+5584999991234' };
@@ -39,8 +40,9 @@ beforeEach(() => {
   env.report.mockReset();
   answers = { '/api/auth/profile/full': { status: 200, body: fullProfile } };
   fetchMock.mockImplementation(async (url: string) => {
-    const answer = answers[url];
-    if (!answer) throw new Error(`unexpected request ${url}`);
+    const pending = answers[url];
+    if (!pending) throw new Error(`unexpected request ${url}`);
+    const answer = await pending;
     return { ok: answer.status < 400, status: answer.status, json: async () => answer.body ?? {} };
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -54,6 +56,15 @@ afterEach(() => {
 const callsTo = (url: string) => fetchMock.mock.calls.filter(([called]) => called === url);
 const bodyOf = (url: string) =>
   JSON.parse((callsTo(url)[0]?.[1] as RequestInit).body as string) as Record<string, unknown>;
+
+// a request that stays pending until the test releases it
+function deferred() {
+  let release!: (answer: Answer) => void;
+  const promise = new Promise<Answer>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
 
 describe('ProfilePage loading', () => {
   it('shows only a spinner while the session is read', () => {
@@ -84,18 +95,6 @@ describe('ProfilePage loading', () => {
     }
   });
 
-  it('reports the failure and keeps the form usable when the profile cannot be read', async () => {
-    signIn(['local']);
-    const failure = new TypeError('Failed to fetch');
-    fetchMock.mockRejectedValue(failure);
-    render(<ProfilePage />);
-
-    await waitFor(() =>
-      expect(env.report).toHaveBeenCalledWith(failure, { where: 'profile page' }),
-    );
-    expect(screen.getByLabelText('Telefone')).toBeEnabled();
-  });
-
   it('has no accessibility violations', async () => {
     signIn(['local']);
     const { baseElement } = render(
@@ -110,32 +109,32 @@ describe('ProfilePage loading', () => {
 });
 
 describe('ProfilePage account data (frames 3.1 to 3.3)', () => {
-  it('shows the e-mail read-only with its helper, for a password account', () => {
+  it('shows the e-mail read-only with its helper, for a password account', async () => {
     signIn(['local']);
     render(<ProfilePage />);
 
-    const email = screen.getByLabelText(/^E-mail/);
+    const email = await screen.findByLabelText(/^E-mail/);
     expect(email).toBeDisabled();
     expect(email).toHaveAccessibleDescription('O e-mail é o seu acesso e não pode ser alterado');
     expect(screen.queryByText('Não confirmado')).not.toBeInTheDocument();
   });
 
-  it('shows the same read-only e-mail for a Google account', () => {
+  it('shows the same read-only e-mail for a Google account', async () => {
     signIn(['google']);
     render(<ProfilePage />);
 
-    expect(screen.getByLabelText(/^E-mail/)).toBeDisabled();
+    expect(await screen.findByLabelText(/^E-mail/)).toBeDisabled();
     expect(screen.getByText('O e-mail é o seu acesso e não pode ser alterado')).toBeVisible();
   });
 
-  it('frame 3.3: an unconfirmed account gets the "Não confirmado" pill under the e-mail', () => {
+  it('frame 3.3: an unconfirmed account gets the "Não confirmado" pill under the e-mail', async () => {
     signIn(['local'], { emailVerified: false });
     render(<ProfilePage />);
 
-    expect(screen.getByText('Não confirmado')).toBeVisible();
+    expect(await screen.findByText('Não confirmado')).toBeVisible();
   });
 
-  it('sends name and phone as typed, never the e-mail, then confirms with the toast', async () => {
+  it('sends the name, never the e-mail, then confirms with the toast', async () => {
     signIn(['local']);
     answers['/api/auth/profile'] = { status: 200 };
     env.loadUser.mockResolvedValue(undefined);
@@ -150,17 +149,18 @@ describe('ProfilePage account data (frames 3.1 to 3.3)', () => {
     await user.click(screen.getByRole('button', { name: 'Salvar' }));
 
     expect(await screen.findByText('Perfil salvo')).toBeVisible();
+    // the phone was retyped to the number already stored, so it is not part of the change
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/profile', {
       method: 'PATCH',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Ana Nova', phone: '(84) 99999-1234' }),
+      body: JSON.stringify({ name: 'Ana Nova' }),
     });
     expect(bodyOf('/api/auth/profile')).not.toHaveProperty('email');
     expect(env.loadUser).toHaveBeenCalled();
   });
 
-  it('shows a stored landline formatted, and saving it untouched sends it as shown', async () => {
+  it('shows a stored landline formatted, and saving the name leaves it out of the request', async () => {
     signIn(['local']);
     answers['/api/auth/profile/full'] = { status: 200, body: { phone: '+558432221234' } };
     answers['/api/auth/profile'] = { status: 200 };
@@ -172,8 +172,7 @@ describe('ProfilePage account data (frames 3.1 to 3.3)', () => {
     await user.click(screen.getByRole('button', { name: 'Salvar' }));
 
     await screen.findByText('Perfil salvo');
-    // the API normalises it back to the number it already holds
-    expect(bodyOf('/api/auth/profile')).toEqual({ name: 'Ana Teste', phone: '(84) 3222-1234' });
+    expect(bodyOf('/api/auth/profile')).toEqual({ name: 'Ana Teste' });
   });
 
   it('keeps a stored value it cannot read as a Brazilian number as it is', async () => {
@@ -193,6 +192,7 @@ describe('ProfilePage account data (frames 3.1 to 3.3)', () => {
     const user = userEvent.setup();
     render(<ProfilePage />);
 
+    await screen.findByLabelText('Telefone');
     await user.type(screen.getByLabelText('Telefone'), '9999');
     await user.click(screen.getByRole('button', { name: 'Salvar' }));
 
@@ -205,11 +205,11 @@ describe('ProfilePage account data (frames 3.1 to 3.3)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows the hint under the phone before anything is refused', () => {
+  it('shows the hint under the phone before anything is refused', async () => {
     signIn(['local']);
     render(<ProfilePage />);
 
-    expect(screen.getByLabelText('Telefone')).toHaveAccessibleDescription(
+    expect(await screen.findByLabelText('Telefone')).toHaveAccessibleDescription(
       'Com DDD, ex.: (84) 99999-1234',
     );
   });
@@ -223,7 +223,7 @@ describe('ProfilePage account data (frames 3.1 to 3.3)', () => {
     const user = userEvent.setup();
     render(<ProfilePage />);
 
-    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+    await user.click(await screen.findByRole('button', { name: 'Salvar' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(messages.errors.VALIDATION_FAILED);
   });
@@ -345,5 +345,180 @@ describe('ProfilePage create password (Google account, frame 3.4)', () => {
       messages.errors.PASSWORD_ALREADY_SET,
     );
     expect(env.loadUser).not.toHaveBeenCalled();
+  });
+});
+
+// Review finding (P2): the PATCH must never unset a stored phone the page has not read. BR-001-25:
+// the page sends only `{ name?, phone? }`, never the e-mail; the phone goes only once it loaded
+// (and then only when the person changed it) and an emptied phone is the removal (BR-001-27).
+describe('ProfilePage reads the stored phone before it can save (DS-19)', () => {
+  const storedAsShown = '(84) 99999-1234';
+
+  async function readyForm() {
+    signIn(['local']);
+    answers['/api/auth/profile'] = { status: 200 };
+    env.loadUser.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<ProfilePage />);
+    await waitFor(() => expect(screen.getByLabelText('Telefone')).toHaveValue(storedAsShown));
+    return user;
+  }
+
+  async function renameAndSave(user: ReturnType<typeof userEvent.setup>) {
+    await user.clear(screen.getByLabelText(/^Nome/));
+    await user.type(screen.getByLabelText(/^Nome/), 'Ana Nova');
+    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+    await screen.findByText('Perfil salvo');
+  }
+
+  describe('while the read is pending', () => {
+    it('shows the loading state with no way to submit, then the stored phone, and saving the name omits the phone', async () => {
+      signIn(['local']);
+      const read = deferred();
+      answers['/api/auth/profile/full'] = read.promise;
+      answers['/api/auth/profile'] = { status: 200 };
+      env.loadUser.mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      render(<ProfilePage />);
+
+      expect(screen.getByRole('status', { name: 'Carregando…' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Salvar' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Telefone')).not.toBeInTheDocument();
+      expect(callsTo('/api/auth/profile')).toHaveLength(0);
+
+      read.release({ status: 200, body: fullProfile });
+      await waitFor(() => expect(screen.getByLabelText('Telefone')).toHaveValue(storedAsShown));
+      expect(screen.queryByRole('status', { name: 'Carregando…' })).not.toBeInTheDocument();
+
+      await renameAndSave(user);
+      expect(callsTo('/api/auth/profile')).toHaveLength(1);
+      expect(bodyOf('/api/auth/profile')).toEqual({ name: 'Ana Nova' });
+    });
+
+    it('keeps the password card usable', () => {
+      signIn(['local']);
+      answers['/api/auth/profile/full'] = deferred().promise;
+      render(<ProfilePage />);
+
+      expect(screen.getByLabelText(/^Nova senha/)).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Alterar senha' })).toBeEnabled();
+    });
+
+    it('has no accessibility violations', async () => {
+      signIn(['local']);
+      answers['/api/auth/profile/full'] = deferred().promise;
+      const { baseElement } = render(
+        <main>
+          <ProfilePage />
+        </main>,
+      );
+
+      expect(await axe(baseElement)).toHaveNoViolations();
+    });
+  });
+
+  describe('when the read failed', () => {
+    it('shows the error state with the catalogue message, no way to save, and a retry that makes the page usable', async () => {
+      signIn(['local']);
+      answers['/api/auth/profile/full'] = {
+        status: 500,
+        body: { code: 'INTERNAL_ERROR', context: {} },
+      };
+      answers['/api/auth/profile'] = { status: 200 };
+      env.loadUser.mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      render(<ProfilePage />);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(messages.errors.INTERNAL_ERROR);
+      expect(screen.queryByRole('button', { name: 'Salvar' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Telefone')).not.toBeInTheDocument();
+      expect(callsTo('/api/auth/profile')).toHaveLength(0);
+      expect(screen.getByLabelText(/^Nova senha/)).toBeEnabled();
+
+      answers['/api/auth/profile/full'] = { status: 200, body: fullProfile };
+      await user.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+
+      await waitFor(() => expect(screen.getByLabelText('Telefone')).toHaveValue(storedAsShown));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await renameAndSave(user);
+      expect(bodyOf('/api/auth/profile')).toEqual({ name: 'Ana Nova' });
+    });
+
+    it('tells a network failure with the catalogue fallback and reports it', async () => {
+      signIn(['local']);
+      const failure = new TypeError('Failed to fetch');
+      fetchMock.mockRejectedValue(failure);
+      render(<ProfilePage />);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(messages.errors.UNKNOWN);
+      expect(env.report).toHaveBeenCalledWith(failure, { where: 'profile page' });
+      expect(screen.queryByRole('button', { name: 'Salvar' })).not.toBeInTheDocument();
+    });
+
+    it('has no accessibility violations', async () => {
+      signIn(['local']);
+      answers['/api/auth/profile/full'] = {
+        status: 500,
+        body: { code: 'INTERNAL_ERROR', context: {} },
+      };
+      const { baseElement } = render(
+        <main>
+          <ProfilePage />
+        </main>,
+      );
+      await screen.findByRole('alert');
+
+      expect(await axe(baseElement)).toHaveNoViolations();
+    });
+  });
+
+  describe('what the PATCH carries once the phone is read', () => {
+    it('never unsets the stored phone when only the name is saved', async () => {
+      const user = await readyForm();
+
+      await renameAndSave(user);
+
+      expect(bodyOf('/api/auth/profile')).toEqual({ name: 'Ana Nova' });
+      expect(bodyOf('/api/auth/profile')).not.toHaveProperty('phone');
+    });
+
+    it('sends the removal (an empty string) when the person empties the phone', async () => {
+      const user = await readyForm();
+
+      await user.clear(screen.getByLabelText('Telefone'));
+      await user.click(screen.getByRole('button', { name: 'Salvar' }));
+      await screen.findByText('Perfil salvo');
+
+      expect(bodyOf('/api/auth/profile')).toEqual({ name: 'Ana Teste', phone: '' });
+    });
+
+    it('sends the phone as typed and never the e-mail', async () => {
+      const user = await readyForm();
+
+      await user.clear(screen.getByLabelText('Telefone'));
+      await user.type(screen.getByLabelText('Telefone'), '84 98888-7777');
+      await renameAndSave(user);
+
+      expect(bodyOf('/api/auth/profile')).toEqual({ name: 'Ana Nova', phone: '84 98888-7777' });
+      expect(bodyOf('/api/auth/profile')).not.toHaveProperty('email');
+    });
+
+    it('treats the saved phone as the new stored one: a second save omits it', async () => {
+      const user = await readyForm();
+      await user.clear(screen.getByLabelText('Telefone'));
+      await user.type(screen.getByLabelText('Telefone'), '84 98888-7777');
+      await user.click(screen.getByRole('button', { name: 'Salvar' }));
+      await waitFor(() => expect(callsTo('/api/auth/profile')).toHaveLength(1));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Salvar' })).toBeEnabled());
+
+      await user.click(screen.getByRole('button', { name: 'Salvar' }));
+      await waitFor(() => expect(callsTo('/api/auth/profile')).toHaveLength(2));
+
+      const second = JSON.parse(
+        (callsTo('/api/auth/profile')[1]?.[1] as RequestInit).body as string,
+      ) as Record<string, unknown>;
+      expect(second).toEqual({ name: 'Ana Teste' });
+    });
   });
 });

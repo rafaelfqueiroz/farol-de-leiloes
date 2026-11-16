@@ -1,5 +1,5 @@
 import { screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe, renderWithProviders as render } from '@/test/render';
 import ProfilePage from './page';
 
@@ -10,7 +10,7 @@ const env = vi.hoisted(() => ({
 vi.mock('@/app/contexts/AuthContext', () => ({
   useAuth: () => ({
     user: env.user,
-    isAuthenticated: false,
+    isAuthenticated: true,
     loading: false,
     loadUser: vi.fn(),
   }),
@@ -18,20 +18,27 @@ vi.mock('@/app/contexts/AuthContext', () => ({
 
 beforeEach(() => {
   env.user = null;
+  // the account form appears once the stored phone is read (DS-19)
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) })),
+  );
 });
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe('ProfilePage', () => {
-  it('fills the name and shows the e-mail of a user already signed in on the first render', () => {
+  it('fills the name and shows the e-mail of a user already signed in on the first render', async () => {
     env.user = { name: 'Ana', email: 'ana@exemplo.com' };
     render(<ProfilePage />);
 
-    expect(screen.getByLabelText(/^nome/i)).toHaveValue('Ana');
+    expect(await screen.findByLabelText(/^nome/i)).toHaveValue('Ana');
     expect(screen.getByLabelText(/^e-?mail/i)).toHaveValue('ana@exemplo.com');
   });
 
   it('follows the user when it arrives after the first render', async () => {
     const { rerender } = render(<ProfilePage />);
-    expect(screen.getByLabelText(/^nome/i)).toHaveValue('');
+    expect(await screen.findByLabelText(/^nome/i)).toHaveValue('');
 
     env.user = { name: 'Bia', email: 'bia@exemplo.com' };
     rerender(<ProfilePage />);
@@ -61,6 +68,7 @@ describe('ProfilePage', () => {
         <ProfilePage />
       </main>,
     );
+    await screen.findByLabelText(/^nome/i);
     expect(await axe(baseElement)).toHaveNoViolations();
   });
 
@@ -72,6 +80,7 @@ describe('ProfilePage', () => {
       </main>,
       { scheme: 'dark' },
     );
+    await screen.findByLabelText(/^nome/i);
     expect(await axe(baseElement)).toHaveNoViolations();
   });
 });

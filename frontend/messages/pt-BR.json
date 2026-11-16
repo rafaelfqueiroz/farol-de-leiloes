@@ -7,6 +7,9 @@
     "favorites": {
       "title": "Não foi possível carregar seus favoritos"
     },
+    "profile": {
+      "title": "Não foi possível carregar seus dados"
+    },
     "savedFilters": {
       "title": "Não foi possível carregar seus filtros salvos",
       "message": "Tente novamente para ver os filtros que você salvou."
