@@ -5,6 +5,8 @@ const dateTests = [
   'lib/dates.test.ts',
   'lib/brasilia-date-adapter.test.ts',
   'app/components/DateField.dst.test.tsx',
+  // BR-003-23: "(horário de Brasília)" and the Brasília day must not move with the device zone.
+  'app/components/patterns/DateText.test.tsx',
 ];
 
 export default defineConfig({
