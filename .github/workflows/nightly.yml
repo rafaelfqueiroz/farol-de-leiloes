@@ -1,7 +1,8 @@
 # DEVELOPMENT §12. The full advisory list (every severity, dev dependencies included) goes to the
 # run summary; the job fails only at high or above (SC-19), so a scheduled-run failure email is
-# the alert for a new high advisory on code nobody has pushed. BL-002's performance budgets join
-# here later. GitHub disables scheduled workflows after 60 days without repository activity.
+# the alert for a new high advisory on code nobody has pushed. The performance budgets (SPEC-003) are
+# not nightly: they need the full reference workload, and run as performance.yml on release tags.
+# GitHub disables scheduled workflows after 60 days without repository activity.
 name: Nightly
 
 on:

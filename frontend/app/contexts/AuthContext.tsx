@@ -56,6 +56,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Builds before the cookie session kept the token in localStorage. It is not read any more (and
+  // the server refuses old tokens), but it must not sit there for a script to find (SC-02).
+  useEffect(() => {
+    try {
+      window.localStorage.removeItem('token');
+    } catch {
+      // storage blocked: nothing to remove
+    }
+  }, []);
+
   // The session ended anywhere in the app (expired, revoked, signed out elsewhere): drop the user.
   useEffect(() => onSessionEnded(() => setUser(null)), []);
 
