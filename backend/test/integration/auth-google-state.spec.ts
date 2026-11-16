@@ -20,7 +20,7 @@ import { useTestDatabase } from '../support/test-database.js';
 
 const FRONTEND = 'http://localhost:3001';
 const REFUSED = `${FRONTEND}/login?error=GOOGLE_SIGN_IN_FAILED`;
-const COOKIE = 'google_oauth_state';
+const COOKIE = 'farol_google_flow';
 const GOOGLE_SUB = 'google-sub-state-spec';
 const EMAIL = 'state-spec@example.test';
 

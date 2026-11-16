@@ -7,8 +7,8 @@ import { FakeClock, MINUTE } from '../../../test/fakes/fake-clock.js';
 import { spyOnLogger } from '../../../test/support/logger-spy.js';
 import { testConfigService } from '../../../test/support/test-env.js';
 import {
-  GOOGLE_STATE_COOKIE,
-  GOOGLE_STATE_COOKIE_PATH,
+  GOOGLE_FLOW_COOKIE,
+  GOOGLE_FLOW_COOKIE_PATH,
   GoogleOAuthStateStore,
 } from './google-oauth-state.store.js';
 
@@ -66,7 +66,7 @@ describe('store (the start of the flow)', () => {
 
     const { name, value, options, state } = start(store);
 
-    expect(name).toBe(GOOGLE_STATE_COOKIE);
+    expect(name).toBe(GOOGLE_FLOW_COOKIE);
     expect(state).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(value).not.toContain(VERIFIER); // base64 inside the sealed body, never as sent
     expect(Buffer.from(value.split('.')[0] ?? '', 'base64url').toString()).toContain(VERIFIER);
@@ -74,7 +74,7 @@ describe('store (the start of the flow)', () => {
       httpOnly: true,
       sameSite: 'lax',
       secure: false, // NODE_ENV is test
-      path: GOOGLE_STATE_COOKIE_PATH,
+      path: GOOGLE_FLOW_COOKIE_PATH,
       maxAge: 10 * 60 * 1000,
     });
   });
@@ -117,14 +117,14 @@ describe('verify (the return from Google)', () => {
 
     const { results, clearCookie } = verify(
       store,
-      `other=1; ${GOOGLE_STATE_COOKIE}=${started.value}`,
+      `other=1; ${GOOGLE_FLOW_COOKIE}=${started.value}`,
       started.state,
     );
 
     expect(results).toEqual([[null, VERIFIER]]);
     expect(clearCookie).toHaveBeenCalledWith(
-      GOOGLE_STATE_COOKIE,
-      expect.objectContaining({ path: GOOGLE_STATE_COOKIE_PATH, httpOnly: true, sameSite: 'lax' }),
+      GOOGLE_FLOW_COOKIE,
+      expect.objectContaining({ path: GOOGLE_FLOW_COOKIE_PATH, httpOnly: true, sameSite: 'lax' }),
     );
   });
 
@@ -155,7 +155,7 @@ describe('verify (the return from Google)', () => {
     const { store } = setup();
     const started = start(store);
 
-    const { results } = verify(store, `${GOOGLE_STATE_COOKIE}=${started.value}`, provided);
+    const { results } = verify(store, `${GOOGLE_FLOW_COOKIE}=${started.value}`, provided);
 
     refused(results);
   });
@@ -166,7 +166,7 @@ describe('verify (the return from Google)', () => {
 
     const { results } = verify(
       store,
-      `${GOOGLE_STATE_COOKIE}=${started.value}`,
+      `${GOOGLE_FLOW_COOKIE}=${started.value}`,
       started.state.slice(0, 20),
     );
 
@@ -179,7 +179,7 @@ describe('verify (the return from Google)', () => {
     const [body = '', signature = ''] = started.value.split('.');
     const tampered = `${body}.${(signature[0] === 'A' ? 'B' : 'A') + signature.slice(1)}`;
 
-    const { results } = verify(store, `${GOOGLE_STATE_COOKIE}=${tampered}`, started.state);
+    const { results } = verify(store, `${GOOGLE_FLOW_COOKIE}=${tampered}`, started.state);
 
     refused(results);
   });
@@ -195,7 +195,7 @@ describe('verify (the return from Google)', () => {
 
     const { results } = verify(
       store,
-      `${GOOGLE_STATE_COOKIE}=${forged}.${signature}`,
+      `${GOOGLE_FLOW_COOKIE}=${forged}.${signature}`,
       'attacker-state',
     );
 
@@ -207,7 +207,7 @@ describe('verify (the return from Google)', () => {
     const foreign = start(other);
     const { store } = setup();
 
-    const { results } = verify(store, `${GOOGLE_STATE_COOKIE}=${foreign.value}`, foreign.state);
+    const { results } = verify(store, `${GOOGLE_FLOW_COOKIE}=${foreign.value}`, foreign.state);
 
     refused(results);
   });
@@ -215,7 +215,7 @@ describe('verify (the return from Google)', () => {
   it('accepts the return within ten minutes and refuses it after (FakeClock)', () => {
     const { store, clock } = setup();
     const started = start(store);
-    const header = `${GOOGLE_STATE_COOKIE}=${started.value}`;
+    const header = `${GOOGLE_FLOW_COOKIE}=${started.value}`;
 
     clock.advance(10 * MINUTE - 1);
     expect(verify(store, header, started.state).results).toEqual([[null, VERIFIER]]);
@@ -229,7 +229,7 @@ describe('verify (the return from Google)', () => {
     const { store } = setup();
     const started = start(store);
 
-    verify(store, `${GOOGLE_STATE_COOKIE}=${started.value}`, 'foreign');
+    verify(store, `${GOOGLE_FLOW_COOKIE}=${started.value}`, 'foreign');
     verify(store, undefined, started.state);
 
     // Nothing is logged at all: the refusal carries only its closed code.

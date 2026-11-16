@@ -14,10 +14,10 @@ import {
   sealState,
 } from './google-oauth-state.seal.js';
 
-export const GOOGLE_STATE_COOKIE = 'google_oauth_state';
+export const GOOGLE_FLOW_COOKIE = 'farol_google_flow';
 // The cookie goes to Google's return (a top-level GET navigation, which SameSite=Lax cookies
 // accompany) and to nothing else of the site: /api is AR-32's prefix.
-export const GOOGLE_STATE_COOKIE_PATH = '/api/auth/google/callback'; // only the callback needs it
+export const GOOGLE_FLOW_COOKIE_PATH = '/api/auth/google/callback'; // only the callback needs it
 
 type StoreCallback = (error: Error | null, state?: string) => void;
 type VerifyCallback = (error: Error | null, verifier?: string | false, info?: unknown) => void;
@@ -53,7 +53,7 @@ export class GoogleOAuthStateStore {
       httpOnly: true,
       sameSite: 'lax',
       secure: config.get('NODE_ENV', { infer: true }) === 'production',
-      path: GOOGLE_STATE_COOKIE_PATH,
+      path: GOOGLE_FLOW_COOKIE_PATH,
     };
   }
 
@@ -69,23 +69,19 @@ export class GoogleOAuthStateStore {
       return callback(new Error('Google sign-in state could not be stored'));
     }
     const state = randomBytes(32).toString('base64url');
-    req.res.cookie(
-      GOOGLE_STATE_COOKIE,
-      sealState(this.key, { state, verifier }, this.clock.now()),
-      {
-        ...this.cookieOptions,
-        maxAge: GOOGLE_STATE_TTL_MS,
-      },
-    );
+    req.res.cookie(GOOGLE_FLOW_COOKIE, sealState(this.key, { state, verifier }, this.clock.now()), {
+      ...this.cookieOptions,
+      maxAge: GOOGLE_STATE_TTL_MS,
+    });
     callback(null, state);
   }
 
   /** Called by passport on the return from Google; answers the PKCE verifier to use. */
   verify(req: Request, providedState: unknown, callback: VerifyCallback): void {
     // Single use: whatever the outcome, the browser is told to drop the cookie.
-    req.res?.clearCookie(GOOGLE_STATE_COOKIE, this.cookieOptions);
+    req.res?.clearCookie(GOOGLE_FLOW_COOKIE, this.cookieOptions);
 
-    const sealed = readCookie(req.headers.cookie, GOOGLE_STATE_COOKIE);
+    const sealed = readCookie(req.headers.cookie, GOOGLE_FLOW_COOKIE);
     const opened = sealed === undefined ? null : openState(this.key, sealed, this.clock.now());
     if (!opened || typeof providedState !== 'string' || !sameState(opened.state, providedState)) {
       return callback(new DomainError('GOOGLE_SIGN_IN_FAILED'));
