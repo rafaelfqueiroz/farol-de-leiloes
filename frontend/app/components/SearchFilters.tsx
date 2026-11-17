@@ -35,6 +35,7 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import LockIcon from '@mui/icons-material/Lock';
 import { useSavedFilters } from '../contexts/SavedFiltersContext';
 import { useAuth } from '../contexts/AuthContext';
+import { hasMinimumPlan } from './RequireRole';
 import type { Auction } from '@/lib/auction';
 import { formatMoney, formatMoneyCompact, moneyFromSlider, moneyToSlider } from '@/lib/money';
 import { publicEnv } from '@/lib/env';
@@ -465,8 +466,9 @@ export default function SearchFilters({
   const tAuction = useTranslations('auctionCard');
   const tCommon = useTranslations('common');
   const tLoadFailed = useTranslations('loadFailed.savedFilters');
-  const canUseAISearch = role === 'admin' || role === 'premium';
-  const canUseSavedFilters = role === 'admin' || role === 'premium' || role === 'standard';
+  // SPEC-002 BR-002-23: plan tiers only; the admin capability is no plan. UX only (AR-51).
+  const canUseAISearch = hasMinimumPlan(role, 'premium');
+  const canUseSavedFilters = hasMinimumPlan(role, 'standard');
 
   // Saved filters state
   const {

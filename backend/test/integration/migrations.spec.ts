@@ -277,8 +277,13 @@ describe('Migrations (integration)', () => {
     });
   });
 
-  describe('0001 to 0003 through the runner (#81)', () => {
-    const ALL = ['0001-money-decimal128', '0002-saved-filter-price-bounds', '0003-account-tokens'];
+  describe('0001 to 0004 through the runner (#81)', () => {
+    const ALL = [
+      '0001-money-decimal128',
+      '0002-saved-filter-price-bounds',
+      '0003-account-tokens',
+      '0004-admin-capability',
+    ];
     let afterFirstRun: Awaited<ReturnType<typeof snapshot>>;
 
     beforeAll(async () => {

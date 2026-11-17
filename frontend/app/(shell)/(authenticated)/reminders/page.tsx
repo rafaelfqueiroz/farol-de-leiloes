@@ -26,7 +26,7 @@ function RemindersPageLoading() {
 export default function Reminders() {
   const t = useTranslations('reminders');
   return (
-    <RequireRole minimumRole="standard" featureName={t('featureName')}>
+    <RequireRole minimumPlan="standard" featureName={t('featureName')}>
       <Suspense fallback={<RemindersPageLoading />}>
         <RemindersPage />
       </Suspense>

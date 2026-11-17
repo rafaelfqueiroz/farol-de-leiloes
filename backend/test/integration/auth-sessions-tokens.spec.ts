@@ -140,20 +140,22 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       await signIn(first.toUpperCase()).expect(200);
     });
 
-    it.each([{ role: 'admin' }, { plan: 'premium' }, { subscriptionStatus: 'active' }])(
-      'BR-001-31: a sign-up body with %j is refused and creates no account',
-      async (extra) => {
-        const email = freshEmail('extra');
+    it.each([
+      { role: 'admin' },
+      { isAdmin: true }, // SPEC-002 BR-002-21
+      { plan: 'premium' },
+      { subscriptionStatus: 'active' },
+    ])('BR-001-31: a sign-up body with %j is refused and creates no account', async (extra) => {
+      const email = freshEmail('extra');
 
-        const response = await request(server())
-          .post('/api/auth/register')
-          .send({ email, password: PASSWORD, name: 'Ana', acceptTerms: true, ...extra })
-          .expect(400);
+      const response = await request(server())
+        .post('/api/auth/register')
+        .send({ email, password: PASSWORD, name: 'Ana', acceptTerms: true, ...extra })
+        .expect(400);
 
-        expect(response.body.code).toBe('VALIDATION_FAILED');
-        expect(await users.countDocuments({ email })).toBe(0);
-      },
-    );
+      expect(response.body.code).toBe('VALIDATION_FAILED');
+      expect(await users.countDocuments({ email })).toBe(0);
+    });
 
     it.each([
       ['declines the terms', { acceptTerms: false }],

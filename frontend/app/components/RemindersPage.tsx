@@ -36,6 +36,7 @@ import SmsIcon from '@mui/icons-material/Sms';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useReminders, Reminder, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
+import { hasMinimumPlan } from './RequireRole';
 import { useApiErrorMessage } from '@/lib/api-error';
 import { toUtcInstant, tryParseInstant } from '@/lib/dates';
 import { formatCount } from '@/lib/numbers';
@@ -86,7 +87,8 @@ export default function RemindersPage() {
       ? t('channelRestricted', { channel: t(`channel.${channel}`) })
       : t(`channel.${channel}`);
 
-  const isPremium = role === 'standard' || role === 'premium' || role === 'admin';
+  // SPEC-002 BR-002-23: SMS and WhatsApp come with a paid plan; the admin capability is no plan.
+  const isPremium = hasMinimumPlan(role, 'standard');
 
   // Filter only pending reminders and sort by scheduledAt
   const upcomingReminders = reminders

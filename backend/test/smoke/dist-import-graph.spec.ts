@@ -18,9 +18,9 @@ import { TEST_ENV } from '../support/test-env.js';
 const BACKEND = join(import.meta.dirname, '..', '..');
 const DIST = join(BACKEND, 'dist');
 
-// The process entry points start the app or the migrations as soon as they load. Everything they
-// import is another dist module, which this spec loads.
-const ENTRY_POINTS = new Set(['main.js', 'migrations/run.js']);
+// The process entry points start the app, the migrations or the grant-admin script as soon as they
+// load. Everything they import is another dist module, which this spec loads.
+const ENTRY_POINTS = new Set(['main.js', 'migrations/run.js', 'access/grant-admin/run.js']);
 
 function distModules(): string[] {
   return (readdirSync(DIST, { recursive: true }) as string[])

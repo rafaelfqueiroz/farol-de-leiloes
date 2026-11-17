@@ -15,7 +15,7 @@ import { RemindersController } from '../../reminders/reminders.controller.js';
 import { SavedFiltersController } from '../../saved-filters/saved-filters.controller.js';
 import { SupportController } from '../../support/support.controller.js';
 import { AuthController } from '../auth.controller.js';
-import { Public } from '../decorators/public.decorator.js';
+import { Public, RequiresAccess } from '../decorators/public.decorator.js';
 import type { AuthenticatedUser } from '../interfaces/auth.interface.js';
 import { ConfirmedEmailGuard } from './confirmed-email.guard.js';
 
@@ -28,6 +28,11 @@ class PublicHandler {
 }
 @Public()
 class PublicClass {
+  route() {}
+}
+@Public()
+class PublicClassWithRequirement {
+  @RequiresAccess()
   route() {}
 }
 
@@ -68,6 +73,17 @@ describe('ConfirmedEmailGuard', () => {
   ])('leaves %s public, signed in or not', (_label, target) => {
     expect(guard.canActivate(contextFor(target, undefined))).toBe(true);
     expect(guard.canActivate(contextFor(target, { emailVerified: false }))).toBe(true);
+  });
+});
+
+describe('ConfirmedEmailGuard and SC-07', () => {
+  it('checks a @Public() controller handler that carries an access requirement', () => {
+    expect(() =>
+      guard.canActivate(contextFor(PublicClassWithRequirement, { emailVerified: false })),
+    ).toThrow(new DomainError('EMAIL_VERIFICATION_REQUIRED'));
+    expect(() => guard.canActivate(contextFor(PublicClassWithRequirement, undefined))).toThrow(
+      new DomainError('UNAUTHENTICATED'),
+    );
   });
 });
 

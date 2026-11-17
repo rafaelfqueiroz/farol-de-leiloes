@@ -51,9 +51,16 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      // The process entry points: they only wire a Nest context and exit (main.ts, run.ts), or
-      // initialise Sentry before it (instrument.ts, whose options are unit-tested).
-      exclude: ['src/**/*.spec.ts', 'src/main.ts', 'src/instrument.ts', 'src/migrations/run.ts'],
+      // The process entry points: they only wire a Nest context and exit (main.ts, the run.ts of
+      // the migrations and of grant-admin), or initialise Sentry before it (instrument.ts, whose
+      // options are unit-tested).
+      exclude: [
+        'src/**/*.spec.ts',
+        'src/main.ts',
+        'src/instrument.ts',
+        'src/migrations/run.ts',
+        'src/access/grant-admin/run.ts',
+      ],
       reporter: ['text-summary', 'text', 'lcov'],
       thresholds: {
         // TESTING §7: the target, 80% lines and branches, now the floor itself. It started at the

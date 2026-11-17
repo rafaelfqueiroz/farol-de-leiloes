@@ -81,6 +81,7 @@ describe('AuthService account contract (AR-09)', () => {
         emailVerified: false,
         role: 'free',
         subscriptionStatus: null,
+        isAdmin: false, // SPEC-002: a missing flag is no admin (AR-28)
         phone: undefined,
         createdAt: CREATED,
         updatedAt: UPDATED,
@@ -105,6 +106,7 @@ describe('AuthService account contract (AR-09)', () => {
       subscriptionStatus: 'active' as const,
       providers: ['local', 'google'],
       phone: '00000000000',
+      isAdmin: true, // SPEC-002 DL-002-05: the stored capability
     };
     const user = { ...account(profile), password: 'fake-hash' };
 
@@ -182,6 +184,7 @@ describe('AuthService.toUserProfile mapping (AR-09, SC-15)', () => {
         'emailVerified',
         'role',
         'subscriptionStatus',
+        'isAdmin',
         'phone',
         'createdAt',
         'updatedAt',

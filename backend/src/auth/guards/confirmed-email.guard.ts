@@ -1,7 +1,7 @@
 import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { DomainError } from '../../common/errors/domain-error.js';
-import { IS_PUBLIC } from '../decorators/public.decorator.js';
+import { isPublicRoute } from '../decorators/public.decorator.js';
 import type { AuthenticatedUser } from '../interfaces/auth.interface.js';
 
 /**
@@ -12,22 +12,15 @@ import type { AuthenticatedUser } from '../interfaces/auth.interface.js';
  *
  * Opt-in per controller with `@UseGuards(ConfirmedEmailGuard)`, so it never depends on a global
  * registration. It runs after the global JwtAuthGuard, which has put the user on the request with
- * `emailVerified` read from the database for this very request (BR-001-17). A `@Public()` handler
- * stays public. Account notifications (confirmation and recovery mail) are unaffected (BR-001-07).
+ * `emailVerified` read from the database for this very request (BR-001-17). A public route stays
+ * public (isPublicRoute, SC-07: @Public() without an access requirement). Account notifications (confirmation and recovery mail) are unaffected (BR-001-07).
  */
 @Injectable()
 export class ConfirmedEmailGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    if (
-      this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
-        context.getHandler(),
-        context.getClass(),
-      ])
-    ) {
-      return true;
-    }
+    if (isPublicRoute(this.reflector, context)) return true;
     const { user } = context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>();
     // A guarded route with no authenticated user means the JWT guard did not run: refuse, never
     // let it through.

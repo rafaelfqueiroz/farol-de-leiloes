@@ -66,27 +66,28 @@ const sentBySearch = async (user: ReturnType<typeof userEvent.setup>, onSearch: 
 };
 
 describe('SearchFilters AI search', () => {
-  it('offers the AI field to a Premium account and an administrator', () => {
-    for (const role of ['premium', 'admin']) {
-      env.auth = { role };
-      const { unmount } = render(<SearchFilters onSearch={vi.fn()} onAISearchResults={vi.fn()} />);
-
-      expect(screen.getByPlaceholderText(messages.searchFilters.ai.placeholder)).toBeVisible();
-      expect(screen.queryByText(messages.searchFilters.ai.locked.title)).not.toBeInTheDocument();
-      unmount();
-    }
-  });
-
-  it.each(['free', 'standard'])('locks it behind the plans page for a %s account', (role) => {
-    env.auth = { role };
+  it('offers the AI field to a Premium account', () => {
+    env.auth = { role: 'premium' };
     render(<SearchFilters onSearch={vi.fn()} onAISearchResults={vi.fn()} />);
 
-    expect(screen.getByText(messages.searchFilters.ai.locked.title)).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Assine agora' })).toHaveAttribute('href', '/plans');
-    expect(
-      screen.queryByPlaceholderText(messages.searchFilters.ai.placeholder),
-    ).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText(messages.searchFilters.ai.placeholder)).toBeVisible();
+    expect(screen.queryByText(messages.searchFilters.ai.locked.title)).not.toBeInTheDocument();
   });
+
+  // SPEC-002 BR-002-23: the legacy role 'admin' is no plan, so it gets no paid feature.
+  it.each(['free', 'standard', 'admin'])(
+    'locks it behind the plans page for a %s account',
+    (role) => {
+      env.auth = { role };
+      render(<SearchFilters onSearch={vi.fn()} onAISearchResults={vi.fn()} />);
+
+      expect(screen.getByText(messages.searchFilters.ai.locked.title)).toBeVisible();
+      expect(screen.getByRole('link', { name: 'Assine agora' })).toHaveAttribute('href', '/plans');
+      expect(
+        screen.queryByPlaceholderText(messages.searchFilters.ai.placeholder),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it('sends the description to the BFF and hands the results to the page', async () => {
     const results = { items: [{ code: '1' }], total: 1, page: 1, pageSize: 20 };

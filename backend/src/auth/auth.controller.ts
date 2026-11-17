@@ -50,6 +50,8 @@ import type { Env } from '../config/env.js';
 import { GoogleCallbackRedirectFilter } from './google/google-callback-redirect.filter.js';
 import type { GoogleIdentity } from './google/google-identity.js';
 import { GoogleCodeDto, GoogleCompleteDto } from './dto/google-code.dto.js';
+import { Access } from '../access/decorators/access.decorator.js';
+import type { AccessContext } from '../access/access-context.js';
 
 // GoogleStrategy.validate hands the verified Google identity to passport, which sets it on the
 // request.
@@ -223,10 +225,18 @@ export class AuthController {
 
   @Get('me')
   @ApiJwtAuth()
-  @ApiOperation({ summary: 'The signed-in user' })
+  @ApiOperation({
+    summary: 'The signed-in user',
+    description:
+      'isAdmin and personas are read and derived on this request (SPEC-002 BR-002-14, ' +
+      'BR-002-15); they tell the interface what to show and authorize nothing by themselves.',
+  })
   @ApiOkResponse({ type: CurrentUserResponseDto })
-  async getProfile(@CurrentUser() user: AuthenticatedUser): Promise<CurrentUserResponseDto> {
-    return new CurrentUserResponseDto(user);
+  async getProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Access() access: AccessContext,
+  ): Promise<CurrentUserResponseDto> {
+    return new CurrentUserResponseDto(user, access);
   }
 
   @Post('logout')

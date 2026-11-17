@@ -32,7 +32,7 @@ describe('CouponsController commands over HTTP', () => {
       controllers: [CouponsController],
       providers: [{ provide: CouponsService, useValue: coupons }],
     };
-    admin = await createHttpApp(metadata, { user: { ...TEST_USER, role: 'admin' } });
+    admin = await createHttpApp(metadata, { user: { ...TEST_USER, isAdmin: true } });
     subscriber = await createHttpApp(metadata);
   });
 
@@ -80,7 +80,7 @@ describe('CouponsController commands over HTTP', () => {
       .patch(`/api/coupons/${COUPON._id}/invalidate`)
       .expect(403);
 
-    expect(res.body.code).toBe('PLAN_NOT_ALLOWED');
+    expect(res.body.code).toBe('FORBIDDEN');
     expect(coupons.invalidate).not.toHaveBeenCalled();
   });
 

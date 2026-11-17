@@ -332,10 +332,10 @@ function ThemeMenu() {
   );
 }
 
-type PlanKey = 'admin' | 'premium' | 'standard' | 'free';
+type PlanKey = 'premium' | 'standard' | 'free';
 
+// SPEC-002 BR-002-23: the legacy role 'admin' is no plan, so it shows as free.
 function planOf(role: string, hasSubscription: boolean): PlanKey {
-  if (role === 'admin') return 'admin';
   if (role === 'premium') return 'premium';
   if (role === 'standard' && hasSubscription) return 'standard';
   return 'free';
@@ -343,7 +343,6 @@ function planOf(role: string, hasSubscription: boolean): PlanKey {
 
 // DS-24: amber (secondary) is never text on light, so paid plans use primary
 const PLAN_COLOR: Record<PlanKey, 'default' | 'primary' | 'success'> = {
-  admin: 'primary',
   premium: 'success',
   standard: 'primary',
   free: 'default',
@@ -513,7 +512,7 @@ export default function AppShell({ children, banner }: AppShellProps) {
   // server markup never depends on these.
   const isMdUp = useMediaQuery(theme.breakpoints.up('md'));
   const isLgUp = useMediaQuery(theme.breakpoints.up('lg'));
-  const { user, loading, isAuthenticated, role, hasSubscription, logout } = useAuth();
+  const { user, loading, isAuthenticated, role, isAdmin, hasSubscription, logout } = useAuth();
   const counts = useCounts();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [railPinned, setRailPinned] = useState(false);
@@ -526,7 +525,7 @@ export default function AppShell({ children, banner }: AppShellProps) {
 
   // while auth loads, only the logo and theme show, so a member never sees "Entrar" flash
   const status = loading ? 'pending' : isAuthenticated && user ? 'member' : 'guest';
-  const groups = status === 'member' ? visibleGroups(role) : [];
+  const groups = status === 'member' ? visibleGroups({ role, isAdmin }) : [];
   const showReminders = groups.some((group) => group.items.some((item) => item.id === 'reminders'));
   const mode = isLgUp ? 'sidebar' : isMdUp ? 'rail' : 'drawer';
   const sidebarExpanded = mode === 'sidebar' || (mode === 'rail' && railPinned);

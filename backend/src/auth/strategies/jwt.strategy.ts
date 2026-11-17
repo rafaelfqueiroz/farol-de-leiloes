@@ -82,6 +82,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       providers: user.providers,
       role: user.role ?? 'free',
       subscriptionStatus: user.subscriptionStatus ?? null,
+      // SPEC-002 BR-002-15 / BR-002-23: the admin capability is the stored flag, read now; a
+      // missing one is false (AR-28). `role === 'admin'` grants nothing any more.
+      isAdmin: user.isAdmin === true,
     };
   }
 }

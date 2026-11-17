@@ -28,6 +28,8 @@ export const PROTECTED = [
   'stripeSubscriptionId',
   'subscriptionStatus',
   'credentialVersion',
+  // SPEC-002 BR-002-21: only the grant-admin script sets it (UsersService.setAdminCapability).
+  'isAdmin',
 ] as const;
 
 /** Mongoose bookkeeping, not account attributes. */
@@ -58,4 +60,5 @@ export const HOSTILE_VALUES: Record<string, unknown> = {
   stripeSubscriptionId: 'sub_hostile',
   subscriptionStatus: 'active',
   credentialVersion: 99,
+  isAdmin: true,
 };

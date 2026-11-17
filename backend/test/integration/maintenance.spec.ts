@@ -1,8 +1,9 @@
 // Integration: the maintenance endpoints (SPEC-003 BR-003-03) against a real MongoDB
 // (Testcontainers, TESTING §2), through the app's own HTTP setup (configureApp), the production
 // JwtAuthGuard (SC-07) and a fake clock (AR-24, TS-06). Only the JWT strategy is a stand-in: it
-// accepts tokens signed with the spec's own secret, so the real guard's @Public handling and the
-// real RolesGuard decide who gets in. supertest binds an ephemeral loopback port (TS-01, TS-07).
+// accepts tokens signed with the spec's own secret, so the real guard's @Public handling, the real
+// AccessContextGuard and the real AdminGuard (SPEC-002 BR-002-23) decide who gets in. supertest
+// binds an ephemeral loopback port (TS-01, TS-07).
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Injectable, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +17,8 @@ import type { Model } from 'mongoose';
 import request from 'supertest';
 import { configureApp } from '../../src/app.setup.js';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard.js';
+import { AccessModule } from '../../src/access/access.module.js';
+import { AccessContextGuard } from '../../src/access/guards/access-context.guard.js';
 import { Clock } from '../../src/common/clock/clock.js';
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
 import { MaintenanceModule } from '../../src/maintenance/maintenance.module.js';
@@ -41,8 +44,9 @@ class SpecJwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  validate(payload: { sub: string; role: string }) {
-    return { userId: payload.sub, role: payload.role };
+  validate(payload: { sub: string; isAdmin: boolean }) {
+    // SC-09: AdminGuard also needs a confirmed email.
+    return { userId: payload.sub, isAdmin: payload.isAdmin, emailVerified: true };
   }
 }
 
@@ -60,11 +64,13 @@ describe('maintenance windows (integration, SPEC-003 BR-003-03)', () => {
       imports: [
         MongooseModule.forRoot(db.uri),
         JwtModule.register({ secret: SECRET }),
+        AccessModule,
         MaintenanceModule,
       ],
       providers: [
         SpecJwtStrategy,
         { provide: APP_GUARD, useClass: JwtAuthGuard },
+        { provide: APP_GUARD, useClass: AccessContextGuard }, // SPEC-002, after the JWT guard
         { provide: ConfigService, useValue: testConfigService() },
       ],
     })
@@ -77,8 +83,8 @@ describe('maintenance windows (integration, SPEC-003 BR-003-03)', () => {
     windows = moduleRef.get(getModelToken(MaintenanceWindowEntity.name));
     await windows.init(); // the startsAt index is built before the first query
     const jwt = moduleRef.get(JwtService);
-    adminToken = jwt.sign({ sub: ADMIN_ID, role: 'admin' });
-    standardToken = jwt.sign({ sub: STANDARD_ID, role: 'standard' });
+    adminToken = jwt.sign({ sub: ADMIN_ID, isAdmin: true });
+    standardToken = jwt.sign({ sub: STANDARD_ID, isAdmin: false });
   });
 
   afterAll(async () => {
@@ -184,7 +190,7 @@ describe('maintenance windows (integration, SPEC-003 BR-003-03)', () => {
         .set('Authorization', `Bearer ${standardToken}`)
         .send(aWindow(72))
         .expect(403);
-      expect(response.body.code).toBe('PLAN_NOT_ALLOWED');
+      expect(response.body.code).toBe('FORBIDDEN');
       expect(await windows.countDocuments()).toBe(0);
     });
   });

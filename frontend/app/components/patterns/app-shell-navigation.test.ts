@@ -3,8 +3,11 @@ import messages from '@/messages/pt-BR.json';
 import { NAV_GROUPS, currentItemId, formatCount, visibleGroups } from './app-shell-navigation';
 
 const query = (search = '') => new URLSearchParams(search);
-const ids = (role: string) => visibleGroups(role).map((group) => group.id);
-const itemIds = (role: string) => visibleGroups(role).flatMap((g) => g.items.map((i) => i.id));
+const as = (role: string, isAdmin = false) => ({ role, isAdmin });
+const ids = (role: string, isAdmin = false) =>
+  visibleGroups(as(role, isAdmin)).map((group) => group.id);
+const itemIds = (role: string, isAdmin = false) =>
+  visibleGroups(as(role, isAdmin)).flatMap((g) => g.items.map((i) => i.id));
 
 describe('app-shell navigation config', () => {
   it('has unique item ids', () => {
@@ -42,11 +45,6 @@ describe('app-shell navigation config', () => {
       ['search', 'tracking', 'account'],
       ['search', 'favorites', 'reminders', 'profile', 'subscription', 'support'],
     ],
-    [
-      'admin',
-      ['search', 'tracking', 'account', 'admin'],
-      ['search', 'favorites', 'reminders', 'profile', 'subscription', 'support', 'coupons'],
-    ],
   ])(
     'shows %s only its groups, in the fixed order, without the empty Escritório',
     (role, groups, items) => {
@@ -57,6 +55,25 @@ describe('app-shell navigation config', () => {
 
   it('treats an unknown or empty role as free', () => {
     expect(ids('')).toEqual(ids('free'));
+  });
+
+  it("SPEC-002 BR-002-23: the legacy role 'admin' is the free plan and shows no admin item", () => {
+    expect(itemIds('admin')).toEqual(itemIds('free'));
+  });
+
+  it('SPEC-002 BR-002-23: the admin capability adds Administração and no plan feature', () => {
+    expect(ids('free', true)).toEqual(['search', 'account', 'admin']);
+    expect(itemIds('admin', true)).toEqual([
+      'search',
+      'profile',
+      'subscription',
+      'support',
+      'coupons',
+    ]);
+  });
+
+  it('SPEC-002: an admin on a paid plan keeps that plan and gains Administração', () => {
+    expect(itemIds('premium', true)).toEqual([...itemIds('premium'), 'coupons']);
   });
 
   it.each([
@@ -72,12 +89,16 @@ describe('app-shell navigation config', () => {
     ['/searching', '', null],
     ['/', '', null],
   ])('matches %s?%s to %s', (pathname, search, expected) => {
-    expect(currentItemId(visibleGroups('admin'), pathname, query(search))).toBe(expected);
+    expect(currentItemId(visibleGroups(as('premium', true)), pathname, query(search))).toBe(
+      expected,
+    );
   });
 
   it('does not mark a destination the role cannot see', () => {
     // a free user on /search?view=favorites sees the search view (the page checks the role too)
-    expect(currentItemId(visibleGroups('free'), '/search', query('view=favorites'))).toBe('search');
+    expect(currentItemId(visibleGroups(as('free')), '/search', query('view=favorites'))).toBe(
+      'search',
+    );
   });
 
   it.each([

@@ -36,6 +36,9 @@ export const ERROR_CODES = [
   'GOOGLE_SIGN_IN_FAILED',
   'INVALID_GOOGLE_CODE',
   'TOO_MANY_ATTEMPTS',
+  // Access (SPEC-002)
+  'PERSONA_REQUIRED',
+  'OFFICE_READ_ONLY',
   // Plans and payments
   'PLAN_NOT_ALLOWED',
   'INVALID_PLAN',

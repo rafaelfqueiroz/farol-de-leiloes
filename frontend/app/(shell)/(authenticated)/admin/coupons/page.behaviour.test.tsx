@@ -14,7 +14,11 @@ const env = vi.hoisted(() => {
     push,
     // Next's router is a stable object; the page's effect depends on it
     router: { push },
-    auth: { role: 'admin', loading: false } as { role: string; loading: boolean },
+    auth: { role: 'free', isAdmin: true, loading: false } as {
+      role: string;
+      isAdmin: boolean;
+      loading: boolean;
+    },
     report: vi.fn(),
   };
 });
@@ -49,7 +53,7 @@ beforeEach(() => {
   vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
   env.push.mockReset();
   env.report.mockReset();
-  env.auth = { role: 'admin', loading: false };
+  env.auth = { role: 'free', isAdmin: true, loading: false };
   listAnswer = () => ({
     status: 200,
     body: { items: [coupon('1')], total: 1, page: 1, pageSize: 20 },
@@ -71,17 +75,21 @@ afterEach(() => {
 });
 
 describe('AdminCouponsPage access', () => {
-  it('sends anyone who is not an administrator home, showing and loading nothing', () => {
-    env.auth = { role: 'premium', loading: false };
-    const { container } = render(<AdminCouponsPage />);
+  // SPEC-002 BR-002-23: the admin capability (isAdmin), never a plan nor the legacy role 'admin'.
+  it.each(['premium', 'admin'])(
+    'sends a %s account without the admin capability home, showing and loading nothing',
+    (role) => {
+      env.auth = { role, isAdmin: false, loading: false };
+      const { container } = render(<AdminCouponsPage />);
 
-    expect(env.push).toHaveBeenCalledWith('/');
-    expect(container).toBeEmptyDOMElement();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
+      expect(env.push).toHaveBeenCalledWith('/');
+      expect(container).toBeEmptyDOMElement();
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('waits for the session before deciding, with a spinner', () => {
-    env.auth = { role: 'free', loading: true };
+    env.auth = { role: 'free', isAdmin: false, loading: true };
     render(<AdminCouponsPage />);
 
     expect(screen.getByRole('progressbar')).toBeInTheDocument();

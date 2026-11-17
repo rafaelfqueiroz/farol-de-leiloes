@@ -73,6 +73,8 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
     ['persona', 'advisor'],
     ['office', 'office-1'],
     ['admin', true],
+    ['isAdmin', true], // SPEC-002 BR-002-21: only the grant-admin script sets it
+    ['personas', ['advisor']], // SPEC-002 BR-002-14: derived, never stored
   ])(
     'BR-001-29: a body with %s is refused as a whole; the stored account is identical',
     async (field, value) => {

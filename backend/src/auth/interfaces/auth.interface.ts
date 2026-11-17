@@ -8,6 +8,8 @@ export interface UserProfile {
   emailVerified: boolean;
   role: string;
   subscriptionStatus: SubscriptionStatus | null;
+  /** SPEC-002 DL-002-05: operator capability, so the interface knows at sign-in (AR-51). */
+  isAdmin: boolean;
   phone?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -32,8 +34,11 @@ export interface AuthenticatedUser {
   name: string;
   emailVerified: boolean;
   providers: string[];
+  /** The plan tier until SPEC-012; `'admin'` here is no plan at all (BR-002-23). */
   role: string;
   subscriptionStatus: SubscriptionStatus | null;
+  /** SPEC-002 DL-002-05: operator capability, `users.isAdmin`, read on every request (BR-002-15). */
+  isAdmin: boolean;
 }
 
 export interface AuthResult {

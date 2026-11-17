@@ -6,7 +6,7 @@ import AdminCouponsPage from './page';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/app/contexts/AuthContext', () => ({
-  useAuth: () => ({ role: 'admin', loading: false }),
+  useAuth: () => ({ role: 'free', isAdmin: true, loading: false }),
 }));
 vi.mock('@/lib/report-client-error', () => ({ reportClientError: vi.fn() }));
 

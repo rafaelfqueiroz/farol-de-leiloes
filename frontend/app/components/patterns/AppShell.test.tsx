@@ -65,13 +65,14 @@ type Role = 'free' | 'standard' | 'premium' | 'admin';
 
 const logout = vi.fn(async () => signOut());
 
-// TS-27: obviously fake people
-function signIn(role: Role) {
+// TS-27: obviously fake people. `isAdmin` is the SPEC-002 capability, separate from the plan.
+function signIn(role: Role, isAdmin = false) {
   env.setAuth({
-    user: { _id: 'user-1', name: 'Ana Teste', email: 'ana@exemplo.test', role },
+    user: { _id: 'user-1', name: 'Ana Teste', email: 'ana@exemplo.test', role, isAdmin },
     loading: false,
     isAuthenticated: true,
     role,
+    isAdmin,
     hasSubscription: role !== 'free',
     logout,
   });
@@ -83,6 +84,7 @@ function signOut() {
     loading: false,
     isAuthenticated: false,
     role: '',
+    isAdmin: false,
     hasSubscription: false,
     logout,
   });
@@ -161,7 +163,8 @@ beforeEach(() => {
   env.listeners.clear();
   logout.mockClear();
   setCounts({});
-  signIn('admin');
+  // every destination: a paid plan and the admin capability
+  signIn('premium', true);
   window.localStorage.clear();
 });
 
@@ -336,11 +339,8 @@ describe('AppShell — navigation by role', () => {
       ['Busca', 'Acompanhamento', 'Conta'],
       ['Buscar imóveis', 'Favoritos', 'Lembretes', 'Perfil', 'Assinatura', 'Suporte'],
     ],
-    [
-      'admin',
-      ['Busca', 'Acompanhamento', 'Conta', 'Administração'],
-      ['Buscar imóveis', 'Favoritos', 'Lembretes', 'Perfil', 'Assinatura', 'Suporte', 'Cupons'],
-    ],
+    // SPEC-002 BR-002-23: the legacy role 'admin' is no plan and no admin capability
+    ['admin', ['Busca', 'Conta'], ['Buscar imóveis', 'Perfil', 'Assinatura', 'Suporte']],
   ] as const)('shows %s its groups and destinations in the fixed order', (role, groups, links) => {
     setViewport(DESKTOP);
     signIn(role);
@@ -351,6 +351,30 @@ describe('AppShell — navigation by role', () => {
     expect(groupLabels(nav)).toEqual(groups);
     expect(linkNames(nav)).toEqual(links);
   });
+
+  it.each([
+    [
+      'free',
+      ['Busca', 'Conta', 'Administração'],
+      ['Buscar imóveis', 'Perfil', 'Assinatura', 'Suporte', 'Cupons'],
+    ],
+    [
+      'premium',
+      ['Busca', 'Acompanhamento', 'Conta', 'Administração'],
+      ['Buscar imóveis', 'Favoritos', 'Lembretes', 'Perfil', 'Assinatura', 'Suporte', 'Cupons'],
+    ],
+  ] as const)(
+    'SPEC-002: adds Administração to a %s account with the admin capability, and no plan feature',
+    (role, groups, links) => {
+      setViewport(DESKTOP);
+      signIn(role, true);
+      renderShell();
+
+      const nav = mainNav();
+      expect(groupLabels(nav)).toEqual(groups);
+      expect(linkNames(nav)).toEqual(links);
+    },
+  );
 
   it('shows the reminders shortcut in the top bar only from standard', () => {
     setViewport(DESKTOP);
@@ -570,6 +594,17 @@ describe('AppShell — account menu', () => {
     await user.click(within(menu).getByRole('menuitem', { name: 'Sair' }));
     await waitFor(() => expect(env.push).toHaveBeenCalledWith('/'));
     expect(logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("SPEC-002 BR-002-23: shows the legacy role 'admin' as the free plan, whatever the capability", async () => {
+    setViewport(DESKTOP);
+    signIn('admin', true);
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(screen.getByRole('button', { name: 'AT, conta de Ana Teste' }));
+    await screen.findByRole('menu', { name: 'Conta de Ana Teste' });
+    expect(screen.getByText('Plano Gratuito')).toBeInTheDocument();
   });
 
   it('signs out to / without racing the guard to /login', async () => {

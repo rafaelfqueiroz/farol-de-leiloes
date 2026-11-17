@@ -24,9 +24,14 @@ interface User {
   name: string;
   providers: string[];
   emailVerified: boolean;
+  /** The plan tier until SPEC-012; a legacy `'admin'` is no plan (SPEC-002 BR-002-23). */
   role: string;
   subscriptionStatus?: string | null;
   phone?: string;
+  /** SPEC-002 DL-002-05: the admin capability, in the sign-in answer and in /api/auth/me. */
+  isAdmin?: boolean;
+  /** SPEC-002 BR-002-14: derived by the server on each /api/auth/me; absent in a sign-in answer. */
+  personas?: string[];
 }
 
 interface AuthContextType {
@@ -40,6 +45,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   emailVerified: boolean;
   role: string;
+  /**
+   * SPEC-002: capability flags for what the interface shows. UX only; the server checks every
+   * request on its own (AR-51, BR-002-10).
+   */
+  isAdmin: boolean;
+  personas: string[];
   hasSubscription: boolean;
   resendVerificationEmail: () => Promise<void>;
   checkVerificationStatus: () => Promise<void>;
@@ -169,6 +180,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const emailVerified = user?.emailVerified ?? false;
   const role = user?.role ?? 'free';
+  const isAdmin = user?.isAdmin === true;
+  const personas = user?.personas ?? [];
   const hasSubscription = user?.subscriptionStatus === 'active';
 
   const refreshUser = useCallback(async () => {
@@ -188,6 +201,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         emailVerified,
         role,
+        isAdmin,
+        personas,
         hasSubscription,
         resendVerificationEmail,
         checkVerificationStatus,

@@ -86,7 +86,7 @@
       "signOut": "Sair",
       "account": "Conta de {name}",
       "accountButton": "{initials}, conta de {name}",
-      "plan": "Plano {plan, select, admin {Admin} premium {Premium} standard {Standard} other {Gratuito}}",
+      "plan": "Plano {plan, select, premium {Premium} standard {Standard} other {Gratuito}}",
       "withCount": "{label}, {count}",
       "upcomingReminders": "{label}, {count, plural, one {# próximo} other {# próximos}}",
       "groups": {
@@ -138,6 +138,8 @@
     "GOOGLE_SIGN_IN_FAILED": "Não foi possível entrar com o Google. Tente novamente ou entre com e-mail e senha.",
     "INVALID_GOOGLE_CODE": "Link de acesso inválido ou expirado",
     "TOO_MANY_ATTEMPTS": "Muitas tentativas. Tente de novo em 15 minutos",
+    "PERSONA_REQUIRED": "Esta área não está disponível para a sua conta.",
+    "OFFICE_READ_ONLY": "O plano do escritório venceu e ele está em modo somente leitura. Regularize o plano para voltar a fazer alterações.",
     "PLAN_NOT_ALLOWED": "Seu plano não inclui este recurso. Veja os planos para liberar o acesso.",
     "INVALID_PLAN": "O plano escolhido não existe. Escolha um dos planos disponíveis.",
     "CHECKOUT_SESSION_FAILED": "Não foi possível iniciar o pagamento. Tente novamente em instantes.",
@@ -738,8 +740,7 @@
     "names": {
       "free": "Gratuito",
       "standard": "Standard",
-      "premium": "Premium",
-      "admin": "Admin"
+      "premium": "Premium"
     },
     "period": "/mês",
     "popular": "Mais popular",

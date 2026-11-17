@@ -65,6 +65,7 @@ describe('BR-003-08: seedReferenceWorkload', () => {
       const user = await connection.collection('users').findOne({ email: account.email });
       expect(user?.emailVerified).toBe(account.emailVerified);
       expect(user?.role).toBe(account.role);
+      expect(user?.isAdmin).toBe(account.isAdmin);
       expect(await bcrypt.compare(account.password, String(user?.password))).toBe(true);
     }
   });

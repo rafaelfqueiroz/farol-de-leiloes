@@ -110,4 +110,43 @@ describe('AuthProvider', () => {
 
     expect(result.current.hasSubscription).toBe(expected);
   });
+
+  // SPEC-002: capability flags for the interface (AR-51: the server still checks every request).
+  it('takes isAdmin and the personas from GET /auth/me', async () => {
+    answerWith(200, {
+      userId: 'u1',
+      email: 'a@b.com',
+      name: 'A',
+      providers: [],
+      role: 'admin',
+      isAdmin: true,
+      personas: ['searcher'],
+    });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => expect(result.current.user).not.toBeNull());
+
+    expect(result.current.isAdmin).toBe(true);
+    expect(result.current.personas).toEqual(['searcher']);
+    expect(result.current.role).toBe('admin');
+  });
+
+  it('is no admin and holds no persona when the answer says nothing about them', async () => {
+    answerWith(200, { user: { _id: 'u1', role: 'free' } });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(() => result.current.login('a@b.com', 'x'));
+
+    expect(result.current.isAdmin).toBe(false);
+    expect(result.current.personas).toEqual([]);
+  });
+
+  it('takes isAdmin from the sign-in answer, so the admin entry shows without a reload', async () => {
+    answerWith(200, { user: { _id: 'u1', role: 'free', isAdmin: true } });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(() => result.current.login('a@b.com', 'x'));
+
+    expect(result.current.isAdmin).toBe(true);
+  });
 });

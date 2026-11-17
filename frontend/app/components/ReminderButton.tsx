@@ -25,6 +25,7 @@ import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useReminders, ReminderChannel } from '../contexts/RemindersContext';
 import { useAuth } from '../contexts/AuthContext';
+import { hasMinimumPlan } from './RequireRole';
 import { useRouter } from 'next/navigation';
 import { useApiErrorMessage } from '@/lib/api-error';
 import { toUtcInstant, tryParseInstant } from '@/lib/dates';
@@ -65,7 +66,8 @@ export default function ReminderButton({
   const hasReminder = hasReminderForAuction(auctionCode);
   const existingReminder = getReminderForAuction(auctionCode);
 
-  const isPremium = role === 'standard' || role === 'premium' || role === 'admin';
+  // SPEC-002 BR-002-23: SMS and WhatsApp come with a paid plan; the admin capability is no plan.
+  const isPremium = hasMinimumPlan(role, 'standard');
 
   const channelOptionLabel = (option: ReminderChannel) =>
     isPremium

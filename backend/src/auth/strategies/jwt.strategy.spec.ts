@@ -6,6 +6,7 @@ import { hashUserId } from '../../common/observability/user-hash.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import { CurrentUserResponseDto } from '../dto/auth-response.dto.js';
 import { spyOnLogger } from '../../../test/support/logger-spy.js';
+import { accessContextFactory } from '../../../test/fakes/fake-access-sources.js';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -146,7 +147,30 @@ describe('JwtStrategy.validate', () => {
 
   it('exposes subscriptionStatus in the /auth/me response', async () => {
     const user = await build({ ...base, subscriptionStatus: 'past_due' }).validate(payload);
-    expect(new CurrentUserResponseDto(user).subscriptionStatus).toBe('past_due');
+    const access = await accessContextFactory().forAccount(user);
+    expect(new CurrentUserResponseDto(user, access).subscriptionStatus).toBe('past_due');
+  });
+
+  it('SPEC-002 BR-002-15: carries the stored admin capability, read on this request', async () => {
+    await expect(build({ ...base, isAdmin: true }).validate(payload)).resolves.toMatchObject({
+      isAdmin: true,
+    });
+  });
+
+  it.each([
+    ['absent', undefined],
+    ['false', false],
+  ])('SPEC-002 AR-28: a %s isAdmin is no admin', async (_label, stored) => {
+    await expect(build({ ...base, isAdmin: stored }).validate(payload)).resolves.toMatchObject({
+      isAdmin: false,
+    });
+  });
+
+  it("SPEC-002 BR-002-23: the legacy role 'admin' is not the admin capability", async () => {
+    await expect(build({ ...base, role: 'admin' }).validate(payload)).resolves.toMatchObject({
+      role: 'admin',
+      isAdmin: false,
+    });
   });
 
   describe('AR-46: the hashed user joins the request log context', () => {
