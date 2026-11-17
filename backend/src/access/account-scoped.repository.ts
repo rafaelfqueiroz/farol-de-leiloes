@@ -6,11 +6,18 @@
 //
 // Each public method takes the request's AccessContext, never an account id (BR-002-11). Jobs that
 // work across accounts (the reminders scheduler) use the protected `...AcrossAccounts...` methods a
-// subclass exposes under a name that says so (AR-12).
+// subclass exposes under a name that says so (AR-12); they take no context at all.
 //
-// A read-only context (a support access grant, BR-002-25, SPEC-002 part 3) reads the account's data
-// and writes none of it: every write refuses it with FORBIDDEN before touching the database, so the
-// grant can never change the granting account's favorites, filters or reminders (fail closed).
+// A support access grant opens CLIENT data only (BR-002-24, BR-002-25, DL-002-04), never an
+// account's own data (BR-002-02, BR-002-23). Its view (`ctx.viaSupportGrant`, built only by
+// AccessContextFactory.supportGrantView) is refused here on EVERY path, before the database is
+// touched (fail closed):
+//   reads   `find`, `count`, `findOne`, `findById` and every subclass query built on `ownedBy`
+//           throw the module's not-found — lists and counts included, never an empty answer, so a
+//           caller cannot mistake the refusal for an account with no data;
+//   writes  `create`, `updateById`, `deleteMany`, `deleteById` throw FORBIDDEN, as for any
+//           read-only context (the view is read-only, BR-002-25; no record is involved).
+// Nothing is read, so a grant route that tried logs nothing (BR-002-27).
 import type { ClientSession, Model } from 'mongoose';
 import type { ErrorCode } from '../common/errors/codes.js';
 import { DomainError } from '../common/errors/domain-error.js';
@@ -43,7 +50,7 @@ type Filter = Record<string, unknown>;
 
 const PROTECTED_FIELDS = ['_id', 'userId'];
 
-/** BR-002-25: a read-only context writes no account data (FORBIDDEN, no record is involved). */
+/** BR-002-25: a read-only context (a grant's view) writes no account data (FORBIDDEN). */
 function assertMayWrite(ctx: AccessContext): void {
   if (ctx.readOnly) throw new DomainError('FORBIDDEN');
 }
@@ -79,6 +86,7 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
     filter: Filter = {},
     options: AccountFindOptions = {},
   ): Promise<TRecord[]> {
+    this.refuseGrantView(ctx);
     let query = this.records.find(this.ownedBy(ctx, filter), undefined, {
       session: options.session,
     });
@@ -91,17 +99,20 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
 
   /** How many of the account's records match `filter` (counts leak like lists, TS-15). */
   async count(ctx: AccessContext, filter: Filter = {}): Promise<number> {
+    this.refuseGrantView(ctx);
     return this.records.countDocuments(this.ownedBy(ctx, filter)).exec();
   }
 
   /** One of the account's records matching `filter`, or null. */
   async findOne(ctx: AccessContext, filter: Filter): Promise<TRecord | null> {
+    this.refuseGrantView(ctx);
     const found = await this.records.findOne(this.ownedBy(ctx, filter)).lean().exec();
     return found as TRecord | null;
   }
 
   /** One of the account's records by id, or null — the same for another account's and a missing id. */
   async findById(ctx: AccessContext, id: string): Promise<TRecord | null> {
+    this.refuseGrantView(ctx);
     if (!isObjectIdString(id)) return null;
     return this.findOne(ctx, { _id: { $eq: id } });
   }
@@ -165,10 +176,17 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
   /**
    * `filter` within the request's account: `userId` equal to the context's account and nothing
    * else, combined with `$and` so `filter` cannot widen it. Subclasses build every query they make
-   * on the model with this.
+   * on the model with this. A support grant's view is refused here too (the module's not-found),
+   * so a subclass query cannot read an account's own data under a grant (BR-002-02, BR-002-23).
    */
   protected ownedBy(ctx: AccessContext, filter: Filter = {}): Filter {
+    this.refuseGrantView(ctx);
     return { $and: [{ userId: { $eq: ctx.accountId } }, filter] };
+  }
+
+  /** BR-002-02 / BR-002-23 / DL-002-04: a grant opens client data, never an account's own. */
+  private refuseGrantView(ctx: AccessContext): void {
+    if (ctx.viaSupportGrant) throw new DomainError(this.notFound);
   }
 
   /**

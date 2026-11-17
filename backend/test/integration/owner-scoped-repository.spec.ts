@@ -180,10 +180,10 @@ describe('OwnerScopedRepository (integration, SPEC-002 AR-12)', () => {
     );
   });
 
-  it('BR-002-25: a read-only view of a writable member reads its office and writes nothing', async () => {
+  it('BR-002-25: a support grant’s view of a writable member reads its office and writes nothing', async () => {
     const view = accessContextFactory(
       fakeAccessSources(memberOf({ [OFFICE_A]: WRITABLE })),
-    ).readOnlyView(await ctxA());
+    ).supportGrantView(await ctxA());
     const id = aRecord._id.toString();
     const readOnly = new DomainError('OFFICE_READ_ONLY');
 

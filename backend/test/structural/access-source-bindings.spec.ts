@@ -18,9 +18,11 @@ const SOURCE_TOKENS = [
   'CLIENT_LINK_SOURCE',
   'SELF_ADVISED_SOURCE',
   'OFFICE_PLAN_SOURCE',
+  // SPEC-002 part 3: the support requests a grant hangs on (BR-002-24); bound here like the rest.
+  'SUPPORT_REQUEST_SOURCE',
 ] as const;
 
-/** `{ provide: TOKEN, ... }` and `.overrideProvider(TOKEN)` of the four tokens, as file:line token. */
+/** `{ provide: TOKEN, ... }` and `.overrideProvider(TOKEN)` of the source tokens, as file:line token. */
 function sourceBindings(file: string, source: string): string[] {
   const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const tokens = new Set<string>(SOURCE_TOKENS);
@@ -128,7 +130,7 @@ describe('BR-002-21: the access sources are bound in AccessModule only', () => {
     sourceBindings(file, readFileSync(join(SRC, file), 'utf8')),
   );
 
-  it('binds each of the four tokens exactly once, in access/access.module.ts', () => {
+  it('binds each of the source tokens exactly once, in access/access.module.ts', () => {
     expect(bindings.filter((binding) => !binding.startsWith(`${ACCESS_MODULE}:`))).toEqual([]);
     for (const token of SOURCE_TOKENS) {
       expect(bindings.filter((binding) => binding.endsWith(` ${token}`))).toHaveLength(1);

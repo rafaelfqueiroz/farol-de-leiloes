@@ -140,6 +140,39 @@ describe('scrubEvent (AR-47)', () => {
     }
   });
 
+  it('SPEC-002 BR-002-28: drops client data in request bodies (support message, journey record, figures)', () => {
+    const marker = {
+      title: 'MKR-SUPPORT-TITLE-QX7',
+      description: 'MKR-SUPPORT-DESCRIPTION-QX7 a private message',
+      record: 'MKR-PROBE-NAME-QX7',
+      amount: '987654.32',
+    };
+    const event: ErrorEvent = {
+      type: undefined,
+      request: {
+        method: 'POST',
+        url: `https://api.example.test/api/support?title=${marker.title}`,
+        data: JSON.stringify({ title: marker.title, description: marker.description }),
+        query_string: { record: marker.record },
+      },
+      extra: { body: { name: marker.record, amount: marker.amount } },
+      exception: {
+        values: [{ type: 'MongoServerError', value: `validation failed: ${marker.amount}` }],
+      },
+      breadcrumbs: [
+        { type: 'http', category: 'http', data: { url: '/api/x', body: marker.description } },
+      ],
+    };
+
+    const json = JSON.stringify(scrubEvent(event));
+
+    for (const value of Object.values(marker)) expect(json).not.toContain(value);
+    expect(scrubEvent(event).request).toEqual({
+      method: 'POST',
+      url: 'https://api.example.test/api/support',
+    });
+  });
+
   it('keeps only the safe contexts, and only their safe keys', () => {
     expect(scrubEvent(anEventFullOfPii()).contexts).toEqual({
       runtime: { name: 'node', version: 'v24.22.2' },

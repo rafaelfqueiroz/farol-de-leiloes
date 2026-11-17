@@ -5,14 +5,17 @@ import { NoClientLinkSource } from './client-link.source.js';
 import { NoMembershipSource } from './membership.source.js';
 import { NoOfficePlanSource } from './office-plan.source.js';
 import { NoSelfAdvisedSource } from './self-advised.source.js';
+import { NoSupportRequestSource } from './support-request.source.js';
 
 describe('default access sources', () => {
-  it('know no membership, link, journey, self-advised status, plan or entitlement', async () => {
+  it('know no membership, link, journey, self-advised status, plan, entitlement or support request', async () => {
     await expect(new NoMembershipSource().activeMemberships()).resolves.toEqual([]);
     await expect(new NoClientLinkSource().clientLinks()).resolves.toEqual([]);
     await expect(new NoClientLinkSource().hasJourneyAsInvestor()).resolves.toBe(false);
     await expect(new NoSelfAdvisedSource().isSelfAdvised()).resolves.toBe(false);
     await expect(new NoOfficePlanSource().officePlans()).resolves.toEqual(new Map());
     await expect(new NoOfficePlanSource().selfAdvisedEntitlements()).resolves.toEqual([]);
+    // BR-002-24: no support request ⇒ no grant can be opened before SPEC-009.
+    await expect(new NoSupportRequestSource().findForGrant()).resolves.toBeNull();
   });
 });

@@ -24,6 +24,7 @@ Setup
 Migrations (AR-29, ADR-001)
 
 - `npm run migrate` — after `npm run build`: applies the pending migrations in `src/migrations/registry.ts` to the database `MONGODB_URI` names (same validated environment as the API), records each in the `migrations` collection and stops at the first failure (exit 1). Safe to re-run. It runs **before** deploying code that depends on it (DV-34); until the deploy pipeline does it (BL-001, #40), run it by hand from your machine against the production database (MongoDB Atlas) first, with `node --env-file=.env.production dist/migrations/run.js` (see DEVELOPMENT §6). How to write one: DEVELOPMENT §6, "Migrations"
+- Migration `0005-admin-access-indexes` builds the indexes of `supportAccessGrants` (the partial unique `one_open_grant_per_request`, on which concurrent grant opens rely, BR-002-24) and `adminAccessLogs`; it is idempotent and only creates indexes (and the empty collections), so the API never depends on Mongoose's autoIndex for them.
 
 Admin capability (SPEC-002 DL-002-05, BR-002-21)
 
@@ -38,7 +39,7 @@ Tests (TESTING §2, §7)
 - `npm run test:isolation` — `test/isolation/`, the owner-isolation gate (TS-13, TS-14); needs Docker
 - `npm run test:smoke` — builds, then loads every module of `dist/` in plain Node as native ESM, catching import interop bugs that `tsc` and Vitest cannot see (#63); the CI `backend-build` job
 - `npm run test:structural` — `test/structural/` alone: checks on the repository itself (Node pins, workflows, Dockerfiles, pre-push selection); the CI `structural` job
-- Helpers: `test/support/` (database harness, fixture paths, `silence-logger.ts`: the Nest Logger is silent in every test project; to assert on a log, `vi.spyOn(Logger.prototype, 'error')`, see TESTING.md), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`
+- Helpers: `test/support/` (database harness, fixture paths, `silence-logger.ts`: the Nest Logger is silent in every test project; to assert on a log, `vi.spyOn(Logger.prototype, 'error')` or `logger-spy.ts` (`spyOnLogger`, and `captureAllLogOutput` for the BR-002-28 log scan), see TESTING.md), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`
 
 API
 

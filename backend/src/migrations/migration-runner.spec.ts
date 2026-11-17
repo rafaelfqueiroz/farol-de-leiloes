@@ -162,6 +162,7 @@ describe('assertMigrationOrder', () => {
       '0002-saved-filter-price-bounds',
       '0003-account-tokens',
       '0004-admin-capability',
+      '0005-admin-access-indexes',
     ]);
   });
 });

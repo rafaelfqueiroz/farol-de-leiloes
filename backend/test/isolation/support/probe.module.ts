@@ -6,6 +6,14 @@
 //
 // It lives under test/ and is never part of the API: the production models are what the gate
 // (model-coverage.isolation.spec.ts) enumerates.
+//
+// SPEC-002 part 3: ProbeAdminGrantController is the pattern SPEC-009/016/021 follow for the
+// admin's support-grant routes (`/api/admin/support-grants/:grantId/...`, ARCHITECTURE §4): every
+// handler is @AdminOnly(), resolves the grant with SupportGrantService.contextForRead (re-checked
+// on every request, BR-002-26) and reads through GrantReadLogger.readOne/readMany, the only holder
+// of the grant's sealed view (logged before it is returned, BR-002-27). There are no write
+// handlers (ARCHITECTURE §4): that the view itself writes nothing (BR-002-25) is proven at the
+// repository level in support-grants.isolation.spec.ts.
 import {
   Body,
   Controller,
@@ -37,6 +45,10 @@ import {
   type OwnedRecordChanges,
   OwnerScopedRepository,
 } from '../../../src/access/owner-scoped.repository.js';
+import { isObjectIdString } from '../../../src/access/owner-filter.js';
+import { AdminAccessModule } from '../../../src/admin-access/admin-access.module.js';
+import { GrantReadLogger, ownedRecordRead } from '../../../src/admin-access/grant-read-logger.js';
+import { SupportGrantService } from '../../../src/admin-access/support-grant.service.js';
 import { DomainError } from '../../../src/common/errors/domain-error.js';
 
 export const PROBE_ENTITLEMENT = 'probes';
@@ -91,6 +103,27 @@ export class ProbeRepository extends OwnerScopedRepository<ProbeRecord> {
   /** BR-002-05 / BR-002-07: exposed, read-only, for the investor route. */
   listAsInvestor(ctx: AccessContext): Promise<ProbeRecord[]> {
     return this.findAsInvestor(ctx, {}, { sort: { name: 1 } });
+  }
+
+  /**
+   * BR-002-25: everything the account sees itself — what it conducts (its offices, its self-advised
+   * records) and what it reads as an investor — the view a support grant shows, never more.
+   */
+  async accountView(ctx: AccessContext): Promise<ProbeRecord[]> {
+    const [conducted, asInvestor] = await Promise.all([
+      this.find(ctx, {}, { sort: { name: 1 } }),
+      this.findAsInvestor(ctx, {}, { sort: { name: 1 } }),
+    ]);
+    const byId = new Map([...conducted, ...asInvestor].map((r) => [r._id.toString(), r]));
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** One record of `accountView`, or null (foreign and missing alike). */
+  async findInAccountView(ctx: AccessContext, id: string): Promise<ProbeRecord | null> {
+    const conducted = await this.findById(ctx, id);
+    if (conducted || !isObjectIdString(id)) return conducted;
+    const [asInvestor] = await this.findAsInvestor(ctx, { _id: { $eq: id } });
+    return asInvestor ?? null;
   }
 }
 
@@ -276,6 +309,57 @@ export class ProbeController {
   }
 }
 
+class OpenGrantDto {
+  /** Validated by the service, which answers a malformed id like a missing request (no oracle). */
+  @IsString()
+  supportRequestId!: string;
+}
+
+const probeRead = ownedRecordRead('probe');
+
+/**
+ * SPEC-002 BR-002-24..BR-002-27: the admin's read path into client data, on the probe collection.
+ * The template of SPEC-009/016/021's `/api/admin/support-grants/:grantId/...` routes.
+ */
+@Controller('probe-admin/grants')
+@AdminOnly()
+export class ProbeAdminGrantController {
+  constructor(
+    private readonly grants: SupportGrantService,
+    private readonly reads: GrantReadLogger,
+    private readonly probes: ProbeRepository,
+  ) {}
+
+  /** SPEC-009 will own this route (the grant is opened from the support request's screen). */
+  @Post()
+  async open(@Access() ctx: AccessContext, @Body() dto: OpenGrantDto) {
+    return this.grants.open(ctx, dto.supportRequestId);
+  }
+
+  @Get(':grantId/probes')
+  async list(@Access() ctx: AccessContext, @Param('grantId') grantId: string) {
+    const read = await this.grants.contextForRead(ctx, grantId);
+    const records = await this.reads.readMany(read, (g) => this.probes.accountView(g), probeRead);
+    return page([...records], records.length);
+  }
+
+  @Get(':grantId/probes/:id')
+  async read(
+    @Access() ctx: AccessContext,
+    @Param('grantId') grantId: string,
+    @Param('id') id: string,
+  ) {
+    const read = await this.grants.contextForRead(ctx, grantId);
+    const record = await this.reads.readOne(
+      read,
+      (g) => this.probes.findInAccountView(g, id),
+      probeRead,
+    );
+    if (!record) throw new DomainError('NOT_FOUND'); // BR-002-12
+    return toAnswer(record);
+  }
+}
+
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: ProbeEntity.name, schema: ProbeSchema }]),
@@ -286,3 +370,13 @@ export class ProbeController {
   exports: [ProbeRepository],
 })
 export class ProbeModule {}
+
+/**
+ * The probe's support-grant routes (SPEC-002 part 3), separate so a spec of the repository alone
+ * (test/integration/owner-scoped-repository.spec.ts) needs neither the access module nor the users.
+ */
+@Module({
+  imports: [ProbeModule, AdminAccessModule],
+  controllers: [ProbeAdminGrantController],
+})
+export class ProbeAdminModule {}

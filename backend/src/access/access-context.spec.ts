@@ -335,7 +335,7 @@ describe('AccessContext.resolveActingOwner (SPEC-002 BR-002-11)', () => {
   });
 });
 
-describe('AccessContextFactory.readOnlyView (SPEC-002 BR-002-25, the part 3 grant seam)', () => {
+describe('AccessContextFactory.supportGrantView (SPEC-002 BR-002-25, DL-002-04)', () => {
   const relationships: FakeRelationships = {
     memberships: [{ officeId: 'office-a' }],
     officePlans: { 'office-a': ACTIVE_PLAN },
@@ -344,15 +344,17 @@ describe('AccessContextFactory.readOnlyView (SPEC-002 BR-002-25, the part 3 gran
     selfAdvisedEntitlements: ['calculator'],
   };
 
-  it('reads exactly what the context reads, and writes nothing', async () => {
+  it('reads exactly what the context reads, writes nothing, and is marked a grant view', async () => {
     const { sources, built } = contextFor(relationships);
     const ctx = await built;
 
-    const view = accessContextFactory(sources).readOnlyView(ctx);
+    const view = accessContextFactory(sources).supportGrantView(ctx);
 
     expect(view).not.toBe(ctx);
     expect(view.readOnly).toBe(true);
+    expect(view.viaSupportGrant).toBe(true);
     expect(ctx.readOnly).toBe(false);
+    expect(ctx.viaSupportGrant).toBe(false);
     expect({ ...view, entitlements: [...view.entitlements] }).toMatchObject({
       accountId: ctx.accountId,
       isAdmin: ctx.isAdmin,
@@ -376,8 +378,18 @@ describe('AccessContextFactory.readOnlyView (SPEC-002 BR-002-25, the part 3 gran
       clientLinks: [{ officeId: 'office-b', status: 'active' }],
     });
 
-    const view = accessContextFactory(sources).readOnlyView(await built);
+    const view = accessContextFactory(sources).supportGrantView(await built);
 
     expect(view.clientLinks).toEqual([{ officeId: 'office-b', status: 'active' }]);
+  });
+
+  it('BR-002-21: never views an admin, nor a view again (programming errors)', async () => {
+    const { sources, built } = contextFor({});
+    const factory = accessContextFactory(sources);
+    const admin = await factory.forAccount({ userId: 'admin-1', isAdmin: true });
+    const view = factory.supportGrantView(await built);
+
+    expect(() => factory.supportGrantView(admin)).toThrow('BR-002-21');
+    expect(() => factory.supportGrantView(view)).toThrow('BR-002-21');
   });
 });
