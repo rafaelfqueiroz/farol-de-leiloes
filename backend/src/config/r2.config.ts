@@ -7,6 +7,8 @@ export interface R2Config {
   secretAccessKey: string;
   bucket: string;
   publicUrl: string;
+  /** SC-18: the client files' bucket, never `bucket`; absent until SPEC-017 configures it. */
+  privateBucket?: string;
 }
 
 /** The R2 settings out of the validated environment (AR-41). */
@@ -17,6 +19,7 @@ export function r2ConfigFrom(env: Env): R2Config {
     secretAccessKey: env.R2_SECRET_ACCESS_KEY,
     bucket: env.R2_BUCKET,
     publicUrl: env.R2_PUBLIC_URL,
+    ...(env.R2_PRIVATE_BUCKET !== undefined ? { privateBucket: env.R2_PRIVATE_BUCKET } : {}),
   };
 }
 

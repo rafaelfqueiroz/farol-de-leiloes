@@ -334,3 +334,50 @@ describe('AccessContext.resolveActingOwner (SPEC-002 BR-002-11)', () => {
     );
   });
 });
+
+describe('AccessContextFactory.readOnlyView (SPEC-002 BR-002-25, the part 3 grant seam)', () => {
+  const relationships: FakeRelationships = {
+    memberships: [{ officeId: 'office-a' }],
+    officePlans: { 'office-a': ACTIVE_PLAN },
+    clientLinks: [{ officeId: 'office-b', status: 'ended', endedAt: ENDED_AT }],
+    selfAdvised: true,
+    selfAdvisedEntitlements: ['calculator'],
+  };
+
+  it('reads exactly what the context reads, and writes nothing', async () => {
+    const { sources, built } = contextFor(relationships);
+    const ctx = await built;
+
+    const view = accessContextFactory(sources).readOnlyView(ctx);
+
+    expect(view).not.toBe(ctx);
+    expect(view.readOnly).toBe(true);
+    expect(ctx.readOnly).toBe(false);
+    expect({ ...view, entitlements: [...view.entitlements] }).toMatchObject({
+      accountId: ctx.accountId,
+      isAdmin: ctx.isAdmin,
+      personas: ctx.personas,
+      memberships: ctx.memberships,
+      clientLinks: ctx.clientLinks,
+      selfAdvised: true,
+      entitlements: [...ctx.entitlements],
+    });
+    expect(view.clientLinks[0]?.endedAtMs).toBe(ENDED_AT.getTime());
+    expect(view.conductedOwners()).toEqual(ctx.conductedOwners());
+    expect(view.writableOwners()).toEqual([]);
+    expect(view.canWriteWith('journeys')).toBe(false);
+    expect(ctx.canWriteWith('journeys')).toBe(true);
+    expect(view.canWriteOwner({ ownerType: 'office', ownerId: 'office-a' })).toBe(false);
+    expect(Object.isFrozen(view)).toBe(true);
+  });
+
+  it('keeps an active link without an end date', async () => {
+    const { sources, built } = contextFor({
+      clientLinks: [{ officeId: 'office-b', status: 'active' }],
+    });
+
+    const view = accessContextFactory(sources).readOnlyView(await built);
+
+    expect(view.clientLinks).toEqual([{ officeId: 'office-b', status: 'active' }]);
+  });
+});

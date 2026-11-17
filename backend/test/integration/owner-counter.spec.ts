@@ -1,11 +1,13 @@
 // SPEC-002 BR-002-13 / AR-15 / TS-02: the atomic limit primitive against a real MongoDB. Concurrent
 // acquires one below the limit give exactly one success, including the race on the very first
-// acquire (two requests creating the counter at once); a release never goes below zero; and an
-// acquire inside an aborted transaction counts nothing (SPEC-016 runs it with the journey insert).
+// acquire (two requests creating the counter at once); a release never goes below zero; and in a
+// transaction (SPEC-016 runs it with the journey insert) the counter is ensured BEFORE the
+// transaction starts, an acquire after another write counts, an aborted one counts nothing, and a
+// counter the transaction cannot see is an error, never "limit reached".
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getConnectionToken, getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
-import type { Connection, Model } from 'mongoose';
+import { type Connection, type Model, Types } from 'mongoose';
 import { OwnerCounterRepository } from '../../src/access/owner-counter.repository.js';
 import { OwnerCountersModule } from '../../src/access/owner-counters.module.js';
 import { OwnerCounterEntity } from '../../src/access/schemas/owner-counter.schema.js';
@@ -113,6 +115,80 @@ describe('OwnerCounterRepository (integration, SPEC-002 BR-002-13)', () => {
     expect(await valueOf('transactional')).toBe(1);
   });
 
+  it('AR-15: ensureCounter is idempotent, even twenty at once on a new key', async () => {
+    const ctx = await member();
+
+    await Promise.all(Array.from({ length: 20 }, () => counters.ensureCounter(ctx, 'ensured')));
+    await counters.ensureCounter(ctx, 'ensured');
+
+    expect(await model.countDocuments({ key: { $eq: 'ensured' } }).exec()).toBe(1);
+    expect(await valueOf('ensured')).toBe(0);
+  });
+
+  it('AR-15: counter ensured before the transaction; a write, then the acquire, in it', async () => {
+    const ctx = await member();
+    const connection = moduleRef.get<Connection>(getConnectionToken());
+    const journeys = connection.collection('counterTransactionJourneys');
+    await journeys.insertOne({ seeded: true }); // the collection exists before the transaction
+    await counters.ensureCounter(ctx, 'in-transaction');
+
+    const session = await connection.startSession();
+    try {
+      session.startTransaction();
+      await journeys.insertOne({ name: 'journey' }, { session }); // the snapshot is taken here
+      expect(await counters.tryAcquire(ctx, 'in-transaction', 1, { session })).toBe(true);
+      expect(await counters.tryAcquire(ctx, 'in-transaction', 1, { session })).toBe(false);
+      await session.commitTransaction();
+    } finally {
+      await session.endSession();
+    }
+
+    expect(await valueOf('in-transaction')).toBe(1);
+    expect(await journeys.countDocuments({ name: 'journey' })).toBe(1);
+  });
+
+  it('AR-15: in a transaction, a counter it cannot see is an error, never "limit reached"', async () => {
+    const ctx = await member();
+    const connection = moduleRef.get<Connection>(getConnectionToken());
+    const journeys = connection.collection('counterTransactionJourneys');
+    await journeys.insertOne({ seeded: true });
+
+    const session = await connection.startSession();
+    try {
+      // Never ensured: tryAcquire with a session does not create it.
+      session.startTransaction();
+      await journeys.insertOne({ name: 'unensured' }, { session });
+      await expect(counters.tryAcquire(ctx, 'never-ensured', 5, { session })).rejects.toThrow(
+        /ensureCounter before startTransaction/,
+      );
+      await session.abortTransaction();
+
+      // Ensured too late, after the transaction's first operation: its snapshot predates it.
+      session.startTransaction();
+      await journeys.insertOne({ name: 'too-late' }, { session });
+      await counters.ensureCounter(ctx, 'ensured-too-late');
+      await expect(counters.tryAcquire(ctx, 'ensured-too-late', 5, { session })).rejects.toThrow(
+        /ensureCounter before startTransaction/,
+      );
+      await session.abortTransaction();
+    } finally {
+      await session.endSession();
+    }
+
+    expect(await valueOf('never-ensured')).toBeNull();
+    expect(await valueOf('ensured-too-late')).toBe(0);
+  });
+
+  it('release takes the ObjectId owner of a stored record', async () => {
+    const ctx = await member();
+    expect(await counters.tryAcquire(ctx, 'object-id-owner', 2)).toBe(true);
+
+    const owner = { ownerType: 'office' as const, ownerId: new Types.ObjectId(OFFICE) };
+
+    expect(await counters.release(ctx, owner, 'object-id-owner')).toBe(true);
+    expect(await valueOf('object-id-owner')).toBe(0);
+  });
+
   it('refuses a zero or invalid limit, a read-only owner and an owner the request cannot write', async () => {
     const ctx = await member();
 
@@ -121,6 +197,9 @@ describe('OwnerCounterRepository (integration, SPEC-002 BR-002-13)', () => {
     await expect(counters.tryAcquire(ctx, 'bad', -1)).rejects.toThrow(/whole number/);
     const readOnly = await member({ ...WRITABLE, readOnly: true });
     await expect(counters.tryAcquire(readOnly, 'journeys', 9)).rejects.toEqual(
+      new DomainError('OFFICE_READ_ONLY'),
+    );
+    await expect(counters.ensureCounter(readOnly, 'journeys')).rejects.toEqual(
       new DomainError('OFFICE_READ_ONLY'),
     );
     await expect(

@@ -7,6 +7,10 @@
 // Each public method takes the request's AccessContext, never an account id (BR-002-11). Jobs that
 // work across accounts (the reminders scheduler) use the protected `...AcrossAccounts...` methods a
 // subclass exposes under a name that says so (AR-12).
+//
+// A read-only context (a support access grant, BR-002-25, SPEC-002 part 3) reads the account's data
+// and writes none of it: every write refuses it with FORBIDDEN before touching the database, so the
+// grant can never change the granting account's favorites, filters or reminders (fail closed).
 import type { ClientSession, Model } from 'mongoose';
 import type { ErrorCode } from '../common/errors/codes.js';
 import { DomainError } from '../common/errors/domain-error.js';
@@ -38,6 +42,11 @@ type UntypedModel = Model<Record<string, unknown>>;
 type Filter = Record<string, unknown>;
 
 const PROTECTED_FIELDS = ['_id', 'userId'];
+
+/** BR-002-25: a read-only context writes no account data (FORBIDDEN, no record is involved). */
+function assertMayWrite(ctx: AccessContext): void {
+  if (ctx.readOnly) throw new DomainError('FORBIDDEN');
+}
 
 /** BR-002-02 / SC-10: a payload never names the account, the id or an operator (programming error). */
 function assertNoProtectedFields(payload: object, what: string): void {
@@ -99,6 +108,7 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
 
   /** Inserts a record of the request's account; the payload never names the account (BR-002-11). */
   async create(ctx: AccessContext, record: NewAccountRecord<TRecord>): Promise<TRecord> {
+    assertMayWrite(ctx);
     assertNoProtectedFields(record, 'A new account record');
     const [created] = await this.records.create([{ ...record, userId: ctx.accountId }]);
     if (!created) throw new Error('MongoDB created no document');
@@ -116,6 +126,7 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
     changes: AccountRecordChanges<TRecord>,
     condition: Filter = {},
   ): Promise<TRecord> {
+    assertMayWrite(ctx);
     assertNoProtectedFields(changes, 'An update of an account record');
     if (isObjectIdString(id)) {
       const updated = await this.records
@@ -133,6 +144,7 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
 
   /** Deletes the account's records matching `filter`; answers how many. */
   async deleteMany(ctx: AccessContext, filter: Filter): Promise<number> {
+    assertMayWrite(ctx);
     const result = await this.records.deleteMany(this.ownedBy(ctx, filter)).exec();
     return result.deletedCount;
   }
@@ -142,6 +154,7 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
    * none matched (another account's, missing or malformed id, AR-14).
    */
   async deleteById(ctx: AccessContext, id: string, condition: Filter = {}): Promise<void> {
+    assertMayWrite(ctx);
     if (isObjectIdString(id)) {
       const deleted = await this.deleteMany(ctx, { $and: [{ _id: { $eq: id } }, condition] });
       if (deleted > 0) return;

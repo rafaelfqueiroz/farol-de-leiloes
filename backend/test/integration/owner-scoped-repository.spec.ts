@@ -17,7 +17,12 @@ import {
   type ProbeRecord,
   ProbeRepository,
 } from '../isolation/support/probe.module.js';
-import { anAccessContext, type FakeRelationships } from '../fakes/fake-access-sources.js';
+import {
+  accessContextFactory,
+  anAccessContext,
+  type FakeRelationships,
+  fakeAccessSources,
+} from '../fakes/fake-access-sources.js';
 import { useTestDatabase } from '../support/test-database.js';
 
 const OFFICE_A = '64b7f00000000000000a0a0a';
@@ -173,6 +178,20 @@ describe('OwnerScopedRepository (integration, SPEC-002 AR-12)', () => {
     await expect(probes.updateById(ctx, bRecord._id.toString(), { name: 'x' })).rejects.toEqual(
       new DomainError('NOT_FOUND'),
     );
+  });
+
+  it('BR-002-25: a read-only view of a writable member reads its office and writes nothing', async () => {
+    const view = accessContextFactory(
+      fakeAccessSources(memberOf({ [OFFICE_A]: WRITABLE })),
+    ).readOnlyView(await ctxA());
+    const id = aRecord._id.toString();
+    const readOnly = new DomainError('OFFICE_READ_ONLY');
+
+    expect((await probes.findById(view, id))?.name).toBe('a-record');
+    await expect(probes.updateById(view, id, { name: 'x' })).rejects.toEqual(readOnly);
+    await expect(probes.deleteById(view, id)).rejects.toEqual(readOnly);
+    await expect(probes.create(view, { name: 'x', status: 'open' })).rejects.toEqual(readOnly);
+    expect((await probes.findById(await ctxA(), id))?.name).toBe('a-record');
   });
 
   it('updates and deletes in one conditional operation, answering the record', async () => {

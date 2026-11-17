@@ -1,13 +1,25 @@
 // SPEC-002 BR-002-13 / AR-15: the atomic plan-limit primitive. A limit check and the count it
 // guards are ONE conditional update (`value < limit` → `value + 1`), so concurrent requests can
-// never push an owner past its limit. SPEC-016 runs `tryAcquire` in the same transaction as the
-// journey insert (pass its session); `release` gives a slot back when the counted thing ends.
+// never push an owner past its limit. `release` gives a slot back when the counted thing ends.
+//
+// In a transaction (SPEC-016 runs the acquire with the journey insert), the ORDER is:
+//
+//   await counters.ensureCounter(ctx, key, { actingOwner });   // 1. BEFORE startTransaction
+//   session.startTransaction();                                 // 2.
+//   ... any write of the transaction ...
+//   if (!(await counters.tryAcquire(ctx, key, limit, { actingOwner, session }))) ... // 3.
+//
+// A transaction reads the snapshot taken at its first operation, so a counter created after that
+// (outside the transaction) is invisible to it: the conditional `$inc` would match nothing and
+// answer "limit reached" at zero. So `tryAcquire` with a session never creates the counter; a
+// counter it cannot see is a programming error (`ensureCounter` missing or run too late), thrown
+// as such, never answered as a full limit. Without a session it ensures and acquires itself.
 //
 // Owned (AR-11, AR-12): the owner is the request's acting owner (AccessContext.resolveActingOwner),
 // never an id from the request (BR-002-11), and it must be writable now (BR-002-30).
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { ClientSession, Model } from 'mongoose';
+import type { ClientSession, Model, Types } from 'mongoose';
 import { DomainError } from '../common/errors/domain-error.js';
 import { serverOperators } from '../common/mongo/query-safety.js';
 import type { AccessContext, ActingOwner, Owner } from './access-context.js';
@@ -24,6 +36,12 @@ export interface AcquireOptions extends CounterOptions {
   actingOwner?: ActingOwner;
 }
 
+/** An owner as a caller may hold it: its id a string, or the ObjectId a stored record carries. */
+export interface CountedOwner {
+  readonly ownerType: Owner['ownerType'];
+  readonly ownerId: string | Types.ObjectId;
+}
+
 /** MongoDB's duplicate-key error: another request created the same counter first. */
 function isDuplicateKey(error: unknown): boolean {
   return (error as { code?: unknown } | null)?.code === 11000;
@@ -38,8 +56,23 @@ export class OwnerCounterRepository extends OwnerScopedRepository<OwnerCounterEn
   }
 
   /**
+   * Creates the zero counter of `key` for the acting owner if it does not exist yet. Idempotent:
+   * a duplicate-key race (two first requests at once) finds the winner's counter. Never in a
+   * transaction: run it BEFORE `startTransaction` when the acquire is part of one (AR-15).
+   */
+  async ensureCounter(
+    ctx: AccessContext,
+    key: string,
+    options: { actingOwner?: ActingOwner } = {},
+  ): Promise<void> {
+    const owner = this.writableActingOwner(ctx, options.actingOwner);
+    await this.createIfMissing(this.identity(owner, key));
+  }
+
+  /**
    * Takes one slot of `key` for the acting owner when fewer than `limit` are taken, atomically
-   * (BR-002-13). Answers whether it did; at the limit nothing changes.
+   * (BR-002-13). Answers whether it did; at the limit nothing changes. With `session`, the counter
+   * must already exist (`ensureCounter` before `startTransaction`); a missing one throws.
    */
   async tryAcquire(
     ctx: AccessContext,
@@ -50,18 +83,74 @@ export class OwnerCounterRepository extends OwnerScopedRepository<OwnerCounterEn
     if (!Number.isInteger(limit) || limit < 0) {
       throw new Error('A limit is a whole number of slots, zero or more (AR-15)');
     }
-    const acting = options.actingOwner ?? ctx.resolveActingOwner();
+    const owner = this.writableActingOwner(ctx, options.actingOwner);
+    if (limit === 0) return false;
+
+    const counter = this.identity(owner, key);
+    const { session } = options;
+    // Outside a transaction the counter is created here; a zero counter is harmless on its own.
+    if (!session) await this.createIfMissing(counter);
+    // AR-15: check and count in one conditional update. SC-10: the bound is the server's.
+    const acquired = await this.counters
+      .findOneAndUpdate(
+        { ...counter, value: serverOperators({ $lt: limit }) },
+        { $inc: { value: 1 } },
+        { returnDocument: 'after', session },
+      )
+      .lean()
+      .exec();
+    if (acquired !== null) return true;
+    // AR-15: in a transaction, "no match" is "limit reached" only when the counter is there.
+    if (session && !(await this.counters.exists(counter).session(session).exec())) {
+      throw new Error(
+        'The counter does not exist in this transaction: call ensureCounter before ' +
+          'startTransaction (AR-15)',
+      );
+    }
+    return false;
+  }
+
+  /**
+   * Gives back one slot of `key` for `owner` (e.g. the owner of the journey that just closed),
+   * never below zero. The owner must be one the request may write to (BR-002-30); a stored
+   * record's ObjectId owner is accepted as it is.
+   *
+   * The caller makes the release happen once per counted thing: it closes that thing with a
+   * CONDITIONAL write (e.g. `status: { $ne: 'closed' }`) in the SAME transaction as the release,
+   * and releases only when that write matched, so a double close cannot give a slot back twice.
+   */
+  async release(
+    ctx: AccessContext,
+    owner: CountedOwner,
+    key: string,
+    options: CounterOptions = {},
+  ): Promise<boolean> {
+    const normalised: Owner = { ownerType: owner.ownerType, ownerId: String(owner.ownerId) };
+    if (!ctx.canWriteOwner(normalised)) {
+      throw new Error('A slot is released only for an owner the request may write to (AR-12)');
+    }
+    const result = await this.counters
+      .updateOne(
+        { ...this.identity(normalised, key), value: serverOperators({ $gt: 0 }) },
+        { $inc: { value: -1 } },
+        { session: options.session },
+      )
+      .exec();
+    return result.modifiedCount > 0;
+  }
+
+  /** The acting owner of this request (BR-002-11), refused when it may not be written (BR-002-30). */
+  private writableActingOwner(ctx: AccessContext, actingOwner?: ActingOwner): Owner {
+    const acting = actingOwner ?? ctx.resolveActingOwner();
     if (acting.context !== ctx) {
       throw new Error('The acting owner was resolved for another request (BR-002-11)');
     }
-    // BR-002-30: a read-only owner takes no new slot.
     if (!ctx.canWriteOwner(acting.owner)) throw new DomainError('OFFICE_READ_ONLY');
-    if (limit === 0) return false;
+    return acting.owner;
+  }
 
-    const counter = this.identity(acting.owner, key);
-    // The counter exists before the conditional increment. Done outside the caller's transaction:
-    // a zero counter is harmless on its own, and a duplicate-key race (two first acquires at once)
-    // must not abort that transaction. The loser of the race finds the winner's counter.
+  /** The zero counter, outside any transaction; the loser of a creation race finds the winner's. */
+  private async createIfMissing(counter: ReturnType<OwnerCounterRepository['identity']>) {
     try {
       await this.counters
         .updateOne(counter, { $setOnInsert: { value: 0 } }, { upsert: true })
@@ -69,39 +158,6 @@ export class OwnerCounterRepository extends OwnerScopedRepository<OwnerCounterEn
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
     }
-    // AR-15: check and count in one conditional update. SC-10: the bound is the server's.
-    const acquired = await this.counters
-      .findOneAndUpdate(
-        { ...counter, value: serverOperators({ $lt: limit }) },
-        { $inc: { value: 1 } },
-        { returnDocument: 'after', session: options.session },
-      )
-      .lean()
-      .exec();
-    return acquired !== null;
-  }
-
-  /**
-   * Gives back one slot of `key` for `owner` (e.g. the owner of the journey that just closed),
-   * never below zero. The owner must be one the request may write to (BR-002-30).
-   */
-  async release(
-    ctx: AccessContext,
-    owner: Owner,
-    key: string,
-    options: CounterOptions = {},
-  ): Promise<boolean> {
-    if (!ctx.canWriteOwner(owner)) {
-      throw new Error('A slot is released only for an owner the request may write to (AR-12)');
-    }
-    const result = await this.counters
-      .updateOne(
-        { ...this.identity(owner, key), value: serverOperators({ $gt: 0 }) },
-        { $inc: { value: -1 } },
-        { session: options.session },
-      )
-      .exec();
-    return result.modifiedCount > 0;
   }
 
   private identity(owner: Owner, key: string) {

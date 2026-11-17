@@ -1,9 +1,16 @@
 // SPEC-002 AR-16 / TS-14: the rules of the isolation gate, as plain functions over what a connection
 // registers and what the isolation specs name, so the gate's own failure modes are tested too
 // (../model-coverage.isolation.spec.ts).
+//
+// The specs are read with the TypeScript parser, as the structural specs read source: a model is
+// named only by a real call `isolationSpecFor('<literal>', () => { ... })`, never by a comment or a
+// string. A file holding such a call fails the gate when it skips, focuses or postpones tests
+// (`.skip`, `.todo`, `.only`, `.skipIf`, `.runIf`, `.fails`, `xit`, `xdescribe`, ...), and so does a
+// call whose body runs no `it(...)` / `test(...)`: a spec that proves nothing covers no model.
 import { readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, relative } from 'path';
 import type { Connection, Schema } from 'mongoose';
+import * as ts from 'typescript';
 import {
   type IsolationMark,
   isolationMarkOf,
@@ -12,9 +19,17 @@ import {
 
 export const ISOLATION_DIR = join(import.meta.dirname, '..');
 const SPEC_SUFFIX = '.isolation.spec.ts';
+const NAMING_CALL = 'isolationSpecFor';
 
-// isolationSpecFor('ModelName', ...) with a literal name; the name is what the gate counts.
-const NAMED_MODEL = /isolationSpecFor\(\s*['"`]([A-Za-z0-9_]+)['"`]/g;
+/**
+ * Modifiers that make a spec prove less than it says: skipped, focused, expected to fail or not
+ * written yet. Refused on anything (`it.skip`, `describe.only`, a test context's `ctx.skip()`).
+ */
+const WEAKENING_MODIFIERS = new Set(['skip', 'todo', 'only', 'skipIf', 'runIf', 'fails']);
+/** Jasmine-style aliases that skip or focus. */
+const WEAKENING_ALIASES = new Set(['xit', 'xtest', 'xdescribe', 'fit', 'fdescribe']);
+/** The calls that are a test. */
+const TESTS = new Set(['it', 'test']);
 
 /** Every isolation spec file under `dir`, recursively, as absolute paths. */
 export function isolationSpecFiles(dir: string = ISOLATION_DIR): string[] {
@@ -24,16 +39,128 @@ export function isolationSpecFiles(dir: string = ISOLATION_DIR): string[] {
     .sort();
 }
 
-/** The model names a spec's source names through isolationSpecFor. */
-export function modelsNamedIn(source: string): string[] {
-  return [...source.matchAll(NAMED_MODEL)].map((match) => match[1] ?? '');
+export interface IsolationSpecScan {
+  /** The models named by real `isolationSpecFor('<literal>', ...)` calls. */
+  readonly models: string[];
+  /** Why the file cannot count as covering them (TS-14); empty when it can. */
+  readonly problems: string[];
 }
 
-/** Every model name the isolation specs under `dir` name. */
+/** The identifier a call chain starts from: `it` for `it.skip.each(...)`, `xit` for `xit(...)`. */
+function rootName(expression: ts.Expression): string | undefined {
+  let node: ts.Expression = expression;
+  for (;;) {
+    if (ts.isIdentifier(node)) return node.text;
+    if (
+      !ts.isPropertyAccessExpression(node) &&
+      !ts.isElementAccessExpression(node) &&
+      !ts.isCallExpression(node)
+    ) {
+      return undefined;
+    }
+    node = node.expression;
+  }
+}
+
+/** Whether `node` holds a call to `it(...)` or `test(...)` (or `it.each(...)(...)`). */
+function containsTest(node: ts.Node): boolean {
+  let found = false;
+  const visit = (child: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(child)) {
+      const root = rootName(child.expression);
+      if (root !== undefined && TESTS.has(root)) {
+        found = true;
+        return;
+      }
+    }
+    ts.forEachChild(child, visit);
+  };
+  ts.forEachChild(node, visit);
+  return found;
+}
+
+/**
+ * Reads one isolation spec's source with the TypeScript parser (TS-14): the models its real
+ * `isolationSpecFor` calls name, and the problems that stop it from counting.
+ */
+export function scanIsolationSpec(source: string, file = 'spec.ts'): IsolationSpecScan {
+  const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const at = (node: ts.Node) =>
+    `${file}:${syntax.getLineAndCharacterOfPosition(node.getStart(syntax)).line + 1}`;
+  const models: string[] = [];
+  const problems: string[] = [];
+  const weakened: string[] = [];
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      if (ts.isIdentifier(callee) && callee.text === NAMING_CALL) {
+        const [name, body] = node.arguments;
+        if (!name || !ts.isStringLiteralLike(name)) {
+          problems.push(`${at(node)}: ${NAMING_CALL} names its model with a string literal`);
+        } else if (!body || !containsTest(body)) {
+          problems.push(`${at(node)}: ${NAMING_CALL}('${name.text}') runs no it(...) or test(...)`);
+          models.push(name.text);
+        } else {
+          models.push(name.text);
+        }
+      }
+      const root = rootName(callee);
+      if (root !== undefined && WEAKENING_ALIASES.has(root)) {
+        weakened.push(`${at(node)}: ${root}(...) skips or focuses tests`);
+      }
+    }
+    if (ts.isPropertyAccessExpression(node) && WEAKENING_MODIFIERS.has(node.name.text)) {
+      const root = rootName(node.expression) ?? '(expression)';
+      weakened.push(`${at(node)}: ${root}.${node.name.text} skips, focuses or postpones tests`);
+    }
+    if (
+      ts.isElementAccessExpression(node) &&
+      ts.isStringLiteralLike(node.argumentExpression) &&
+      WEAKENING_MODIFIERS.has(node.argumentExpression.text)
+    ) {
+      const root = rootName(node.expression) ?? '(expression)';
+      weakened.push(
+        `${at(node)}: ${root}['${node.argumentExpression.text}'] skips, focuses or postpones tests`,
+      );
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(syntax);
+
+  // The skip and focus rules apply to the files that name a model: the gate trusts those.
+  if (models.length > 0) problems.push(...weakened);
+  return { models, problems };
+}
+
+/** The model names a spec's source names through real isolationSpecFor calls. */
+export function modelsNamedIn(source: string): string[] {
+  return scanIsolationSpec(source).models;
+}
+
+/** Every file's scan, relative to `dir` in the problem lines. */
+function scans(dir: string): IsolationSpecScan[] {
+  return isolationSpecFiles(dir).map((file) =>
+    scanIsolationSpec(readFileSync(file, 'utf8'), relative(dir, file)),
+  );
+}
+
+/**
+ * Every model name the isolation specs under `dir` name, counting only files with no problem
+ * (fail closed: a skipped or empty spec covers nothing).
+ */
 export function modelsWithIsolationSpec(dir: string = ISOLATION_DIR): Set<string> {
   return new Set(
-    isolationSpecFiles(dir).flatMap((file) => modelsNamedIn(readFileSync(file, 'utf8'))),
+    scans(dir)
+      .filter((scan) => scan.problems.length === 0)
+      .flatMap((scan) => scan.models),
   );
+}
+
+/** TS-14: every problem of every isolation spec under `dir`; the gate requires none. */
+export function isolationSpecProblems(dir: string = ISOLATION_DIR): string[] {
+  return scans(dir).flatMap((scan) => scan.problems);
 }
 
 export interface ModelIsolation {

@@ -333,4 +333,29 @@ export class AccessContextFactory {
       readOnly: false,
     });
   }
+
+  /**
+   * BR-002-25: the same context, made read-only — what SPEC-002 part 3 builds a support access
+   * grant's context from. It reads exactly what `ctx` reads and writes nothing: `writableOwners()`
+   * is empty, `canWriteWith()` is false, and the repositories refuse every write (OFFICE_READ_ONLY
+   * for owned data, FORBIDDEN for an account's own data). It can only narrow a context the factory
+   * built, never widen one, so being reachable through the exported factory grants nothing.
+   */
+  readOnlyView(ctx: AccessContext): AccessContext {
+    return new AccessContext(MINT, {
+      accountId: ctx.accountId,
+      isAdmin: ctx.isAdmin,
+      personas: ctx.personas,
+      memberships: ctx.memberships,
+      clientLinks: ctx.clientLinks.map(({ officeId, status, endedAtMs }) => ({
+        officeId,
+        status,
+        ...(endedAtMs !== undefined ? { endedAt: new Date(endedAtMs) } : {}),
+      })),
+      selfAdvised: ctx.selfAdvised,
+      entitlements: [...ctx.entitlements],
+      writableEntitlements: [],
+      readOnly: true,
+    });
+  }
 }

@@ -12,9 +12,10 @@ import { errorMessage } from '../common/error-message.js';
 import { CAIXA_USER_AGENT } from '../common/caixa-user-agent.js';
 
 /**
- * SPEC-002 BR-002-08 / SC-18: client files (journey documents and photos, SPEC-017) live under this
- * prefix. They never get a public URL; a download is a link issued per request, after the caller's
- * access was checked, by `issuePrivateFileLink`.
+ * SPEC-002 BR-002-08 / SC-18: client files (journey documents and photos, SPEC-017) have keys under
+ * this prefix and live in their own bucket, R2_PRIVATE_BUCKET, which has no public access — never in
+ * R2_BUCKET, which R2_PUBLIC_URL serves openly. They never get a public URL; a download is a link
+ * issued per request, after the caller's access was checked, by `issuePrivateFileLink`.
  */
 export const PRIVATE_FILE_PREFIX = 'private/';
 
@@ -51,12 +52,20 @@ export class StorageService {
   private readonly s3Client: S3Client | null;
   private readonly bucket: string;
   private readonly publicUrl: string;
+  /** SC-18: the client files' bucket; undefined until configured (SPEC-017). Never `bucket`. */
+  private readonly privateBucket: string | undefined;
 
   constructor(
     @Inject(r2Config.KEY)
     private readonly config: ConfigType<typeof r2Config>,
   ) {
-    const { accountId, accessKeyId, secretAccessKey, bucket, publicUrl } = config;
+    const { accountId, accessKeyId, secretAccessKey, bucket, publicUrl, privateBucket } = config;
+    // SC-18: validated at boot too (env.schema.ts); a client file must never land in the public
+    // bucket, whatever built this config.
+    if (privateBucket !== undefined && privateBucket === bucket) {
+      throw new Error('The private bucket must not be the public one (SC-18)');
+    }
+    this.privateBucket = privateBucket || undefined;
 
     if (!accountId || !accessKeyId || !secretAccessKey) {
       this.logger.warn('R2 configuration incomplete - storage features disabled');
@@ -195,7 +204,9 @@ export class StorageService {
    * PRIVATE_FILE_LINK_SECONDS (60 s, fixed: no caller chooses a longer one). Call it only after the
    * caller's access to the file was checked on this request (BR-002-15); never store, email or log
    * the link (SPEC-017 is its first caller). Refuses a key outside PRIVATE_FILE_PREFIX, so it cannot
-   * sign the public catalogue's files either. Neither the key nor the link is ever logged.
+   * sign the public catalogue's files either. Signs against R2_PRIVATE_BUCKET only, and refuses when
+   * it is not configured: it never falls back to the public bucket. Neither the key nor the link is
+   * ever logged.
    */
   async issuePrivateFileLink(key: string): Promise<string> {
     if (!isPrivateFileKey(key)) {
@@ -204,7 +215,7 @@ export class StorageService {
     if (!this.s3Client) {
       throw new Error('R2 not configured');
     }
-    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    const command = new GetObjectCommand({ Bucket: this.privateBucketOrRefuse(), Key: key });
     return getSignedUrl(this.s3Client, command, { expiresIn: PRIVATE_FILE_LINK_SECONDS });
   }
 
@@ -246,10 +257,12 @@ export class StorageService {
       return false;
     }
 
+    // SC-18: outside the try, so an unconfigured private bucket is a refusal, not a quiet false.
+    const bucket = this.bucketFor(key);
     try {
       await this.s3Client.send(
         new DeleteObjectCommand({
-          Bucket: this.bucket,
+          Bucket: bucket,
           Key: key,
         }),
       );
@@ -276,7 +289,7 @@ export class StorageService {
 
     await this.s3Client.send(
       new PutObjectCommand({
-        Bucket: this.bucket,
+        Bucket: this.bucketFor(key),
         Key: key,
         Body: buffer,
         ContentType: contentType,
@@ -298,7 +311,7 @@ export class StorageService {
 
     const response = await this.s3Client.send(
       new GetObjectCommand({
-        Bucket: this.bucket,
+        Bucket: this.bucketFor(key),
         Key: key,
       }),
     );
@@ -311,6 +324,23 @@ export class StorageService {
     this.logger.debug(`Downloaded buffer: ${loggableKey(key)} (${bytes.length} bytes)`);
 
     return Buffer.from(bytes);
+  }
+
+  /**
+   * SC-18: the bucket a key lives in. A client file (PRIVATE_FILE_PREFIX) lives only in the private
+   * bucket, so an upload, download or delete of one never touches the public bucket; every other key
+   * is the public catalogue's.
+   */
+  private bucketFor(key: string): string {
+    return key.startsWith(PRIVATE_FILE_PREFIX) ? this.privateBucketOrRefuse() : this.bucket;
+  }
+
+  /** SC-18: the private bucket, or a refusal; never the public bucket in its place. */
+  private privateBucketOrRefuse(): string {
+    if (!this.privateBucket) {
+      throw new Error('The private file bucket is not configured (R2_PRIVATE_BUCKET, SC-18)');
+    }
+    return this.privateBucket;
   }
 
   private getExtensionFromMimeType(mimeType: string): string {

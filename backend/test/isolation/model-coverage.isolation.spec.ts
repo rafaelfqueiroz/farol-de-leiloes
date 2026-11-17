@@ -5,12 +5,17 @@
 //   - an account-data model (marked 'account', BR-002-02) that no isolation spec names;
 //   - a model with neither `ownerId` nor an isolation mark (markIsolation, src/access/).
 // A spec "names" a model with isolationSpecFor('<ModelName>', ...) (support/isolation-spec.ts),
-// found by reading every test/isolation/**/*.isolation.spec.ts: there is no hand-kept list.
+// found by parsing every test/isolation/**/*.isolation.spec.ts with the TypeScript parser: only
+// real calls count (never a comment or a string), and a file that skips, focuses or postpones tests,
+// or a call whose body runs no test, fails the gate. There is no hand-kept list.
 //
 // AppModule itself is not compiled: its ConfigModule.forRoot reads the process environment and a
 // .env file as it is imported (DV-19). The infrastructure it adds registers no model; the gate
 // replaces it with the validated test environment and this file's own database.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { ConfigModule } from '@nestjs/config';
 import { getConnectionToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -27,10 +32,12 @@ import {
   coverageProblems,
   isolationOf,
   isolationSpecFiles,
+  isolationSpecProblems,
   type ModelIsolation,
   modelIsolations,
   modelsNamedIn,
   modelsWithIsolationSpec,
+  scanIsolationSpec,
 } from './support/isolation-coverage.js';
 
 describe('TS-14: every model the API registers is classified, and every owned one has its spec', () => {
@@ -73,6 +80,10 @@ describe('TS-14: every model the API registers is classified, and every owned on
 
   it('AR-16 / TS-13 / TS-14: no model breaks the gate', () => {
     expect(coverageProblems(models, modelsWithIsolationSpec())).toEqual([]);
+  });
+
+  it('TS-14: no isolation spec skips, focuses or postpones a test, or names a model and runs none', () => {
+    expect(isolationSpecProblems()).toEqual([]);
   });
 
   it('BR-002-02: the account-data collections are the ones marked so', () => {
@@ -133,14 +144,84 @@ describe('the isolation gate itself', () => {
     expect(coverageProblems([marked('public'), marked('internal')], new Set())).toEqual([]);
   });
 
+  // A test call built from parts too, for the same reason.
+  const testCall = (modifier = '') => `${'it'}${modifier}('proves it', () => {});`;
+  const naming = (name: string, body: string) =>
+    `${'isolationSpec'}For('${name}', () => {\n${body}\n});`;
+
   it('reads the names a spec gives isolationSpecFor, and nothing else', () => {
     const source = [
-      callNaming('FavoriteEntity'),
-      callNaming('ProbeEntity').replace(/'/g, '"'),
+      naming('FavoriteEntity', testCall()),
+      naming('ProbeEntity', testCall()).replace(/'ProbeEntity'/, '"ProbeEntity"'),
       "describe('FavoriteEntity is mentioned, not named', () => {});",
     ].join('\n');
 
     expect(modelsNamedIn(source)).toEqual(['FavoriteEntity', 'ProbeEntity']);
+    expect(scanIsolationSpec(source).problems).toEqual([]);
+  });
+
+  it('TS-14: a model named only in a comment or a string is not covered', () => {
+    const source = [
+      `// ${callNaming('CommentedEntity')}`,
+      `/* ${callNaming('BlockCommentedEntity')} */`,
+      `const text = "${callNaming('QuotedEntity')}";`,
+      `describe('real tests', () => { ${testCall()} });`,
+    ].join('\n');
+
+    expect(modelsNamedIn(source)).toEqual([]);
+    expect(coverageProblems([owned()], new Set(modelsNamedIn(source)))).toHaveLength(1);
+  });
+
+  it.each([
+    ['a skipped test', testCall('.skip')],
+    ['a focused test', testCall('.only')],
+    ['a postponed test', `${'it'}.todo('later');\n${testCall()}`],
+    ['a conditionally skipped test', `${'it'}.skipIf(true)('x', () => {});\n${testCall()}`],
+    ['a test skipped from its context', `${'it'}('x', (ctx) => { ctx.${'skip'}(); });`],
+    ['an xit', `${'x'}it('x', () => {});\n${testCall()}`],
+    ['an xdescribe', `${'x'}describe('x', () => { ${testCall()} });\n${testCall()}`],
+    ['a skipped describe', `${'describe'}.skip('x', () => { ${testCall()} });\n${testCall()}`],
+  ])('TS-14: a spec with %s fails, and covers nothing', (_case, body) => {
+    const scan = scanIsolationSpec(naming('OwnedEntity', body), 'x.isolation.spec.ts');
+
+    expect(scan.models).toEqual(['OwnedEntity']);
+    expect(scan.problems).toHaveLength(1);
+    expect(scan.problems[0]).toMatch(/^x\.isolation\.spec\.ts:\d+: .*(skips|focuses)/);
+  });
+
+  it('TS-14: a skipped isolationSpecFor block fails', () => {
+    const source = `${'isolationSpec'}For.skip('OwnedEntity', () => { ${testCall()} });`;
+
+    expect(scanIsolationSpec(source).problems).toEqual([]); // names nothing: not a covering call
+    expect(modelsNamedIn(source)).toEqual([]);
+    const both = [naming('OwnedEntity', testCall()), source].join('\n');
+    expect(scanIsolationSpec(both).problems).toEqual([
+      'spec.ts:4: isolationSpecFor.skip skips, focuses or postpones tests',
+    ]);
+  });
+
+  it('TS-14: a naming call that runs no test, or names no literal, fails', () => {
+    expect(scanIsolationSpec(naming('OwnedEntity', '// nothing yet')).problems).toEqual([
+      "spec.ts:1: isolationSpecFor('OwnedEntity') runs no it(...) or test(...)",
+    ]);
+    expect(
+      scanIsolationSpec(`${'isolationSpec'}For(modelName, () => { ${testCall()} });`).problems,
+    ).toEqual(['spec.ts:1: isolationSpecFor names its model with a string literal']);
+  });
+
+  it('TS-14: a file with a problem covers none of its models (fail closed)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'isolation-gate-'));
+    try {
+      writeFileSync(join(dir, 'good.isolation.spec.ts'), naming('GoodEntity', testCall()));
+      writeFileSync(join(dir, 'bad.isolation.spec.ts'), naming('BadEntity', testCall('.only')));
+
+      expect([...modelsWithIsolationSpec(dir)]).toEqual(['GoodEntity']);
+      expect(isolationSpecProblems(dir)).toEqual([
+        'bad.isolation.spec.ts:2: it.only skips, focuses or postpones tests',
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('scans the isolation spec files of this folder, this one included', () => {
