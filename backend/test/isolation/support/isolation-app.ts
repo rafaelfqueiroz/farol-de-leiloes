@@ -1,7 +1,7 @@
 // SPEC-002 TS-15 / TS-16: the harness of the API-level isolation specs. The real AuthModule,
 // JwtStrategy, AccessContextGuard and the feature modules under test on the spec's own database
-// (createAuthTestApp); only the clock, the mailer and the four access sources are fakes (TS-03,
-// TS-06, TS-07). The sources are ONE FakeAccessSources the spec drives per account at runtime
+// (createAuthTestApp); only the clock, the mailer, the four access sources and the support request
+// source (SPEC-009's seam, `supportRequests`) are fakes (TS-03, TS-06, TS-07). The sources are ONE FakeAccessSources the spec drives per account at runtime
 // (`sources.forAccount(id, {...})`), read on every request like the real ones (BR-002-15), so a
 // spec seeds offices A and B, members and investors, and changes them between two requests.
 //
@@ -16,8 +16,10 @@ import { CLIENT_LINK_SOURCE } from '../../../src/access/sources/client-link.sour
 import { MEMBERSHIP_SOURCE } from '../../../src/access/sources/membership.source.js';
 import { OFFICE_PLAN_SOURCE } from '../../../src/access/sources/office-plan.source.js';
 import { SELF_ADVISED_SOURCE } from '../../../src/access/sources/self-advised.source.js';
+import { SUPPORT_REQUEST_SOURCE } from '../../../src/access/sources/support-request.source.js';
 import { UserEntity, type UserDocument } from '../../../src/users/schemas/user.schema.js';
 import { FakeAccessSources } from '../../fakes/fake-access-sources.js';
+import { FakeSupportRequests } from '../../fakes/fake-support-requests.js';
 import { createAuthTestApp, type AuthTestApp } from '../../support/auth-test-app.js';
 import type { TestDatabase } from '../../support/test-database.js';
 
@@ -38,8 +40,10 @@ export interface Answer {
 export interface IsolationApp {
   readonly harness: AuthTestApp;
   readonly sources: FakeAccessSources;
-  /** A new account with a confirmed email, signed in. */
-  signUp(label: string): Promise<TestAccount>;
+  /** SPEC-009's support requests, as the grant service reads them (BR-002-24, BR-002-26). */
+  readonly supportRequests: FakeSupportRequests;
+  /** A new account with a confirmed email, signed in (named `name`, default 'Conta Teste'). */
+  signUp(label: string, name?: string): Promise<TestAccount>;
   /** One account per label, in order. */
   signUpAll<const L extends readonly string[]>(
     ...labels: L
@@ -60,6 +64,7 @@ export async function createIsolationApp(
   env: Record<string, string> = {},
 ): Promise<IsolationApp> {
   const sources = new FakeAccessSources();
+  const supportRequests = new FakeSupportRequests();
   const harness = await createAuthTestApp(
     db,
     imports,
@@ -73,18 +78,20 @@ export async function createIsolationApp(
         .overrideProvider(SELF_ADVISED_SOURCE)
         .useValue(sources)
         .overrideProvider(OFFICE_PLAN_SOURCE)
-        .useValue(sources),
+        .useValue(sources)
+        .overrideProvider(SUPPORT_REQUEST_SOURCE)
+        .useValue(supportRequests),
   );
   const server = () => harness.app.getHttpServer() as Parameters<typeof request>[0];
   const users = harness.moduleRef.get<Model<UserDocument>>(getModelToken(UserEntity.name));
   let counter = 0;
 
-  const signUp = async (label: string): Promise<TestAccount> => {
+  const signUp = async (label: string, name = 'Conta Teste'): Promise<TestAccount> => {
     counter += 1;
     const email = `${label}-${counter}@example.test`;
     const registered = await request(server())
       .post('/api/auth/register')
-      .send({ email, password: PASSWORD, name: 'Conta Teste', acceptTerms: true })
+      .send({ email, password: PASSWORD, name, acceptTerms: true })
       .expect(201);
     const confirmation = harness.mailbox.verificationEmails.find((sent) => sent.email === email);
     await request(server())
@@ -101,6 +108,7 @@ export async function createIsolationApp(
   return {
     harness,
     sources,
+    supportRequests,
     signUp,
     async signUpAll(...labels) {
       const accounts: TestAccount[] = [];

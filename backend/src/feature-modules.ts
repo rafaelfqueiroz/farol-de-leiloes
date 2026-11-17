@@ -17,6 +17,7 @@ import { AiModule } from './ai/ai.module.js';
 import { SupportModule } from './support/support.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MaintenanceModule } from './maintenance/maintenance.module.js';
+import { AdminAccessModule } from './admin-access/admin-access.module.js';
 
 export const FEATURE_MODULES = [
   UsersModule,
@@ -31,4 +32,5 @@ export const FEATURE_MODULES = [
   SupportModule,
   HealthModule,
   MaintenanceModule,
+  AdminAccessModule,
 ];
