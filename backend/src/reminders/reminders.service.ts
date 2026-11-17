@@ -1,66 +1,56 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Injectable } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { parseISO, roundToNearestMinutes } from 'date-fns';
-import {
-  ReminderEntity,
-  ReminderDocument,
-  ReminderChannel,
-  ReminderStatus,
-} from './schemas/reminder.schema.js';
-import { NotificationLog, NotificationLogDocument } from './schemas/notification-log.schema.js';
+import { ReminderChannel, ReminderStatus } from './schemas/reminder.schema.js';
+import type { AccessContext } from '../access/access-context.js';
+import { RemindersRepository, type ReminderRecord } from './reminders.repository.js';
+import { NotificationLogsRepository } from './notification-logs.repository.js';
 import { AuctionsService } from '../auctions/auctions.service.js';
 import { UsersService } from '../users/users.service.js';
 import { CreateReminderDto } from './dto/create-reminder.dto.js';
 import { UpdateReminderDto } from './dto/update-reminder.dto.js';
 import { AuctionRecord } from '../auctions/interfaces/auction.interface.js';
-import { PopulatedReminder, ReminderAuction } from './interfaces/reminder.interface.js';
+import { PopulatedReminder } from './interfaces/reminder.interface.js';
 import { DomainError } from '../common/errors/domain-error.js';
-import { serverOperators } from '../common/mongo/query-safety.js';
 import { Clock } from '../common/clock/clock.js';
 import { inBrasilia } from '../common/clock/brasilia-time.js';
-import {
-  type PageRequest,
-  type Paginated,
-  paginated,
-  skipOf,
-} from '../common/pagination/paginated.js';
+import { type PageRequest, type Paginated, paginated } from '../common/pagination/paginated.js';
 
 // The auction fields a reminder is created against.
 type ReminderTarget = Pick<AuctionRecord, 'phases'> & { _id: Types.ObjectId };
 
+// SPEC-002 BR-002-02: a reminder belongs to its account alone. Request paths take the request's
+// AccessContext and reach reminders only through the account-scoped repository (AR-08, AR-12); the
+// scheduler's paths (getDueReminders, markAsSent, logNotification) are the named cross-account
+// ones, and deliver each reminder to its own account (BR-002-29).
 @Injectable()
 export class RemindersService {
-  private readonly logger = new Logger(RemindersService.name);
-
   constructor(
-    @InjectModel(ReminderEntity.name)
-    private readonly reminderModel: Model<ReminderDocument>,
-    @InjectModel(NotificationLog.name)
-    private readonly notificationLogModel: Model<NotificationLogDocument>,
+    private readonly reminders: RemindersRepository,
+    private readonly notificationLogs: NotificationLogsRepository,
     private readonly auctionsService: AuctionsService,
     private readonly usersService: UsersService,
     private readonly clock: Clock, // AR-24
   ) {}
 
-  async create(userId: string, dto: CreateReminderDto): Promise<PopulatedReminder> {
+  async create(ctx: AccessContext, dto: CreateReminderDto): Promise<PopulatedReminder> {
     const auction = await this.auctionsService.findDocumentByCode(dto.auctionId);
     if (!auction) {
       const auctionById = await this.auctionsService.findDocumentById(dto.auctionId);
       if (!auctionById) {
         throw new DomainError('AUCTION_NOT_FOUND');
       }
-      return this.createWithAuction(userId, dto, auctionById);
+      return this.createWithAuction(ctx, dto, auctionById);
     }
-    return this.createWithAuction(userId, dto, auction);
+    return this.createWithAuction(ctx, dto, auction);
   }
 
   private async createWithAuction(
-    userId: string,
+    ctx: AccessContext,
     dto: CreateReminderDto,
     auction: ReminderTarget,
   ): Promise<PopulatedReminder> {
-    const user = await this.usersService.findByIdFull(userId);
+    const user = await this.usersService.findByIdFull(ctx.accountId);
     if (!user) {
       throw new DomainError('USER_NOT_FOUND');
     }
@@ -79,72 +69,48 @@ export class RemindersService {
 
     const scheduledAt = this.validateAndNormalizeScheduledAt(dto.scheduledAt, auctionStartDate);
 
-    const reminder = new this.reminderModel({
-      userId: new Types.ObjectId(userId),
+    // BR-002-11: the account comes from the context, never from the request body.
+    const saved = await this.reminders.create(ctx, {
       auction: auction._id,
       channel: dto.channel,
       scheduledAt,
       description: dto.description,
       status: ReminderStatus.PENDING,
     });
-
-    const saved = await reminder.save();
-    return this.findPopulatedById(saved._id);
+    return this.findPopulatedById(ctx, saved._id.toString());
   }
 
-  /** AR-35: one page of the user's reminders, soonest first (`_id` breaks scheduledAt ties). */
-  async findPageByUser(userId: string, page: PageRequest): Promise<Paginated<PopulatedReminder>> {
-    const filter = { userId: new Types.ObjectId(userId) };
+  /** AR-35: one page of the account's reminders, soonest first (`_id` breaks scheduledAt ties). */
+  async findPageByUser(
+    ctx: AccessContext,
+    page: PageRequest,
+  ): Promise<Paginated<PopulatedReminder>> {
     const [total, items] = await Promise.all([
-      this.reminderModel.countDocuments(filter).exec(),
-      this.reminderModel
-        .find(filter)
-        .populate<{ auction: ReminderAuction }>('auction')
-        .sort({ scheduledAt: 1, _id: 1 })
-        .skip(skipOf(page))
-        .limit(page.pageSize)
-        .exec(),
+      this.reminders.count(ctx),
+      this.reminders.findPopulatedPage(ctx, page),
     ]);
     return paginated(items, total, page);
   }
 
-  async findOne(userId: string, reminderId: string): Promise<PopulatedReminder> {
-    const reminder = await this.reminderModel
-      .findOne({ _id: { $eq: reminderId }, userId: new Types.ObjectId(userId) })
-      .populate<{ auction: ReminderAuction }>('auction')
-      .exec();
-
-    if (!reminder) {
-      throw new DomainError('REMINDER_NOT_FOUND');
-    }
-
-    return reminder;
+  /** REMINDER_NOT_FOUND alike for another account's, a missing and a malformed id (AR-14). */
+  async findOne(ctx: AccessContext, reminderId: string): Promise<PopulatedReminder> {
+    return this.findPopulatedById(ctx, reminderId);
   }
 
   async update(
-    userId: string,
+    ctx: AccessContext,
     reminderId: string,
     dto: UpdateReminderDto,
   ): Promise<PopulatedReminder> {
-    const reminder = await this.reminderModel.findOne({
-      _id: { $eq: reminderId },
-      userId: new Types.ObjectId(userId),
-    });
-
-    if (!reminder) {
-      throw new DomainError('REMINDER_NOT_FOUND');
-    }
-
-    if (reminder.status !== ReminderStatus.PENDING) {
-      throw new DomainError('REMINDER_ALREADY_SENT');
-    }
+    const reminder = await this.pendingReminder(ctx, reminderId);
+    const changes: Partial<Pick<ReminderRecord, 'channel' | 'scheduledAt' | 'description'>> = {};
 
     if (dto.channel && dto.channel !== reminder.channel) {
-      const user = await this.usersService.findByIdFull(userId);
+      const user = await this.usersService.findByIdFull(ctx.accountId);
       if (!user) throw new DomainError('USER_NOT_FOUND');
       this.validateChannelPermission(user, dto.channel);
       this.validateUserContactInfo(user, dto.channel);
-      reminder.channel = dto.channel;
+      changes.channel = dto.channel;
     }
 
     if (dto.scheduledAt) {
@@ -158,67 +124,60 @@ export class RemindersService {
         throw new DomainError('AUCTION_START_DATE_MISSING');
       }
 
-      reminder.scheduledAt = this.validateAndNormalizeScheduledAt(
-        dto.scheduledAt,
-        auctionStartDate,
-      );
+      changes.scheduledAt = this.validateAndNormalizeScheduledAt(dto.scheduledAt, auctionStartDate);
     }
 
     if (dto.description !== undefined) {
-      reminder.description = dto.description;
+      changes.description = dto.description;
     }
 
-    await reminder.save();
-    return this.findPopulatedById(reminder._id);
+    if (Object.keys(changes).length > 0) {
+      // One conditional write: still the account's and still pending (a reminder the scheduler
+      // sent in between is not changed).
+      await this.reminders.updateById(ctx, reminderId, changes, {
+        status: { $eq: ReminderStatus.PENDING },
+      });
+    }
+    return this.findPopulatedById(ctx, reminderId);
   }
 
-  // Re-reads a reminder just saved, with its auction. Deleted in between → 404 (DV-03).
-  private async findPopulatedById(id: Types.ObjectId): Promise<PopulatedReminder> {
-    const reminder = await this.reminderModel
-      .findById(id)
-      .populate<{ auction: ReminderAuction }>('auction')
-      .exec();
+  // Re-reads a reminder of the account with its auction. Gone in between → 404 (DV-03).
+  private async findPopulatedById(ctx: AccessContext, id: string): Promise<PopulatedReminder> {
+    const reminder = await this.reminders.findPopulatedById(ctx, id);
     if (!reminder) {
       throw new DomainError('REMINDER_NOT_FOUND');
     }
     return reminder;
   }
 
-  async delete(userId: string, reminderId: string): Promise<void> {
-    const reminder = await this.reminderModel.findOne({
-      _id: { $eq: reminderId },
-      userId: new Types.ObjectId(userId),
-    });
+  async delete(ctx: AccessContext, reminderId: string): Promise<void> {
+    await this.pendingReminder(ctx, reminderId);
+    await this.reminders.deleteById(ctx, reminderId, { status: { $eq: ReminderStatus.PENDING } });
+  }
 
+  /** The account's reminder, still pending: REMINDER_NOT_FOUND, else REMINDER_ALREADY_SENT. */
+  private async pendingReminder(ctx: AccessContext, reminderId: string): Promise<ReminderRecord> {
+    const reminder = await this.reminders.findById(ctx, reminderId);
     if (!reminder) {
       throw new DomainError('REMINDER_NOT_FOUND');
     }
-
     if (reminder.status !== ReminderStatus.PENDING) {
       throw new DomainError('REMINDER_ALREADY_SENT');
     }
-
-    await this.reminderModel.deleteOne({ _id: { $eq: reminderId } });
+    return reminder;
   }
 
+  /** Scheduler (AR-12, BR-002-29): every account's pending reminders due now. */
   async getDueReminders(limit: number = 100): Promise<PopulatedReminder[]> {
-    return this.reminderModel
-      .find({
-        status: ReminderStatus.PENDING,
-        scheduledAt: serverOperators({ $lte: this.clock.now() }),
-      })
-      .populate<{ auction: ReminderAuction }>('auction')
-      .limit(limit)
-      .exec();
+    return this.reminders.findDueAcrossAccounts(this.clock.now(), limit);
   }
 
+  /** Scheduler (AR-12): the reminder it just delivered is sent. */
   async markAsSent(reminderId: string): Promise<void> {
-    await this.reminderModel.updateOne(
-      { _id: { $eq: reminderId } },
-      { status: ReminderStatus.SENT },
-    );
+    await this.reminders.markSentAcrossAccounts(reminderId);
   }
 
+  /** Scheduler (AR-12, BR-002-29): the attempt is logged for the reminder's own account. */
   async logNotification(
     reminderId: string,
     userId: string,
@@ -227,15 +186,13 @@ export class RemindersService {
     success: boolean,
     errorMessage?: string,
   ): Promise<void> {
-    const log = new this.notificationLogModel({
-      reminderId: new Types.ObjectId(reminderId),
-      userId: new Types.ObjectId(userId),
+    await this.notificationLogs.recordDeliveryByJob(userId, {
+      reminderId,
       channel,
       recipient,
       success,
       errorMessage,
     });
-    await log.save();
   }
 
   private validateChannelPermission(user: { role: string }, channel: ReminderChannel): void {

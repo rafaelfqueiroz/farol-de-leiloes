@@ -21,11 +21,11 @@ import {
 import { FavoritesService } from './favorites.service.js';
 import { AddFavoriteDto } from './dto/add-favorite.dto.js';
 import { FavoriteCodesResponseDto } from './dto/favorite-codes-response.dto.js';
-import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import type { AccessContext } from '../access/access-context.js';
+import { Access } from '../access/decorators/access.decorator.js';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
 import { ApiConfirmedEmail } from '../auth/decorators/api-confirmed-email.decorator.js';
 import { ConfirmedEmailGuard } from '../auth/guards/confirmed-email.guard.js';
-import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
 import { AuctionResponseDto } from '../auctions/dto/auction-response.dto.js';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
 import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
@@ -46,10 +46,10 @@ export class FavoritesController {
   @ApiOperation({ summary: 'The signed-in user favorited active auctions (paginated, AR-35)' })
   @ApiPaginatedResponse(AuctionResponseDto)
   async findAll(
-    @CurrentUser() user: AuthenticatedUser,
+    @Access() access: AccessContext,
     @Query() query: PaginationQueryDto,
   ): Promise<Paginated<AuctionResponseDto>> {
-    const page = await this.favoritesService.findPage(user.userId, query);
+    const page = await this.favoritesService.findPage(access, query);
     return mapPage(page, (auction) => new AuctionResponseDto(auction));
   }
 
@@ -58,8 +58,8 @@ export class FavoritesController {
   @Get('codes')
   @ApiOperation({ summary: 'Codes of every auction the signed-in user favorited' })
   @ApiOkResponse({ type: FavoriteCodesResponseDto })
-  async findCodes(@CurrentUser() user: AuthenticatedUser): Promise<FavoriteCodesResponseDto> {
-    return new FavoriteCodesResponseDto(await this.favoritesService.findCodes(user.userId));
+  async findCodes(@Access() access: AccessContext): Promise<FavoriteCodesResponseDto> {
+    return new FavoriteCodesResponseDto(await this.favoritesService.findCodes(access));
   }
 
   @Post()
@@ -67,10 +67,10 @@ export class FavoritesController {
   @ApiCreatedResponse({ type: AuctionResponseDto })
   @ApiNotFoundResponse({ description: 'AUCTION_NOT_FOUND', type: ErrorResponseDto })
   async create(
-    @CurrentUser() user: AuthenticatedUser,
+    @Access() access: AccessContext,
     @Body() dto: AddFavoriteDto,
   ): Promise<AuctionResponseDto> {
-    const auction = await this.favoritesService.create(user.userId, dto.code);
+    const auction = await this.favoritesService.create(access, dto.code);
     return new AuctionResponseDto(auction);
   }
 
@@ -78,7 +78,7 @@ export class FavoritesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove an auction from the favorites (idempotent)' })
   @ApiNoContentResponse({ description: 'Removed, or was not a favorite' })
-  async remove(@CurrentUser() user: AuthenticatedUser, @Param('code') code: string): Promise<void> {
-    await this.favoritesService.remove(user.userId, code);
+  async remove(@Access() access: AccessContext, @Param('code') code: string): Promise<void> {
+    await this.favoritesService.remove(access, code);
   }
 }

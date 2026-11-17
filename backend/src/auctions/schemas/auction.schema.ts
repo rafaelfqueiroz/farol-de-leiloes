@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 export enum PhaseModality {
   SFI_AUCTION = 'SFI_AUCTION',
@@ -102,6 +103,12 @@ export class AuctionEntity {
 export type AuctionDocument = HydratedDocument<AuctionEntity>;
 
 export const AuctionSchema = SchemaFactory.createForClass(AuctionEntity);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(AuctionSchema, {
+  kind: 'public',
+  reason: 'The public Caixa catalogue (SPEC-004/005): the same for every visitor',
+});
 
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1 });
 AuctionSchema.index({ 'address.state': 1, 'address.city': 1, 'address.neighborhood': 1 });

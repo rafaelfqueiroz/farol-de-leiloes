@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 export type CouponDocument = CouponEntity & Document;
 
@@ -36,3 +37,10 @@ export class CouponEntity extends Document {
 }
 
 export const CouponSchema = SchemaFactory.createForClass(CouponEntity);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(CouponSchema, {
+  kind: 'public',
+  reason:
+    'Platform-wide discount coupons (SPEC-026), managed by operations; no account or client data',
+});

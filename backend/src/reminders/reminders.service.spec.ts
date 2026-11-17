@@ -4,10 +4,12 @@ import { DomainError } from '../common/errors/domain-error.js';
 import { RemindersService } from './reminders.service.js';
 import type { CreateReminderDto } from './dto/create-reminder.dto.js';
 import { FakeClock } from '../../test/fakes/fake-clock.js';
-import { serverOperators } from '../common/mongo/query-safety.js';
+import { anAccessContext } from '../../test/fakes/fake-access-sources.js';
 import { ReminderChannel, ReminderStatus } from './schemas/reminder.schema.js';
 
 type ServiceDeps = ConstructorParameters<typeof RemindersService>;
+
+const ctx = await anAccessContext('64b000000000000000000002');
 
 // AR-09: both reminder creation and rescheduling reach auctions only through their service.
 describe('RemindersService auction lookup boundary (AR-09)', () => {
@@ -18,7 +20,7 @@ describe('RemindersService auction lookup boundary (AR-09)', () => {
     };
     const reminder = { status: 'PENDING', auction: { toString: () => '64b000000000000000000001' } };
     const service = new RemindersService(
-      { findOne: vi.fn().mockResolvedValue(reminder) } as unknown as ServiceDeps[0],
+      { findById: vi.fn().mockResolvedValue(reminder) } as unknown as ServiceDeps[0],
       {} as ServiceDeps[1],
       auctionsService as unknown as ServiceDeps[2],
       { findByIdFull: vi.fn().mockResolvedValue(null) } as unknown as ServiceDeps[3],
@@ -32,7 +34,7 @@ describe('RemindersService auction lookup boundary (AR-09)', () => {
   it('falls back to AuctionsService by id when no auction has the given code', async () => {
     const { service, auctionsService } = build();
 
-    await expect(service.create('u1', dto('64b000000000000000000001'))).rejects.toEqual(
+    await expect(service.create(ctx, dto('64b000000000000000000001'))).rejects.toEqual(
       new DomainError('AUCTION_NOT_FOUND'),
     );
     expect(auctionsService.findDocumentByCode).toHaveBeenCalledWith('64b000000000000000000001');
@@ -43,7 +45,6 @@ describe('RemindersService auction lookup boundary (AR-09)', () => {
   });
 
   it('uses the code match without an id lookup', async () => {
-    const userId = new Types.ObjectId('64b000000000000000000002');
     const auctionId = new Types.ObjectId('64b000000000000000000001');
     const reminderId = new Types.ObjectId('64b000000000000000000003');
     const auction = {
@@ -54,23 +55,13 @@ describe('RemindersService auction lookup boundary (AR-09)', () => {
       findDocumentByCode: vi.fn().mockResolvedValue(auction),
       findDocumentById: vi.fn().mockResolvedValue(null),
     };
-    const persisted: Record<string, unknown>[] = [];
     const populated = { _id: reminderId, auction, status: ReminderStatus.PENDING };
-    class ReminderPersistenceFake {
-      constructor(fields: Record<string, unknown>) {
-        persisted.push(fields);
-      }
-
-      async save() {
-        return { _id: reminderId };
-      }
-
-      static findById = vi.fn().mockReturnValue({
-        populate: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(populated) }),
-      });
-    }
+    const reminders = {
+      create: vi.fn().mockResolvedValue({ _id: reminderId }),
+      findPopulatedById: vi.fn().mockResolvedValue(populated),
+    };
     const service = new RemindersService(
-      ReminderPersistenceFake as unknown as ServiceDeps[0],
+      reminders as unknown as ServiceDeps[0],
       {} as ServiceDeps[1],
       auctionsService as unknown as ServiceDeps[2],
       {
@@ -84,32 +75,30 @@ describe('RemindersService auction lookup boundary (AR-09)', () => {
     );
 
     await expect(
-      service.create(userId.toHexString(), {
+      service.create(ctx, {
         auctionId: 'A1',
         channel: ReminderChannel.EMAIL,
         scheduledAt: '2026-01-16T12:00:00.000Z',
       }),
     ).resolves.toBe(populated);
-    expect(persisted).toEqual([
-      {
-        userId,
-        auction: auctionId,
-        channel: ReminderChannel.EMAIL,
-        scheduledAt: new Date('2026-01-16T12:00:00.000Z'),
-        description: undefined,
-        status: ReminderStatus.PENDING,
-      },
-    ]);
+    // BR-002-11: the account is the context's; the payload never names it.
+    expect(reminders.create).toHaveBeenCalledWith(ctx, {
+      auction: auctionId,
+      channel: ReminderChannel.EMAIL,
+      scheduledAt: new Date('2026-01-16T12:00:00.000Z'),
+      description: undefined,
+      status: ReminderStatus.PENDING,
+    });
     expect(auctionsService.findDocumentByCode).toHaveBeenCalledWith('A1');
     expect(auctionsService.findDocumentById).not.toHaveBeenCalled();
-    expect(ReminderPersistenceFake.findById).toHaveBeenCalledWith(reminderId);
+    expect(reminders.findPopulatedById).toHaveBeenCalledWith(ctx, reminderId.toHexString());
   });
 
   it('resolves the saved auction id through AuctionsService when rescheduling', async () => {
     const { service, auctionsService } = build();
 
     await expect(
-      service.update('64b000000000000000000002', 'r1', {
+      service.update(ctx, 'r1', {
         scheduledAt: '2026-01-16T12:00:00.000Z',
       }),
     ).rejects.toEqual(new DomainError('AUCTION_NOT_FOUND'));
@@ -125,13 +114,9 @@ describe('RemindersService and the clock (AR-24)', () => {
   const AUCTION_START = new Date('2026-01-20T13:00:00.000Z');
 
   function build() {
-    const find = vi.fn().mockReturnValue({
-      populate: vi.fn().mockReturnValue({
-        limit: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue([]) }),
-      }),
-    });
+    const findDueAcrossAccounts = vi.fn().mockResolvedValue([]);
     const service = new RemindersService(
-      { find } as unknown as ServiceDeps[0],
+      { findDueAcrossAccounts } as unknown as ServiceDeps[0],
       {} as ServiceDeps[1],
       {} as ServiceDeps[2],
       {} as ServiceDeps[3],
@@ -139,18 +124,16 @@ describe('RemindersService and the clock (AR-24)', () => {
     );
     // Private; bracket access keeps its signature type-checked.
     const schedule = (at: string) => service['validateAndNormalizeScheduledAt'](at, AUCTION_START);
-    return { service, find, schedule };
+    return { service, findDueAcrossAccounts, schedule };
   }
 
   it('due reminders are those scheduled at or before now', async () => {
-    const { service, find } = build();
+    const { service, findDueAcrossAccounts } = build();
 
     await service.getDueReminders(10);
 
-    expect(find).toHaveBeenCalledWith({
-      status: 'PENDING',
-      scheduledAt: serverOperators({ $lte: NOW }),
-    });
+    // AR-12: the scheduler's named cross-account read, at the injected clock's now.
+    expect(findDueAcrossAccounts).toHaveBeenCalledWith(NOW, 10);
   });
 
   it('refuses a time at or before now and accepts one just after', () => {

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { FavoritesController } from './favorites.controller.js';
+import { FavoritesRepository } from './favorites.repository.js';
 import { FavoritesService } from './favorites.service.js';
 import { FavoriteEntity, FavoriteSchema } from './schemas/favorite.schema.js';
 import { AuctionsModule } from '../auctions/auctions.module.js';
@@ -11,6 +12,6 @@ import { AuctionsModule } from '../auctions/auctions.module.js';
     AuctionsModule,
   ],
   controllers: [FavoritesController],
-  providers: [FavoritesService],
+  providers: [FavoritesService, FavoritesRepository],
 })
 export class FavoritesModule {}

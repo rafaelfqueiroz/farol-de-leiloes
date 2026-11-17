@@ -11,6 +11,10 @@ import { ReminderChannel, ReminderStatus } from './schemas/reminder.schema.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { createHttpApp, TEST_USER } from '../../test/support/http-app.js';
 
+// SPEC-002: the controller hands the service the request's AccessContext, built for the signed-in
+// user (BR-002-11), never an id from the request.
+const AS_TEST_USER = expect.objectContaining({ accountId: TEST_USER.userId });
+
 const REMINDER = {
   _id: new Types.ObjectId('64b7f00000000000000000bb'),
   channel: ReminderChannel.SMS,
@@ -61,7 +65,7 @@ describe('RemindersController over HTTP', () => {
     const res = await request(app.getHttpServer()).get('/api/reminders/abc').expect(200);
 
     expect(res.body).toEqual(EXPECTED);
-    expect(reminders.findOne).toHaveBeenCalledWith(TEST_USER.userId, 'abc');
+    expect(reminders.findOne).toHaveBeenCalledWith(AS_TEST_USER, 'abc');
   });
 
   it('GET /api/reminders/:id answers 404 REMINDER_NOT_FOUND for a reminder that is not theirs', async () => {
@@ -83,7 +87,7 @@ describe('RemindersController over HTTP', () => {
     const res = await request(app.getHttpServer()).post('/api/reminders').send(body).expect(201);
 
     expect(res.body).toEqual(EXPECTED);
-    expect(reminders.create).toHaveBeenCalledWith(TEST_USER.userId, body);
+    expect(reminders.create).toHaveBeenCalledWith(AS_TEST_USER, body);
   });
 
   it.each([
@@ -111,7 +115,7 @@ describe('RemindersController over HTTP', () => {
       .expect(200);
 
     expect(res.body).toEqual(EXPECTED);
-    expect(reminders.update).toHaveBeenCalledWith(TEST_USER.userId, 'abc', { description: 'new' });
+    expect(reminders.update).toHaveBeenCalledWith(AS_TEST_USER, 'abc', { description: 'new' });
   });
 
   it('PATCH /api/reminders/:id refuses a body with an invalid channel', async () => {
@@ -127,7 +131,7 @@ describe('RemindersController over HTTP', () => {
     const res = await request(app.getHttpServer()).delete('/api/reminders/abc').expect(204);
 
     expect(res.text).toBe('');
-    expect(reminders.delete).toHaveBeenCalledWith(TEST_USER.userId, 'abc');
+    expect(reminders.delete).toHaveBeenCalledWith(AS_TEST_USER, 'abc');
   });
 
   it('DELETE /api/reminders/:id answers 409 for a reminder already sent', async () => {

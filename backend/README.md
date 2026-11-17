@@ -35,7 +35,7 @@ Tests (TESTING §2, §7)
 - `npm test` — Vitest projects `unit` (`src/**/*.spec.ts`, next to the source) and `structural` (`test/structural/`); no Docker
 - `npm run test:cov` — the same with the V8 coverage gate (`backend/vitest.config.mts`); lcov report in `coverage/`
 - `npm run test:integration` — `test/integration/` against MongoDB from Testcontainers; needs Docker
-- `npm run test:isolation` — `test/isolation/`, the owner-isolation gate; needs Docker (empty until #2)
+- `npm run test:isolation` — `test/isolation/`, the owner-isolation gate (TS-13, TS-14); needs Docker
 - `npm run test:smoke` — builds, then loads every module of `dist/` in plain Node as native ESM, catching import interop bugs that `tsc` and Vitest cannot see (#63); the CI `backend-build` job
 - `npm run test:structural` — `test/structural/` alone: checks on the repository itself (Node pins, workflows, Dockerfiles, pre-push selection); the CI `structural` job
 - Helpers: `test/support/` (database harness, fixture paths, `silence-logger.ts`: the Nest Logger is silent in every test project; to assert on a log, `vi.spyOn(Logger.prototype, 'error')`, see TESTING.md), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`

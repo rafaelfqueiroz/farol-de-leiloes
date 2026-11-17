@@ -6,6 +6,8 @@
 // never leaves this file, so no controller, service or test can hand-craft one with an owner taken
 // from a request (BR-002-11). It is frozen, and so is everything in it.
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { ErrorCode } from '../common/errors/codes.js';
+import { DomainError } from '../common/errors/domain-error.js';
 import {
   type ClientLinkFacts,
   type MembershipFacts,
@@ -50,6 +52,32 @@ export interface AccessAccount {
 
 // Never exported: holding it is what "being AccessContextFactory" means.
 const MINT: unique symbol = Symbol('AccessContext.mint');
+// Never exported either: only AccessContext.resolveActingOwner chooses an acting owner.
+const ACTING_MINT: unique symbol = Symbol('ActingOwner.mint');
+
+function sameOwner(a: Owner, b: Owner): boolean {
+  return a.ownerType === b.ownerType && a.ownerId === b.ownerId;
+}
+
+/**
+ * The owner a write acts for, chosen on the server by `AccessContext.resolveActingOwner` among the
+ * owners the account conducts (BR-002-11). Only that method can build one, and it carries the
+ * context it came from, so a repository can refuse an ActingOwner of another request or an owner
+ * spelled from a request value (AR-12).
+ */
+export class ActingOwner {
+  readonly owner: Owner;
+  readonly context: AccessContext;
+
+  constructor(token: typeof ACTING_MINT, owner: Owner, context: AccessContext) {
+    if (token !== ACTING_MINT) {
+      throw new Error('ActingOwner is chosen by AccessContext.resolveActingOwner only (BR-002-11)');
+    }
+    this.owner = Object.freeze({ ownerType: owner.ownerType, ownerId: owner.ownerId });
+    this.context = context;
+    Object.freeze(this);
+  }
+}
 
 interface AccessContextFields {
   accountId: string;
@@ -175,6 +203,49 @@ export class AccessContext {
     }));
     if (this.selfAdvised) owners.push({ ownerType: 'self_advised', ownerId: this.accountId });
     return Object.freeze(owners.map((owner) => Object.freeze(owner)));
+  }
+
+  /** BR-002-03: the owner is one the account conducts (reads only). */
+  canReadOwner(owner: Owner): boolean {
+    return this.conductedOwners().some((conducted) => sameOwner(conducted, owner));
+  }
+
+  /** BR-002-30: the owner is one the account conducts and may write to now. */
+  canWriteOwner(owner: Owner): boolean {
+    return this.writableOwners().some((writable) => sameOwner(writable, owner));
+  }
+
+  /**
+   * The owner a write acts for (BR-002-11). The account conducts the owners; the request may only
+   * pick among them:
+   *
+   * - `requestedOfficeId` given (a member of several offices choosing one): it must be an office
+   *   the account is a current member of, else `notFound` — the same answer as an office that does
+   *   not exist, so nothing is learned about other offices (BR-002-12, AR-14);
+   * - nothing requested: the one owner the account conducts; none at all is FORBIDDEN (no record
+   *   is involved), and several is VALIDATION_FAILED on `officeId` (the caller must choose).
+   *
+   * Whether the owner may be written to now (BR-002-30) is the repository's check, with the write.
+   */
+  resolveActingOwner(requestedOfficeId?: unknown, notFound: ErrorCode = 'NOT_FOUND'): ActingOwner {
+    if (requestedOfficeId !== undefined) {
+      // SC-10: compared by value; a non-string is no office at all.
+      const membership =
+        typeof requestedOfficeId === 'string'
+          ? this.memberships.find((m) => m.officeId === requestedOfficeId)
+          : undefined;
+      if (!membership) throw new DomainError(notFound);
+      return new ActingOwner(
+        ACTING_MINT,
+        { ownerType: 'office', ownerId: membership.officeId },
+        this,
+      );
+    }
+    const owners = this.conductedOwners();
+    const [only] = owners;
+    if (!only) throw new DomainError('FORBIDDEN');
+    if (owners.length > 1) throw new DomainError('VALIDATION_FAILED', { fields: ['officeId'] });
+    return new ActingOwner(ACTING_MINT, only, this);
   }
 
   /** The owners the account may write to: read-only offices removed (BR-002-30); none if readOnly. */

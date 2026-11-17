@@ -40,11 +40,20 @@ import { UserEntity, UserSchema } from '../../src/users/schemas/user.schema.js';
 import { credentialVersionOf } from '../../src/users/domain/credential-version.js';
 import { UsersService } from '../../src/users/users.service.js';
 import { useTestDatabase } from '../support/test-database.js';
+import { anAccessContext } from '../fakes/fake-access-sources.js';
+import { FavoritesRepository } from '../../src/favorites/favorites.repository.js';
+import { SavedFiltersRepository } from '../../src/saved-filters/saved-filters.repository.js';
+import { RemindersRepository } from '../../src/reminders/reminders.repository.js';
+import { NotificationLogsRepository } from '../../src/reminders/notification-logs.repository.js';
 import { testBusinessConfig, testConfigService } from '../support/test-env.js';
 import businessConfig from '../../src/config/business.config.js';
 
 const USER_A = new Types.ObjectId('64b7f0000000000000000a01');
 const USER_B = new Types.ObjectId('64b7f0000000000000000b01');
+// SPEC-002: services take the request's AccessContext, built by the real factory (AR-13); an
+// account id can no longer be an operator object, since only the factory builds a context.
+const ctxA = await anAccessContext(USER_A.toHexString());
+const ctxB = await anAccessContext(USER_B.toHexString());
 const FAR_FUTURE = new Date('2999-01-01T00:00:00.000Z');
 
 // What a hostile client sends in place of a string. The services are typed `string`, so the
@@ -96,9 +105,13 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       providers: [
         AuctionsService,
         FavoritesService,
+        FavoritesRepository,
         SavedFiltersService,
+        SavedFiltersRepository,
         UsersService,
         RemindersService,
+        RemindersRepository,
+        NotificationLogsRepository,
         { provide: Clock, useValue: new FakeClock() },
         { provide: CACHE_MANAGER, useValue: {} },
         { provide: ConfigService, useValue: testConfigService() },
@@ -252,14 +265,13 @@ describe('SC-10: Mongo operator injection (integration)', () => {
 
   describe('FavoritesService.findOne', () => {
     it('matches an exact pair and never an operator object (AR-12)', async () => {
-      await expect(favorites.findOne(USER_A.toString(), 'A1')).resolves.toMatchObject({
+      await expect(favorites.findOne(ctxA, 'A1')).resolves.toMatchObject({
         auctionCode: 'A1',
       });
-      await expect(favorites.findOne(USER_A.toString(), NE_NULL)).resolves.toBeNull();
-      await expect(favorites.findOne(USER_A.toString(), REGEX_ALL)).resolves.toBeNull();
-      await expect(favorites.findOne(NE_NULL, 'A1')).resolves.toBeNull();
+      await expect(favorites.findOne(ctxA, NE_NULL)).resolves.toBeNull();
+      await expect(favorites.findOne(ctxA, REGEX_ALL)).resolves.toBeNull();
       // Another user's favorite is not reachable by widening either value.
-      await expect(favorites.findOne(USER_A.toString(), 'A2')).resolves.toBeNull();
+      await expect(favorites.findOne(ctxA, 'A2')).resolves.toBeNull();
     });
   });
 
@@ -267,20 +279,20 @@ describe('SC-10: Mongo operator injection (integration)', () => {
     it('does not read another user as a duplicate through an operator name (AR-12)', async () => {
       // A's name is an operator object: with sanitizeFilter it equals nothing, so the save goes
       // on instead of tripping over B's "Casas em SP". Mongoose then refuses the non-string name.
-      await expect(savedFilters.create(USER_A.toString(), GT_EMPTY, {})).rejects.not.toMatchObject({
+      await expect(savedFilters.create(ctxA, GT_EMPTY, {})).rejects.not.toMatchObject({
         code: 'SAVED_FILTER_NAME_TAKEN',
       });
     });
 
     it('counts and lists only the caller, and still detects a real duplicate', async () => {
-      const own = await savedFilters.findPage(USER_B.toString(), { page: 1, pageSize: 20 });
-      const other = await savedFilters.findPage(USER_A.toString(), { page: 1, pageSize: 20 });
+      const own = await savedFilters.findPage(ctxB, { page: 1, pageSize: 20 });
+      const other = await savedFilters.findPage(ctxA, { page: 1, pageSize: 20 });
 
       expect(own.total).toBe(1);
       expect(other.total).toBe(0);
-      await expect(savedFilters.create(USER_B.toString(), 'Casas em SP', {})).rejects.toMatchObject(
-        { code: 'SAVED_FILTER_NAME_TAKEN' },
-      );
+      await expect(savedFilters.create(ctxB, 'Casas em SP', {})).rejects.toMatchObject({
+        code: 'SAVED_FILTER_NAME_TAKEN',
+      });
     });
   });
 
@@ -307,27 +319,28 @@ describe('SC-10: Mongo operator injection (integration)', () => {
           phases: [{ modality: PhaseModality.SFI_AUCTION, phaseDates: [FAR_FUTURE] }],
         }),
       );
+      const ctxReminder = await anAccessContext(userId.toHexString());
       const dto = {
         auctionId: 'reminder-lookup',
         channel: ReminderChannel.EMAIL,
         scheduledAt: '2026-01-16T12:00:00.000Z',
       };
 
-      const byCode = await reminders.create(userId.toString(), dto);
-      const byId = await reminders.create(userId.toString(), {
+      const byCode = await reminders.create(ctxReminder, dto);
+      const byId = await reminders.create(ctxReminder, {
         ...dto,
         auctionId: auctionId.toString(),
       });
       expect(byCode.auction).toMatchObject({ _id: auctionId, code: 'reminder-lookup' });
       expect(byId.auction).toMatchObject({ _id: auctionId, code: 'reminder-lookup' });
 
-      const updated = await reminders.update(userId.toString(), byId._id.toString(), {
+      const updated = await reminders.update(ctxReminder, byId._id.toString(), {
         scheduledAt: '2026-01-17T12:00:00.000Z',
       });
       expect(updated.scheduledAt).toEqual(new Date('2026-01-17T12:00:00.000Z'));
       for (const invalid of ['not-an-id', NE_NULL]) {
         await expect(
-          reminders.create(userId.toString(), { ...dto, auctionId: invalid }),
+          reminders.create(ctxReminder, { ...dto, auctionId: invalid }),
         ).rejects.toMatchObject({ code: 'AUCTION_NOT_FOUND' });
       }
     });
@@ -357,10 +370,10 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       const due = await reminders.getDueReminders();
 
       expect(due.map((reminder) => reminder._id.toString())).toEqual([REMINDER_ID.toString()]);
-      await expect(reminders.findOne(USER_A.toString(), NE_NULL)).rejects.toThrow();
-      await expect(
-        reminders.findOne(USER_B.toString(), REMINDER_ID.toString()),
-      ).rejects.toMatchObject({ code: 'REMINDER_NOT_FOUND' });
+      await expect(reminders.findOne(ctxA, NE_NULL)).rejects.toThrow();
+      await expect(reminders.findOne(ctxB, REMINDER_ID.toString())).rejects.toMatchObject({
+        code: 'REMINDER_NOT_FOUND',
+      });
     });
   });
 

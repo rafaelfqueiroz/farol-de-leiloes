@@ -11,6 +11,28 @@ import r2Config from '../config/r2.config.js';
 import { errorMessage } from '../common/error-message.js';
 import { CAIXA_USER_AGENT } from '../common/caixa-user-agent.js';
 
+/**
+ * SPEC-002 BR-002-08 / SC-18: client files (journey documents and photos, SPEC-017) live under this
+ * prefix. They never get a public URL; a download is a link issued per request, after the caller's
+ * access was checked, by `issuePrivateFileLink`.
+ */
+export const PRIVATE_FILE_PREFIX = 'private/';
+
+/** BR-002-09 / DL-002-06: a private file link stops working 60 seconds after it is issued. */
+export const PRIVATE_FILE_LINK_SECONDS = 60;
+
+/** A key under the private prefix, with no empty or dot segment that could climb out of it. */
+export function isPrivateFileKey(key: unknown): key is string {
+  if (typeof key !== 'string' || !key.startsWith(PRIVATE_FILE_PREFIX)) return false;
+  const rest = key.slice(PRIVATE_FILE_PREFIX.length).split('/');
+  return rest.every((segment) => segment !== '' && segment !== '.' && segment !== '..');
+}
+
+/** SC-15 / SC-18: a private key never reaches a log line. */
+function loggableKey(key: string): string {
+  return key.startsWith(PRIVATE_FILE_PREFIX) ? '[private file]' : key;
+}
+
 export interface UploadResult {
   key: string;
   url: string;
@@ -169,11 +191,33 @@ export class StorageService {
   }
 
   /**
-   * Generate a signed URL for accessing a private document
+   * SPEC-002 BR-002-08 / BR-002-09 / SC-18: a download link for a CLIENT file, valid for
+   * PRIVATE_FILE_LINK_SECONDS (60 s, fixed: no caller chooses a longer one). Call it only after the
+   * caller's access to the file was checked on this request (BR-002-15); never store, email or log
+   * the link (SPEC-017 is its first caller). Refuses a key outside PRIVATE_FILE_PREFIX, so it cannot
+   * sign the public catalogue's files either. Neither the key nor the link is ever logged.
+   */
+  async issuePrivateFileLink(key: string): Promise<string> {
+    if (!isPrivateFileKey(key)) {
+      throw new Error('Not a private file key (SC-18)');
+    }
+    if (!this.s3Client) {
+      throw new Error('R2 not configured');
+    }
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    return getSignedUrl(this.s3Client, command, { expiresIn: PRIVATE_FILE_LINK_SECONDS });
+  }
+
+  /**
+   * Generate a signed URL for accessing a public-catalogue document. Private client files go
+   * through issuePrivateFileLink only (60 s, SC-18), so they are refused here.
    * @param key The R2 object key
    * @param expiresIn Expiration time in seconds (default: 1 hour)
    */
   async getSignedUrl(key: string, expiresIn = 3600): Promise<string | null> {
+    if (key.startsWith(PRIVATE_FILE_PREFIX)) {
+      throw new Error('A private file is linked by issuePrivateFileLink only (SC-18)');
+    }
     if (!this.s3Client) {
       this.logger.debug('R2 not configured, cannot generate signed URL');
       return null;
@@ -210,10 +254,10 @@ export class StorageService {
         }),
       );
 
-      this.logger.debug(`Deleted file from R2: ${key}`);
+      this.logger.debug(`Deleted file from R2: ${loggableKey(key)}`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to delete file ${key}: ${errorMessage(error)}`);
+      this.logger.error(`Failed to delete file ${loggableKey(key)}: ${errorMessage(error)}`);
       return false;
     }
   }
@@ -239,7 +283,7 @@ export class StorageService {
       }),
     );
 
-    this.logger.debug(`Uploaded buffer: ${key} (${buffer.length} bytes)`);
+    this.logger.debug(`Uploaded buffer: ${loggableKey(key)} (${buffer.length} bytes)`);
 
     return { key, size: buffer.length };
   }
@@ -261,10 +305,10 @@ export class StorageService {
 
     // An object read always carries a body; fail clearly if one ever does not (DV-03).
     if (!response.Body) {
-      throw new Error(`R2 object ${key} has no body`);
+      throw new Error(`R2 object ${loggableKey(key)} has no body`);
     }
     const bytes = await response.Body.transformToByteArray();
-    this.logger.debug(`Downloaded buffer: ${key} (${bytes.length} bytes)`);
+    this.logger.debug(`Downloaded buffer: ${loggableKey(key)} (${bytes.length} bytes)`);
 
     return Buffer.from(bytes);
   }

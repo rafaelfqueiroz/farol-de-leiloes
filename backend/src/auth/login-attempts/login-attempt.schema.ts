@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 /**
  * BR-001-15: the sign-in attempts of one key, `email:<normalised email>` or `ip:<address>`, over a
@@ -40,6 +41,12 @@ export class LoginAttemptEntity {
 
 export type LoginAttemptDocument = HydratedDocument<LoginAttemptEntity>;
 export const LoginAttemptSchema = SchemaFactory.createForClass(LoginAttemptEntity);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(LoginAttemptSchema, {
+  kind: 'internal',
+  reason: 'SPEC-001 sign-in throttling counters keyed by a hash; never read by any account',
+});
 
 // `key` is indexed by its `unique` option. Throttling expires on its own (BR-001-15).
 LoginAttemptSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });

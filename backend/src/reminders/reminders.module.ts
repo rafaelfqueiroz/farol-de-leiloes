@@ -3,6 +3,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { RemindersController } from './reminders.controller.js';
 import { RemindersService } from './reminders.service.js';
+import { RemindersRepository } from './reminders.repository.js';
+import { NotificationLogsRepository } from './notification-logs.repository.js';
 import { RemindersScheduler } from './reminders.scheduler.js';
 import { ReminderEntity, ReminderSchema } from './schemas/reminder.schema.js';
 import { NotificationLog, NotificationLogSchema } from './schemas/notification-log.schema.js';
@@ -27,7 +29,12 @@ import schedulerConfig from '../config/scheduler.config.js';
     CommonModule,
   ],
   controllers: [RemindersController],
-  providers: [RemindersService, RemindersScheduler],
+  providers: [
+    RemindersService,
+    RemindersScheduler,
+    RemindersRepository,
+    NotificationLogsRepository,
+  ],
   exports: [RemindersService],
 })
 export class RemindersModule {}

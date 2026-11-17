@@ -18,11 +18,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { SavedFiltersService } from './saved-filters.service.js';
-import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import type { AccessContext } from '../access/access-context.js';
+import { Access } from '../access/decorators/access.decorator.js';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
 import { ApiConfirmedEmail } from '../auth/decorators/api-confirmed-email.decorator.js';
 import { ConfirmedEmailGuard } from '../auth/guards/confirmed-email.guard.js';
-import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
 import { SavedFilterResponseDto } from './dto/saved-filter-response.dto.js';
 import { CreateSavedFilterDto } from './dto/create-saved-filter.dto.js';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
@@ -44,10 +44,10 @@ export class SavedFiltersController {
   @ApiOperation({ summary: 'The signed-in user saved filters, newest first (paginated, AR-35)' })
   @ApiPaginatedResponse(SavedFilterResponseDto)
   async findAll(
-    @CurrentUser() user: AuthenticatedUser,
+    @Access() access: AccessContext,
     @Query() query: PaginationQueryDto,
   ): Promise<Paginated<SavedFilterResponseDto>> {
-    const page = await this.savedFiltersService.findPage(user.userId, query);
+    const page = await this.savedFiltersService.findPage(access, query);
     return mapPage(page, (filter) => new SavedFilterResponseDto(filter));
   }
 
@@ -55,11 +55,11 @@ export class SavedFiltersController {
   @ApiOperation({ summary: 'Save the current search filters under a name' })
   @ApiCreatedResponse({ type: SavedFilterResponseDto })
   async create(
-    @CurrentUser() user: AuthenticatedUser,
+    @Access() access: AccessContext,
     @Body() body: CreateSavedFilterDto,
   ): Promise<SavedFilterResponseDto> {
     const filter = await this.savedFiltersService.create(
-      user.userId,
+      access,
       body.name,
       body.filters.toFilterData(),
     );
@@ -71,7 +71,7 @@ export class SavedFiltersController {
   @ApiOperation({ summary: 'Delete a saved filter' })
   @ApiNoContentResponse({ description: 'Deleted' })
   @ApiNotFoundResponse({ description: 'SAVED_FILTER_NOT_FOUND', type: ErrorResponseDto })
-  async delete(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string): Promise<void> {
-    await this.savedFiltersService.delete(user.userId, id);
+  async delete(@Access() access: AccessContext, @Param('id') id: string): Promise<void> {
+    await this.savedFiltersService.delete(access, id);
   }
 }

@@ -8,6 +8,10 @@ import request from 'supertest';
 import { FavoritesController } from './favorites.controller.js';
 import { FavoritesService } from './favorites.service.js';
 import { createHttpApp, TEST_USER } from '../../test/support/http-app.js';
+
+// SPEC-002: the controller hands the service the request's AccessContext, built for the signed-in
+// user (BR-002-11), never an id from the request.
+const AS_TEST_USER = expect.objectContaining({ accountId: TEST_USER.userId });
 import { itAnswersPages } from '../../test/support/pagination-contract.js';
 import type { Auction } from '../auctions/interfaces/auction.interface.js';
 import { Decimal } from '../common/money/money.js';
@@ -77,7 +81,7 @@ describe('FavoritesController over HTTP', () => {
 
       await request(app.getHttpServer()).get('/api/favorites').expect(200);
 
-      expect(favorites.findPage).toHaveBeenCalledWith(TEST_USER.userId, { page: 1, pageSize: 20 });
+      expect(favorites.findPage).toHaveBeenCalledWith(AS_TEST_USER, { page: 1, pageSize: 20 });
     });
   });
 
@@ -89,7 +93,7 @@ describe('FavoritesController over HTTP', () => {
         .get('/api/favorites/codes')
         .expect(200, { codes: ['B', 'A'] });
 
-      expect(favorites.findCodes).toHaveBeenCalledWith(TEST_USER.userId);
+      expect(favorites.findCodes).toHaveBeenCalledWith(AS_TEST_USER);
     });
   });
 
@@ -102,7 +106,7 @@ describe('FavoritesController over HTTP', () => {
         .send({ code: AUCTION.code })
         .expect(201, AUCTION_JSON);
 
-      expect(favorites.create).toHaveBeenCalledWith(TEST_USER.userId, AUCTION.code);
+      expect(favorites.create).toHaveBeenCalledWith(AS_TEST_USER, AUCTION.code);
     });
 
     it('AR-34: refuses a body without a code, or with another owner id', async () => {

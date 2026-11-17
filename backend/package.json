@@ -17,7 +17,7 @@
     "grant-admin": "node dist/access/grant-admin/run.js",
     "test": "vitest run --project unit --project \"tz-*\" --project structural",
     "test:integration": "vitest run --project integration",
-    "test:isolation": "vitest run --project isolation --passWithNoTests",
+    "test:isolation": "vitest run --project isolation",
     "test:structural": "vitest run --project structural",
     "test:smoke": "npm run build && vitest run --project smoke",
     "test:cov": "vitest run --project unit --project \"tz-*\" --project structural --coverage",
