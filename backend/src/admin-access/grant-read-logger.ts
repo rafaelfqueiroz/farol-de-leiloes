@@ -2,8 +2,11 @@
 // admin, the support request, the owner, the record and the time — BEFORE the data is returned —
 // and if the entry cannot be written, the read is refused (fail closed).
 //
-// The wrappers `readOne` and `readMany` are the way a grant route reads: they run the load with the
-// grant's read-only context, append the log entries, and only then hand the records back. A route
+// The wrappers `readOne` and `readMany` are the ONLY way a grant route reads: the grant's view is
+// sealed in its SupportGrantRead (grant-context.ts) and this file is the one place that opens it
+// (test/structural/admin-access-append-only.spec.ts). They run the load with that view, append the
+// log entries, and only then hand the records back. The view reads client data only — an account's
+// own data refuses it (AccountScopedRepository, BR-002-02/23) — and writes nothing (BR-002-25). A route
 // that returns what the wrapper returned cannot send a record whose entry was not acknowledged by
 // MongoDB; if the append fails they throw AdminAccessLogUnavailableError, a fault, answered as a
 // bare 500 INTERNAL_ERROR with no data (ApiExceptionFilter).
@@ -16,6 +19,7 @@ import type { AccessContext, Owner } from '../access/access-context.js';
 import { Clock } from '../common/clock/clock.js';
 import { logSafeError } from '../common/errors/log-safe-error.js';
 import { AdminAccessLogRepository } from './admin-access-log.repository.js';
+import { grantContextOf } from './grant-context.js';
 import type { LoggedOwnerType } from './schemas/admin-access-log.schema.js';
 import { SupportGrantRead } from './support-grant.service.js';
 
@@ -92,28 +96,36 @@ export class GrantReadLogger {
   }
 
   /**
-   * Loads one record with the grant's read-only context and returns it only after its entry is
-   * written. A record the requester cannot see comes back null and logs nothing (nothing was read).
+   * Loads one record with the grant's view and returns it only after its entry is written. A
+   * record the requester cannot see comes back null and logs nothing (nothing was read).
    */
   async readOne<T>(
     read: SupportGrantRead,
     load: (ctx: AccessContext) => Promise<T | null>,
     describe: (record: T) => GrantReadRecord,
   ): Promise<T | null> {
-    const record = await load(read.context);
+    const record = await load(this.viewOf(read));
     if (record === null) return null;
     await this.logRead(read, describe(record));
     return record;
   }
 
-  /** Loads records with the grant's read-only context; returns them once all entries are written. */
+  /** Loads records with the grant's view; returns them once all entries are written. */
   async readMany<T>(
     read: SupportGrantRead,
     load: (ctx: AccessContext) => Promise<readonly T[]>,
     describe: (record: T) => GrantReadRecord,
   ): Promise<readonly T[]> {
-    const records = await load(read.context);
+    const records = await load(this.viewOf(read));
     await this.logReads(read, records.map(describe));
     return records;
+  }
+
+  /** The sealed view of a read SupportGrantService built; throws for anything else. */
+  private viewOf(read: SupportGrantRead): AccessContext {
+    if (!(read instanceof SupportGrantRead)) {
+      throw new Error('A grant read comes from SupportGrantService.contextForRead (BR-002-27)');
+    }
+    return grantContextOf(read);
   }
 }

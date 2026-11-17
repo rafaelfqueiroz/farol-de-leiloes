@@ -8,7 +8,7 @@
 // Accounts are created through the API: register, then confirm the email with the link the fake
 // mailer received (as test/integration/auth-confirmed-email.spec.ts does), so every request goes
 // through the production guards, ConfirmedEmailGuard included.
-import type { ModuleMetadata } from '@nestjs/common';
+import type { INestApplication, ModuleMetadata } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import request from 'supertest';
@@ -62,6 +62,8 @@ export async function createIsolationApp(
   db: TestDatabase,
   imports: NonNullable<ModuleMetadata['imports']>,
   env: Record<string, string> = {},
+  /** Runs on the app before it starts (the log scan installs the production pino logger). */
+  prepareApp?: (app: INestApplication) => void,
 ): Promise<IsolationApp> {
   const sources = new FakeAccessSources();
   const supportRequests = new FakeSupportRequests();
@@ -81,6 +83,7 @@ export async function createIsolationApp(
         .useValue(sources)
         .overrideProvider(SUPPORT_REQUEST_SOURCE)
         .useValue(supportRequests),
+    prepareApp,
   );
   const server = () => harness.app.getHttpServer() as Parameters<typeof request>[0];
   const users = harness.moduleRef.get<Model<UserDocument>>(getModelToken(UserEntity.name));

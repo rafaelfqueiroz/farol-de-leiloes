@@ -89,6 +89,7 @@ interface AccessContextFields {
   entitlements: readonly string[];
   writableEntitlements: readonly string[];
   readOnly: boolean;
+  viaSupportGrant: boolean;
 }
 
 /** A read-only view of a Set: there is no add, delete or clear to call, even by a cast. */
@@ -143,10 +144,17 @@ export class AccessContext {
   /** BR-002-13: the plan entitlements of every owner the account conducts. */
   readonly entitlements: ReadonlySet<string>;
   /**
-   * True for a context that may only read, whatever its owners allow: a support access grant
-   * (BR-002-25, SPEC-002 part 3). False for an account's own requests.
+   * True for a context that may only read, whatever its owners allow: a support access grant's
+   * view (BR-002-25, SPEC-002 part 3). False for an account's own requests.
    */
   readonly readOnly: boolean;
+  /**
+   * True only for the view a support access grant reads through (AccessContextFactory
+   * .supportGrantView). It opens CLIENT data (owned records, BR-002-24/25, DL-002-04), never the
+   * account's own data: AccountScopedRepository refuses it on every path (BR-002-02, BR-002-23).
+   * Always read-only too.
+   */
+  readonly viaSupportGrant: boolean;
   private readonly writableEntitlements: ReadonlySet<string>;
 
   constructor(token: typeof MINT, fields: AccessContextFields) {
@@ -171,6 +179,7 @@ export class AccessContext {
     this.entitlements = new FrozenSet(fields.entitlements);
     this.writableEntitlements = new FrozenSet(fields.writableEntitlements);
     this.readOnly = fields.readOnly;
+    this.viaSupportGrant = fields.viaSupportGrant;
     Object.freeze(this);
   }
 
@@ -331,20 +340,31 @@ export class AccessContextFactory {
       isAdmin: account.isAdmin,
       ...resolved,
       readOnly: false,
+      viaSupportGrant: false,
     });
   }
 
   /**
-   * BR-002-25: the same context, made read-only — what SPEC-002 part 3 builds a support access
-   * grant's context from. It reads exactly what `ctx` reads and writes nothing: `writableOwners()`
-   * is empty, `canWriteWith()` is false, and the repositories refuse every write (OFFICE_READ_ONLY
-   * for owned data, FORBIDDEN for an account's own data). It can only narrow a context the factory
-   * built, never widen one, so being reachable through the exported factory grants nothing.
+   * BR-002-25 / DL-002-04: the view a support access grant reads through — the requester's context
+   * made read-only and marked `viaSupportGrant`. Called by SupportGrantService only
+   * (test/structural/admin-access-append-only.spec.ts holds it), which seals the view inside a
+   * SupportGrantRead that only GrantReadLogger opens (BR-002-27).
+   *
+   * It reads the CLIENT data the requester reads (owned records, through OwnerScopedRepository) and
+   * nothing else: `writableOwners()` is empty and `canWriteWith()` false, so every owned write is
+   * refused (OFFICE_READ_ONLY on the requester's own records, the module's not-found otherwise),
+   * and AccountScopedRepository refuses the view on every read and write of the account's OWN
+   * data (BR-002-02, BR-002-23: favorites, saved filters, reminders are never opened by a grant).
+   * It only narrows a context the factory built; an admin's context or a view of a view is a
+   * programming error (BR-002-21).
    */
-  readOnlyView(ctx: AccessContext): AccessContext {
+  supportGrantView(ctx: AccessContext): AccessContext {
+    if (ctx.isAdmin || ctx.viaSupportGrant) {
+      throw new Error('A support grant views a non-admin account context, once (BR-002-21)');
+    }
     return new AccessContext(MINT, {
       accountId: ctx.accountId,
-      isAdmin: ctx.isAdmin,
+      isAdmin: false,
       personas: ctx.personas,
       memberships: ctx.memberships,
       clientLinks: ctx.clientLinks.map(({ officeId, status, endedAtMs }) => ({
@@ -356,6 +376,7 @@ export class AccessContextFactory {
       entitlements: [...ctx.entitlements],
       writableEntitlements: [],
       readOnly: true,
+      viaSupportGrant: true,
     });
   }
 }

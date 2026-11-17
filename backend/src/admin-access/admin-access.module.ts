@@ -23,8 +23,9 @@ import { SupportGrantService } from './support-grant.service.js';
  * the support request source (AccessModule's SUPPORT_REQUEST_SOURCE) knows no request, so no grant
  * can be opened (BR-002-24).
  *
- * In the API (FEATURE_MODULES) so the isolation gate classifies its two collections and Mongoose
- * builds the one-open-grant-per-request index the open race relies on before SPEC-009 calls it.
+ * In the API (FEATURE_MODULES) so the isolation gate classifies its two collections. Their indexes,
+ * the one-open-grant-per-request index the open race relies on included, are built by migration
+ * 0005-admin-access-indexes in the deploy's migration step (AR-29, DV-34), not left to autoIndex.
  */
 @Module({
   imports: [

@@ -10,9 +10,10 @@
 // SPEC-002 part 3: ProbeAdminGrantController is the pattern SPEC-009/016/021 follow for the
 // admin's support-grant routes (`/api/admin/support-grants/:grantId/...`, ARCHITECTURE §4): every
 // handler is @AdminOnly(), resolves the grant with SupportGrantService.contextForRead (re-checked
-// on every request, BR-002-26), reads with the grant's read-only context through GrantReadLogger
-// (logged before it is returned, BR-002-27), and every write through that context is refused
-// (BR-002-25).
+// on every request, BR-002-26) and reads through GrantReadLogger.readOne/readMany, the only holder
+// of the grant's sealed view (logged before it is returned, BR-002-27). There are no write
+// handlers (ARCHITECTURE §4): that the view itself writes nothing (BR-002-25) is proven at the
+// repository level in support-grants.isolation.spec.ts.
 import {
   Body,
   Controller,
@@ -356,42 +357,6 @@ export class ProbeAdminGrantController {
     );
     if (!record) throw new DomainError('NOT_FOUND'); // BR-002-12
     return toAnswer(record);
-  }
-
-  // BR-002-25: the grant's context is read-only, so the repository refuses each of these writes.
-  @Post(':grantId/probes')
-  async create(
-    @Access() ctx: AccessContext,
-    @Param('grantId') grantId: string,
-    @Body() dto: CreateProbeDto,
-  ) {
-    const { context } = await this.grants.contextForRead(ctx, grantId);
-    return toAnswer(await this.probes.create(context, { name: dto.name, status: 'open' }));
-  }
-
-  @Patch(':grantId/probes/:id')
-  async update(
-    @Access() ctx: AccessContext,
-    @Param('grantId') grantId: string,
-    @Param('id') id: string,
-    @Body() dto: UpdateProbeDto,
-  ) {
-    const { context } = await this.grants.contextForRead(ctx, grantId);
-    const changes: OwnedRecordChanges<ProbeRecord> = {};
-    if (dto.name !== undefined) changes.name = dto.name;
-    if (dto.status !== undefined) changes.status = dto.status;
-    return toAnswer(await this.probes.updateById(context, id, changes));
-  }
-
-  @Delete(':grantId/probes/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(
-    @Access() ctx: AccessContext,
-    @Param('grantId') grantId: string,
-    @Param('id') id: string,
-  ): Promise<void> {
-    const { context } = await this.grants.contextForRead(ctx, grantId);
-    await this.probes.deleteById(context, id);
   }
 }
 

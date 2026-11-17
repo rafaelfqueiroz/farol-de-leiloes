@@ -15,7 +15,10 @@ import {
   fakeAccessSources,
 } from '../../test/fakes/fake-access-sources.js';
 import { DAY, FakeClock, MINUTE } from '../../test/fakes/fake-clock.js';
+import { grantViewOf } from '../../test/support/grant-view.js';
+import type { AdminAccessLogRepository } from './admin-access-log.repository.js';
 import type { GrantEndReason } from './domain/grant-validity.js';
+import { GrantReadLogger } from './grant-read-logger.js';
 import type {
   NewGrant,
   StoredGrant,
@@ -202,9 +205,13 @@ describe('SupportGrantService (SPEC-002 BR-002-23..BR-002-26)', () => {
       expect(grants.rows).toHaveLength(1);
     });
 
-    it('is FORBIDDEN while another admin holds the request’s open grant', async () => {
+    it('answers NOT_FOUND, like a nonexistent request, while another admin holds its open grant (no oracle)', async () => {
       await service.open(admin, REQUEST);
-      await expect(service.open(otherAdmin, REQUEST)).rejects.toEqual(forbidden);
+      const nonexistent = await service.open(otherAdmin, OTHER_REQUEST).catch((e: unknown) => e);
+
+      expect(nonexistent).toEqual(notFound);
+      await expect(service.open(otherAdmin, REQUEST)).rejects.toEqual(nonexistent);
+      expect(grants.rows).toHaveLength(1);
     });
 
     it('ends an expired open grant in the way and opens a new one', async () => {
@@ -243,12 +250,22 @@ describe('SupportGrantService (SPEC-002 BR-002-23..BR-002-26)', () => {
         adminUserId: ADMIN,
         requesterUserId: REQUESTER,
       });
-      expect(read.context.accountId).toBe(REQUESTER);
-      expect(read.context.isAdmin).toBe(false);
-      expect(read.context.readOnly).toBe(true);
-      expect(read.context.conductedOwners()).toEqual([{ ownerType: 'office', ownerId: OFFICE }]);
-      expect(read.context.writableOwners()).toEqual([]);
-      expect(read.context.canWriteWith('x')).toBe(false);
+      // BR-002-27: the view is sealed, not a property a handler could read with.
+      expect(Object.keys(read).sort()).toEqual(
+        ['adminUserId', 'grantId', 'requesterUserId', 'supportRequestId'].sort(),
+      );
+      expect('context' in read).toBe(false);
+      expect(Object.isFrozen(read)).toBe(true);
+
+      const logs = { append: () => Promise.resolve() } as unknown as AdminAccessLogRepository;
+      const view = await grantViewOf(new GrantReadLogger(logs, clock), read);
+      expect(view.accountId).toBe(REQUESTER);
+      expect(view.isAdmin).toBe(false);
+      expect(view.readOnly).toBe(true);
+      expect(view.viaSupportGrant).toBe(true); // client data only (BR-002-02, BR-002-23)
+      expect(view.conductedOwners()).toEqual([{ ownerType: 'office', ownerId: OFFICE }]);
+      expect(view.writableOwners()).toEqual([]);
+      expect(view.canWriteWith('x')).toBe(false);
     });
 
     it('is bound to its admin: another admin, a non-admin and a missing id get NOT_FOUND', async () => {

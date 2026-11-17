@@ -31,6 +31,8 @@ export async function createAuthTestApp(
   env: Record<string, string> = {},
   /** Replaces more providers or guards (e.g. the Google guard, the boundary with Google; TS-07). */
   customize: (builder: TestingModuleBuilder) => TestingModuleBuilder = (builder) => builder,
+  /** Runs on the app after configureApp, before it starts (e.g. installing the pino logger). */
+  prepareApp: (app: INestApplication) => void = () => undefined,
 ): Promise<AuthTestApp> {
   applyMongooseDefaults();
   const clock = new FakeClock(AUTH_TEST_START);
@@ -55,6 +57,7 @@ export async function createAuthTestApp(
   const moduleRef = await customize(builder).compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
+  prepareApp(app);
   // Listening once (loopback, ephemeral port) keeps supertest from adding listeners to the server
   // on every one of many parallel requests.
   await app.listen(0, '127.0.0.1');

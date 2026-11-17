@@ -116,7 +116,8 @@ describe('GrantReadLogger (BR-002-27)', () => {
     );
 
     expect(record).toBe(rows[0]);
-    expect(seen).toBe(read.context);
+    // The sealed view: the requester's, read-only, a grant view (BR-002-25).
+    expect(seen).toMatchObject({ accountId: REQUESTER, readOnly: true, viaSupportGrant: true });
     expect(log.entries).toEqual([
       {
         adminUserId: ADMIN,
@@ -167,6 +168,22 @@ describe('GrantReadLogger (BR-002-27)', () => {
     await expect(logger.logRead(forged, describeRow(rows[0] as Row))).rejects.toThrow(
       'contextForRead',
     );
+    expect(log.entries).toEqual([]);
+  });
+
+  it('reads only with a read the service built: a forged one never reaches the load', async () => {
+    const load = vi.fn(() => Promise.resolve(rows));
+    const copied = { ...read } as SupportGrantRead;
+    // Even an object of the right class holds no sealed view unless the service built it.
+    const prototyped = Object.create(read.constructor.prototype as object) as SupportGrantRead;
+
+    for (const forged of [copied, prototyped]) {
+      await expect(logger.readMany(forged, load, describeRow)).rejects.toThrow('contextForRead');
+      await expect(
+        logger.readOne(forged, () => load().then(() => null), describeRow),
+      ).rejects.toThrow('contextForRead');
+    }
+    expect(load).not.toHaveBeenCalled();
     expect(log.entries).toEqual([]);
   });
 });

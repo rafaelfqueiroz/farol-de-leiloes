@@ -5,11 +5,15 @@
 // permission withdrawn, or 7 days pass (BR-002-26, domain/grant-validity.ts).
 //
 // Every refusal about a grant or a support request is the same NOT_FOUND as a nonexistent one, so
-// the answer never tells the admin whether a request exists, is closed, or was never shared.
+// the answer never tells the admin whether a request exists, is closed, was never shared, or has
+// an open grant another admin holds.
 //
 // Reads under a grant go through `contextForRead`, which re-checks the grant against the CURRENT
-// support request and the Clock on every call (AR-13, AR-24), then through GrantReadLogger, which
-// logs each record before it is returned (BR-002-27). See ARCHITECTURE §4 for the route pattern.
+// support request and the Clock on every call (AR-13, AR-24). The view it builds
+// (AccessContextFactory.supportGrantView: read-only, client data only, never the account's own
+// data, BR-002-02/23) is SEALED in the SupportGrantRead it returns (grant-context.ts): the read has
+// no property to read with, so the data comes only through GrantReadLogger, which logs each record
+// before it is returned (BR-002-27). See ARCHITECTURE §4 for the route pattern.
 import { Inject, Injectable } from '@nestjs/common';
 import { type AccessContext, AccessContextFactory } from '../access/access-context.js';
 import { isObjectIdString } from '../access/owner-filter.js';
@@ -22,6 +26,7 @@ import { Clock } from '../common/clock/clock.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { UsersService } from '../users/users.service.js';
 import { grantExpiresAt, grantValidity } from './domain/grant-validity.js';
+import { sealGrantContext } from './grant-context.js';
 import {
   type StoredGrant,
   SupportAccessGrantRepository,
@@ -47,17 +52,16 @@ interface SupportGrantReadFields {
 }
 
 /**
- * One validated read under a grant: the grant it went through and the requester's context made
- * read-only (BR-002-25). Built by `SupportGrantService.contextForRead` only, for one request; never
- * kept across requests (AR-13). GrantReadLogger refuses anything else.
+ * One validated read under a grant: the grant it went through, and — sealed, not a property — the
+ * requester's view (BR-002-25). Built by `SupportGrantService.contextForRead` only, for one
+ * request; never kept across requests (AR-13). Its view is opened by GrantReadLogger alone
+ * (grant-context.ts), so a handler cannot read with it and skip the log (BR-002-27).
  */
 export class SupportGrantRead {
   readonly grantId: string;
   readonly supportRequestId: string;
   readonly adminUserId: string;
   readonly requesterUserId: string;
-  /** The requester's own current view, read-only: every write through it is refused. */
-  readonly context: AccessContext;
 
   constructor(token: typeof MINT, fields: SupportGrantReadFields) {
     if (token !== MINT) {
@@ -67,7 +71,7 @@ export class SupportGrantRead {
     this.supportRequestId = fields.supportRequestId;
     this.adminUserId = fields.adminUserId;
     this.requesterUserId = fields.requesterUserId;
-    this.context = fields.context;
+    sealGrantContext(this, fields.context);
     Object.freeze(this);
   }
 }
@@ -102,10 +106,10 @@ export class SupportGrantService {
    * active account without the admin capability (BR-002-21). Anything else is the same NOT_FOUND
    * as a request that does not exist (no oracle).
    *
-   * Idempotent and race-safe: the partial unique index allows one grant per request that has not
-   * ended, so concurrent opens end with ONE grant and every caller of the same admin gets it. A
-   * grant of the request held by ANOTHER admin is FORBIDDEN (it reveals nothing about client data:
-   * the other admin sees the same support request in SPEC-009's screens).
+   * Idempotent and race-safe: the partial unique index (migration 0005, AR-29) allows one grant
+   * per request that has not ended, so concurrent opens end with ONE grant and every caller of the
+   * same admin gets it. A request whose open grant ANOTHER admin holds answers the same NOT_FOUND
+   * (no oracle: the answer never says a grant exists, nor whose it is).
    */
   async open(adminCtx: AccessContext, supportRequestId: string): Promise<OpenedGrant> {
     if (!adminCtx.isAdmin || adminCtx.readOnly) throw new DomainError('FORBIDDEN'); // BR-002-23
@@ -132,7 +136,7 @@ export class SupportGrantService {
         await this.grants.endIfOpen(existing.id, validity.endedAt, validity.reason);
         continue;
       }
-      if (existing.adminUserId !== adminCtx.accountId) throw new DomainError('FORBIDDEN');
+      if (existing.adminUserId !== adminCtx.accountId) throw new DomainError('NOT_FOUND');
       return toOpened(existing);
     }
     // Only a pathological race lands here (the grant keeps ending and reappearing): a fault.
@@ -145,10 +149,11 @@ export class SupportGrantService {
    * open with the permission in place, and the 7 days not passed (Clock). A grant found ended is
    * recorded as ended (conditional, once) before the refusal.
    *
-   * On success the context is the requester's CURRENT one (AccessContextFactory.forAccount: their
-   * memberships and links as of this request, AR-13) made read-only (readOnlyView): it reads exactly
-   * what the requester reads and writes nothing (BR-002-25). The data it returns must go through
-   * GrantReadLogger before it reaches the response (BR-002-27).
+   * On success the view is the requester's CURRENT context (AccessContextFactory.forAccount: their
+   * memberships and links as of this request, AR-13) made a grant view (supportGrantView): it reads
+   * the client data the requester reads, never their own account data (BR-002-02, BR-002-23), and
+   * writes nothing (BR-002-25). It is sealed in the returned SupportGrantRead: only GrantReadLogger
+   * reads with it, logging every record before it is returned (BR-002-27).
    */
   async contextForRead(adminCtx: AccessContext, grantId: string): Promise<SupportGrantRead> {
     if (!adminCtx.isAdmin || adminCtx.readOnly) throw new DomainError('NOT_FOUND');
@@ -175,7 +180,7 @@ export class SupportGrantService {
       supportRequestId: grant.supportRequestId,
       adminUserId: grant.adminUserId,
       requesterUserId: grant.requesterUserId,
-      context: this.contexts.readOnlyView(requesterContext),
+      context: this.contexts.supportGrantView(requesterContext),
     });
   }
 

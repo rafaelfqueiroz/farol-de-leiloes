@@ -1,7 +1,8 @@
-// SPEC-002 BR-002-02 / BR-002-25 / TS-02: AccountScopedRepository against a real MongoDB, through a
-// test-only account collection. A read-only context (what a part 3 support grant is built from,
-// AccessContextFactory.readOnlyView) reads the account's own data and writes none of it: every
-// write is FORBIDDEN before it reaches the database, and the records are left as they were.
+// SPEC-002 BR-002-02 / BR-002-23 / BR-002-25 / TS-02: AccountScopedRepository against a real
+// MongoDB, through a test-only account collection. A support grant's view
+// (AccessContextFactory.supportGrantView) opens client data only, never an account's own data: every
+// read — base methods and a subclass query built on `ownedBy` — throws the module's not-found, and
+// every write is FORBIDDEN, all before the database is touched; the records stay as they were.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import mongoose, { type Connection, type Model, Schema, type Types } from 'mongoose';
 import { AccountScopedRepository } from '../../src/access/account-scoped.repository.js';
@@ -18,13 +19,19 @@ interface NoteRecord {
 
 class NotesRepository extends AccountScopedRepository<NoteRecord> {
   constructor(model: Model<NoteRecord>) {
-    super(model);
+    // A module's own not-found, to prove the refusal answers with it (AR-14).
+    super(model, 'SAVED_FILTER_NOT_FOUND');
+  }
+
+  /** A subclass query, built on `ownedBy` like RemindersRepository's populated reads. */
+  texts(ctx: Parameters<NotesRepository['find']>[0]): Promise<NoteRecord[]> {
+    return this.model.find(this.ownedBy(ctx)).lean<NoteRecord[]>().exec();
   }
 }
 
 const ACCOUNT = '64b7f0000000000000000c01';
 
-describe('AccountScopedRepository (integration, SPEC-002 BR-002-25)', () => {
+describe('AccountScopedRepository (integration, SPEC-002 BR-002-02, BR-002-23, BR-002-25)', () => {
   const db = useTestDatabase();
   const factory = accessContextFactory(fakeAccessSources());
   let connection: Connection;
@@ -48,15 +55,22 @@ describe('AccountScopedRepository (integration, SPEC-002 BR-002-25)', () => {
     await connection.close();
   });
 
-  it('BR-002-25: a read-only context reads the account’s data and every write is FORBIDDEN', async () => {
+  it('BR-002-02 / BR-002-23: a support grant’s view reads none of the account’s own data, and writes none', async () => {
     const own = await factory.forAccount({ userId: ACCOUNT, isAdmin: false });
     const note = await notes.create(own, { text: 'kept' });
     const id = note._id.toString();
-    const view = factory.readOnlyView(own);
+    const view = factory.supportGrantView(own);
+    const notFound = new DomainError('SAVED_FILTER_NOT_FOUND');
     const forbidden = new DomainError('FORBIDDEN');
 
-    expect((await notes.findById(view, id))?.text).toBe('kept');
-    expect(await notes.count(view)).toBe(1);
+    // Reads: the module's not-found, a list and a count included (never an empty answer).
+    await expect(notes.findById(view, id)).rejects.toEqual(notFound);
+    await expect(notes.findById(view, 'not-an-id')).rejects.toEqual(notFound);
+    await expect(notes.findOne(view, {})).rejects.toEqual(notFound);
+    await expect(notes.find(view)).rejects.toEqual(notFound);
+    await expect(notes.count(view)).rejects.toEqual(notFound);
+    expect(() => notes.texts(view)).toThrow(notFound);
+    // Writes: read-only (BR-002-25).
     await expect(notes.create(view, { text: 'new' })).rejects.toEqual(forbidden);
     await expect(notes.updateById(view, id, { text: 'changed' })).rejects.toEqual(forbidden);
     await expect(notes.deleteById(view, id)).rejects.toEqual(forbidden);
@@ -64,6 +78,7 @@ describe('AccountScopedRepository (integration, SPEC-002 BR-002-25)', () => {
 
     const stored = await model.find({}).lean().exec();
     expect(stored.map((record) => record.text)).toEqual(['kept']);
+    expect((await notes.texts(own)).map((record) => record.text)).toEqual(['kept']);
   });
 
   it('the account’s own context still writes', async () => {

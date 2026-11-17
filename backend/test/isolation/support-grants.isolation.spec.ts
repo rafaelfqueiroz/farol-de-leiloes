@@ -1,15 +1,23 @@
 // SPEC-002 BR-002-23..BR-002-27 / DL-002-04: the admin's only path to client data, a support access
 // grant, proven through HTTP on the PROBE collection (support/probe.module.ts:
 // ProbeAdminGrantController, the template of SPEC-009/016/021's admin grant routes). The real
-// SupportGrantService, GrantReadLogger, AccessContextFactory, repositories and MongoDB indexes; the
-// relationships and SPEC-009's support requests are fakes the spec drives (TS-03).
+// SupportGrantService, GrantReadLogger, AccessContextFactory, repositories and MongoDB indexes (built
+// by migration 0005, as a deploy does, AR-29); the relationships and SPEC-009's support requests
+// are fakes the spec drives (TS-03).
+//
+// Two proofs are at the repository level, because no route may exist for them: that the grant's
+// view writes nothing (BR-002-25; grant routes have no write handlers), and that it reads none of
+// the requester's OWN data — favorites, saved filters, reminders (BR-002-02, BR-002-23). The view
+// is obtained as a route would use it, through GrantReadLogger (test/support/grant-view.ts).
 //
 // The cast: offices A and B share investor X (self-advised too); `memberA` is a member of A. Each
 // test opens its grants on fresh support requests, so one test's ended grant never affects another.
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { type Connection, type Model, Types } from 'mongoose';
+import { type AccessContext, AccessContextFactory } from '../../src/access/access-context.js';
 import type { OfficePlanState } from '../../src/access/sources/office-plan.source.js';
+import { GrantReadLogger } from '../../src/admin-access/grant-read-logger.js';
 import {
   type AdminAccessLogDocument,
   AdminAccessLogEntity,
@@ -19,7 +27,18 @@ import {
   SupportAccessGrantEntity,
 } from '../../src/admin-access/schemas/support-access-grant.schema.js';
 import { SupportGrantService } from '../../src/admin-access/support-grant.service.js';
+import { AuctionEntity } from '../../src/auctions/schemas/auction.schema.js';
+import { AuctionsModule } from '../../src/auctions/auctions.module.js';
+import { DomainError } from '../../src/common/errors/domain-error.js';
+import { FavoritesModule } from '../../src/favorites/favorites.module.js';
+import { FavoritesRepository } from '../../src/favorites/favorites.repository.js';
+import { adminAccessIndexes } from '../../src/migrations/0005-admin-access-indexes.migration.js';
+import { RemindersModule } from '../../src/reminders/reminders.module.js';
+import { RemindersRepository } from '../../src/reminders/reminders.repository.js';
+import { SavedFiltersModule } from '../../src/saved-filters/saved-filters.module.js';
+import { SavedFiltersRepository } from '../../src/saved-filters/saved-filters.repository.js';
 import { DAY, MINUTE } from '../fakes/fake-clock.js';
+import { grantViewOf } from '../support/grant-view.js';
 import { spyOnLogger } from '../support/logger-spy.js';
 import { useTestDatabase } from '../support/test-database.js';
 import {
@@ -35,6 +54,7 @@ import {
   ProbeAdminModule,
   ProbeModule,
   type ProbeAnswer,
+  ProbeRepository,
 } from './support/probe.module.js';
 
 const OFFICE_A = '64b7f00000000000000a0a0a';
@@ -46,6 +66,8 @@ const WRITABLE: OfficePlanState = {
 };
 
 const NOT_FOUND: Answer = { status: 404, body: { code: 'NOT_FOUND', context: {} } };
+const AUCTION_CODE = 'GRANT001';
+const AUCTION_START = '2099-02-01T13:00:00.000Z'; // after the harness clock's 2099-01-15
 const FAULT: Answer = { status: 500, body: { code: 'INTERNAL_ERROR', context: {} } };
 
 interface OpenedGrantBody {
@@ -123,10 +145,20 @@ describe('support access grants through the API (SPEC-002 BR-002-23..BR-002-27)'
   }
 
   beforeAll(async () => {
-    app = await createIsolationApp(db, [ProbeModule, ProbeAdminModule]);
+    app = await createIsolationApp(db, [
+      ProbeModule,
+      ProbeAdminModule,
+      AuctionsModule,
+      FavoritesModule,
+      SavedFiltersModule,
+      RemindersModule,
+    ]);
     const { moduleRef } = app.harness;
     connection = moduleRef.get<Connection>(getConnectionToken());
-    await connection.syncIndexes(); // the one-open-grant-per-request index the race relies on
+    // AR-29: the one-open-grant-per-request index the open race relies on comes from the
+    // migration a deploy runs (0005), not from Mongoose's autoIndex.
+    if (!connection.db) throw new Error('no database');
+    await adminAccessIndexes.up(connection.db);
     grants = moduleRef.get(getModelToken(SupportAccessGrantEntity.name));
     logs = moduleRef.get(getModelToken(AdminAccessLogEntity.name));
 
@@ -151,7 +183,38 @@ describe('support access grants through the API (SPEC-002 BR-002-23..BR-002-27)'
     await seed(memberB, 'b-open-x', forX);
     await seed(memberB, 'b-secret');
     await seed(investorX, 'x-self', forX); // X's own self-advised record
+
+    // X's OWN data (BR-002-02): a favorite, a saved filter and a reminder, through the API.
+    const auctions = moduleRef.get<Model<unknown>>(getModelToken(AuctionEntity.name));
+    const phase = { modality: 'ONLINE_SALES', minimumPrice: null, phaseDates: [AUCTION_START] };
+    await auctions.collection.insertOne({
+      code: AUCTION_CODE,
+      available: true,
+      phases: [phase],
+      currentPhase: phase,
+      updatedAt: new Date('2999-01-01T00:00:00.000Z'),
+    });
+    const asX = app.as(investorX);
+    await asX.post('/api/favorites').send({ code: AUCTION_CODE }).expect(201);
+    const filter = await asX
+      .post('/api/saved-filters')
+      .send({ name: 'x-filter', filters: { state: 'SP' } })
+      .expect(201);
+    ids['x-filter'] = (filter.body as { _id: string })._id;
+    const reminder = await asX
+      .post('/api/reminders')
+      .send({ auctionId: AUCTION_CODE, channel: 'EMAIL', scheduledAt: '2099-01-20T12:00:00.000Z' })
+      .expect(201);
+    ids['x-reminder'] = (reminder.body as { _id: string })._id;
   });
+
+  /** The admin's context, as AccessContextGuard builds it for a request. */
+  const adminContext = (): Promise<AccessContext> =>
+    app.harness.moduleRef.get(AccessContextFactory).forAccount({ userId: admin.id, isAdmin: true });
+
+  /** A validated read under the grant, as a grant route gets it from contextForRead. */
+  const grantRead = async (grantId: string) =>
+    app.harness.moduleRef.get(SupportGrantService).contextForRead(await adminContext(), grantId);
 
   afterAll(async () => {
     await app.close();
@@ -221,29 +284,114 @@ describe('support access grants through the API (SPEC-002 BR-002-23..BR-002-27)'
     expect(await readUnderGrant(admin, grantId, idOf('b-secret'))).toEqual(missing);
   });
 
-  it('BR-002-25: a grant is read-only — every write through it is refused and nothing changes', async () => {
+  it('BR-002-25: grant routes have no write handlers, and the grant’s view writes nothing in any repository', async () => {
     const grantId = await openGrant(admin, newRequest(investorX));
     const as = app.as(admin);
     const base = `/api/probe-admin/grants/${grantId}/probes`;
-    const attempts = [
+    // ARCHITECTURE §4: no write route exists under a grant.
+    for (const attempt of [
       as.post(base).send({ name: 'written by the admin' }),
       as.patch(`${base}/${idOf('x-self')}`).send({ name: 'changed' }),
-      as.patch(`${base}/${idOf('a-open-x')}`).send({ name: 'changed' }),
       as.delete(`${base}/${idOf('x-self')}`),
-      as.delete(`${base}/${idOf('b-open-x')}`),
-    ];
-    for (const attempt of attempts) {
-      const { status, body } = await answerOf(attempt);
-      // Its own record says OFFICE_READ_ONLY (leaks nothing); an investor's record is not found.
-      expect([403, 404]).toContain(status);
-      expect(['OFFICE_READ_ONLY', 'NOT_FOUND']).toContain((body as { code: string }).code);
+    ]) {
+      expect((await answerOf(attempt)).status).toBe(404);
     }
+
+    // The view itself, as a handler would hold it inside GrantReadLogger's load.
+    const { moduleRef } = app.harness;
+    const view = await grantViewOf(moduleRef.get(GrantReadLogger), await grantRead(grantId));
+    const probes = moduleRef.get(ProbeRepository);
+    const readOnly = new DomainError('OFFICE_READ_ONLY');
+    const notFound = new DomainError('NOT_FOUND');
+    // Owned data: its own record says OFFICE_READ_ONLY (leaks nothing); an office's is not found.
+    await expect(
+      probes.create(view, { name: 'written by the admin', status: 'open' }),
+    ).rejects.toEqual(readOnly);
+    await expect(probes.updateById(view, idOf('x-self'), { name: 'changed' })).rejects.toEqual(
+      readOnly,
+    );
+    await expect(probes.deleteById(view, idOf('x-self'))).rejects.toEqual(readOnly);
+    await expect(probes.updateById(view, idOf('a-open-x'), { name: 'changed' })).rejects.toEqual(
+      notFound,
+    );
+    await expect(probes.deleteById(view, idOf('b-open-x'))).rejects.toEqual(notFound);
+    // The account's own data: FORBIDDEN before the database (BR-002-02, BR-002-25).
+    const forbidden = new DomainError('FORBIDDEN');
+    await expect(
+      moduleRef.get(FavoritesRepository).removeByCode(view, AUCTION_CODE),
+    ).rejects.toEqual(forbidden);
+    await expect(
+      moduleRef.get(SavedFiltersRepository).deleteById(view, idOf('x-filter')),
+    ).rejects.toEqual(forbidden);
+    await expect(
+      moduleRef.get(RemindersRepository).updateById(view, idOf('x-reminder'), { description: 'x' }),
+    ).rejects.toEqual(forbidden);
+
     expect(await namesUnderGrant(admin, grantId)).toEqual(X_VIEW);
     const kept = await app
       .as(memberA)
       .get(`/api/probes/${idOf('a-open-x')}`)
       .expect(200);
     expect(kept.body).toMatchObject({ name: 'a-open-x' });
+  });
+
+  it('BR-002-02 / BR-002-23: under X’s grant, X’s own favorites, saved filters and reminders are refused, and nothing is logged', async () => {
+    const grantId = await openGrant(admin, newRequest(investorX));
+    const { moduleRef } = app.harness;
+    const reads = moduleRef.get(GrantReadLogger);
+    const read = await grantRead(grantId);
+    const favorites = moduleRef.get(FavoritesRepository);
+    const filters = moduleRef.get(SavedFiltersRepository);
+    const reminders = moduleRef.get(RemindersRepository);
+    const page = { page: 1, pageSize: 10 };
+    const never = (): never => {
+      throw new Error('nothing is read, so nothing is described');
+    };
+    const before = await logs.countDocuments();
+
+    // Each read as a grant route would make it: through GrantReadLogger, with the sealed view.
+    const refusals: [Promise<unknown>, string][] = [
+      [reads.readMany(read, (g) => favorites.findCodes(g), never), 'NOT_FOUND'],
+      [reads.readOne(read, (g) => favorites.findByCode(g, AUCTION_CODE), never), 'NOT_FOUND'],
+      [reads.readMany(read, (g) => favorites.count(g).then((n) => [n]), never), 'NOT_FOUND'],
+      [reads.readMany(read, (g) => filters.findPage(g, page), never), 'SAVED_FILTER_NOT_FOUND'],
+      [
+        reads.readOne(read, (g) => filters.findById(g, idOf('x-filter')), never),
+        'SAVED_FILTER_NOT_FOUND',
+      ],
+      [
+        reads.readMany(read, (g) => reminders.findPopulatedPage(g, page), never),
+        'REMINDER_NOT_FOUND',
+      ],
+      [
+        reads.readOne(read, (g) => reminders.findPopulatedById(g, idOf('x-reminder')), never),
+        'REMINDER_NOT_FOUND',
+      ],
+      [
+        reads.readOne(read, (g) => reminders.findById(g, idOf('x-reminder')), never),
+        'REMINDER_NOT_FOUND',
+      ],
+    ];
+    for (const [refused, code] of refusals) {
+      await expect(refused).rejects.toEqual(new DomainError(code as never));
+    }
+    expect(await logs.countDocuments()).toBe(before); // nothing was read, nothing logged
+
+    // The admin's own routes, grant or not, answer the admin's own (empty) data.
+    const as = app.as(admin);
+    expect((await as.get('/api/favorites/codes').expect(200)).body).toEqual({ codes: [] });
+    expect((await as.get('/api/saved-filters').expect(200)).body).toMatchObject({ total: 0 });
+    expect((await as.get('/api/reminders').expect(200)).body).toMatchObject({ total: 0 });
+    expect(
+      await answerOf(as.get(`/api/reminders/${idOf('x-reminder')}`)).then((a) => a.status),
+    ).toBe(404);
+    // X still has all of it.
+    const asX = app.as(investorX);
+    expect((await asX.get('/api/favorites/codes').expect(200)).body).toEqual({
+      codes: [AUCTION_CODE],
+    });
+    expect((await asX.get('/api/saved-filters').expect(200)).body).toMatchObject({ total: 1 });
+    expect((await asX.get('/api/reminders').expect(200)).body).toMatchObject({ total: 1 });
   });
 
   it('BR-002-25: under a member’s grant the admin sees that office’s data and nothing of other offices', async () => {
@@ -410,15 +558,25 @@ describe('support access grants through the API (SPEC-002 BR-002-23..BR-002-27)'
     expect(random).toEqual(NOT_FOUND);
     expect(await answerOf(as.get(`/api/probe-admin/grants/${grantId}/probes`))).toEqual(random);
     expect(await readUnderGrant(otherAdmin, grantId, idOf('x-self'))).toEqual(random);
-    // Nor can it open its own on the same request while this one is open.
-    expect(await openAnswer(otherAdmin, supportRequestId)).toEqual({
-      status: 403,
-      body: { code: 'FORBIDDEN', context: {} },
-    });
+    // Nor can it open its own on the same request while this one is open: the same not-found
+    // as a nonexistent request, so it learns nothing about the grant (no oracle).
+    expect(await openAnswer(otherAdmin, supportRequestId)).toEqual(
+      await openAnswer(otherAdmin, RANDOM_ID),
+    );
+    expect(await openAnswer(otherAdmin, supportRequestId)).toEqual(NOT_FOUND);
   });
 
   it('BR-002-24: concurrent opens of the same request produce one grant', async () => {
     const supportRequestId = newRequest(investorX);
+    // The guarantee is the migration's partial unique index, present before the first open.
+    const indexes = await grants.collection.indexes();
+    expect(indexes).toContainEqual(
+      expect.objectContaining({
+        name: 'one_open_grant_per_request',
+        unique: true,
+        partialFilterExpression: { status: 'open' },
+      }),
+    );
 
     const answers = await Promise.all(
       Array.from({ length: 8 }, () => openAnswer(admin, supportRequestId)),

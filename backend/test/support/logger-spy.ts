@@ -25,19 +25,44 @@ export function expectNoneLogged(logged: string, values: string[]): void {
 const LEVELS = ['log', 'warn', 'error', 'debug', 'verbose', 'fatal'] as const;
 
 /**
- * SPEC-002 BR-002-28 / SC-15: captures EVERYTHING the backend could log during a flow — every Nest
- * Logger level on instances (`new Logger(Name)`, Nest's own ExceptionsHandler included) and the
- * static `Logger.*` calls, plus anything written straight to stdout/stderr (a stray console call
- * or a pino destination) — silently, until `restore()`. The log-scan specs grep it for markers.
+ * SPEC-002 BR-002-28 / SC-15: captures what the backend's code hands to a logger during a flow —
+ * every Nest Logger level on instances (`new Logger(Name)`, Nest's own ExceptionsHandler included)
+ * and the static `Logger.*` calls, as the ARGUMENTS they were called with — plus anything written
+ * straight to stdout/stderr (a stray console call), silently, until `restore()`.
+ *
+ * What it does NOT see by itself: lines pino builds without a Nest Logger call — pino-http's
+ * request completion lines and pino's serialization of an error — because in tests no pino is
+ * installed. A spec that needs those boots the production logger (`loggerParams`, nestjs-pino)
+ * into an in-memory destination and passes `{ passThrough: true }`, so each Nest Logger call is
+ * both recorded here and handed on to pino (test/isolation/log-hygiene.isolation.spec.ts does).
  */
-export function captureAllLogOutput(): { text: () => string; restore: () => void } {
+export function captureAllLogOutput(options: { passThrough?: boolean } = {}): {
+  text: () => string;
+  restore: () => void;
+} {
   const chunks: string[] = [];
   const record = (...args: unknown[]) => {
     for (const arg of args) chunks.push(typeof arg === 'string' ? arg : safeJson(arg));
   };
+  type LogFn = (this: unknown, ...args: unknown[]) => unknown;
+  const recording = (original: LogFn): LogFn =>
+    options.passThrough
+      ? function (this: unknown, ...args: unknown[]) {
+          record(...args);
+          return original.apply(this, args);
+        }
+      : (...args: unknown[]) => {
+          record(...args);
+        };
   const spies = [
-    ...LEVELS.map((level) => vi.spyOn(Logger.prototype, level).mockImplementation(record)),
-    ...LEVELS.map((level) => vi.spyOn(Logger, level).mockImplementation(record)),
+    ...LEVELS.map((level) => {
+      const original = Logger.prototype[level] as LogFn;
+      return vi.spyOn(Logger.prototype, level).mockImplementation(recording(original) as never);
+    }),
+    ...LEVELS.map((level) => {
+      const original = Logger[level].bind(Logger) as LogFn;
+      return vi.spyOn(Logger, level).mockImplementation(recording(original) as never);
+    }),
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
       record(String(chunk));
       return true;

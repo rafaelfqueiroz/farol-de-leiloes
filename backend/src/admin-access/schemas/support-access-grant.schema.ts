@@ -56,7 +56,8 @@ export const SupportAccessGrantSchema = SchemaFactory.createForClass(SupportAcce
 
 // BR-002-24: one grant per support request that has not ended, so two concurrent opens end with
 // one grant (the second insert fails with a duplicate key and reads the first). An ended grant
-// leaves the index, so a request may get a new grant after its previous one expired.
+// leaves the index, so a request may get a new grant after its previous one expired. Built in
+// production by migration 0005-admin-access-indexes (AR-29), whose unit spec holds it equal to this.
 SupportAccessGrantSchema.index(
   { supportRequestId: 1 },
   { unique: true, partialFilterExpression: { status: 'open' }, name: 'one_open_grant_per_request' },

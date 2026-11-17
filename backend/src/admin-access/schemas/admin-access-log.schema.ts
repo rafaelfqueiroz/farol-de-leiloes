@@ -5,10 +5,14 @@ import { markIsolation } from '../../access/isolation-mark.js';
 export const ADMIN_ACCESS_ACTIONS = ['grant_read', 'account_search', 'account_view'] as const;
 export type AdminAccessAction = (typeof ADMIN_ACCESS_ACTIONS)[number];
 
-export const LOGGED_OWNER_TYPES = ['office', 'self_advised', 'account'] as const;
+/**
+ * The owners of CLIENT data (AR-11). A grant never opens an account's own data (BR-002-02,
+ * BR-002-23: AccountScopedRepository refuses its view), so no entry names an account as owner.
+ */
+export const LOGGED_OWNER_TYPES = ['office', 'self_advised'] as const;
 export type LoggedOwnerType = (typeof LOGGED_OWNER_TYPES)[number];
 
-/** Whose data was read: an office, a self-advised investor, or an account's own data. */
+/** Whose client data was read: an office, or a self-advised investor. */
 export interface LoggedOwner {
   type: LoggedOwnerType;
   id: Types.ObjectId;
@@ -86,7 +90,8 @@ export type AdminAccessLogDocument = HydratedDocument<AdminAccessLogEntity>;
 
 export const AdminAccessLogSchema = SchemaFactory.createForClass(AdminAccessLogEntity);
 
-// AR-27: SPEC-009's "what did this admin read" and SPEC-010's "who read this owner's data".
+// AR-27: SPEC-009's "what did this admin read" and SPEC-010's "who read this owner's data". Built in
+// production by migration 0005-admin-access-indexes (AR-29), whose unit spec holds them equal.
 AdminAccessLogSchema.index({ adminUserId: 1, at: -1 });
 AdminAccessLogSchema.index({ 'owner.id': 1, at: -1 });
 
