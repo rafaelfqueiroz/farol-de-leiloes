@@ -8,6 +8,10 @@
 // found by parsing every test/isolation/**/*.isolation.spec.ts with the TypeScript parser: only
 // real calls count (never a comment or a string), and a file that skips, focuses or postpones tests,
 // or a call whose body runs no test, fails the gate. There is no hand-kept list.
+// Syntax is not proof, though: a loop over no scenarios, a condition or an uncalled helper looks like
+// a test and runs none. So after ALL files finish, IsolationRunReporter (support/isolation-reporter.ts)
+// also requires, for every model this file's AR-16 test declares, an isolation test that RAN and
+// PASSED in this run (support/executed-isolation.ts, tested in executed-isolation.isolation-gate.spec.ts).
 //
 // AppModule itself is not compiled: its ConfigModule.forRoot reads the process environment and a
 // .env file as it is imported (DV-19). The infrastructure it adds registers no model; the gate
@@ -20,6 +24,7 @@ import { ConfigModule } from '@nestjs/config';
 import { getConnectionToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { type Connection, Schema } from 'mongoose';
+import { REQUIRED_MODELS } from './support/executed-isolation.js';
 import { markIsolation } from '../../src/access/isolation-mark.js';
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
 import businessConfig from '../../src/config/business.config.js';
@@ -37,6 +42,7 @@ import {
   modelIsolations,
   modelsNamedIn,
   modelsWithIsolationSpec,
+  requiredModelNames,
   scanIsolationSpec,
 } from './support/isolation-coverage.js';
 
@@ -78,7 +84,10 @@ describe('TS-14: every model the API registers is classified, and every owned on
     );
   });
 
-  it('AR-16 / TS-13 / TS-14: no model breaks the gate', () => {
+  it('AR-16 / TS-13 / TS-14: no model breaks the gate', ({ task }) => {
+    // The run-time half (support/executed-isolation.ts): this test declares which models need an
+    // isolation test; IsolationRunReporter fails the run for each one without a PASSED one.
+    task.meta[REQUIRED_MODELS] = requiredModelNames(models);
     expect(coverageProblems(models, modelsWithIsolationSpec())).toEqual([]);
   });
 

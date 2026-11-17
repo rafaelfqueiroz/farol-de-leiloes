@@ -47,6 +47,9 @@ const withMongo = {
 
 export default defineConfig({
   test: {
+    // TS-14: after every file finished, fail the isolation run for any required model without an
+    // isolation test that ran and passed. A no-op unless the enumeration spec ran (partial runs).
+    reporters: ['default', './test/isolation/support/isolation-reporter.ts'],
     // TESTING §7. Coverage is measured on the unit and structural run (`npm run test:cov`).
     coverage: {
       provider: 'v8',
