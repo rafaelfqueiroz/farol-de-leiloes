@@ -17,6 +17,18 @@
 //      no `.collection`, `.db` or `.connection` access and no injected connection, so the two
 //      models are used through Mongoose only.
 //
+//   6. outside src/admin-access/ (the schemas, repositories and migration 0005 aside) no code looks
+//      up, injects or names the two models or collections by any route: `connection.model(...)`,
+//      `db.model(...)`, `mongoose.model(...)`, `connection.models.X`, `connection.collections`,
+//      `@InjectModel(...)`, `getModelToken(...)`, `.collection(...)` on a connection or db, the
+//      entity class symbols or their names as strings. Static spellings are resolved (literal,
+//      template, `X.name`, same-file const, `+`); an argument that cannot be resolved is refused
+//      too, except in the allowlisted files below. test/structural/module-model-boundary.spec.ts
+//      (AR-09) already refuses `connection.model` for every model; this check is still needed
+//      because it also covers the collection and token routes, the registry maps and the
+//      driver, and names the two protected models (a #161 review P2: a service in src/ deleted a
+//      persisted entry through `connection.model('AdminAccessLogEntity').collection`).
+//
 // This is a source check of the application's own code. The control that also holds against a
 // bug it cannot see is the database role of the API user: insert and find only on adminAccessLogs
 // (SECURITY.md SC-09, an owner action on Atlas).
@@ -73,6 +85,18 @@ const DESTRUCTIVE_CALLS = new Set([
 ]);
 /** Ways under Mongoose, refused inside src/admin-access/ (5). */
 const UNDER_MONGOOSE = new Set(['collection', 'db', 'connection']);
+
+/** The two protected models (class names) and, via COLLECTION_NAMES, their collections (6). */
+const PROTECTED_MODELS = ['AdminAccessLogEntity', 'SupportAccessGrantEntity'];
+/** Lookups whose argument names a model or a collection (6). */
+const NAMING_CALLS = new Set(['model', 'collection', 'getModelToken', 'InjectModel']);
+/** Registry maps that reach every model or collection without naming one (6). */
+const REGISTRY_MEMBERS = new Set(['models', 'collections', 'modelNames']);
+/**
+ * Files outside admin-access allowed a `.collection(<non-literal>)` that cannot be resolved
+ * statically (6). 0001 iterates a fixed list of money collections, none of the two protected ones.
+ */
+const UNRESOLVED_ALLOWED = ['migrations/0001-money-decimal128.migration.ts'];
 
 const PRIVATE_PATHS = [
   'admin-access/schemas/',
@@ -204,6 +228,113 @@ function stringsOf(file: string, source: string): { text: string; line: number }
   return found;
 }
 
+/** The string an argument statically spells (literal, template, `X.name`, same-file const, `+`). */
+function resolveText(
+  expression: ts.Expression,
+  consts: ReadonlyMap<string, ts.Expression>,
+  seen: ReadonlySet<string> = new Set(),
+): string | null {
+  let node = expression;
+  while (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isSatisfiesExpression(node)
+  ) {
+    node = node.expression;
+  }
+  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isTemplateExpression(node)) {
+    let text = node.head.text;
+    for (const span of node.templateSpans) {
+      const inner = resolveText(span.expression, consts, seen);
+      if (inner === null) return null;
+      text += inner + span.literal.text;
+    }
+    return text;
+  }
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = resolveText(node.left, consts, seen);
+    const right = resolveText(node.right, consts, seen);
+    return left === null || right === null ? null : left + right;
+  }
+  if (
+    ts.isPropertyAccessExpression(node) &&
+    node.name.text === 'name' &&
+    ts.isIdentifier(node.expression)
+  ) {
+    return node.expression.text; // `Entity.name` is the class name
+  }
+  const initializer = ts.isIdentifier(node) ? consts.get(node.text) : undefined;
+  if (ts.isIdentifier(node) && initializer && !seen.has(node.text)) {
+    return resolveText(initializer, consts, new Set([...seen, node.text]));
+  }
+  return null;
+}
+
+/** (6) A protected model or collection looked up, injected or named outside the module. */
+function protectedUses(
+  syntax: ts.SourceFile,
+  file: string,
+  at: (node: ts.Node) => number,
+): BypassUse[] {
+  const uses: BypassUse[] = [];
+  const consts = new Map<string, ts.Expression>();
+  const collect = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      ts.getCombinedNodeFlags(node) & ts.NodeFlags.Const
+    ) {
+      consts.set(node.name.text, node.initializer);
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(syntax);
+  const protectedNames = [...PROTECTED_MODELS, ...COLLECTION_NAMES];
+  const unresolvedAllowed = UNRESOLVED_ALLOWED.some((path) => file.split(sep).join('/') === path);
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && PROTECTED_MODELS.includes(node.text)) {
+      uses.push({ what: `${node.text} (symbol)`, line: at(node) });
+    }
+    if (
+      (ts.isPropertyAccessExpression(node) && REGISTRY_MEMBERS.has(node.name.text)) ||
+      (ts.isElementAccessExpression(node) &&
+        ts.isStringLiteralLike(node.argumentExpression) &&
+        REGISTRY_MEMBERS.has(node.argumentExpression.text))
+    ) {
+      const member = ts.isPropertyAccessExpression(node)
+        ? node.name.text
+        : (node.argumentExpression as ts.StringLiteralLike).text;
+      uses.push({ what: `.${member} (registry)`, line: at(node) });
+    }
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const name = ts.isIdentifier(callee)
+        ? callee.text
+        : ts.isPropertyAccessExpression(callee)
+          ? callee.name.text
+          : ts.isElementAccessExpression(callee) &&
+              ts.isStringLiteralLike(callee.argumentExpression)
+            ? callee.argumentExpression.text
+            : null;
+      if (name && NAMING_CALLS.has(name)) {
+        const argument = node.arguments[0];
+        const text = argument ? resolveText(argument, consts) : null;
+        if (text === null) {
+          if (!unresolvedAllowed) uses.push({ what: `${name}(<unresolved>)`, line: at(node) });
+        } else if (protectedNames.some((protectedName) => text.includes(protectedName))) {
+          uses.push({ what: `${name}('${text}')`, line: at(node) });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(syntax);
+  return uses;
+}
+
 interface BypassUse {
   readonly what: string;
   readonly line: number;
@@ -217,6 +348,9 @@ function bypassesOf(file: string, source: string, inModule: boolean, nameAllowed
   for (const { text, line } of stringsOf(file, source)) {
     if (!nameAllowed) {
       for (const name of COLLECTION_NAMES) {
+        if (text.includes(name)) uses.push({ what: `'${name}'`, line });
+      }
+      for (const name of PROTECTED_MODELS) {
         if (text.includes(name)) uses.push({ what: `'${name}'`, line });
       }
     }
@@ -256,6 +390,7 @@ function bypassesOf(file: string, source: string, inModule: boolean, nameAllowed
     ts.forEachChild(node, visit);
   }
   visit(syntax);
+  if (!inModule && !nameAllowed) uses.push(...protectedUses(syntax, file, at));
   return uses;
 }
 
@@ -397,5 +532,85 @@ describe('append-only detection', () => {
       '}',
     ].join('\n');
     expect(publicMethods('x.ts', source, 'R')).toEqual(['append', 'update']);
+  });
+});
+
+// #161 review P2: a service anywhere in src/ reached the log's driver collection through the
+// connection's model registry and deleted a persisted entry. Each spelling below must be reported
+// in an ordinary file outside the module.
+const OWNER_SPELLING = [
+  "import { Injectable } from '@nestjs/common';",
+  "import { InjectConnection } from '@nestjs/mongoose';",
+  "import { Connection } from 'mongoose';",
+  '@Injectable()',
+  'export class CleanupService {',
+  '  constructor(@InjectConnection() private readonly connection: Connection) {}',
+  '  async purge(): Promise<void> {',
+  '    await this.connection',
+  "      .model('AdminAccessLogEntity')",
+  '      .collection.deleteMany({});',
+  '  }',
+  '}',
+].join('\n');
+
+describe('append-only detection: the protected models outside their module (#161 review P2)', () => {
+  const outside = (source: string) =>
+    bypassesOf('cleanup/cleanup.service.ts', source, false, false).map((use) => use.what);
+
+  it.each([
+    ['the owner’s connection.model spelling', OWNER_SPELLING],
+    ['@InjectModel(Entity.name)', '@InjectModel(AdminAccessLogEntity.name) private readonly l;'],
+    ["@InjectModel('Entity')", "@InjectModel('SupportAccessGrantEntity') private readonly g;"],
+    ["getModelToken('Entity')", "app.get(getModelToken('AdminAccessLogEntity'));"],
+    ['getModelToken(Entity.name)', 'app.get(getModelToken(SupportAccessGrantEntity.name));'],
+    ['connection.models.Entity', 'connection.models.AdminAccessLogEntity.collection.drop2();'],
+    ["connection.models['Entity']", "connection.models['SupportAccessGrantEntity'];"],
+    ['mongoose.model(...)', "mongoose.model('AdminAccessLogEntity');"],
+    ['a renamed connection', 'this.conn.model(`AdminAccessLogEntity`).collection.deleteMany({});'],
+    ['a concatenated model name', "this.db.model('AdminAccess' + 'LogEntity');"],
+    ['a template model name', "connection.model(`AdminAccess${'LogEntity'}`);"],
+    ['a model name held in a constant', "const N = 'AdminAccessLogEntity'; connection.model(N);"],
+    ["connection.db.collection('name')", "connection.db.collection('adminAccessLogs');"],
+    ['a concatenated collection name', "connection.collection('adminAccess' + 'Logs');"],
+    ['a template collection name', 'connection.db.collection(`supportAccess${"Grants"}`);'],
+    ['connection.collections.name', 'connection.collections.adminAccessLogs.deleteMany({});'],
+    ['a non-literal model lookup', 'connection.model(name).collection.deleteMany({});'],
+    ['a non-literal collection', 'this.connection.db.collection(name).deleteMany({});'],
+    ['a non-literal model token', 'app.get(getModelToken(name));'],
+    ['a non-literal injected model', '@InjectModel(name) private readonly m;'],
+    ['an unresolved template', 'connection.model(`${prefix}LogEntity`);'],
+    ['the registry enumerated', 'Object.values(connection.models).map((m) => m.collection);'],
+    ['the model names listed', 'connection.modelNames().forEach((n) => n);'],
+    [
+      'an import of the model class',
+      "import { AdminAccessLogEntity } from '../admin-access/schemas/admin-access-log.schema';",
+    ],
+  ])('reports %s', (_name, source) => {
+    expect(outside(source)).not.toEqual([]);
+  });
+});
+
+describe('append-only detection: what stays allowed (#161 review P2)', () => {
+  it('lets an admin-access repository inject and use its own model', () => {
+    const source = [
+      "import { InjectModel } from '@nestjs/mongoose';",
+      "import { AdminAccessLogEntity } from './schemas/admin-access-log.schema';",
+      'class AdminAccessLogRepository {',
+      '  constructor(@InjectModel(AdminAccessLogEntity.name) private readonly logs) {}',
+      '  append(entry) { return this.logs.create(entry); }',
+      '}',
+    ].join('\n');
+    expect(bypassesOf('admin-access/admin-access-log.repository.ts', source, true, true)).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    '@InjectModel(JobExecution.name) private readonly jobs;',
+    "const COLLECTION = 'users'; db.collection(COLLECTION).find({});",
+    "app.get(getModelToken('UserEntity'));",
+    "connection.model('UserEntity');",
+  ])('lets other models and collections through outside the module: %s', (source) => {
+    expect(bypassesOf('jobs/jobs.service.ts', source, false, false)).toEqual([]);
   });
 });
