@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 import { ACCOUNT_TOKEN_PURPOSES, type AccountTokenPurpose } from './account-token-purposes.js';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 // A sub-document, not a nested path: a nested path's `required` members would fail every other
 // purpose's token, which has no profile.
@@ -54,6 +55,13 @@ export class AccountTokenEntity {
 
 export type AccountTokenDocument = HydratedDocument<AccountTokenEntity>;
 export const AccountTokenSchema = SchemaFactory.createForClass(AccountTokenEntity);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(AccountTokenSchema, {
+  kind: 'internal',
+  reason:
+    'SPEC-001 one-time tokens (email confirmation, password reset, Google exchange), found by their hash; never listed',
+});
 
 // `tokenHash` is indexed by its `unique` option. AR-27: issuing deletes by user and purpose.
 AccountTokenSchema.index({ userId: 1, purpose: 1 });

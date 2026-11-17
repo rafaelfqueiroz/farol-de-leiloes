@@ -20,8 +20,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { RemindersService } from './reminders.service.js';
-import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
-import { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
+import type { AccessContext } from '../access/access-context.js';
+import { Access } from '../access/decorators/access.decorator.js';
 import { CreateReminderDto } from './dto/create-reminder.dto.js';
 import { UpdateReminderDto } from './dto/update-reminder.dto.js';
 import { ReminderResponseDto } from './dto/reminder-response.dto.js';
@@ -49,10 +49,10 @@ export class RemindersController {
   @ApiOperation({ summary: 'The signed-in user reminders, soonest first (paginated, AR-35)' })
   @ApiPaginatedResponse(ReminderResponseDto)
   async findAll(
-    @CurrentUser() user: AuthenticatedUser,
+    @Access() access: AccessContext,
     @Query() query: PaginationQueryDto,
   ): Promise<Paginated<ReminderResponseDto>> {
-    const page = await this.remindersService.findPageByUser(user.userId, query);
+    const page = await this.remindersService.findPageByUser(access, query);
     return mapPage(page, (reminder) => new ReminderResponseDto(reminder));
   }
 
@@ -61,10 +61,10 @@ export class RemindersController {
   @ApiOkResponse({ type: ReminderResponseDto })
   @ApiNotFoundResponse(NOT_FOUND)
   async findOne(
-    @CurrentUser() user: AuthenticatedUser,
+    @Access() access: AccessContext,
     @Param('id') id: string,
   ): Promise<ReminderResponseDto> {
-    const reminder = await this.remindersService.findOne(user.userId, id);
+    const reminder = await this.remindersService.findOne(access, id);
     return new ReminderResponseDto(reminder);
   }
 
@@ -72,10 +72,10 @@ export class RemindersController {
   @ApiOperation({ summary: 'Schedule a reminder for an auction' })
   @ApiCreatedResponse({ type: ReminderResponseDto })
   async create(
-    @CurrentUser() user: AuthenticatedUser,
+    @Access() access: AccessContext,
     @Body() dto: CreateReminderDto,
   ): Promise<ReminderResponseDto> {
-    const reminder = await this.remindersService.create(user.userId, dto);
+    const reminder = await this.remindersService.create(access, dto);
     return new ReminderResponseDto(reminder);
   }
 
@@ -84,11 +84,11 @@ export class RemindersController {
   @ApiOkResponse({ type: ReminderResponseDto })
   @ApiNotFoundResponse(NOT_FOUND)
   async update(
-    @CurrentUser() user: AuthenticatedUser,
+    @Access() access: AccessContext,
     @Param('id') id: string,
     @Body() dto: UpdateReminderDto,
   ): Promise<ReminderResponseDto> {
-    const reminder = await this.remindersService.update(user.userId, id, dto);
+    const reminder = await this.remindersService.update(access, id, dto);
     return new ReminderResponseDto(reminder);
   }
 
@@ -97,7 +97,7 @@ export class RemindersController {
   @ApiOperation({ summary: 'Delete a reminder' })
   @ApiNoContentResponse({ description: 'Deleted' })
   @ApiNotFoundResponse(NOT_FOUND)
-  async delete(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string): Promise<void> {
-    await this.remindersService.delete(user.userId, id);
+  async delete(@Access() access: AccessContext, @Param('id') id: string): Promise<void> {
+    await this.remindersService.delete(access, id);
   }
 }

@@ -6,6 +6,10 @@ import request from 'supertest';
 import { SavedFiltersController } from './saved-filters.controller.js';
 import { SavedFiltersService } from './saved-filters.service.js';
 import { createHttpApp, TEST_USER } from '../../test/support/http-app.js';
+
+// SPEC-002: the controller hands the service the request's AccessContext, built for the signed-in
+// user (BR-002-11), never an id from the request.
+const AS_TEST_USER = expect.objectContaining({ accountId: TEST_USER.userId });
 import { itAnswersPages } from '../../test/support/pagination-contract.js';
 import type { SavedFilter } from './interfaces/saved-filter.interface.js';
 import { Decimal } from '../common/money/money.js';
@@ -58,7 +62,7 @@ describe('SavedFiltersController over HTTP', () => {
         .expect(201);
 
       // AR-17: the money string reaches the service as a Decimal, never a float.
-      expect(savedFilters.create).toHaveBeenCalledWith(TEST_USER.userId, FILTER.name, {
+      expect(savedFilters.create).toHaveBeenCalledWith(AS_TEST_USER, FILTER.name, {
         state: 'RN',
         city: ['Natal'],
         maxPrice: new Decimal('300000'),

@@ -224,6 +224,19 @@ describe('validateEnv', () => {
     });
   });
 
+  describe('the private bucket of client files (SC-18, BR-002-08)', () => {
+    it('is optional, in production too (until SPEC-017)', () => {
+      expect(testEnv({ NODE_ENV: 'production' }).R2_PRIVATE_BUCKET).toBeUndefined();
+      expect(testEnv({ R2_PRIVATE_BUCKET: 'test-private' }).R2_PRIVATE_BUCKET).toBe('test-private');
+    });
+
+    it('refuses to boot when it is the public bucket', () => {
+      expect(errorOf({ ...TEST_ENV, R2_PRIVATE_BUCKET: TEST_ENV.R2_BUCKET })).toContain(
+        'R2_PRIVATE_BUCKET: must not be R2_BUCKET, which is served publicly',
+      );
+    });
+  });
+
   it('describes every variable once', () => {
     expect(new Set(ENV_KEYS).size).toBe(ENV_KEYS.length);
   });
@@ -266,6 +279,13 @@ describe('namespaced configs built from the validated environment', () => {
       secretAccessKey: TEST_ENV.R2_SECRET_ACCESS_KEY,
       bucket: TEST_ENV.R2_BUCKET,
       publicUrl: TEST_ENV.R2_PUBLIC_URL,
+    });
+  });
+
+  it('SC-18: maps the private bucket when it is set', () => {
+    expect(r2ConfigFrom(testEnv({ R2_PRIVATE_BUCKET: 'test-private-bucket' }))).toMatchObject({
+      bucket: TEST_ENV.R2_BUCKET,
+      privateBucket: 'test-private-bucket',
     });
   });
 });

@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 /**
  * The criteria as stored, in a Mixed path (Mongoose casts nothing in it). In code they are the
@@ -39,6 +40,13 @@ export class SavedFilterEntity extends Document {
 export type SavedFilterDocument = HydratedDocument<SavedFilterEntity>;
 
 export const SavedFilterSchema = SchemaFactory.createForClass(SavedFilterEntity);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(SavedFilterSchema, {
+  kind: 'account',
+  reason:
+    "SPEC-002 BR-002-02: the account's own saved searches, scoped by userId (SavedFiltersRepository); no office sees them (DL-002-08)",
+});
 
 // Create compound index to ensure unique names per user
 SavedFilterSchema.index({ userId: 1, name: 1 }, { unique: true });

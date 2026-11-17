@@ -35,7 +35,7 @@ Tests (TESTING §2, §7)
 - `npm test` — Vitest projects `unit` (`src/**/*.spec.ts`, next to the source) and `structural` (`test/structural/`); no Docker
 - `npm run test:cov` — the same with the V8 coverage gate (`backend/vitest.config.mts`); lcov report in `coverage/`
 - `npm run test:integration` — `test/integration/` against MongoDB from Testcontainers; needs Docker
-- `npm run test:isolation` — `test/isolation/`, the owner-isolation gate; needs Docker (empty until #2)
+- `npm run test:isolation` — `test/isolation/`, the owner-isolation gate (TS-13, TS-14); needs Docker
 - `npm run test:smoke` — builds, then loads every module of `dist/` in plain Node as native ESM, catching import interop bugs that `tsc` and Vitest cannot see (#63); the CI `backend-build` job
 - `npm run test:structural` — `test/structural/` alone: checks on the repository itself (Node pins, workflows, Dockerfiles, pre-push selection); the CI `structural` job
 - Helpers: `test/support/` (database harness, fixture paths, `silence-logger.ts`: the Nest Logger is silent in every test project; to assert on a log, `vi.spyOn(Logger.prototype, 'error')`, see TESTING.md), `test/fakes/`, `test/builders/`; captured Caixa pages in `test/fixtures/caixa/`
@@ -65,6 +65,7 @@ Security baseline (SC-07, SC-10, SC-12, SC-16, SC-17)
 - Mongoose enables `sanitizeFilter: true` and `strictQuery: 'throw'` before the first query. Keep query fields explicitly allowlisted in DTOs and builders, sorts fixed by the server, and trusted server operators behind `serverOperators`; unknown schema paths throw instead of disappearing and widening read/write predicates, including inside `$or`.
 - Future SPEC-010 CSV exports must call `neutralizeCsvCell` (`src/common/exports/csv-cell.ts`) on every untrusted text cell before serialization. It prefixes an apostrophe for formula prefixes (`=`, `+`, `-`, `@`) even after leading whitespace, and for leading tab, carriage return or newline; it preserves the original whitespace, and the serializer must still quote CSV delimiters and quotes. XLSX exports must use explicit string cells and never set formula properties from untrusted text; do not apply CSV apostrophe escaping to XLSX, where the apostrophe would display literally.
 - Secrets remain server-side and are never logged; the frontend's explicitly allowed public environment values contain no secrets (SC-16).
+- Client files (SPEC-017) live in a separate R2 bucket, `R2_PRIVATE_BUCKET`, with no public access, never in `R2_BUCKET`, which `R2_PUBLIC_URL` serves openly; the API refuses to boot when the two are equal (SC-18, BR-002-08). The variable is optional until SPEC-017: while it is unset, `StorageService.issuePrivateFileLink` and any upload, download or delete of a `private/` key are refused, never redirected to the public bucket. Create the bucket (no public URL, no custom domain) and set the variable before SPEC-017 ships.
 
 Observability (ARCHITECTURE §11)
 

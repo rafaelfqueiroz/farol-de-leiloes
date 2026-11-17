@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import { type JobExecutionRecord, JobStatus, RunMode } from '../job-execution.js';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 @Schema({ collection: 'jobexecutions', timestamps: true })
 export class JobExecution implements JobExecutionRecord {
@@ -31,6 +32,13 @@ export class JobExecution implements JobExecutionRecord {
 
 export type JobExecutionDocument = HydratedDocument<JobExecution>;
 export const JobExecutionSchema = SchemaFactory.createForClass(JobExecution);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(JobExecutionSchema, {
+  kind: 'public',
+  reason:
+    'Job run records for operations (AR-46): ids, counts and outcome codes only, no account or client data (SC-15)',
+});
 
 // Create compound index for efficient queries
 JobExecutionSchema.index({ jobName: 1, runMode: 1, finishedAt: -1 });

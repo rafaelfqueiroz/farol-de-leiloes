@@ -21,6 +21,8 @@ import { CouponsService } from '../../src/coupons/coupons.service.js';
 import { CouponEntity, CouponSchema } from '../../src/coupons/schemas/coupon.schema.js';
 import { PaymentGateway } from '../../src/payments/payment-gateway.js';
 import { SavedFiltersService } from '../../src/saved-filters/saved-filters.service.js';
+import { SavedFiltersRepository } from '../../src/saved-filters/saved-filters.repository.js';
+import { anAccessContext } from '../fakes/fake-access-sources.js';
 import {
   SavedFilterEntity,
   SavedFilterSchema,
@@ -33,6 +35,7 @@ import businessConfig from '../../src/config/business.config.js';
 
 const NOW = new Date('2026-01-15T12:00:00.000Z');
 const USER = new Types.ObjectId('64b7f0000000000000000a01');
+const ctx = await anAccessContext(USER.toHexString()); // SPEC-002: services take the context
 const PAGE = { page: 1, pageSize: 20 };
 
 // 34 significant digits, more than a double holds (~15–17): only Decimal128 keeps them all.
@@ -63,6 +66,7 @@ describe('Money round trip through MongoDB (integration)', () => {
         AuctionsService,
         CouponsService,
         SavedFiltersService,
+        SavedFiltersRepository,
         { provide: Clock, useValue: new FakeClock(NOW) },
         { provide: PaymentGateway, useValue: new FakePaymentGateway() },
         { provide: CACHE_MANAGER, useValue: {} },
@@ -184,7 +188,7 @@ describe('Money round trip through MongoDB (integration)', () => {
 
   describe('saved filters', () => {
     it('stores the price bounds as Decimal128 and reads them back exactly', async () => {
-      await savedFilters.create(USER.toString(), 'Até 300 mil', {
+      await savedFilters.create(ctx, 'Até 300 mil', {
         state: 'RN',
         maxPrice: new Decimal('300000.50'),
       });
@@ -207,7 +211,7 @@ describe('Money round trip through MongoDB (integration)', () => {
         updatedAt: NOW,
       });
 
-      const page = await savedFilters.findPage(USER.toString(), PAGE);
+      const page = await savedFilters.findPage(ctx, PAGE);
       const byName = new Map(page.items.map((filter) => [filter.name, filter.filters]));
       expect(byName.get('Migrado')).toEqual({
         city: ['Natal'],

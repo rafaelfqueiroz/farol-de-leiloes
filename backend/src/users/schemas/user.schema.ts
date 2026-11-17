@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { SUBSCRIPTION_STATUSES, SubscriptionStatus } from '../subscription-status.js';
 import { ACCOUNT_STATUSES, type AccountStatus, type UserAccount } from '../user-account.js';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 /** Legacy shape of the stored `address`; nothing reads or writes it (see the legacy fields below). */
 interface LegacyAddress {
@@ -99,6 +100,13 @@ export class UserEntity extends Document implements UserAccount {
 }
 
 export const UserSchema = SchemaFactory.createForClass(UserEntity);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(UserSchema, {
+  kind: 'internal',
+  reason:
+    "The account itself: read by the authenticated account's own id (JwtStrategy, /auth/me, profile) and by operations code; never listed per owner",
+});
 
 // email, googleId and stripeCustomerId are indexed by their `unique` @Prop options; declaring them
 // again here makes Mongoose 9 warn about duplicate indexes (TESTING §2: stray output is a defect).

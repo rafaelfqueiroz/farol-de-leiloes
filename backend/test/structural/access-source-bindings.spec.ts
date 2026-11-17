@@ -79,6 +79,10 @@ function moduleImports(file: string): string[] {
         ) {
           for (const element of property.initializer.elements) {
             if (ts.isIdentifier(element)) imports.push(element.text);
+            // `...FEATURE_MODULES`: AppModule spreads the list of src/feature-modules.ts.
+            if (ts.isSpreadElement(element) && ts.isIdentifier(element.expression)) {
+              imports.push(`...${element.expression.text}`);
+            }
           }
         }
       }
@@ -87,6 +91,33 @@ function moduleImports(file: string): string[] {
   }
   visit(syntax);
   return imports;
+}
+
+/** The identifiers of the FEATURE_MODULES array of src/feature-modules.ts (SPEC-002 part 2). */
+function featureModules(): string[] {
+  const file = 'feature-modules.ts';
+  const syntax = ts.createSourceFile(
+    file,
+    readFileSync(join(SRC, file), 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const names: string[] = [];
+  function visit(node: ts.Node): void {
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.name.getText(syntax) === 'FEATURE_MODULES' &&
+      node.initializer &&
+      ts.isArrayLiteralExpression(node.initializer)
+    ) {
+      for (const element of node.initializer.elements) {
+        if (ts.isIdentifier(element)) names.push(element.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(syntax);
+  return names;
 }
 
 describe('BR-002-21: the access sources are bound in AccessModule only', () => {
@@ -111,8 +142,9 @@ describe('BR-002-21: the access sources are bound in AccessModule only', () => {
     expect(moduleImports(file)).toContain('AccessModule');
   });
 
-  it('AppModule imports AuthModule', () => {
-    expect(moduleImports('app.module.ts')).toContain('AuthModule');
+  it('AppModule imports AuthModule (through FEATURE_MODULES)', () => {
+    expect(moduleImports('app.module.ts')).toContain('...FEATURE_MODULES');
+    expect(featureModules()).toContain('AuthModule');
   });
 });
 

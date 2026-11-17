@@ -70,6 +70,7 @@ readonly ENTRIES=(
   "R2_SECRET_ACCESS_KEY         secret    backend  required"
   "R2_BUCKET                    variable  backend  required"
   "R2_PUBLIC_URL                variable  backend  required"
+  "R2_PRIVATE_BUCKET            variable  backend  optional"
   "IMPORT_ENABLED               variable  backend  optional"
   "IMPORT_ON_START_UP           variable  backend  optional"
   "SCRAPER_ENABLED              variable  backend  optional"

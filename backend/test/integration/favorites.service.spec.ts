@@ -1,7 +1,7 @@
 // Integration: FavoritesService against a real MongoDB (Testcontainers, TESTING §2). Proves the
-// paginated favorites list (AR-35) and the codes lookup against stored documents: owner-scoped
-// (AR-12; the HTTP-level isolation gate arrives with #2, TESTING §4), most recent first, counting
-// only active auctions, with page boundaries that neither repeat nor skip.
+// paginated favorites list (AR-35) and the codes lookup against stored documents: account-scoped
+// (AR-12, BR-002-02; through the API: test/isolation/favorites.isolation.spec.ts), most recent
+// first, counting only active auctions, with page boundaries that neither repeat nor skip.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
@@ -17,13 +17,18 @@ import {
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
 import { Clock } from '../../src/common/clock/clock.js';
 import { FakeClock } from '../fakes/fake-clock.js';
+import { FavoritesRepository } from '../../src/favorites/favorites.repository.js';
 import { FavoritesService } from '../../src/favorites/favorites.service.js';
+import { anAccessContext } from '../fakes/fake-access-sources.js';
 import { FavoriteEntity, FavoriteSchema } from '../../src/favorites/schemas/favorite.schema.js';
 import { useTestDatabase } from '../support/test-database.js';
 import { testConfigService } from '../support/test-env.js';
 
 const USER_A = new Types.ObjectId('64b7f0000000000000000a01');
 const USER_B = new Types.ObjectId('64b7f0000000000000000b01');
+// SPEC-002: the service is asked as each account, through the context the real factory builds.
+const ctxA = await anAccessContext(USER_A.toHexString());
+const ctxB = await anAccessContext(USER_B.toHexString());
 
 // Far from any day the suite runs, so activity does not depend on the clock (TS-06).
 const LONG_AGO = new Date('2000-01-01T00:00:00.000Z');
@@ -62,6 +67,7 @@ describe('FavoritesService (integration)', () => {
       ],
       providers: [
         FavoritesService,
+        FavoritesRepository,
         AuctionsService,
         { provide: Clock, useValue: new FakeClock() },
         { provide: CACHE_MANAGER, useValue: {} },
@@ -111,7 +117,7 @@ describe('FavoritesService (integration)', () => {
 
   describe('findPage', () => {
     it("pages the user's active favorites, most recently favorited first", async () => {
-      const page = await service.findPage(USER_A.toString(), { page: 1, pageSize: 20 });
+      const page = await service.findPage(ctxA, { page: 1, pageSize: 20 });
 
       // A's favorites, newest first: A4 (unavailable), A3 (closed), A2, A1 -> active: A2, A1.
       expect(page).toMatchObject({ total: 2, page: 1, pageSize: 20 });
@@ -119,9 +125,9 @@ describe('FavoritesService (integration)', () => {
     });
 
     it('cuts pages without repeating or skipping, with the total of every page', async () => {
-      const first = await service.findPage(USER_A.toString(), { page: 1, pageSize: 1 });
-      const second = await service.findPage(USER_A.toString(), { page: 2, pageSize: 1 });
-      const third = await service.findPage(USER_A.toString(), { page: 3, pageSize: 1 });
+      const first = await service.findPage(ctxA, { page: 1, pageSize: 1 });
+      const second = await service.findPage(ctxA, { page: 2, pageSize: 1 });
+      const third = await service.findPage(ctxA, { page: 3, pageSize: 1 });
 
       expect(first.items.map((item) => item.code)).toEqual(['A2']);
       expect(second.items.map((item) => item.code)).toEqual(['A1']);
@@ -130,7 +136,7 @@ describe('FavoritesService (integration)', () => {
     });
 
     it("AR-12: never includes another user's favorites, nor counts them", async () => {
-      const page = await service.findPage(USER_B.toString(), { page: 1, pageSize: 20 });
+      const page = await service.findPage(ctxB, { page: 1, pageSize: 20 });
 
       expect(page.total).toBe(2);
       expect(page.items.map((item) => item.code)).toEqual(['A1', 'B1']);
@@ -139,7 +145,7 @@ describe('FavoritesService (integration)', () => {
 
   describe('findCodes', () => {
     it('lists every code the user favorited, active or not, newest first', async () => {
-      await expect(service.findCodes(USER_A.toString())).resolves.toEqual([
+      await expect(service.findCodes(ctxA)).resolves.toEqual([
         'A4-unavailable',
         'A3-closed',
         'A2',
@@ -148,11 +154,13 @@ describe('FavoritesService (integration)', () => {
     });
 
     it("AR-12: holds only the user's own codes", async () => {
-      await expect(service.findCodes(USER_B.toString())).resolves.toEqual(['A1', 'B1']);
+      await expect(service.findCodes(ctxB)).resolves.toEqual(['A1', 'B1']);
     });
 
     it('is empty for a user with no favorites', async () => {
-      await expect(service.findCodes(new Types.ObjectId().toString())).resolves.toEqual([]);
+      await expect(
+        service.findCodes(await anAccessContext(new Types.ObjectId().toString())),
+      ).resolves.toEqual([]);
     });
   });
 });

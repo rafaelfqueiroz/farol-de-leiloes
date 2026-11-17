@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AccessContext } from './access-context.js';
+import { AccessContext, ActingOwner } from './access-context.js';
+import { DomainError } from '../common/errors/domain-error.js';
 import {
   accessContextFactory,
   fakeAccessSources,
@@ -246,5 +247,137 @@ describe('AccessContext (SPEC-002 AR-13)', () => {
       ['journeys', 'journeys'],
       ['radar', 'radar'],
     ]);
+  });
+});
+
+describe('AccessContext.resolveActingOwner (SPEC-002 BR-002-11)', () => {
+  const WRITABLE = { advisorPlanActive: true, readOnly: false, entitlements: [] };
+
+  async function contextOf(relationships: FakeRelationships) {
+    return contextFor(relationships).built;
+  }
+
+  it('acts for the only owner the account conducts', async () => {
+    const access = await contextOf({
+      memberships: [{ officeId: 'office-a' }],
+      officePlans: { 'office-a': WRITABLE },
+    });
+
+    const acting = access.resolveActingOwner();
+
+    expect(acting.owner).toEqual({ ownerType: 'office', ownerId: 'office-a' });
+    expect(acting.context).toBe(access);
+    expect(Object.isFrozen(acting)).toBe(true);
+    expect(Object.isFrozen(acting.owner)).toBe(true);
+  });
+
+  it('acts for itself when self-advised only', async () => {
+    const access = await contextOf({ selfAdvised: true });
+
+    expect(access.resolveActingOwner().owner).toEqual({
+      ownerType: 'self_advised',
+      ownerId: 'account-1',
+    });
+  });
+
+  it('refuses an account that conducts nothing (FORBIDDEN: no record is involved)', async () => {
+    const access = await contextOf({});
+
+    expect(() => access.resolveActingOwner()).toThrow(new DomainError('FORBIDDEN'));
+  });
+
+  it('asks an account of several owners to choose, and accepts only its own offices', async () => {
+    const access = await contextOf({
+      memberships: [{ officeId: 'office-a' }, { officeId: 'office-b' }],
+      officePlans: { 'office-a': WRITABLE, 'office-b': WRITABLE },
+    });
+
+    expect(() => access.resolveActingOwner()).toThrow(
+      new DomainError('VALIDATION_FAILED', { fields: ['officeId'] }),
+    );
+    expect(access.resolveActingOwner('office-b').owner).toEqual({
+      ownerType: 'office',
+      ownerId: 'office-b',
+    });
+    // BR-002-12: an office the account is not in answers like one that does not exist.
+    expect(() => access.resolveActingOwner('office-c')).toThrow(new DomainError('NOT_FOUND'));
+    expect(() => access.resolveActingOwner('office-c', 'REMINDER_NOT_FOUND')).toThrow(
+      new DomainError('REMINDER_NOT_FOUND'),
+    );
+    expect(() => access.resolveActingOwner({ $ne: null })).toThrow(new DomainError('NOT_FOUND'));
+  });
+
+  it('BR-002-30: tells a readable owner from a writable one', async () => {
+    const access = await contextOf({
+      memberships: [{ officeId: 'office-a' }, { officeId: 'office-r' }],
+      officePlans: { 'office-a': WRITABLE, 'office-r': { ...WRITABLE, readOnly: true } },
+    });
+    const a = { ownerType: 'office' as const, ownerId: 'office-a' };
+    const r = { ownerType: 'office' as const, ownerId: 'office-r' };
+    const other = { ownerType: 'office' as const, ownerId: 'office-b' };
+    const selfAdvisedTwin = { ownerType: 'self_advised' as const, ownerId: 'office-a' };
+
+    expect([a, r, other, selfAdvisedTwin].map((owner) => access.canReadOwner(owner))).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    expect([a, r, other].map((owner) => access.canWriteOwner(owner))).toEqual([true, false, false]);
+  });
+
+  it('an ActingOwner cannot be built outside the context', () => {
+    const Constructor = ActingOwner as unknown as new (...args: unknown[]) => ActingOwner;
+
+    expect(() => new Constructor(Symbol('forged'), { ownerType: 'office', ownerId: 'x' })).toThrow(
+      /resolveActingOwner only/,
+    );
+  });
+});
+
+describe('AccessContextFactory.readOnlyView (SPEC-002 BR-002-25, the part 3 grant seam)', () => {
+  const relationships: FakeRelationships = {
+    memberships: [{ officeId: 'office-a' }],
+    officePlans: { 'office-a': ACTIVE_PLAN },
+    clientLinks: [{ officeId: 'office-b', status: 'ended', endedAt: ENDED_AT }],
+    selfAdvised: true,
+    selfAdvisedEntitlements: ['calculator'],
+  };
+
+  it('reads exactly what the context reads, and writes nothing', async () => {
+    const { sources, built } = contextFor(relationships);
+    const ctx = await built;
+
+    const view = accessContextFactory(sources).readOnlyView(ctx);
+
+    expect(view).not.toBe(ctx);
+    expect(view.readOnly).toBe(true);
+    expect(ctx.readOnly).toBe(false);
+    expect({ ...view, entitlements: [...view.entitlements] }).toMatchObject({
+      accountId: ctx.accountId,
+      isAdmin: ctx.isAdmin,
+      personas: ctx.personas,
+      memberships: ctx.memberships,
+      clientLinks: ctx.clientLinks,
+      selfAdvised: true,
+      entitlements: [...ctx.entitlements],
+    });
+    expect(view.clientLinks[0]?.endedAtMs).toBe(ENDED_AT.getTime());
+    expect(view.conductedOwners()).toEqual(ctx.conductedOwners());
+    expect(view.writableOwners()).toEqual([]);
+    expect(view.canWriteWith('journeys')).toBe(false);
+    expect(ctx.canWriteWith('journeys')).toBe(true);
+    expect(view.canWriteOwner({ ownerType: 'office', ownerId: 'office-a' })).toBe(false);
+    expect(Object.isFrozen(view)).toBe(true);
+  });
+
+  it('keeps an active link without an end date', async () => {
+    const { sources, built } = contextFor({
+      clientLinks: [{ officeId: 'office-b', status: 'active' }],
+    });
+
+    const view = accessContextFactory(sources).readOnlyView(await built);
+
+    expect(view.clientLinks).toEqual([{ officeId: 'office-b', status: 'active' }]);
   });
 });

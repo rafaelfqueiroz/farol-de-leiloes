@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 @Schema({ collection: 'favorites', timestamps: true })
 export class FavoriteEntity extends Document {
@@ -26,6 +27,13 @@ export class FavoriteEntity extends Document {
 export type FavoriteDocument = HydratedDocument<FavoriteEntity>;
 
 export const FavoriteSchema = SchemaFactory.createForClass(FavoriteEntity);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(FavoriteSchema, {
+  kind: 'account',
+  reason:
+    "SPEC-002 BR-002-02: the account's own favorites, scoped by userId (FavoritesRepository); no office sees them (DL-002-08)",
+});
 
 // Create compound index to ensure a user can't favorite the same auction twice
 FavoriteSchema.index({ userId: 1, auctionCode: 1 }, { unique: true });

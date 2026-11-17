@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 /**
  * BR-001-17/18: a server-side session, keyed by the token's `jti`. It identifies the account and
@@ -31,6 +32,13 @@ export class SessionEntity {
 
 export type SessionDocument = HydratedDocument<SessionEntity>;
 export const SessionSchema = SchemaFactory.createForClass(SessionEntity);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(SessionSchema, {
+  kind: 'internal',
+  reason:
+    "SPEC-001 sign-in sessions of an account: checked by the session id inside the caller's own token; never listed",
+});
 
 // BR-001-18: the database removes an expired session; isActive also checks `expiresAt` against the
 // injected clock, because the TTL monitor lags by up to a minute.

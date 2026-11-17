@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 import { ReminderChannel } from './reminder.schema.js';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 @Schema({ collection: 'notificationlogs', timestamps: { createdAt: true, updatedAt: false } })
 export class NotificationLog {
@@ -36,5 +37,12 @@ export class NotificationLog {
 export type NotificationLogDocument = HydratedDocument<NotificationLog>;
 
 export const NotificationLogSchema = SchemaFactory.createForClass(NotificationLog);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(NotificationLogSchema, {
+  kind: 'account',
+  reason:
+    "SPEC-002 BR-002-02: delivery attempts of the account's own reminders, written by the scheduler for the reminder's account (BR-002-29); no API reads them",
+});
 
 NotificationLogSchema.index({ createdAt: -1 });

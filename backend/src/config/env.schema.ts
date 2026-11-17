@@ -98,6 +98,10 @@ export const envSchema = z
     R2_SECRET_ACCESS_KEY: required,
     R2_BUCKET: required,
     R2_PUBLIC_URL: url,
+    // SC-18 / BR-002-08: the bucket of CLIENT files (SPEC-017), with no public access at all. A
+    // separate bucket, never R2_BUCKET (served openly at R2_PUBLIC_URL; superRefine below). Optional
+    // until SPEC-017: without it, client file links are refused, never signed on the public bucket.
+    R2_PRIVATE_BUCKET: required.optional(),
 
     // Scheduled jobs
     IMPORT_ENABLED: flag.default(true),
@@ -135,6 +139,14 @@ export const envSchema = z
           code: 'custom',
           path: ['LOG_HASH_SECRET'],
           message: 'required when NODE_ENV is production',
+        });
+      }
+      // SC-18: a client file in the public bucket would be reachable at R2_PUBLIC_URL, unsigned.
+      if (env.R2_PRIVATE_BUCKET !== undefined && env.R2_PRIVATE_BUCKET === env.R2_BUCKET) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['R2_PRIVATE_BUCKET'],
+          message: 'must not be R2_BUCKET, which is served publicly',
         });
       }
       // The provider itself may be the invalid value, hence the lookup guard.

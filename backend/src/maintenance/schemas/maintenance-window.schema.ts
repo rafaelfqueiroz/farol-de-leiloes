@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
+import { markIsolation } from '../../access/isolation-mark.js';
 
 export type MaintenanceWindowDocument = MaintenanceWindowEntity & Document;
 
@@ -35,3 +36,9 @@ export class MaintenanceWindowEntity extends Document {
 }
 
 export const MaintenanceWindowSchema = SchemaFactory.createForClass(MaintenanceWindowEntity);
+
+// AR-16 / TS-14: the isolation class of this collection.
+markIsolation(MaintenanceWindowSchema, {
+  kind: 'public',
+  reason: 'Platform maintenance announcements, shown to every visitor',
+});
