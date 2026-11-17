@@ -3,6 +3,8 @@ export interface AuditGateInput {
   waiversText: string;
   allAuditText: string;
   runtimeAuditText: string;
+  /** The package directory name, e.g. "backend". */
+  packageName: string;
   now: Date;
 }
 export interface AuditGateResult {
@@ -19,3 +21,4 @@ export function blockingAdvisories(
   auditText: string,
 ): { id: string; package: string; severity: string; title: string }[];
 export function utcDate(now: Date): string;
+export function consumersOf(auditText: string, id: string): string[];

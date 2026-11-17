@@ -2,10 +2,12 @@
 // any high or critical advisory fails, unless `.github/audit-waivers.json` waives it. A waiver
 //   - names an advisory id, the issue that records the exposure (SC-19) and an expiry date;
 //   - covers dev and build tooling only: the same advisory in the runtime tree
-//     (`npm audit --omit=dev`) still fails, unless the waiver lists that package in
-//     `runtimeAllowed`. That key exists because npm files build-time packages that a runtime
-//     dependency pulls in (e.g. @sentry/nextjs -> @rollup/plugin-commonjs) under "prod"; the
-//     issue named by the waiver must record why each such path is build-time only;
+//     (`npm audit --omit=dev`) still fails, unless the waiver lists, for that package directory,
+//     EVERY runtime package the audit flags because of it (the advisory's package and each
+//     package whose `via` chain leads to it) in `runtimeAllowed`. npm files build-time packages
+//     that a runtime dependency pulls in (e.g. @sentry/nextjs -> @rollup/plugin-commonjs) under
+//     "prod"; the issue named by the waiver records the evidence for each. A new consumer, or
+//     any exposure in a package with no list (backend), fails;
 //   - lapses on its own: it is valid THROUGH its `expires` day (UTC, inclusive) and the gate
 //     fails from the next day on, even if the advisory is gone, so stale entries get removed.
 // Moderate and low advisories never fail (same as `--audit-level=high`). Anything unexpected
@@ -14,14 +16,14 @@
 // ids, package names, titles, severities and the waiver's own text.
 //
 // CLI: node audit-gate.mjs [package-dir] [--waivers <file>]
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const BLOCKING = new Set(["high", "critical"]);
-const WAIVER_KEYS = ["id", "issue", "expires", "scope", "reason"];
-const OPTIONAL_KEYS = ["runtimeAllowed"];
+const BLOCKING = new Set(['high', 'critical']);
+const WAIVER_KEYS = ['id', 'issue', 'expires', 'scope', 'reason'];
+const OPTIONAL_KEYS = ['runtimeAllowed'];
 const GHSA = /^GHSA(-[2-9cfghjmpqrvwx]{4}){3}$/;
 const GHSA_IN_URL = /GHSA(?:-[2-9cfghjmpqrvwx]{4}){3}/;
 
@@ -29,10 +31,17 @@ const GHSA_IN_URL = /GHSA(?:-[2-9cfghjmpqrvwx]{4}){3}/;
 export const utcDate = (now) => now.toISOString().slice(0, 10);
 
 function isRealDate(text) {
-  if (typeof text !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(text))
-    return false;
+  if (typeof text !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
   const parsed = new Date(`${text}T00:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && utcDate(parsed) === text;
+}
+
+function validRuntimeAllowed(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.values(value).every(
+    (names) =>
+      Array.isArray(names) && names.every((name) => typeof name === 'string' && name !== ''),
+  );
 }
 
 /** Parses and validates the waiver file text. Returns { waivers, problems }. */
@@ -41,15 +50,14 @@ export function parseWaivers(text) {
   try {
     data = JSON.parse(text);
   } catch {
-    return { waivers: [], problems: ["waiver file is not valid JSON"] };
+    return { waivers: [], problems: ['waiver file is not valid JSON'] };
   }
-  if (!Array.isArray(data))
-    return { waivers: [], problems: ["waiver file must be a JSON array"] };
+  if (!Array.isArray(data)) return { waivers: [], problems: ['waiver file must be a JSON array'] };
   const problems = [];
   const waivers = [];
   data.forEach((entry, index) => {
     const label = `waiver #${index + 1}`;
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
       problems.push(`${label} is not an object`);
       return;
     }
@@ -61,45 +69,24 @@ export function parseWaivers(text) {
     for (const key of WAIVER_KEYS) {
       if (!(key in entry)) problems.push(`${label} is missing "${key}"`);
     }
-    if (
-      "id" in entry &&
-      !(typeof entry.id === "string" && GHSA.test(entry.id))
-    ) {
+    if ('id' in entry && !(typeof entry.id === 'string' && GHSA.test(entry.id))) {
       problems.push(`${label} has a bad id (expected GHSA-xxxx-xxxx-xxxx)`);
     }
-    if (
-      "issue" in entry &&
-      !(Number.isInteger(entry.issue) && entry.issue > 0)
-    ) {
+    if ('issue' in entry && !(Number.isInteger(entry.issue) && entry.issue > 0)) {
       problems.push(`${label} needs "issue" to be a positive issue number`);
     }
-    if ("expires" in entry && !isRealDate(entry.expires)) {
-      problems.push(
-        `${label} has a bad "expires" (expected a real YYYY-MM-DD date)`,
-      );
+    if ('expires' in entry && !isRealDate(entry.expires)) {
+      problems.push(`${label} has a bad "expires" (expected a real YYYY-MM-DD date)`);
     }
-    if ("scope" in entry && entry.scope !== "dev") {
-      problems.push(
-        `${label} has scope other than "dev" (waivers cover dev and build paths only)`,
-      );
+    if ('scope' in entry && entry.scope !== 'dev') {
+      problems.push(`${label} has scope other than "dev" (waivers cover dev and build paths only)`);
     }
-    if (
-      "reason" in entry &&
-      !(typeof entry.reason === "string" && entry.reason.trim() !== "")
-    ) {
+    if ('reason' in entry && !(typeof entry.reason === 'string' && entry.reason.trim() !== '')) {
       problems.push(`${label} needs a non-empty "reason"`);
     }
-    if (
-      "runtimeAllowed" in entry &&
-      !(
-        Array.isArray(entry.runtimeAllowed) &&
-        entry.runtimeAllowed.every(
-          (name) => typeof name === "string" && name !== "",
-        )
-      )
-    ) {
+    if ('runtimeAllowed' in entry && !validRuntimeAllowed(entry.runtimeAllowed)) {
       problems.push(
-        `${label} needs "runtimeAllowed" to be a list of package names`,
+        `${label} needs "runtimeAllowed" to be an object of package directory -> list of package names`,
       );
     }
     if (problems.length === before) waivers.push(entry);
@@ -116,37 +103,26 @@ export function blockingAdvisories(auditText) {
   try {
     report = JSON.parse(auditText);
   } catch {
-    throw new Error("npm audit output is not valid JSON");
+    throw new Error('npm audit output is not valid JSON');
   }
-  if (report === null || typeof report !== "object")
-    throw new Error("npm audit output is not an object");
-  if (report.error !== undefined)
-    throw new Error("npm audit reported an error");
-  if (
-    report.vulnerabilities === null ||
-    typeof report.vulnerabilities !== "object"
-  ) {
+  if (report === null || typeof report !== 'object')
+    throw new Error('npm audit output is not an object');
+  if (report.error !== undefined) throw new Error('npm audit reported an error');
+  if (report.vulnerabilities === null || typeof report.vulnerabilities !== 'object') {
     throw new Error('npm audit output has no "vulnerabilities"');
   }
   const found = new Map();
   for (const [name, vulnerability] of Object.entries(report.vulnerabilities)) {
     for (const via of vulnerability?.via ?? []) {
-      if (
-        via === null ||
-        typeof via !== "object" ||
-        !BLOCKING.has(via.severity)
-      )
-        continue;
-      const url = typeof via.url === "string" ? via.url : "";
-      const id =
-        GHSA_IN_URL.exec(url)?.[0] ??
-        (url || `source ${via.source ?? "unknown"}`);
-      const pkg = typeof via.name === "string" ? via.name : name;
+      if (via === null || typeof via !== 'object' || !BLOCKING.has(via.severity)) continue;
+      const url = typeof via.url === 'string' ? via.url : '';
+      const id = GHSA_IN_URL.exec(url)?.[0] ?? (url || `source ${via.source ?? 'unknown'}`);
+      const pkg = typeof via.name === 'string' ? via.name : name;
       found.set(`${id}|${pkg}`, {
         id,
         package: pkg,
         severity: via.severity,
-        title: via.title ?? "",
+        title: via.title ?? '',
       });
     }
   }
@@ -154,16 +130,38 @@ export function blockingAdvisories(auditText) {
 }
 
 /**
+ * Every package an `npm audit --json` report flags because of advisory `id`: the package that
+ * carries it plus each package whose `via` chain leads to it. Sorted.
+ */
+export function consumersOf(auditText, id) {
+  const { vulnerabilities } = JSON.parse(auditText);
+  const entries = Object.entries(vulnerabilities);
+  const hit = new Set(
+    entries
+      .filter(([, v]) =>
+        (v?.via ?? []).some((via) => typeof via === 'object' && via?.url?.includes(id)),
+      )
+      .map(([name]) => name),
+  );
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [name, v] of entries) {
+      if (!hit.has(name) && (v?.via ?? []).some((via) => typeof via === 'string' && hit.has(via))) {
+        hit.add(name);
+        grew = true;
+      }
+    }
+  }
+  return [...hit].sort();
+}
+
+/**
  * The gate decision. `waiversText`, `allAuditText` (`npm audit --json`) and `runtimeAuditText`
- * (`npm audit --omit=dev --json`) are raw texts; `now` is a Date. Pure: no I/O, no clock.
+ * (`npm audit --omit=dev --json`) are raw texts; `packageName` is the package directory
+ * ("backend", "frontend"); `now` is a Date. Pure: no I/O, no clock.
  * Returns { ok, failures, applied } where each entry is one printable line.
  */
-export function evaluateAudit({
-  waiversText,
-  allAuditText,
-  runtimeAuditText,
-  now,
-}) {
+export function evaluateAudit({ waiversText, allAuditText, runtimeAuditText, packageName, now }) {
   const failures = [];
   const applied = [];
 
@@ -195,9 +193,14 @@ export function evaluateAudit({
   const waived = new Map(live.map((waiver) => [waiver.id, waiver]));
   for (const advisory of runtime) {
     const waiver = waived.get(advisory.id);
-    if (waiver && !(waiver.runtimeAllowed ?? []).includes(advisory.package)) {
+    if (!waiver) continue;
+    const allowed = new Set(waiver.runtimeAllowed?.[packageName] ?? []);
+    const unlisted = consumersOf(runtimeAuditText, advisory.id).filter(
+      (name) => !allowed.has(name),
+    );
+    if (unlisted.length > 0) {
       failures.push(
-        `${advisory.id} (${advisory.package}, ${advisory.severity}) is in the RUNTIME dependencies: its waiver covers dev and build paths only (runtimeAllowed does not list ${advisory.package})`,
+        `${advisory.id} (${advisory.package}, ${advisory.severity}) is in the RUNTIME dependencies of ${packageName}: its waiver covers dev and build paths only, and runtimeAllowed.${packageName} does not list ${unlisted.join(', ')}`,
       );
     }
   }
@@ -216,39 +219,36 @@ export function evaluateAudit({
 }
 
 function runAudit(cwd, omitDev) {
-  const args = ["audit", "--json", ...(omitDev ? ["--omit=dev"] : [])];
-  const result = spawnSync("npm", args, {
+  const args = ['audit', '--json', ...(omitDev ? ['--omit=dev'] : [])];
+  const result = spawnSync('npm', args, {
     cwd,
-    encoding: "utf8",
+    encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
   // npm exits 1 when it finds vulnerabilities; the JSON on stdout is what matters, and the
   // evaluation rejects error reports and unparseable output.
-  return result.error || result.stdout === undefined ? "" : result.stdout;
+  return result.error || result.stdout === undefined ? '' : result.stdout;
 }
 
 function main(argv) {
   const args = argv.slice(2);
-  let dir = ".";
-  let waiversFile = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "audit-waivers.json",
-  );
+  let dir = '.';
+  let waiversFile = join(dirname(fileURLToPath(import.meta.url)), '..', 'audit-waivers.json');
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--waivers") waiversFile = args[++i] ?? "";
+    if (args[i] === '--waivers') waiversFile = args[++i] ?? '';
     else dir = args[i];
   }
   let waiversText;
   try {
-    waiversText = readFileSync(waiversFile, "utf8");
+    waiversText = readFileSync(waiversFile, 'utf8');
   } catch {
-    waiversText = "";
+    waiversText = '';
   }
   const result = evaluateAudit({
     waiversText,
     allAuditText: runAudit(dir, false),
     runtimeAuditText: runAudit(dir, true),
+    packageName: basename(resolve(dir)),
     now: new Date(),
   });
   for (const line of result.applied) console.log(`audit: ${line}`);

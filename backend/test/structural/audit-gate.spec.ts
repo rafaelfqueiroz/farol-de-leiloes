@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { evaluateAudit, parseWaivers } from '../../../.github/scripts/audit-gate.mjs';
+import { consumersOf, evaluateAudit, parseWaivers } from '../../../.github/scripts/audit-gate.mjs';
 
 const ID = 'GHSA-fc5q-39xc-vjpf';
 const advisory = (name: string, id: string, severity: string) => ({
@@ -53,6 +53,36 @@ const report = (...advisories: ReturnType<typeof advisory>[]): string =>
   });
 const clean = report();
 
+/** What `npm audit --omit=dev` reports in the frontend today: the advisory in picomatch, and the
+ * packages that depend on it by name (the `via` chain). */
+const FRONTEND_CHAIN = [
+  '@parcel/watcher',
+  '@rollup/plugin-commonjs',
+  '@rollup/pluginutils',
+  '@sentry/nextjs',
+  'fdir',
+  'picomatch',
+  'tinyglobby',
+  'vite',
+];
+const chainReport = (names: string[]): string => {
+  const vulnerabilities: Record<string, unknown> = {};
+  for (const name of names) {
+    vulnerabilities[name] = {
+      name,
+      severity: 'high',
+      isDirect: false,
+      via: name === 'picomatch' ? [advisory('picomatch', ID, 'high')] : ['picomatch'],
+      effects: [],
+      range: '*',
+      nodes: [`node_modules/${name}`],
+      fixAvailable: false,
+    };
+  }
+  return JSON.stringify({ auditReportVersion: 2, vulnerabilities, metadata: {} });
+};
+const frontendRuntime = chainReport(FRONTEND_CHAIN);
+
 const waiver = (over: Record<string, unknown> = {}) => ({
   id: ID,
   issue: 162,
@@ -67,6 +97,7 @@ const run = (over: Partial<Parameters<typeof evaluateAudit>[0]> = {}) =>
     waiversText: JSON.stringify([waiver()]),
     allAuditText: report(advisory('picomatch', ID, 'high')),
     runtimeAuditText: clean,
+    packageName: 'backend',
     now: NOW,
     ...over,
   });
@@ -131,14 +162,48 @@ describe('audit gate (SC-19)', () => {
     expect(result.failures.join('\n')).toContain('RUNTIME');
   });
 
-  it('allows a waived runtime path only for the package the waiver lists in runtimeAllowed', () => {
-    const present = report(advisory('picomatch', ID, 'high'));
-    const allowed = JSON.stringify([waiver({ runtimeAllowed: ['picomatch'] })]);
-    expect(run({ runtimeAuditText: present, waiversText: allowed }).ok).toBe(true);
-    const otherPackage = report(advisory('micromatch', ID, 'high'));
+  it('passes the real frontend runtime shape when the waiver lists every package of the chain', () => {
+    const result = run({
+      packageName: 'frontend',
+      allAuditText: frontendRuntime,
+      runtimeAuditText: frontendRuntime,
+      waiversText: JSON.stringify([waiver({ runtimeAllowed: { frontend: FRONTEND_CHAIN } })]),
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('fails when a new runtime package joins the chain', () => {
+    const grown = chainReport([...FRONTEND_CHAIN, 'new-consumer']);
+    const result = run({
+      packageName: 'frontend',
+      allAuditText: grown,
+      runtimeAuditText: grown,
+      waiversText: JSON.stringify([waiver({ runtimeAllowed: { frontend: FRONTEND_CHAIN } })]),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.failures.join('\n')).toContain('does not list new-consumer');
+  });
+
+  it('fails in a package with no runtimeAllowed list, even though another package has one', () => {
+    const waiversText = JSON.stringify([waiver({ runtimeAllowed: { frontend: FRONTEND_CHAIN } })]);
+    const result = run({
+      packageName: 'backend',
+      allAuditText: frontendRuntime,
+      runtimeAuditText: frontendRuntime,
+      waiversText,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.failures.join('\n')).toContain('RUNTIME dependencies of backend');
+    const alone = report(advisory('picomatch', ID, 'high'));
     expect(
-      run({ runtimeAuditText: otherPackage, allAuditText: otherPackage, waiversText: allowed }).ok,
+      run({ packageName: 'backend', allAuditText: alone, runtimeAuditText: alone, waiversText }).ok,
     ).toBe(false);
+  });
+
+  it('lists every package flagged because of the advisory', () => {
+    expect(consumersOf(frontendRuntime, ID)).toEqual([...FRONTEND_CHAIN].sort());
+    expect(consumersOf(clean, ID)).toEqual([]);
   });
 
   it('fails when the waiver file is malformed', () => {
@@ -153,7 +218,8 @@ describe('audit gate (SC-19)', () => {
       JSON.stringify([waiver({ issue: 0 })]),
       JSON.stringify([waiver({ scope: 'runtime' })]),
       JSON.stringify([waiver({ reason: ' ' })]),
-      JSON.stringify([waiver({ runtimeAllowed: 'picomatch' })]),
+      JSON.stringify([waiver({ runtimeAllowed: ['picomatch'] })]),
+      JSON.stringify([waiver({ runtimeAllowed: { frontend: 'picomatch' } })]),
       '',
     ]) {
       const result = run({ waiversText: text, allAuditText: clean });
