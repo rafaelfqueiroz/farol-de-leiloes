@@ -15,6 +15,7 @@
     "start:debug": "node --inspect=0.0.0.0:9229 --import ./dist/instrument.js dist/main.js",
     "migrate": "node dist/migrations/run.js",
     "grant-admin": "node dist/access/grant-admin/run.js",
+    "plans:upsert": "node dist/plans/upsert/run.js",
     "test": "vitest run --project unit --project \"tz-*\" --project structural",
     "test:integration": "vitest run --project integration",
     "test:isolation": "vitest run --project isolation",
