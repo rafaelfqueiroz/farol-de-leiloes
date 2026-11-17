@@ -1,0 +1,10 @@
+[
+  {
+    "id": "GHSA-fc5q-39xc-vjpf",
+    "issue": 162,
+    "expires": "2026-12-01",
+    "scope": "dev",
+    "runtimeAllowed": ["picomatch"],
+    "reason": "picomatch ReDoS (<= 4.0.7, no patched version); reaches only dev and build tooling (vitest, vite, eslint, build-time Sentry plugins), which match repository-authored globs, never user input. npm files three build-time paths under prod in the frontend (@sentry/nextjs -> @rollup/plugin-commonjs, next-intl -> @parcel/watcher, @sentry/cloudflare -> vite), hence runtimeAllowed"
+  }
+]
