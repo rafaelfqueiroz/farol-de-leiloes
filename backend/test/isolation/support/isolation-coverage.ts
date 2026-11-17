@@ -182,6 +182,14 @@ export function modelIsolations(connection: Connection): ModelIsolation[] {
     .map((name) => isolationOf(name, connection.model(name).schema as Schema));
 }
 
+/** The models that need an isolation test: owned ones and account-data ones (TS-13, BR-002-02). */
+export function requiredModelNames(models: readonly ModelIsolation[]): string[] {
+  return models
+    .filter((model) => model.owned || model.mark?.kind === 'account')
+    .map((model) => model.name)
+    .sort();
+}
+
 /**
  * The gate (TS-14): one line per model that breaks it.
  * - owned (ownerId) with no isolation spec naming it (TS-13);

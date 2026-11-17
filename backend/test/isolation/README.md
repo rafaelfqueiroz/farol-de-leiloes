@@ -32,7 +32,17 @@ isolationSpecFor('<ModelName>', () => {
 with the TypeScript parser for these calls, so nothing else needs registering. Only a real call with
 a string-literal name counts — never a comment or a string — and its body must run an `it(...)` or
 `test(...)`. A file that names a model and skips, focuses or postpones a test (`.skip`, `.todo`,
-`.only`, `.skipIf`, `.runIf`, `.fails`, `xit`, `xdescribe`, ...) fails the gate and covers nothing. `support/isolation-app.ts`
+`.only`, `.skipIf`, `.runIf`, `.fails`, `xit`, `xdescribe`, ...) fails the gate and covers nothing.
+
+Parsing is only the first layer, because a call can contain an `it(...)` and run none (a loop over
+no scenarios, an environment-conditional registration, a helper never called). The second layer is
+the run itself: `isolationSpecFor` stamps each test that runs inside it with its model, and after
+all files finish `IsolationRunReporter` (`support/isolation-reporter.ts`, registered in
+`vitest.config.mts`) fails the run — non-zero exit, message naming each model — for any owned or
+account model without an isolation test that **ran and passed**. It applies only when the
+enumeration spec ran, so running one file by filter never fails falsely; the full
+`npm run test:isolation` always checks. Self-test: `test/structural/isolation-gate-run.spec.ts`
+runs a child `vitest run` over `support/__fixtures__/` (no Docker). `support/isolation-app.ts`
 (`createIsolationApp`) boots the real auth stack with the modules under test, accounts with
 confirmed emails (`signUp`, `signUpAll`) and one `FakeAccessSources` the spec drives per account
 (`sources.forAccount(id, {...})`, `sources.plans`), plus `supportRequests` (SPEC-009's seam); `answerOf` gives the status and body that
