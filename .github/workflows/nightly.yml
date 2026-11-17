@@ -36,8 +36,8 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           done
-      - run: npm audit --audit-level=high
+      - run: node ../.github/scripts/audit-gate.mjs .
         working-directory: backend
-      - run: npm audit --audit-level=high
+      - run: node ../.github/scripts/audit-gate.mjs .
         if: ${{ !cancelled() }}
         working-directory: frontend

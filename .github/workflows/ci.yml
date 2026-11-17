@@ -209,7 +209,8 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # SC-19: a high or critical advisory blocks. `npm audit` reads the lockfile, so no install.
+  # SC-19: a high or critical advisory blocks unless .github/audit-waivers.json waives it (dev paths
+  # only, with an issue and an expiry). `npm audit` reads the lockfile, so no install.
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -221,10 +222,10 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
-      - run: npm audit --audit-level=high
+      - run: node ../.github/scripts/audit-gate.mjs .
         working-directory: backend
       # Runs even when the backend audit fails, so one run reports both packages.
-      - run: npm audit --audit-level=high
+      - run: node ../.github/scripts/audit-gate.mjs .
         if: ${{ !cancelled() }}
         working-directory: frontend
 

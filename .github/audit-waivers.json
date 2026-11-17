@@ -1,0 +1,21 @@
+[
+  {
+    "id": "GHSA-fc5q-39xc-vjpf",
+    "issue": 162,
+    "expires": "2026-12-01",
+    "scope": "dev",
+    "runtimeAllowed": {
+      "frontend": [
+        "@parcel/watcher",
+        "@rollup/plugin-commonjs",
+        "@rollup/pluginutils",
+        "@sentry/nextjs",
+        "fdir",
+        "picomatch",
+        "tinyglobby",
+        "vite"
+      ]
+    },
+    "reason": "picomatch ReDoS (<= 4.0.7, no patched version); dev and build tooling only, matching repository-authored globs, never user input. Backend has no runtime exposure. npm files the frontend build-time chain under prod (@sentry/nextjs -> @rollup/plugin-commonjs, next-intl -> @parcel/watcher, @sentry/cloudflare -> vite); evidence: after next build, .next/standalone (all the image ships) has none of picomatch, @parcel/watcher, @rollup/*, vite, fdir, tinyglobby, @sentry/nextjs, next-intl in node_modules, only Next's own vendored next/dist/compiled/picomatch"
+  }
+]
