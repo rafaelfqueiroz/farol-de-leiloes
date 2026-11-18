@@ -32,6 +32,9 @@ import {
   type SubscriptionDocument,
 } from '../../src/subscriptions/schemas/subscription.schema.js';
 import { SubscriptionsBillingService } from '../../src/subscriptions/subscriptions-billing.service.js';
+import { SubscriptionsReconcileJob } from '../../src/subscriptions/subscriptions-reconcile.job.js';
+import type { JobExecutionService } from '../../src/common/services/job-execution.service.js';
+import type { SchedulerConfig } from '../../src/config/scheduler.config.js';
 import {
   OpenCheckoutExistsError,
   SubscriptionsRepository,
@@ -70,6 +73,7 @@ function patch(overrides: Partial<SyncPatch> = {}): SyncPatch {
     scheduledPlanId: null,
     scheduledChangeAt: null,
     firstPaidAt: new Date('2099-02-01T00:00:05.000Z'),
+    firstPaymentFree: false,
     lapsedAt: null,
     readOnlyAt: null,
     lastSyncedAt: NOW,
@@ -156,32 +160,57 @@ describe('billing repositories (integration, SPEC-012)', () => {
       await pending();
     });
 
-    it('finds the open checkout by key, and releases the key when the provider moves it out of PENDING', async () => {
+    it('finds the open checkout by key; the key lives through the payment and is released by the office attach or the lapse', async () => {
       const created = await pending({ openCheckoutKey: `buyer:${BUYER}` });
       expect((await subscriptions.findOpenCheckout(`buyer:${BUYER}`))?.id).toBe(created.id);
       expect(await subscriptions.findOpenCheckout('buyer:nobody')).toBeNull();
-
       const token = 'token-release';
-      await subscriptions.acquireSyncLease(
-        created.id,
-        token,
-        NOW,
-        new Date(NOW.getTime() + 30_000),
-      );
-      await subscriptions.writeSync(created.id, token, patch({ status: 'PENDING' }));
-      expect(await subscriptions.findOpenCheckout(`buyer:${BUYER}`)).not.toBeNull(); // still incomplete
+      const sync = async (status: 'PENDING' | 'ACTIVE' | 'LAPSED') => {
+        await subscriptions.acquireSyncLease(
+          created.id,
+          token,
+          NOW,
+          new Date(NOW.getTime() + 30_000),
+        );
+        await subscriptions.writeSync(
+          created.id,
+          token,
+          patch({ status, lapsedAt: status === 'LAPSED' ? NOW : null }),
+        );
+      };
 
-      await subscriptions.acquireSyncLease(
-        created.id,
-        token,
-        NOW,
-        new Date(NOW.getTime() + 30_000),
+      await sync('PENDING');
+      await sync('ACTIVE'); // paid, the office not created yet: the buyer still holds the key
+      expect(await subscriptions.findOpenCheckout(`buyer:${BUYER}`)).not.toBeNull();
+      await expect(pending({ openCheckoutKey: `buyer:${BUYER}` })).rejects.toBeInstanceOf(
+        OpenCheckoutExistsError,
       );
-      await subscriptions.writeSync(created.id, token, patch({ status: 'ACTIVE' }));
 
+      expect(await subscriptions.attachOffice(created.id, OFFICE, NOW)).toBe('attached');
       expect(await subscriptions.findOpenCheckout(`buyer:${BUYER}`)).toBeNull();
       expect(await raw(created.id)).not.toHaveProperty('openCheckoutKey');
       await pending({ openCheckoutKey: `buyer:${BUYER}` }); // the buyer may start another
+    });
+
+    it('an office checkout keeps the office key while its subscription lives and gives it back when it lapses', async () => {
+      const created = await pending({ officeId: OFFICE, openCheckoutKey: `office:${OFFICE}` });
+      const token = 'token-lapse';
+      const sync = async (over: Partial<SyncPatch>) => {
+        await subscriptions.acquireSyncLease(
+          created.id,
+          token,
+          NOW,
+          new Date(NOW.getTime() + 30_000),
+        );
+        await subscriptions.writeSync(created.id, token, patch(over));
+      };
+
+      await sync({ status: 'ACTIVE' });
+      expect(await subscriptions.findOpenCheckout(`office:${OFFICE}`)).not.toBeNull();
+      await sync({ status: 'LAPSED', lapsedAt: NOW });
+
+      expect(await subscriptions.findOpenCheckout(`office:${OFFICE}`)).toBeNull();
+      await pending({ officeId: OFFICE, openCheckoutKey: `office:${OFFICE}` });
     });
 
     it('stores the session once on a PENDING record, and removes a record only while it is an unpaid PENDING', async () => {
@@ -359,29 +388,141 @@ describe('billing repositories (integration, SPEC-012)', () => {
       expect(due.map((entry) => entry.id)).toEqual([created.id]);
     });
 
-    it('purges only the PENDING records with no provider subscription created before the cutoff', async () => {
+    it('purges only the checkouts whose creation never finished (no session id): a record with a session is never purged here', async () => {
       const dead = await pending({ openCheckoutKey: 'buyer:dead' });
+      const withSession = await pending({ openCheckoutKey: 'buyer:session' });
+      await subscriptions.setCheckoutSession(withSession.id, 'cs_paid_maybe', 'cus_1');
       const fresh = await pending({ openCheckoutKey: 'buyer:fresh' });
       const paid = await inEffect(OFFICE);
-      await model.collection.updateOne(
-        { _id: new Types.ObjectId(dead.id) },
-        { $set: { createdAt: new Date(NOW.getTime() - 4 * DAY) } },
-      );
-      await model.collection.updateOne(
-        { _id: new Types.ObjectId(paid) },
-        { $set: { createdAt: new Date(NOW.getTime() - 40 * DAY) } },
-      );
-      await model.collection.updateOne(
-        { _id: new Types.ObjectId(fresh.id) },
-        { $set: { createdAt: new Date(NOW.getTime() + 1 * DAY) } },
-      );
+      const ageOf = async (id: string, createdAt: Date) =>
+        model.collection.updateOne({ _id: new Types.ObjectId(id) }, { $set: { createdAt } });
+      await ageOf(dead.id, new Date(NOW.getTime() - 4 * DAY));
+      await ageOf(withSession.id, new Date(NOW.getTime() - 40 * DAY));
+      await ageOf(paid, new Date(NOW.getTime() - 40 * DAY));
+      await ageOf(fresh.id, new Date(NOW.getTime() + 1 * DAY));
 
-      const purged = await subscriptions.purgeStalePending(new Date(NOW.getTime() - 3 * DAY));
+      const purged = await subscriptions.purgeOrphanedPending(new Date(NOW.getTime() - 3 * DAY));
 
       expect(purged).toBe(1);
       expect(await raw(dead.id)).toBeNull();
+      expect(await raw(withSession.id)).not.toBeNull();
       expect(await raw(fresh.id)).not.toBeNull();
       expect(await raw(paid)).not.toBeNull();
+    });
+
+    it('finds the checkouts that have a session and no provider subscription, older than the cutoff', async () => {
+      const old = await pending({ openCheckoutKey: 'buyer:old' });
+      await subscriptions.setCheckoutSession(old.id, 'cs_old', 'cus_1');
+      const young = await pending({ openCheckoutKey: 'buyer:young' });
+      await subscriptions.setCheckoutSession(young.id, 'cs_young', 'cus_2');
+      await pending({ openCheckoutKey: 'buyer:no-session' });
+      await inEffect(OFFICE);
+      await model.collection.updateMany(
+        { _id: { $ne: new Types.ObjectId(young.id) } },
+        { $set: { createdAt: new Date(NOW.getTime() - 1 * DAY) } },
+      );
+      await model.collection.updateOne(
+        { _id: new Types.ObjectId(young.id) },
+        { $set: { createdAt: new Date(NOW.getTime() + 1 * DAY) } },
+      );
+
+      const found = await subscriptions.findPendingWithSession(NOW, 10);
+
+      expect(found.map((record) => record.id)).toEqual([old.id]);
+    });
+
+    it('F10: a record the job could not read sorts after the others, whatever its sync age', async () => {
+      const staleBefore = new Date(NOW.getTime() - 12 * HOUR);
+      const lapsedSince = new Date(NOW.getTime() - 14 * DAY);
+      const oldest = await inEffect('64b7f0000000000000000c21', {
+        lastSyncedAt: new Date(NOW.getTime() - 40 * HOUR),
+      });
+      const next = await inEffect('64b7f0000000000000000c22', {
+        lastSyncedAt: new Date(NOW.getTime() - 30 * HOUR),
+      });
+      const last = await inEffect('64b7f0000000000000000c23', {
+        lastSyncedAt: new Date(NOW.getTime() - 20 * HOUR),
+      });
+      await subscriptions.markReconcileFailed(oldest, NOW);
+
+      const due = await subscriptions.findIdsToReconcile({ staleBefore, lapsedSince, limit: 10 });
+
+      expect(due.map((entry) => entry.id)).toEqual([next, last, oldest]);
+      // A successful read forgets the failure: the record is in its place again.
+      await subscriptions.acquireSyncLease(oldest, 't-ok', NOW, new Date(NOW.getTime() + 30_000));
+      await subscriptions.writeSync(
+        oldest,
+        't-ok',
+        patch({ lastSyncedAt: new Date(NOW.getTime() - 40 * HOUR) }),
+      );
+      expect(await raw(oldest)).not.toHaveProperty('lastReconcileFailedAt');
+    });
+  });
+
+  describe('BR-012-29: the refund claim, the request and the repairs', () => {
+    const STALE = new Date(NOW.getTime() - 5 * MINUTE);
+
+    it('the first accepted request is kept whatever claims follow, and a claim goes back only to its holder', async () => {
+      const id = await inEffect(OFFICE);
+      const later = new Date(NOW.getTime() + 6 * MINUTE);
+
+      await subscriptions.claimRefund(id, NOW, STALE);
+      await subscriptions.releaseRefundClaim(id, later); // not the holder's instant: nothing
+      expect(await raw(id)).toHaveProperty('refundClaimedAt');
+      await subscriptions.releaseRefundClaim(id, NOW);
+      expect(await raw(id)).not.toHaveProperty('refundClaimedAt');
+      await subscriptions.claimRefund(id, later, new Date(later.getTime() - 5 * MINUTE));
+
+      expect(await raw(id)).toMatchObject({ refundRequestedAt: NOW, refundClaimedAt: later });
+    });
+
+    it('finds the subscriptions in effect whose refund was requested or made, and not the others', async () => {
+      const requested = await inEffect('64b7f0000000000000000c31');
+      const made = await inEffect('64b7f0000000000000000c32');
+      await inEffect('64b7f0000000000000000c33');
+      const lapsed = await inEffect('64b7f0000000000000000c34', {
+        status: 'LAPSED',
+        lapsedAt: NOW,
+      });
+      await subscriptions.claimRefund(requested, NOW, STALE);
+      await subscriptions.claimRefund(made, NOW, STALE);
+      await subscriptions.markRefunded(made, NOW);
+      await model.collection.updateOne(
+        { _id: new Types.ObjectId(lapsed) },
+        { $set: { refundedAt: NOW } },
+      );
+
+      const found = await subscriptions.findRefundsToFinish(10);
+
+      expect(found.map((record) => record.id).sort()).toEqual([requested, made].sort());
+    });
+
+    it('a first subscription that charged nothing is not an earlier paid one', async () => {
+      const free = await inEffect(OFFICE, {
+        status: 'LAPSED',
+        lapsedAt: NOW,
+        firstPaidAt: new Date('2099-01-01T00:00:00.000Z'),
+        firstPaymentFree: true,
+      });
+      const real = await inEffect(OFFICE, { firstPaidAt: new Date('2099-02-01T00:00:00.000Z') });
+      expect(await raw(free)).toMatchObject({ firstPaymentFree: true });
+
+      expect(
+        await subscriptions.existsEarlierPaid(OFFICE, real, new Date('2099-02-01T00:00:00.000Z')),
+      ).toBe(false);
+    });
+
+    it('finds a first subscription in effect with no office by its buyer, and the buyer’s stored customer', async () => {
+      const first = await pending();
+      const token = 'token-buyer';
+      await subscriptions.acquireSyncLease(first.id, token, NOW, new Date(NOW.getTime() + 30_000));
+      await subscriptions.writeSync(first.id, token, patch({ stripeCustomerId: 'cus_buyer' }));
+
+      expect((await subscriptions.findInEffectByBuyerWithoutOffice(BUYER))?.id).toBe(first.id);
+      expect(await subscriptions.findCustomerIdOfBuyer(BUYER)).toBe('cus_buyer');
+      await subscriptions.attachOffice(first.id, OFFICE, NOW);
+      expect(await subscriptions.findInEffectByBuyerWithoutOffice(BUYER)).toBeNull();
+      expect(await subscriptions.findCustomerIdOfBuyer('64b7f0000000000000000b99')).toBeNull();
     });
   });
 
@@ -431,8 +572,8 @@ describe('billing repositories (integration, SPEC-012)', () => {
     });
   });
 
-  describe('BR-012-29: two members cancelling at the same moment refund once (end to end)', () => {
-    it('refunds once, ends the subscription, and neither cancel is an error', async () => {
+  describe('BR-012-29: the whole cancel on real MongoDB, with a provider that fails at each step', () => {
+    function harness() {
       const clock = new FakeClock(NOW);
       const gateway = new FakePaymentGateway();
       const plans = new InMemoryPlans([PLAN]);
@@ -447,57 +588,187 @@ describe('billing repositories (integration, SPEC-012)', () => {
         new FakePaymentFailedNotifier(),
         testBusinessConfig(),
       );
-      const slots = new JourneySlotsService(
-        subscriptions,
-        new FakeOwnerCounters() as unknown as OwnerCounterRepository,
-      );
       const billing = new SubscriptionsBillingService(
         subscriptions,
         sync,
         plans as unknown as PlansService,
         new FakeCoupons() as unknown as CouponsService,
-        slots,
+        new JourneySlotsService(
+          subscriptions,
+          new FakeOwnerCounters() as unknown as OwnerCounterRepository,
+        ),
         gateway,
         clock,
         provisioner,
         testBusinessConfig(),
         testConfigService({ FRONTEND_URL: 'https://app.example.test' }),
       );
-      const created = await pending({ officeId: OFFICE });
-      gateway.setSubscription(
-        aProviderSubscription({
-          id: 'sub_race',
-          subscriptionRef: created.id,
-          priceId: 'price_5',
-          currentPeriodStart: NOW,
-          currentPeriodEnd: new Date(NOW.getTime() + 30 * DAY),
-          latestInvoicePaidAt: NOW,
-        }),
-      );
-      await sync.handleProviderEvent({
-        id: 'evt_race',
-        type: 'checkout.completed',
-        subscriptionId: 'sub_race',
-        subscriptionRef: created.id,
-      });
-      clock.advance(2 * DAY);
       const member = (id: string) =>
         anAccessContext(id, {
           memberships: [{ officeId: OFFICE }],
           officePlans: { [OFFICE]: WRITABLE },
         });
-      const contexts = await Promise.all([member(BUYER), member(SECOND_MEMBER)]);
+      /** An office subscription confirmed by the provider on day 0, then `days` days pass. */
+      async function subscribed(days: number) {
+        const created = await pending({ officeId: OFFICE });
+        gateway.setSubscription(
+          aProviderSubscription({
+            id: 'sub_race',
+            subscriptionRef: created.id,
+            priceId: 'price_5',
+            currentPeriodStart: NOW,
+            currentPeriodEnd: new Date(NOW.getTime() + 30 * DAY),
+            firstInvoicePaidAt: NOW,
+          }),
+        );
+        await sync.handleProviderEvent({
+          id: `evt_${created.id}`,
+          type: 'checkout.completed',
+          subscriptionId: 'sub_race',
+          subscriptionRef: created.id,
+        });
+        clock.advance(days * DAY);
+        return created.id;
+      }
+      return { clock, gateway, sync, billing, member, subscribed };
+    }
 
-      const views = await Promise.all(contexts.map((ctx) => billing.cancel(ctx)));
+    it('two members cancelling at the same moment refund once: one ends it, the other is told it is in progress or repeats the idempotent end', async () => {
+      const t = harness();
+      const ref = await t.subscribed(2);
+      const contexts = await Promise.all([t.member(BUYER), t.member(SECOND_MEMBER)]);
 
-      expect(gateway.refunds).toHaveLength(1);
-      expect(gateway.refundRequests).toEqual([`refund:${created.id}`]);
-      // A cancel that finds the refund recorded finishes the end too: it is idempotent at the
-      // provider, so one or both may issue it, but it is the same subscription and the same end.
-      expect([...new Set(gateway.cancelledSubscriptions)]).toEqual(['sub_race']);
-      expect(views.some((view) => view.status === 'LAPSED')).toBe(true);
-      expect(await raw(created.id)).toMatchObject({ status: 'LAPSED' });
-      expect(await raw(created.id)).toHaveProperty('refundedAt');
+      const results = await Promise.allSettled(contexts.map((ctx) => t.billing.cancel(ctx)));
+
+      expect(t.gateway.refunds).toHaveLength(1);
+      expect(t.gateway.refundRequests).toEqual([`refund:${ref}:in_create_sub_race`]);
+      expect([...new Set(t.gateway.cancelledSubscriptions)]).toEqual(['sub_race']);
+      const rejected = results.filter((result) => result.status === 'rejected');
+      for (const result of rejected) {
+        expect((result as PromiseRejectedResult).reason).toMatchObject({
+          code: 'CANCEL_IN_PROGRESS',
+        });
+      }
+      expect(results.some((result) => result.status === 'fulfilled')).toBe(true);
+      expect(await raw(ref)).toMatchObject({ status: 'LAPSED' });
+      expect(await raw(ref)).toHaveProperty('refundedAt');
+    });
+
+    it.each([
+      [
+        'the refund at the provider fails',
+        (t: ReturnType<typeof harness>) => t.gateway.failRefundFor.add('in_create_sub_race'),
+        (t: ReturnType<typeof harness>) => t.gateway.failRefundFor.clear(),
+        true,
+      ],
+      [
+        'the record of the refund fails',
+        (t: ReturnType<typeof harness>) => {
+          const original = subscriptions.markRefunded.bind(subscriptions);
+          subscriptions.markRefunded = () => Promise.reject(new Error('database unreachable'));
+          Object.assign(t, { restoreMark: () => (subscriptions.markRefunded = original) });
+        },
+        (t: ReturnType<typeof harness>) =>
+          (t as unknown as { restoreMark: () => void }).restoreMark(),
+        true,
+      ],
+      [
+        'the end at the provider fails',
+        (t: ReturnType<typeof harness>) => {
+          const original = t.gateway.cancelSubscription.bind(t.gateway);
+          t.gateway.cancelSubscription = () => Promise.reject(new Error('provider unreachable'));
+          Object.assign(t, { restoreCancel: () => (t.gateway.cancelSubscription = original) });
+        },
+        (t: ReturnType<typeof harness>) =>
+          (t as unknown as { restoreCancel: () => void }).restoreCancel(),
+        false,
+      ],
+    ])(
+      'F2: when %s, a retry AFTER the window (judged at the request) completes it, once',
+      async (_step, breakIt, fixIt, claimReleased) => {
+        const t = harness();
+        const ref = await t.subscribed(6);
+        breakIt(t);
+
+        await expect(t.billing.cancel(await t.member(BUYER))).rejects.toThrow();
+        const afterFailure = await raw(ref);
+        expect(afterFailure).toMatchObject({ status: 'ACTIVE' });
+        expect(afterFailure).toHaveProperty('refundRequestedAt');
+        // Before the refund is confirmed (and recorded) the claim goes back at once.
+        if (claimReleased) expect(afterFailure).not.toHaveProperty('refundClaimedAt');
+        fixIt(t);
+        t.clock.advance(5 * DAY); // day 11: the window is over
+
+        const view = await t.billing.cancel(await t.member(SECOND_MEMBER));
+
+        expect(view.status).toBe('LAPSED');
+        expect(await raw(ref)).toMatchObject({ status: 'LAPSED' });
+        expect(await raw(ref)).toHaveProperty('refundedAt');
+        // The invoice was refunded exactly once at the provider, whatever step failed.
+        expect(t.gateway.refunds).toHaveLength(1);
+      },
+    );
+
+    it('a claim that nobody released (the holder died) blocks others for 5 minutes with CANCEL_IN_PROGRESS, then is retaken', async () => {
+      const t = harness();
+      const ref = await t.subscribed(2);
+      await subscriptions.claimRefund(
+        ref,
+        t.clock.now(),
+        new Date(t.clock.now().getTime() - 5 * MINUTE),
+      );
+
+      await expect(t.billing.cancel(await t.member(BUYER))).rejects.toMatchObject({
+        code: 'CANCEL_IN_PROGRESS',
+      });
+      t.clock.advance(5 * MINUTE);
+
+      expect((await t.billing.cancel(await t.member(BUYER))).status).toBe('LAPSED');
+      expect(t.gateway.refunds).toHaveLength(1);
+    });
+
+    it('F3: a paid checkout whose events never arrived is recovered by the job on real MongoDB and never purged', async () => {
+      const t = harness();
+      const first = await subscriptions.createPending({
+        buyerUserId: BUYER,
+        planId: PLAN.id,
+        planCode: PLAN.code,
+        activeJourneyLimit: 5,
+        openCheckoutKey: `buyer:${BUYER}`,
+      });
+      await subscriptions.setCheckoutSession(first.id, 'cs_paid', 'cus_1');
+      t.gateway.checkoutSessions.set('cs_paid', { state: 'complete', subscriptionId: 'sub_late' });
+      t.gateway.setSubscription(
+        aProviderSubscription({ id: 'sub_late', subscriptionRef: first.id, priceId: 'price_5' }),
+      );
+      await model.collection.updateOne(
+        { _id: new Types.ObjectId(first.id) },
+        { $set: { createdAt: new Date(NOW.getTime() - 5 * DAY) } },
+      );
+      const jobs = {
+        recordExecution: () => Promise.resolve({}),
+        recordFailure: () => Promise.resolve({}),
+      };
+      const job = new SubscriptionsReconcileJob(
+        subscriptions,
+        t.sync,
+        t.billing,
+        events,
+        jobs as unknown as JobExecutionService,
+        t.clock,
+        { subscriptionsReconcile: { enabled: true } } as unknown as SchedulerConfig,
+      );
+
+      const [outcome, second] = await Promise.all([job.run(), job.run()]);
+
+      // Two replicas at once: one runs, the other finds the lock held and does nothing.
+      expect([outcome, second].filter((result) => result === null)).toHaveLength(1);
+      expect(await raw(first.id)).toMatchObject({
+        status: 'ACTIVE',
+        stripeSubscriptionId: 'sub_late',
+      });
+      expect(await raw(first.id)).toHaveProperty('officeId');
+      expect(await raw(first.id)).not.toHaveProperty('openCheckoutKey');
     });
   });
 });

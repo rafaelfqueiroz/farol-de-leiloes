@@ -10,7 +10,7 @@ type Port<T> = { [K in keyof T]: T[K] };
 /** The slice of the counter repository the journey slots use. */
 type CounterPort = Pick<
   Port<OwnerCounterRepository>,
-  'ensureCounter' | 'tryAcquire' | 'release' | 'readValue'
+  'ensureCounter' | 'tryAcquire' | 'release' | 'readValue' | 'releaseByJob' | 'setCountByJob'
 >;
 
 /**
@@ -65,6 +65,21 @@ export class FakeOwnerCounters implements CounterPort {
     if (value <= 0) return false;
     this.values.set(`${ownerId}:${key}`, value - 1);
     return true;
+  }
+
+  async releaseByJob(owner: CountedOwner, key: string): Promise<boolean> {
+    const at = `${String(owner.ownerId)}:${key}`;
+    const value = this.values.get(at) ?? 0;
+    if (value <= 0) return false;
+    this.values.set(at, value - 1);
+    return true;
+  }
+
+  async setCountByJob(owner: CountedOwner, key: string, actual: number): Promise<number | null> {
+    const at = `${String(owner.ownerId)}:${key}`;
+    const value = this.values.get(at) ?? 0;
+    this.values.set(at, actual);
+    return value === actual ? null : value;
   }
 
   async readValue(
