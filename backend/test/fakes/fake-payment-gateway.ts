@@ -1,10 +1,10 @@
 import {
   type CreateCustomerInput,
   type CreateFixedDiscountInput,
-  type CreateSubscriptionCheckoutInput,
   type FixedDiscount,
   PaymentGateway,
   type PaymentEvent,
+  type ProviderSubscription,
 } from '../../src/payments/payment-gateway.js';
 
 /**
@@ -13,36 +13,58 @@ import {
  * Stripe adapter's, AR-20), and answers predictable ids. Nothing reaches Stripe.
  *
  *   const gateway = new FakePaymentGateway();
- *   gateway.nextWebhookEvent = { type: 'subscription.deleted', customerId: 'cus_1' };
+ *   gateway.nextWebhookEvent = { id: 'evt_1', type: 'subscription.changed', subscriptionId: 'sub_1' };
+ *   gateway.setSubscription(aProviderSubscription({ id: 'sub_1', status: 'active' }));
  */
 export class FakePaymentGateway extends PaymentGateway {
   readonly customers: CreateCustomerInput[] = [];
-  readonly checkouts: CreateSubscriptionCheckoutInput[] = [];
   readonly cancelledSubscriptions: string[] = [];
   readonly discounts: CreateFixedDiscountInput[] = [];
   readonly deactivatedPromotionCodes: string[] = [];
+  /** Every retrieveSubscription call, in order (BR-012-13: a sync always re-reads the provider). */
+  readonly retrievals: string[] = [];
 
-  /** The URL createSubscriptionCheckout answers; null to simulate a session without one. */
-  checkoutUrl: string | null = 'https://checkout.example.test/session';
   /** What parseWebhookEvent answers; an Error makes it throw, as a bad signature does. */
-  nextWebhookEvent: PaymentEvent | Error = { type: 'unhandled', providerType: 'test.event' };
+  nextWebhookEvent: PaymentEvent | Error = {
+    id: 'evt_test',
+    type: 'unhandled',
+    providerType: 'test.event',
+  };
   /** Makes deactivatePromotionCode fail, as an unreachable provider would. */
   failDeactivation = false;
+  /**
+   * Runs at the start of every retrieveSubscription, before it answers: a spec uses it to change
+   * the provider's state while a sync is in flight, to hold a retrieve open (concurrency), or to
+   * make it fail.
+   */
+  onRetrieve: ((subscriptionId: string) => Promise<void> | void) | undefined;
+
+  private readonly subscriptions = new Map<string, ProviderSubscription>();
+
+  /** The provider's current state of a subscription; replaces what was there. */
+  setSubscription(subscription: ProviderSubscription): void {
+    this.subscriptions.set(subscription.id, subscription);
+  }
 
   async createCustomer(input: CreateCustomerInput): Promise<{ id: string }> {
     this.customers.push(input);
     return { id: `cus_fake_${this.customers.length}` };
   }
 
-  async createSubscriptionCheckout(
-    input: CreateSubscriptionCheckoutInput,
-  ): Promise<{ url: string | null }> {
-    this.checkouts.push(input);
-    return { url: this.checkoutUrl };
-  }
-
   async cancelSubscription(subscriptionId: string): Promise<void> {
     this.cancelledSubscriptions.push(subscriptionId);
+    const current = this.subscriptions.get(subscriptionId);
+    if (current) {
+      this.subscriptions.set(subscriptionId, { ...current, status: 'canceled' });
+    }
+  }
+
+  async retrieveSubscription(subscriptionId: string): Promise<ProviderSubscription> {
+    this.retrievals.push(subscriptionId);
+    await this.onRetrieve?.(subscriptionId);
+    const current = this.subscriptions.get(subscriptionId);
+    if (!current) throw new Error('resource_missing');
+    return current;
   }
 
   async createFixedDiscount(input: CreateFixedDiscountInput): Promise<FixedDiscount> {

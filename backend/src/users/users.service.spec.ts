@@ -50,17 +50,6 @@ describe('UsersService finders (SC-10)', () => {
     await expect(service.findByGoogleId(operator)).resolves.toBeNull();
     expect(model.findOne).not.toHaveBeenCalled();
   });
-
-  it('findByStripeCustomerId compares by equality and finds nobody for a non-string', async () => {
-    const { service, model } = build({ id: 1 });
-
-    await service.findByStripeCustomerId('cus_1');
-    expect(model.findOne).toHaveBeenCalledWith({ stripeCustomerId: { $eq: 'cus_1' } });
-
-    model.findOne.mockClear();
-    await expect(service.findByStripeCustomerId(operator)).resolves.toBeNull();
-    expect(model.findOne).not.toHaveBeenCalled();
-  });
 });
 
 describe('UsersService.update (SC-10)', () => {
@@ -71,15 +60,11 @@ describe('UsersService.update (SC-10)', () => {
   it('writes a $set of the whitelisted text fields, matched by equality on the id', async () => {
     const { service, model } = build();
 
-    await service.update('u1', {
-      name: 'Ana',
-      phone: '11999999999',
-      role: 'user',
-    } as UpdateUserDto);
+    await service.update('u1', { name: 'Ana', phone: '11999999999' });
 
     expect(model.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: { $eq: 'u1' } },
-      { $set: { name: 'Ana', phone: '11999999999', role: 'user' } },
+      { $set: { name: 'Ana', phone: '11999999999' } },
       { returnDocument: 'after' },
     );
   });
@@ -117,18 +102,18 @@ describe('UsersService.update (SC-10)', () => {
     expect(setOf(model)).toEqual({ name: 'Ana' });
   });
 
-  it('keeps an explicit null subscriptionStatus and a string one, and drops other types', async () => {
-    const cleared = build();
-    await cleared.service.update('u1', { subscriptionStatus: null } as unknown as UpdateUserDto);
-    expect(setOf(cleared.model)).toEqual({ subscriptionStatus: null });
+  it('SPEC-012 BR-012-14: update cannot write a plan or a subscription, whatever the body carries', async () => {
+    const { service, model } = build();
 
-    const active = build();
-    await active.service.update('u1', { subscriptionStatus: 'active' } as UpdateUserDto);
-    expect(setOf(active.model)).toEqual({ subscriptionStatus: 'active' });
+    await service.update('u1', {
+      name: 'Ana',
+      role: 'premium',
+      subscriptionStatus: 'active',
+      stripeCustomerId: 'cus_hostile',
+      stripeSubscriptionId: 'sub_hostile',
+    } as unknown as UpdateUserDto);
 
-    const bad = build();
-    await bad.service.update('u1', { subscriptionStatus: { $ne: 1 } } as unknown as UpdateUserDto);
-    expect(setOf(bad.model)).toEqual({});
+    expect(setOf(model)).toEqual({ name: 'Ana' });
   });
 
   it('BR-001-31, DL-001-02: update cannot write the providers or the Google id, whatever the body carries', async () => {

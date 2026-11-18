@@ -16,7 +16,6 @@ export const TEST_ENV = {
   GOOGLE_CALLBACK_URL: 'http://localhost:3000/api/auth/google/callback',
   STRIPE_SECRET_KEY: 'sk_test_fake',
   STRIPE_WEBHOOK_SECRET: 'whsec_test_secret',
-  STRIPE_STANDARD_PRICE_ID: 'price_test_standard',
   EMAIL_FROM: 'noreply@example.test',
   SMTP_HOST: 'smtp.example.test',
   SMTP_USER: 'test-smtp-user',

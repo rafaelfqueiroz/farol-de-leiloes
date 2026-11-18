@@ -45,7 +45,6 @@ readonly ENTRIES=(
   "GOOGLE_CALLBACK_URL          variable  backend  required"
   "STRIPE_SECRET_KEY            secret    backend  required"
   "STRIPE_WEBHOOK_SECRET        secret    backend  required"
-  "STRIPE_STANDARD_PRICE_ID     variable  backend  required"
   "EMAIL_FROM                   variable  backend  required"
   "SMTP_HOST                    variable  backend  required"
   "SMTP_PORT                    variable  backend  optional"

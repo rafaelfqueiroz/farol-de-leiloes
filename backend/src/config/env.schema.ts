@@ -65,7 +65,6 @@ export const envSchema = z
     // Payments
     STRIPE_SECRET_KEY: required,
     STRIPE_WEBHOOK_SECRET: required,
-    STRIPE_STANDARD_PRICE_ID: required,
 
     // Email
     EMAIL_FROM: required,

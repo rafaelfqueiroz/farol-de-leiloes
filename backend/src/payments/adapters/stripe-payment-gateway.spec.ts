@@ -85,6 +85,146 @@ describe('StripePaymentGateway', () => {
     expect(stripe.coupons.create).not.toHaveBeenCalled();
   });
 
+  describe('retrieveSubscription (BR-012-13)', () => {
+    // Stripe API 2025+: the billing period is on the item, the ref in the metadata.
+    const stripeSubscription = (overrides: Record<string, unknown> = {}) => ({
+      id: 'sub_1',
+      status: 'active',
+      customer: 'cus_1',
+      cancel_at_period_end: false,
+      canceled_at: null,
+      ended_at: null,
+      metadata: { subscriptionRef: 'ref_1' },
+      latest_invoice: { status: 'paid', status_transitions: { paid_at: 1_768_046_405 } },
+      schedule: null,
+      items: {
+        data: [
+          {
+            price: { id: 'price_5' },
+            current_period_start: 1_768_046_400, // 2026-01-10T12:00:00Z
+            current_period_end: 1_770_724_800, // 2026-02-10T12:00:00Z
+          },
+        ],
+      },
+      ...overrides,
+    });
+
+    function build(subscription: Record<string, unknown>) {
+      const gateway = new StripePaymentGateway(testConfigService());
+      const retrieve = vi.fn().mockResolvedValue(subscription);
+      Object.assign(gateway, { stripe: { subscriptions: { retrieve } } });
+      return { gateway, retrieve };
+    }
+
+    it('reads the subscription with its latest invoice and schedule, as instants', async () => {
+      const { gateway, retrieve } = build(stripeSubscription());
+
+      await expect(gateway.retrieveSubscription('sub_1')).resolves.toEqual({
+        id: 'sub_1',
+        status: 'active',
+        customerId: 'cus_1',
+        cancelAtPeriodEnd: false,
+        currentPeriodStart: new Date('2026-01-10T12:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-02-10T12:00:00.000Z'),
+        priceId: 'price_5',
+        scheduledPriceId: null,
+        scheduledChangeAt: null,
+        latestInvoicePaidAt: new Date('2026-01-10T12:00:05.000Z'),
+        subscriptionRef: 'ref_1',
+        canceledAt: null,
+        endedAt: null,
+      });
+      expect(retrieve).toHaveBeenCalledWith('sub_1', { expand: ['latest_invoice', 'schedule'] });
+    });
+
+    it('BR-012-17: reads the next phase of the schedule as the scheduled downgrade', async () => {
+      const { gateway } = build(
+        stripeSubscription({
+          schedule: {
+            current_phase: { start_date: 1_768_046_400, end_date: 1_770_724_800 },
+            phases: [
+              { start_date: 1_768_046_400, end_date: 1_770_724_800, items: [{ price: 'price_5' }] },
+              {
+                start_date: 1_770_724_800,
+                end_date: 1_773_144_000,
+                items: [{ price: { id: 'price_2' } }],
+              },
+            ],
+          },
+        }),
+      );
+
+      await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
+        scheduledPriceId: 'price_2',
+        scheduledChangeAt: new Date('2026-02-10T12:00:00.000Z'),
+      });
+    });
+
+    it.each([
+      [
+        'a schedule with no phase ahead',
+        {
+          current_phase: { start_date: 1, end_date: 5 },
+          phases: [{ start_date: 1, end_date: 5, items: [{ price: 'price_5' }] }],
+        },
+      ],
+      ['a schedule not in a phase', { current_phase: null, phases: [] }],
+      [
+        'a next phase with no item',
+        {
+          current_phase: { start_date: 1, end_date: 5 },
+          phases: [{ start_date: 5, end_date: 9, items: [] }],
+        },
+      ],
+      ['a schedule left as an id', 'sub_sched_1'],
+    ])('has no scheduled change for %s', async (_label, schedule) => {
+      const { gateway } = build(stripeSubscription({ schedule }));
+
+      await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
+        scheduledPriceId: null,
+        scheduledChangeAt: null,
+      });
+    });
+
+    it('says not paid for an open invoice, and keeps the cancellation and end instants', async () => {
+      const { gateway } = build(
+        stripeSubscription({
+          status: 'canceled',
+          cancel_at_period_end: true,
+          canceled_at: 1_768_046_400,
+          ended_at: 1_770_724_800,
+          latest_invoice: { status: 'open', status_transitions: { paid_at: null } },
+        }),
+      );
+
+      await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
+        status: 'canceled',
+        cancelAtPeriodEnd: true,
+        latestInvoicePaidAt: null,
+        canceledAt: new Date('2026-01-10T12:00:00.000Z'),
+        endedAt: new Date('2026-02-10T12:00:00.000Z'),
+      });
+    });
+
+    it('has no ref when the metadata lacks it, and reads an expanded customer', async () => {
+      const { gateway } = build(
+        stripeSubscription({ metadata: {}, customer: { id: 'cus_2' }, latest_invoice: 'in_1' }),
+      );
+
+      await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
+        subscriptionRef: null,
+        customerId: 'cus_2',
+        latestInvoicePaidAt: null,
+      });
+    });
+
+    it('refuses a subscription with no item: a fault, never a guess of the price', async () => {
+      const { gateway } = build(stripeSubscription({ items: { data: [] } }));
+
+      await expect(gateway.retrieveSubscription('sub_1')).rejects.toThrow('no item');
+    });
+  });
+
   describe('parseWebhookEvent', () => {
     const gateway = new StripePaymentGateway(testConfigService());
     const signer = new Stripe(TEST_ENV.STRIPE_SECRET_KEY);
@@ -98,28 +238,62 @@ describe('StripePaymentGateway', () => {
       return gateway.parseWebhookEvent(Buffer.from(payload), signature);
     }
 
-    it('maps the events the product acts on into the port vocabulary', () => {
+    it('maps the events the product acts on into the port vocabulary, ids only', () => {
       expect(
         signed('checkout.session.completed', {
           subscription: 'sub_1',
-          metadata: { userId: 'u1' },
+          metadata: { subscriptionRef: 'ref_1' },
         }),
-      ).toEqual({ type: 'checkout.completed', userId: 'u1', subscriptionId: 'sub_1' });
+      ).toEqual({
+        id: 'evt_1',
+        type: 'checkout.completed',
+        subscriptionId: 'sub_1',
+        subscriptionRef: 'ref_1',
+      });
+      // An expanded subscription, and a legacy session without our ref (BR-012-13).
       expect(
         signed('checkout.session.completed', { subscription: { id: 'sub_2' }, metadata: null }),
-      ).toEqual({ type: 'checkout.completed', userId: null, subscriptionId: 'sub_2' });
-      expect(
-        signed('customer.subscription.updated', { customer: 'cus_1', status: 'past_due' }),
-      ).toEqual({ type: 'subscription.updated', customerId: 'cus_1', status: 'past_due' });
-      expect(signed('customer.subscription.deleted', { customer: { id: 'cus_2' } })).toEqual({
-        type: 'subscription.deleted',
-        customerId: 'cus_2',
+      ).toEqual({
+        id: 'evt_1',
+        type: 'checkout.completed',
+        subscriptionId: 'sub_2',
+        subscriptionRef: null,
       });
-      expect(signed('invoice.payment_failed', { customer: null })).toEqual({
+      expect(
+        signed('checkout.session.expired', { metadata: { subscriptionRef: 'ref_2' } }),
+      ).toEqual({ id: 'evt_1', type: 'checkout.expired', subscriptionRef: 'ref_2' });
+      for (const type of [
+        'customer.subscription.created',
+        'customer.subscription.updated',
+        'customer.subscription.deleted',
+      ]) {
+        // The status in the payload is not carried: the state is read again (BR-012-13).
+        expect(signed(type, { id: 'sub_3', status: 'canceled', customer: 'cus_1' })).toEqual({
+          id: 'evt_1',
+          type: 'subscription.changed',
+          subscriptionId: 'sub_3',
+        });
+      }
+      const invoice = (subscription: string | null) => ({
+        parent: subscription ? { subscription_details: { subscription } } : null,
+      });
+      expect(signed('invoice.paid', invoice('sub_4'))).toEqual({
+        id: 'evt_1',
+        type: 'invoice.paid',
+        subscriptionId: 'sub_4',
+      });
+      expect(signed('invoice.payment_failed', invoice('sub_5'))).toEqual({
+        id: 'evt_1',
         type: 'invoice.payment_failed',
-        customerId: null,
+        subscriptionId: 'sub_5',
+      });
+      expect(signed('invoice.payment_failed', invoice(null))).toEqual({
+        id: 'evt_1',
+        type: 'invoice.payment_failed',
+        subscriptionId: null,
       });
       expect(signed('charge.refunded', {})).toEqual({
+        id: 'evt_1',
         type: 'unhandled',
         providerType: 'charge.refunded',
       });

@@ -6,7 +6,7 @@
 // binds an ephemeral loopback port (TS-01, TS-07).
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Injectable, type INestApplication } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
@@ -27,7 +27,7 @@ import {
   type MaintenanceWindowDocument,
 } from '../../src/maintenance/schemas/maintenance-window.schema.js';
 import { DAY, FakeClock, HOUR } from '../fakes/fake-clock.js';
-import { testConfigService } from '../support/test-env.js';
+import { testConfigService, testEnv } from '../support/test-env.js';
 import { useTestDatabase } from '../support/test-database.js';
 
 const NOW = new Date('2026-03-01T12:00:00.000Z');
@@ -62,6 +62,9 @@ describe('maintenance windows (integration, SPEC-003 BR-003-03)', () => {
     applyMongooseDefaults(); // as in production (SC-10)
     const moduleRef = await Test.createTestingModule({
       imports: [
+        // SPEC-012: AccessModule loads the subscriptions module (the real OFFICE_PLAN_SOURCE),
+        // which reads the validated configuration.
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: () => testEnv() }),
         MongooseModule.forRoot(db.uri),
         JwtModule.register({ secret: SECRET }),
         AccessModule,

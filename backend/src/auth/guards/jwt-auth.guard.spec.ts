@@ -20,6 +20,8 @@ import { UsersService } from '../../users/users.service.js';
 import { testConfigService } from '../../../test/support/test-env.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { AccessModule } from '../../access/access.module.js';
+import { SubscriptionsModule } from '../../subscriptions/subscriptions.module.js';
+import { StubSubscriptionsModule } from '../../../test/support/stub-subscriptions-module.js';
 import type { AccessContext } from '../../access/access-context.js';
 import { Access } from '../../access/decorators/access.decorator.js';
 import { RequiresPersona } from '../../access/decorators/access-guards.decorator.js';
@@ -99,7 +101,12 @@ describe('global JWT authentication (SC-07)', () => {
   let token: string;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [GuardTestModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [GuardTestModule] })
+      // SPEC-012: AccessModule imports the subscriptions module (database, payment gateway); this
+      // spec runs the guards only, on the default sources.
+      .overrideModule(SubscriptionsModule)
+      .useModule(StubSubscriptionsModule)
+      .compile();
     app = moduleRef.createNestApplication();
     configureApp(app);
     await app.init();

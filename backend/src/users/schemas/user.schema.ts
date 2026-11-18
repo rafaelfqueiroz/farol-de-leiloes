@@ -51,9 +51,11 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: Number, required: false, default: 0, min: 0 })
   credentialVersion?: number;
 
-  // The plan tier until SPEC-012 moves plans to the office. `'admin'` is a legacy value that grants
-  // nothing any more, not even a plan (SPEC-002 BR-002-23): the capability is `isAdmin` below, and
-  // migration 0004 copied it there. The value stays readable until SPEC-012 contracts it (AR-28).
+  // Legacy plan tier. SPEC-012 moved plans to the office (BR-012-06) and nothing writes this any
+  // more (BR-012-14); it stays in the schema and in the auth answers (the frontend still reads
+  // it) until the contract step removes it (AR-28, follow-up issue). `'admin'` is a legacy value
+  // that grants nothing (SPEC-002 BR-002-23): the capability is `isAdmin` below, and migration
+  // 0004 copied it there.
   @Prop({ required: true, enum: ['admin', 'free', 'standard', 'premium'], default: 'free' })
   role!: string;
 
@@ -63,7 +65,9 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: Boolean, required: false, default: false })
   isAdmin?: boolean;
 
-  // Stripe integration
+  // Legacy Stripe integration of the user-level subscription. SPEC-012 (BR-012-06, BR-012-14)
+  // moved subscriptions to the office (`subscriptions` collection) and nothing writes these three
+  // fields any more; the contract step removes them (AR-28, follow-up issue).
   @Prop({ required: false, unique: true, sparse: true })
   stripeCustomerId?: string;
 

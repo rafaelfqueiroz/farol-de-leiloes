@@ -69,7 +69,6 @@ services:
       GOOGLE_CALLBACK_URL: http://localhost:${E2E_API_PORT:-38100}/api/auth/google/callback
       STRIPE_SECRET_KEY: sk_test_e2e_fake
       STRIPE_WEBHOOK_SECRET: whsec_e2e_fake
-      STRIPE_STANDARD_PRICE_ID: price_e2e_fake
       EMAIL_FROM: noreply@farol.test
       SMTP_HOST: smtp.farol.test
       SMTP_USER: e2e

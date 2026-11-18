@@ -101,24 +101,23 @@ describe('profile allowlist over the user schema (integration)', () => {
     expect(await raw(id)).not.toHaveProperty('phone');
   });
 
-  // `update` is the server-flow write (payments, Google link): it may write the protected paths it
-  // owns, but never the email (D-63) nor the legacy details, which no path writes any more, nor
-  // the admin capability, which only the grant-admin script sets (SPEC-002 BR-002-21).
-  it.each([...EMAIL_READ_ONLY, ...LEGACY_UNUSED, 'isAdmin'])(
-    'update (the server flow) cannot change %s either',
-    async (path) => {
-      const { id } = await seed();
-      const before = await raw(id);
-      const hostile = { [path]: HOSTILE_VALUES[path] } as unknown as Parameters<
-        UsersService['update']
-      >[1];
+  // `update` is the server-flow write. Since SPEC-012 (BR-012-14) it writes the name and the phone
+  // and nothing else: not the email (D-63), not the legacy details, not the admin capability
+  // (SPEC-002 BR-002-21), not a credential, and no plan or subscription field (`role`,
+  // `subscriptionStatus`, the Stripe ids), which follow the provider through the office's
+  // subscription.
+  it.each(NOT_PROFILE)('update (the server flow) cannot change %s either', async (path) => {
+    const { id } = await seed();
+    const before = await raw(id);
+    const hostile = { [path]: HOSTILE_VALUES[path] } as unknown as Parameters<
+      UsersService['update']
+    >[1];
 
-      await service.update(id, hostile);
+    await service.update(id, hostile);
 
-      // an empty `$set` still moves updatedAt, which changedKeys leaves out
-      expect(changedKeys(before, await raw(id))).toEqual([]);
-    },
-  );
+    // an empty `$set` still moves updatedAt, which changedKeys leaves out
+    expect(changedKeys(before, await raw(id))).toEqual([]);
+  });
 
   it.each(LEGACY_UNUSED)(
     'stored %s survives every write path untouched and is never returned by them',
