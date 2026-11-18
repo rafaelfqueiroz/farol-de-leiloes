@@ -143,6 +143,7 @@ The default is DNS-only (ADR-002). Behind the proxy (orange cloud), Cloudflare i
    ```
 
    Never use `private_ranges` or a wider range here: any peer listed can forge the client address. Then, as `deploy`, run `dc up -d --force-recreate caddy`.
+
 3. **Set the variable `TRUST_PROXY_HOPS` to `2`** (`gh variable set TRUST_PROXY_HOPS --env deploy-production --body 2`), then redeploy ([Change a setting or a secret](#change-a-setting-or-a-secret)). Caddy then forwards `<client>, <Cloudflare edge>`, and two trusted hops make `req.ip` the client. A direct request still resolves to its real address, because Caddy discards the header it sent. The BFF forwards the same chain, so the hop count is right for both paths ([Client address behind the BFF](#client-address-behind-the-bff)).
 4. **Turn on the proxy** in Cloudflare.
 5. **Keep the ranges current.** Cloudflare's lists change, and requests from a missing range are treated as untrusted, so those users share the edge address. Check the lists when reviewing this runbook.

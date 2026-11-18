@@ -16,20 +16,25 @@
 {
   "status": "degraded",
   "database": { "status": "up" },
-  "lastImport": { "status": "FAILED", "finishedAt": "2026-01-15T09:00:00.000Z", "ageHours": 3, "stale": false }
+  "lastImport": {
+    "status": "FAILED",
+    "finishedAt": "2026-01-15T09:00:00.000Z",
+    "ageHours": 3,
+    "stale": false
+  }
 }
 ```
 
-| Field | Values | Meaning |
-|---|---|---|
-| `status` | `ok` | Database up, and the last import succeeded within 26 h. HTTP 200. |
-| | `degraded` | Database up, but the auction data may be out of date: the last import **failed**, is **stale** or **never** ran. HTTP 200: the API still serves. |
-| | `down` | MongoDB is unreachable: not connected, a ping slower than 2 s, or the read failed. HTTP **503**: the container is unhealthy. |
-| `database.status` | `up` / `down` | Connection state plus `ping` with a 2 s timeout. The reason is never in the body. |
-| `lastImport.status` | `SUCCESS` / `FAILED` / `NEVER` | The latest `auctions-import` run in `jobexecutions`, in **any** run mode (daily `AUTO` or startup `MANUAL`). A row written before #36 has no status and reads as `SUCCESS`. With the database down it reads `NEVER`: there was nothing to read. |
-| `lastImport.finishedAt` | ISO time / `null` | When that run finished. |
-| `lastImport.ageHours` | number / `null` | Hours since it finished, two decimals. |
-| `lastImport.stale` | boolean | `true` past **26 h** (`IMPORT_STALE_AFTER_HOURS`: daily at 03:00 Brasília plus 2 h), or when the import never ran. |
+| Field                   | Values                         | Meaning                                                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`                | `ok`                           | Database up, and the last import succeeded within 26 h. HTTP 200.                                                                                                                                                                               |
+|                         | `degraded`                     | Database up, but the auction data may be out of date: the last import **failed**, is **stale** or **never** ran. HTTP 200: the API still serves.                                                                                                |
+|                         | `down`                         | MongoDB is unreachable: not connected, a ping slower than 2 s, or the read failed. HTTP **503**: the container is unhealthy.                                                                                                                    |
+| `database.status`       | `up` / `down`                  | Connection state plus `ping` with a 2 s timeout. The reason is never in the body.                                                                                                                                                               |
+| `lastImport.status`     | `SUCCESS` / `FAILED` / `NEVER` | The latest `auctions-import` run in `jobexecutions`, in **any** run mode (daily `AUTO` or startup `MANUAL`). A row written before #36 has no status and reads as `SUCCESS`. With the database down it reads `NEVER`: there was nothing to read. |
+| `lastImport.finishedAt` | ISO time / `null`              | When that run finished.                                                                                                                                                                                                                         |
+| `lastImport.ageHours`   | number / `null`                | Hours since it finished, two decimals.                                                                                                                                                                                                          |
+| `lastImport.stale`      | boolean                        | `true` past **26 h** (`IMPORT_STALE_AFTER_HOURS`: daily at 03:00 Brasília plus 2 h), or when the import never ran.                                                                                                                              |
 
 The body never holds error details, versions or host names. A failed run's stable code (`errorCode`, an error class or a `DomainError` code, never a message) is in its `jobexecutions` row only.
 

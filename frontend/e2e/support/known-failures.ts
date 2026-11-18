@@ -17,9 +17,9 @@ interface KnownFailure {
 }
 
 const KNOWN_FAILURES: readonly KnownFailure[] = [
-  // color-contrast: dimmed "coming soon" plan cards (opacity 0.7), light only.
+  // color-contrast: dimmed "coming soon" plan cards (opacity 0.7), light only. The plans page no
+  // longer has them (SPEC-012); the landing page still does.
   { path: '/', issue: '#139', checks: ['axe'], scheme: 'light' },
-  { path: '/plans', issue: '#139', checks: ['axe'], scheme: 'light' },
   // The 380 px filter drawer squeezes the page to 0 width at 360 px: its heading is not visible.
   { path: '/search', issue: '#149', project: 'phone-360' },
 ];

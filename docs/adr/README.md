@@ -6,13 +6,13 @@ Write one when a choice is hard to reverse, contradicts a guideline, adds a depe
 
 Files are `NNN-short-title.md`, numbered in order, starting from the template below.
 
-| ADR | Title | Status |
-|---|---|---|
-| [001](001-in-house-mongodb-migrations-runner.md) | In-house MongoDB migrations runner | Accepted |
-| [002](002-hosting-and-environments.md) | Hosting, environments and backups | Accepted; runtime secrets superseded by [004](004-production-configuration-from-github.md) |
-| [003](003-reaching-caixa-from-the-vps.md) | Reaching Caixa from the production VPS | Proposed |
-| [004](004-production-configuration-from-github.md) | Production configuration from the GitHub environment | Accepted |
-| [005](005-office-subscriptions-on-stripe.md) | Office subscriptions on Stripe: the provider is the source of truth | Accepted |
+| ADR                                                | Title                                                               | Status                                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [001](001-in-house-mongodb-migrations-runner.md)   | In-house MongoDB migrations runner                                  | Accepted                                                                                   |
+| [002](002-hosting-and-environments.md)             | Hosting, environments and backups                                   | Accepted; runtime secrets superseded by [004](004-production-configuration-from-github.md) |
+| [003](003-reaching-caixa-from-the-vps.md)          | Reaching Caixa from the production VPS                              | Proposed                                                                                   |
+| [004](004-production-configuration-from-github.md) | Production configuration from the GitHub environment                | Accepted                                                                                   |
+| [005](005-office-subscriptions-on-stripe.md)       | Office subscriptions on Stripe: the provider is the source of truth | Accepted                                                                                   |
 
 ## Template
 
@@ -24,14 +24,18 @@ Files are `NNN-short-title.md`, numbered in order, starting from the template be
 **Related:** SPEC-NNN, AR-nn, #issue
 
 ## Context
+
 What forced a decision.
 
 ## Options
+
 What was considered, and what breaks under each.
 
 ## Decision
+
 What was chosen.
 
 ## Consequences
+
 What this makes easy, what it makes hard, what it forecloses.
 ```

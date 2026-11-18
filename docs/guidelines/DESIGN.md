@@ -355,7 +355,7 @@ Voice: address the user as "você"; sentence case; buttons are verbs of one to t
 - **Pull request.** The PR links the frame and matches it. A deviation found while building updates the frame first, then the code.
 - **Missing parts.** A component the frame needs that the system lacks is added to the design system first (DS-17), never invented inside the page.
 
-The artifact's `SearchPageFrame` card is the example to follow.
+The artifact's `SearchPageFrame` card is the example to follow. Approved frames: SPEC-012 (plans, checkout result and office plan, owner-approved on issue #12): <https://claude.ai/artifact/4HMEj9Razh3BosxqGzs6mN>. Deviations the build found (no office name, no retry date for a failed renewal, no refunded amount) are listed in the PR.
 
 ## 11. What is not used
 

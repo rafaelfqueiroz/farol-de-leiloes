@@ -21,13 +21,13 @@ The repository had no concept of staging: `NODE_ENV` is the only environment swi
 
 Monthly cost for production plus staging, checked on 2026-11-06. USD services are converted at about R$ 5,53 (PTAX of R$ 5,34 on 2026-10-28 plus 3.5% IOF). The Railway and Fly.io usage figures are estimates, and the Fly.io São Paulo rate and the Vultr prices come from third parties.
 
-| Stack | Now | After the promotion | What breaks or does not fit |
-|---|---|---|---|
-| A. Vercel Pro + Railway Pro + Atlas Flex | R$ 265–415 | same | Railway has no Brazil region, so personal data is processed in the US and every query crosses from Virginia to São Paulo. Both platforms publish outside the migration gate (DV-34). |
-| B. Hostinger KVM 4 with self-hosted MongoDB | ~R$ 65 | ~R$ 155 | One disk holds the application, the database and possibly the backups. Hostinger's own backups are weekly, so dumps, restores, patching and monitoring of MongoDB become ours. |
-| **C. Hostinger KVM 2 + Atlas Flex** | **R$ 87–209** | **R$ 122–244** | Single server for the applications, with no contractual uptime on the database tier. |
-| D. Fly.io São Paulo + Atlas Flex | R$ 277–498 | same | Lowest operating effort that stays in Brazil, at roughly three times the cost of C. |
-| E. Vultr São Paulo + Atlas Flex | R$ 210–498 | same | Same shape as C with no prepayment, at a much higher price for the same memory. |
+| Stack                                       | Now           | After the promotion | What breaks or does not fit                                                                                                                                                          |
+| ------------------------------------------- | ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A. Vercel Pro + Railway Pro + Atlas Flex    | R$ 265–415    | same                | Railway has no Brazil region, so personal data is processed in the US and every query crosses from Virginia to São Paulo. Both platforms publish outside the migration gate (DV-34). |
+| B. Hostinger KVM 4 with self-hosted MongoDB | ~R$ 65        | ~R$ 155             | One disk holds the application, the database and possibly the backups. Hostinger's own backups are weekly, so dumps, restores, patching and monitoring of MongoDB become ours.       |
+| **C. Hostinger KVM 2 + Atlas Flex**         | **R$ 87–209** | **R$ 122–244**      | Single server for the applications, with no contractual uptime on the database tier.                                                                                                 |
+| D. Fly.io São Paulo + Atlas Flex            | R$ 277–498    | same                | Lowest operating effort that stays in Brazil, at roughly three times the cost of C.                                                                                                  |
+| E. Vultr São Paulo + Atlas Flex             | R$ 210–498    | same                | Same shape as C with no prepayment, at a much higher price for the same memory.                                                                                                      |
 
 Also ruled out:
 
