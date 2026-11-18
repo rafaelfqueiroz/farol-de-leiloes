@@ -165,9 +165,15 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
 
       await t.service.handleProviderEvent(completed('evt_1', pending.id));
 
-      expect(t.gateway.retrievals).toEqual(
-        ['sub_1', 'sub_1'.replace('sub_1', 'sub_1')].slice(0, 1),
-      );
+      // The completed event names only the subscription id; the status, plan and limit that are stored
+      // can only have come from the provider read.
+      expect(t.gateway.retrievals.length).toBeGreaterThan(0);
+      expect(new Set(t.gateway.retrievals)).toEqual(new Set(['sub_1']));
+      expect(t.subscriptions.get(pending.id)).toMatchObject({
+        stripeSubscriptionId: 'sub_1',
+        status: 'ACTIVE',
+        activeJourneyLimit: 5,
+      });
     });
 
     it('does not create an office for a renewal of an office that has one', async () => {
