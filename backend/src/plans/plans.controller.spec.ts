@@ -8,7 +8,8 @@ import request from 'supertest';
 import { Decimal } from '../common/money/money.js';
 import { aPlan } from '../../test/builders/plan.builder.js';
 import { createHttpApp } from '../../test/support/http-app.js';
-import { testEnv } from '../../test/support/test-env.js';
+import { testBusinessConfig, testEnv } from '../../test/support/test-env.js';
+import businessConfig from '../config/business.config.js';
 import { PlansController } from './plans.controller.js';
 import { PlansThrottlerModule } from './plans-throttler.module.js';
 import { PlansService } from './plans.service.js';
@@ -24,7 +25,10 @@ describe('PlansController over HTTP', () => {
         PlansThrottlerModule,
       ],
       controllers: [PlansController],
-      providers: [{ provide: PlansService, useValue: plans }],
+      providers: [
+        { provide: PlansService, useValue: plans },
+        { provide: businessConfig.KEY, useValue: testBusinessConfig({ REFUND_WINDOW_DAYS: '14' }) },
+      ],
     });
   });
 
@@ -52,6 +56,8 @@ describe('PlansController over HTTP', () => {
         { code: 'a', name: 'A', price: '99.90', interval: 'month', activeJourneyLimit: 2 },
         { code: 'b', name: 'B', price: '1234.50', interval: 'year', activeJourneyLimit: 9 },
       ],
+      // AR-43: the refund notice's number is the setting, not a constant of the page
+      refundWindowDays: 14,
     });
   });
 
@@ -66,6 +72,8 @@ describe('PlansController over HTTP', () => {
   it('answers an empty envelope when nothing is offered (AR-35: an object, never a bare array)', async () => {
     plans.listOffered.mockResolvedValue([]);
 
-    await request(app.getHttpServer()).get('/api/plans').expect(200, { items: [] });
+    await request(app.getHttpServer())
+      .get('/api/plans')
+      .expect(200, { items: [], refundWindowDays: 14 });
   });
 });

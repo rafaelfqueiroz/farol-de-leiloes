@@ -284,13 +284,14 @@ describe('plan catalog (integration, SPEC-012)', () => {
             activeJourneyLimit: 5,
           },
         ],
+        refundWindowDays: 7,
       });
     });
 
     it('answers an empty list when nothing is offered', async () => {
       await model.collection.deleteMany({});
 
-      await request(server()).get('/api/plans').expect(200, { items: [] });
+      await request(server()).get('/api/plans').expect(200, { items: [], refundWindowDays: 7 });
     });
   });
 

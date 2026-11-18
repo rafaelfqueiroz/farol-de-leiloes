@@ -10,6 +10,8 @@ import {
   type FixedDiscount,
   PaymentGateway,
   type PaymentEvent,
+  type PlanChangePreview,
+  type PreviewPlanChangeInput,
   type ProviderInvoice,
   type ProviderPrice,
   type ProviderSubscription,
@@ -98,6 +100,17 @@ export class FakePaymentGateway extends PaymentGateway {
   invoices: ProviderInvoice[] = [];
   /** Invoices of one customer; a customer without an entry gets `invoices`. */
   readonly invoicesByCustomer = new Map<string, ProviderInvoice[]>();
+  /** What `previewPlanChange` answers; a spec sets it (default: R$ 100 due now, no credit lines). */
+  preview: PlanChangePreview = {
+    amountDue: new Decimal('100'),
+    currency: 'brl',
+    lines: [{ amount: new Decimal('100') }],
+    nextChargeAt: null,
+  };
+  /** Every preview asked for: proves nothing else was called (read only, BR-012-16). */
+  readonly previewRequests: PreviewPlanChangeInput[] = [];
+  /** Makes previewPlanChange fail, as an unreachable provider would. */
+  failPreview = false;
   /** The provider's prices by id (BR-012-02); an absent one does not exist. */
   readonly prices = new Map<string, ProviderPrice>();
   /**
@@ -193,6 +206,12 @@ export class FakePaymentGateway extends PaymentGateway {
     if (priceId === undefined) throw new Error('no pending change');
     this.pendingPriceChanges.delete(subscriptionId);
     this.apply(subscriptionId, { priceId });
+  }
+
+  async previewPlanChange(input: PreviewPlanChangeInput): Promise<PlanChangePreview> {
+    if (this.failPreview) throw new Error('provider unreachable');
+    this.previewRequests.push(input);
+    return this.preview;
   }
 
   async scheduleSubscriptionPrice(input: ChangePriceInput): Promise<void> {

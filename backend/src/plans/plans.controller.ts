@@ -1,9 +1,11 @@
-import { Controller, Get, Header, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Inject, UseGuards } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { ApiOkResponse, ApiOperation, ApiTags, ApiTooManyRequestsResponse } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from '../auth/decorators/public.decorator.js';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
 import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
+import businessConfig from '../config/business.config.js';
 import { PlansResponseDto } from './dto/plan-response.dto.js';
 import { PlansService } from './plans.service.js';
 
@@ -12,7 +14,11 @@ import { PlansService } from './plans.service.js';
 @ApiErrorResponses()
 @Controller('plans')
 export class PlansController {
-  constructor(private readonly plans: PlansService) {}
+  constructor(
+    private readonly plans: PlansService,
+    // AR-43: the refund window is a setting; the page's notice says it.
+    @Inject(businessConfig.KEY) private readonly config: ConfigType<typeof businessConfig>,
+  ) {}
 
   // SC-07: explicitly public; a visitor who tries to subscribe is sent to sign in by the frontend
   // (BR-012-05). AR-35 lookup exemption: the offered catalog is a handful of entries read at once,
@@ -29,6 +35,9 @@ export class PlansController {
   @ApiOkResponse({ type: PlansResponseDto })
   @ApiTooManyRequestsResponse({ description: 'TOO_MANY_REQUESTS', type: ErrorResponseDto })
   async list(): Promise<PlansResponseDto> {
-    return new PlansResponseDto(await this.plans.listOffered());
+    return new PlansResponseDto(
+      await this.plans.listOffered(),
+      this.config.subscriptions.refundWindowDays,
+    );
   }
 }

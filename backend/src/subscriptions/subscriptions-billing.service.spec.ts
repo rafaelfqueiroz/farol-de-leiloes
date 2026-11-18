@@ -9,6 +9,7 @@ import type { OwnerCounterRepository } from '../access/owner-counter.repository.
 import type { OfficePlanState } from '../access/sources/office-plan.source.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { Decimal } from '../common/money/money.js';
+import type { ProviderInvoice } from '../payments/payment-gateway.js';
 import type { CouponsService } from '../coupons/coupons.service.js';
 import type { PlansService } from '../plans/plans.service.js';
 import { aPlan } from '../../test/builders/plan.builder.js';
@@ -198,6 +199,17 @@ function build(env: Record<string, string | undefined> = {}) {
 type Harness = ReturnType<typeof build>;
 
 const BUYER_INFO = { email: 'ana.teste@example.test', name: 'Ana Teste' };
+
+const anInvoice = (id: string): ProviderInvoice => ({
+  id,
+  reason: 'subscription_cycle',
+  periodStart: FIRST_PAID,
+  periodEnd: new Date(FIRST_PAID.getTime() + 30 * DAY),
+  paidAt: FIRST_PAID,
+  amount: new Decimal('199.9'),
+  status: 'paid',
+  hostedUrl: `https://invoice.example.test/${id}`,
+});
 
 describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
   let t: Harness;
@@ -516,18 +528,9 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
   });
 
   describe('BR-012-11, BR-012-26: reading the plan', () => {
-    it('shows the plan, the limit, the count against it, the dates and the billing history', async () => {
+    it('shows the plan, the limit, the count against it, the dates and the settings it words', async () => {
       await t.subscribeOffice(OFFICE);
       t.counters.set(OFFICE, ACTIVE_JOURNEYS_KEY, 4);
-      t.gateway.invoices = [
-        {
-          id: 'in_1',
-          paidAt: FIRST_PAID,
-          amount: new Decimal('199.9'),
-          status: 'paid',
-          hostedUrl: 'https://invoice.example.test/in_1',
-        },
-      ];
 
       const view = await t.billing.view(await t.memberOf());
 
@@ -542,10 +545,45 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
         lapsedAt: null,
         readOnlyAt: null,
         firstPaidAt: FIRST_PAID,
+        canUndoScheduledChange: false,
+        canUndoCancel: false,
+        refundWindowDays: 7,
+        graceDays: 10,
       });
       expect(view.plan.price.toFixed(2)).toBe('199.90');
+      expect(view.nextChargeAmount?.toFixed(2)).toBe('199.90');
       expect(view.currentPeriodEnd?.toISOString()).toBe('2026-03-31T12:00:00.000Z');
-      expect(view.invoices).toEqual(t.gateway.invoices);
+      // The history has its own route: the plan page never waits for the provider's invoice list.
+      expect(t.gateway.invoiceReads).toBe(0);
+    });
+
+    it('BR-012-17: a scheduled downgrade names its price, and the next charge is the new plan price; it can be undone', async () => {
+      const { ref } = await t.subscribeOffice(OFFICE);
+      const ctx = await t.memberOf();
+      await t.billing.changePlan(ctx, { planCode: PLAN_2.code });
+
+      const view = await t.billing.view(ctx);
+
+      expect(view.scheduledChange).toMatchObject({ planCode: PLAN_2.code, interval: 'month' });
+      expect(view.scheduledChange?.price.toFixed(2)).toBe('99.90');
+      expect(view.nextChargeAmount?.toFixed(2)).toBe('99.90');
+      expect(view.canUndoScheduledChange).toBe(true);
+      expect(t.subscriptions.get(ref).scheduledPlanId).toBe(PLAN_2.id);
+    });
+
+    it('BR-012-19: while cancelling nothing renews, and the cancellation can be undone', async () => {
+      await t.subscribeOffice(OFFICE);
+      const ctx = await t.memberOf();
+      t.clock.advance(10 * DAY); // past the refund window: a cancel stops renewal only
+      await t.billing.cancel(ctx);
+
+      const view = await t.billing.view(ctx);
+
+      expect(view).toMatchObject({
+        status: 'CANCELING',
+        canUndoCancel: true,
+        nextChargeAmount: null,
+      });
     });
 
     it('BR-012-11: ANY member sees it, not only the one who paid', async () => {
@@ -556,14 +594,70 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       expect(view.status).toBe('ACTIVE');
     });
 
-    it('a billing history the provider cannot give right now does not break the page', async () => {
+    it('BR-012-11, AR-35: the billing history is paged from one bounded read, newest first', async () => {
+      await t.subscribeOffice(OFFICE);
+      t.gateway.invoices = Array.from({ length: 14 }, (_, index) => anInvoice(`in_${index + 1}`));
+      const ctx = await t.memberOf();
+
+      const first = await t.billing.invoices(ctx, undefined, { page: 1, pageSize: 6 });
+      const last = await t.billing.invoices(ctx, undefined, { page: 3, pageSize: 6 });
+      const beyond = await t.billing.invoices(ctx, undefined, { page: 9, pageSize: 6 });
+
+      expect(first.items.map((invoice) => invoice.id)).toEqual([
+        'in_1',
+        'in_2',
+        'in_3',
+        'in_4',
+        'in_5',
+        'in_6',
+      ]);
+      expect([first.total, first.page, first.pageSize]).toEqual([14, 1, 6]);
+      expect(last.items.map((invoice) => invoice.id)).toEqual(['in_13', 'in_14']);
+      expect(beyond.items).toEqual([]);
+      expect(beyond.total).toBe(14);
+      // three pages, one provider read (30 s cache), and it asked for the newest 100 only
+      expect(t.gateway.invoiceReads).toBe(1);
+    });
+
+    it('BR-012-11: ANY member pages the history; a stranger gets the shared NOT_FOUND', async () => {
+      await t.subscribeOffice(OFFICE);
+      t.gateway.invoices = [anInvoice('in_1')];
+
+      const colleague = await t.billing.invoices(await t.memberOf(SECOND_MEMBER), undefined, {
+        page: 1,
+        pageSize: 6,
+      });
+      const stranger = await t.billing
+        .invoices(await t.noOffice(), OFFICE, { page: 1, pageSize: 6 })
+        .catch((error: unknown) => error);
+
+      expect(colleague.items).toHaveLength(1);
+      expect(stranger).toBeInstanceOf(DomainError);
+    });
+
+    it('an office with no provider customer yet has an empty history, not an error', async () => {
+      const ctx = await t.memberOf();
+
+      await expect(t.billing.invoices(ctx, undefined, { page: 1, pageSize: 6 })).resolves.toEqual({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 6,
+      });
+      expect(t.gateway.invoiceReads).toBe(0);
+    });
+
+    it('a billing history the provider cannot give is BILLING_HISTORY_UNAVAILABLE, and the plan page still works', async () => {
       await t.subscribeOffice(OFFICE);
       t.gateway.failInvoices = true;
+      const ctx = await t.memberOf();
 
-      const view = await t.billing.view(await t.memberOf());
-
-      expect(view.invoices).toBeNull();
-      expect(view.status).toBe('ACTIVE');
+      await expect(
+        t.billing.invoices(ctx, undefined, { page: 1, pageSize: 6 }),
+      ).rejects.toMatchObject({
+        code: 'BILLING_HISTORY_UNAVAILABLE',
+      });
+      expect((await t.billing.view(ctx)).status).toBe('ACTIVE');
     });
 
     it('AR-14: a removed member and a stranger get the same NOT_FOUND as a missing office', async () => {
@@ -672,6 +766,112 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
     });
   });
 
+  describe('BR-012-16, BR-012-17: previewing a change (read only)', () => {
+    it('BR-012-16: an upgrade answers the provider own prorated amount and changes nothing', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE);
+      t.gateway.preview = {
+        amountDue: new Decimal('12600.09'),
+        currency: 'brl',
+        lines: [{ amount: new Decimal('12990') }, { amount: new Decimal('-389.91') }],
+        nextChargeAt: new Date('2027-03-01T12:00:00.000Z'),
+      };
+      const before = { ...t.subscriptions.get(ref) };
+
+      const preview = await t.billing.previewChange(await t.memberOf(), {
+        planCode: PLAN_10.code,
+      });
+
+      expect(preview).toMatchObject({ change: 'upgrade', currency: 'BRL', effectiveAt: null });
+      expect(preview.amountDue.toFixed(2)).toBe('12600.09');
+      expect(preview.lines.map((line) => line.amount.toFixed(2))).toEqual(['12990.00', '-389.91']);
+      expect(preview.nextChargeAt?.toISOString()).toBe('2027-03-01T12:00:00.000Z');
+      expect(preview.nextChargeAmount.toFixed(2)).toBe('349.90');
+      expect(t.gateway.previewRequests).toEqual([
+        { subscriptionId: providerId, priceId: 'price_10' },
+      ]);
+      // read only: no price change, no schedule, no write
+      expect(t.gateway.callLog).toEqual([]);
+      expect(t.subscriptions.get(ref)).toEqual(before);
+    });
+
+    it('an upgrade whose preview carries no next charge date falls back to the period end', async () => {
+      await t.subscribeOffice(OFFICE);
+      t.gateway.preview = { ...t.gateway.preview, nextChargeAt: null };
+
+      const preview = await t.billing.previewChange(await t.memberOf(), {
+        planCode: PLAN_10.code,
+      });
+
+      expect(preview.nextChargeAt?.toISOString()).toBe('2026-03-31T12:00:00.000Z');
+    });
+
+    it('BR-012-17: a downgrade charges nothing now and names the period end, without asking the provider', async () => {
+      await t.subscribeOffice(OFFICE);
+
+      const preview = await t.billing.previewChange(await t.memberOf(), { planCode: PLAN_2.code });
+
+      expect(preview.change).toBe('schedule');
+      expect(preview.amountDue.isZero()).toBe(true);
+      expect(preview.effectiveAt?.toISOString()).toBe('2026-03-31T12:00:00.000Z');
+      expect(preview.nextChargeAmount.toFixed(2)).toBe('99.90');
+      expect(t.gateway.previewRequests).toEqual([]);
+    });
+
+    it('choosing the plan in effect, or the one scheduled, changes nothing; with a schedule it releases it', async () => {
+      await t.subscribeOffice(OFFICE);
+      const ctx = await t.memberOf();
+      expect((await t.billing.previewChange(ctx, { planCode: PLAN_5.code })).change).toBe('keep');
+
+      await t.billing.changePlan(ctx, { planCode: PLAN_2.code });
+
+      const released = await t.billing.previewChange(ctx, { planCode: PLAN_5.code });
+      expect(released).toMatchObject({ change: 'release_schedule', effectiveAt: null });
+      expect(released.nextChargeAmount.toFixed(2)).toBe('199.90');
+      expect((await t.billing.previewChange(ctx, { planCode: PLAN_2.code })).change).toBe('keep');
+    });
+
+    it('refuses what the change refuses: nothing in effect, a withdrawn or unknown plan, a cancelling subscription, a read-only context', async () => {
+      const ctx = await t.memberOf();
+      await expect(t.billing.previewChange(ctx, { planCode: PLAN_10.code })).rejects.toMatchObject({
+        code: 'SUBSCRIPTION_NOT_CHANGEABLE',
+      });
+      await t.subscribeOffice(OFFICE);
+      for (const planCode of [PLAN_OLD.code, 'nope']) {
+        await expect(t.billing.previewChange(ctx, { planCode })).rejects.toMatchObject({
+          code: 'INVALID_PLAN',
+        });
+      }
+      await expect(
+        t.billing.previewChange({ ...ctx, readOnly: true } as AccessContext, {
+          planCode: PLAN_10.code,
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      t.clock.advance(10 * DAY);
+      await t.billing.cancel(ctx);
+      await expect(t.billing.previewChange(ctx, { planCode: PLAN_10.code })).rejects.toMatchObject({
+        code: 'SUBSCRIPTION_NOT_CHANGEABLE',
+      });
+      expect((await t.billing.previewChange(ctx, { planCode: PLAN_5.code })).change).toBe('keep');
+    });
+
+    it('a price the provider no longer sells is INVALID_PLAN; a provider that cannot compute is CHANGE_PREVIEW_FAILED', async () => {
+      await t.subscribeOffice(OFFICE);
+      const ctx = await t.memberOf();
+      t.gateway.listsPlan(PLAN_10, { active: false });
+      await expect(t.billing.previewChange(ctx, { planCode: PLAN_10.code })).rejects.toMatchObject({
+        code: 'INVALID_PLAN',
+      });
+
+      t.gateway.listsPlan(PLAN_10);
+      t.gateway.failPreview = true;
+      const logger = spyOnLogger();
+      await expect(t.billing.previewChange(ctx, { planCode: PLAN_10.code })).rejects.toMatchObject({
+        code: 'CHANGE_PREVIEW_FAILED',
+      });
+      expectNoneLogged(logger.loggedText(), [BUYER]);
+    });
+  });
+
   describe('BR-012-17, BR-012-18: downgrade', () => {
     it('BR-012-17: a lower limit is scheduled for the period end; the current plan and limit apply until then', async () => {
       const { providerId } = await t.subscribeOffice(OFFICE);
@@ -686,6 +886,8 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       expect(view.scheduledChange).toEqual({
         planCode: 'escritorio-2',
         planName: 'Escritório 2',
+        price: new Decimal('99.90'),
+        interval: 'month',
         activeJourneyLimit: 2,
         at: new Date('2026-03-31T12:00:00.000Z'),
       });
@@ -1585,20 +1787,21 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
     it('the invoice list is reused for 30 seconds and dropped by every action of ours', async () => {
       const { ref } = await t.subscribeOffice(OFFICE);
       const ctx = await t.memberOf();
-      await t.billing.view(ctx);
-      await t.billing.view(ctx);
+      const page = { page: 1, pageSize: 6 };
+      await t.billing.invoices(ctx, undefined, page);
+      await t.billing.invoices(ctx, undefined, page);
       expect(t.gateway.invoiceReads).toBe(1);
 
       t.clock.advance(INVOICE_CACHE_MS);
-      await t.billing.view(ctx);
+      await t.billing.invoices(ctx, undefined, page);
       expect(t.gateway.invoiceReads).toBe(2);
 
       // The cache is warm (the read just above). An action of ours refreshes the record and drops it:
-      // its own answer reads the list again.
-      const warm = t.gateway.invoiceReads;
+      // the next read asks the provider again.
       await t.billing.changePlan(ctx, { planCode: PLAN_2.code });
       expect(t.subscriptions.get(ref).scheduledPlanId).toBe(PLAN_2.id);
-      expect(t.gateway.invoiceReads).toBe(warm + 1);
+      await t.billing.invoices(ctx, undefined, page);
+      expect(t.gateway.invoiceReads).toBe(3);
     });
   });
 });

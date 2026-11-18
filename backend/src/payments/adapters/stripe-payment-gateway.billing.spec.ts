@@ -32,7 +32,12 @@ function build() {
     prices: { retrieve: vi.fn() },
     refunds: { create: vi.fn().mockResolvedValue({ id: 're_1' }) },
     invoicePayments: { list: vi.fn() },
-    invoices: { list: vi.fn(), voidInvoice: vi.fn().mockResolvedValue({}), retrieve: vi.fn() },
+    invoices: {
+      list: vi.fn(),
+      voidInvoice: vi.fn().mockResolvedValue({}),
+      retrieve: vi.fn(),
+      createPreview: vi.fn(),
+    },
     billingPortal: {
       sessions: { create: vi.fn().mockResolvedValue({ url: 'https://billing.stripe.test/s' }) },
     },
@@ -582,6 +587,8 @@ describe('StripePaymentGateway billing operations', () => {
           {
             id: 'in_2',
             status: 'paid',
+            billing_reason: 'subscription_update',
+            lines: { data: [{ period: { start: 1772366400, end: 1774958400 } }] },
             total: 19990,
             status_transitions: { paid_at: 1772366405 },
             hosted_invoice_url: 'https://invoice.stripe.test/in_2',
@@ -605,13 +612,85 @@ describe('StripePaymentGateway billing operations', () => {
         {
           id: 'in_2',
           status: 'paid',
+          reason: 'subscription_update',
+          periodStart: new Date('2026-03-01T12:00:00.000Z'),
+          periodEnd: new Date('2026-03-31T12:00:00.000Z'),
           paidAt: new Date('2026-03-01T12:00:05.000Z'),
           amount: '199.9',
           hostedUrl: 'https://invoice.stripe.test/in_2',
         },
-        { id: 'in_3', status: 'open', paidAt: null, amount: '99.9', hostedUrl: null },
-        { id: 'in_4', status: 'draft', paidAt: null, amount: '0', hostedUrl: null },
+        {
+          id: 'in_3',
+          status: 'open',
+          reason: 'other',
+          periodStart: null,
+          periodEnd: null,
+          paidAt: null,
+          amount: '99.9',
+          hostedUrl: null,
+        },
+        {
+          id: 'in_4',
+          status: 'draft',
+          reason: 'other',
+          periodStart: null,
+          periodEnd: null,
+          paidAt: null,
+          amount: '0',
+          hostedUrl: null,
+        },
       ]);
+    });
+  });
+
+  describe('previewPlanChange (BR-012-16)', () => {
+    it('asks the provider upcoming invoice with the proration the upgrade uses, in reais, and creates nothing', async () => {
+      const { gateway, stripe } = build();
+      stripe.subscriptions.retrieve.mockResolvedValue({ items: { data: [ITEM] } });
+      stripe.invoices.createPreview.mockResolvedValue({
+        amount_due: 1260009,
+        currency: 'brl',
+        lines: {
+          data: [
+            { amount: 1299000, period: { start: 1772366400, end: 1803902400 } },
+            { amount: -38991, period: { start: 1772366400, end: 1774958400 } },
+          ],
+        },
+      });
+
+      const preview = await gateway.previewPlanChange({
+        subscriptionId: 'sub_1',
+        priceId: 'price_9',
+      });
+
+      expect(stripe.invoices.createPreview).toHaveBeenCalledWith({
+        subscription: 'sub_1',
+        subscription_details: {
+          items: [{ id: 'si_1', price: 'price_9' }],
+          proration_behavior: 'always_invoice',
+        },
+      });
+      expect(preview.amountDue.toFixed(2)).toBe('12600.09');
+      expect(preview.currency).toBe('brl');
+      expect(preview.lines.map((line) => line.amount.toFixed(2))).toEqual(['12990.00', '-389.91']);
+      // the next charge is the end of the longest period the new price is charged for
+      expect(preview.nextChargeAt).toEqual(new Date('2027-03-01T12:00:00.000Z'));
+      expect(stripe.subscriptions.update).not.toHaveBeenCalled();
+    });
+
+    it('never answers a negative amount due, and no next charge when no line charges', async () => {
+      const { gateway, stripe } = build();
+      stripe.subscriptions.retrieve.mockResolvedValue({ items: { data: [ITEM] } });
+      stripe.invoices.createPreview.mockResolvedValue({
+        amount_due: -500,
+        currency: 'brl',
+        lines: { data: [{ amount: -500, period: { start: 1, end: 2 } }] },
+      });
+
+      const preview = await gateway.previewPlanChange({ subscriptionId: 'sub_1', priceId: 'p' });
+
+      expect(preview.amountDue.isZero()).toBe(true);
+      expect(preview.nextChargeAt).toBeNull();
     });
   });
 

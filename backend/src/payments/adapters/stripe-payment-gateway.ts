@@ -17,6 +17,8 @@ import {
   PaymentGateway,
   type PaymentEvent,
   type InvoiceReason,
+  type PlanChangePreview,
+  type PreviewPlanChangeInput,
   type ProviderCheckoutSession,
   type ProviderInvoice,
   type ProviderPrice,
@@ -227,6 +229,34 @@ export class StripePaymentGateway extends PaymentGateway {
     );
   }
 
+  async previewPlanChange({
+    subscriptionId,
+    priceId,
+  }: PreviewPlanChangeInput): Promise<PlanChangePreview> {
+    const item = onlyItem(await this.stripe.subscriptions.retrieve(subscriptionId));
+    // The provider's upcoming invoice with the SAME proration the upgrade uses (BR-012-16), so the
+    // figure shown is the one it would charge. Read only: no invoice, item or schedule is created.
+    const invoice = await this.stripe.invoices.createPreview({
+      subscription: subscriptionId,
+      subscription_details: {
+        items: [{ id: item.id, price: priceId }],
+        proration_behavior: 'always_invoice',
+      },
+    });
+    const lines = invoice.lines.data;
+    const periodEnds = lines
+      .filter((line) => line.amount > 0)
+      .map((line) => line.period.end)
+      .sort((a, b) => b - a);
+    return {
+      // AR-20: centavos become reais here and nowhere else. A credit is never paid out.
+      amountDue: centavosToReais(Math.max(invoice.amount_due, 0)),
+      currency: invoice.currency,
+      lines: lines.map((line) => ({ amount: centavosToReais(line.amount) })),
+      nextChargeAt: fromUnixSeconds(periodEnds[0]),
+    };
+  }
+
   async scheduleSubscriptionPrice({
     subscriptionId,
     priceId,
@@ -402,6 +432,10 @@ export class StripePaymentGateway extends PaymentGateway {
     const invoices = await this.stripe.invoices.list({ customer: customerId, limit });
     return invoices.data.map((invoice) => ({
       id: invoice.id,
+      reason: invoiceReasonOf(invoice.billing_reason),
+      // The service period is the first line's; the invoice's own period fields are another thing.
+      periodStart: fromUnixSeconds(invoice.lines?.data[0]?.period.start),
+      periodEnd: fromUnixSeconds(invoice.lines?.data[0]?.period.end),
       paidAt:
         invoice.status === 'paid' ? fromUnixSeconds(invoice.status_transitions.paid_at) : null,
       // The invoice's total after discounts; AR-20: centavos become reais here and nowhere else.

@@ -73,6 +73,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   BILLING_PORTAL_FAILED: HttpStatus.BAD_GATEWAY,
   // The payment provider rejected a plan change (e.g. a price it cannot switch to): upstream.
   CHANGE_PLAN_FAILED: HttpStatus.BAD_GATEWAY,
+  // The provider could not compute the prorated amount of an upgrade (nothing was changed): upstream.
+  CHANGE_PREVIEW_FAILED: HttpStatus.BAD_GATEWAY,
+  // The provider could not list the invoices (BR-012-11): the plan page works without them.
+  BILLING_HISTORY_UNAVAILABLE: HttpStatus.BAD_GATEWAY,
   // BR-012-29: another member's cancel is refunding this subscription right now; retry shortly.
   CANCEL_IN_PROGRESS: HttpStatus.CONFLICT,
   // BR-012-23 / BR-012-25: the office is at its active-journey limit.

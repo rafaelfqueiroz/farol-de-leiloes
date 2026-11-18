@@ -39,7 +39,17 @@ export class PlansResponseDto {
   @ApiProperty({ type: () => [PlanResponseDto] })
   items: PlanResponseDto[];
 
-  constructor(plans: readonly Plan[]) {
+  @ApiProperty({
+    type: Number,
+    minimum: 1,
+    description:
+      'Days after the first confirmed payment of an office with a full refund (BR-012-29, ' +
+      'REFUND_WINDOW_DAYS): the plans page words its notice with it',
+  })
+  refundWindowDays: number;
+
+  constructor(plans: readonly Plan[], refundWindowDays: number) {
     this.items = plans.map((plan) => new PlanResponseDto(plan));
+    this.refundWindowDays = refundWindowDays;
   }
 }
