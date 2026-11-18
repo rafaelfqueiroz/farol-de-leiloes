@@ -44,15 +44,14 @@ describe('decideCancel', () => {
         refunded: false,
       }),
     ).toBe('noop');
-    // Even inside the window: the member chose the period end first.
-    expect(
-      decideCancel({
-        status: 'PAST_DUE',
-        cancelAtPeriodEnd: true,
-        refundEligible: true,
-        refunded: false,
-      }),
-    ).toBe('noop');
+  });
+
+  it('BR-012-29: stopping renewal first does not take the right of withdrawal away: inside the window it still refunds', () => {
+    for (const status of ['CANCELING', 'PAST_DUE'] as const) {
+      expect(
+        decideCancel({ status, cancelAtPeriodEnd: true, refundEligible: true, refunded: false }),
+      ).toBe('refund_and_cancel');
+    }
   });
 
   it('BR-012-29: a refund already made but not yet followed by the end is finished, whatever the window says', () => {

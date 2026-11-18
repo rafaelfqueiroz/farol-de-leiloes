@@ -98,6 +98,7 @@ function patch(overrides: Partial<SyncPatch> = {}): SyncPatch {
     scheduledPlanId: null,
     scheduledChangeAt: null,
     firstPaidAt: NOW,
+    firstPaymentFree: false,
     lapsedAt: null,
     readOnlyAt: null,
     lastSyncedAt: NOW,
@@ -130,10 +131,12 @@ describe('SubscriptionsRepository (no database)', () => {
         scheduledPlanId: null,
         scheduledChangeAt: null,
         firstPaidAt: null,
+        firstPaymentFree: false,
         lapsedAt: null,
         readOnlyAt: null,
         provisionedAt: null,
         refundClaimedAt: null,
+        refundRequestedAt: null,
         refundedAt: null,
         syncLeaseToken: null,
         syncLeaseUntil: null,
@@ -162,6 +165,8 @@ describe('SubscriptionsRepository (no database)', () => {
         readOnlyAt: LATER,
         provisionedAt: NOW,
         refundClaimedAt: NOW,
+        refundRequestedAt: NOW,
+        firstPaymentFree: true,
         refundedAt: LATER,
         syncLeaseToken: 'token',
         syncLeaseUntil: LATER,
@@ -176,7 +181,9 @@ describe('SubscriptionsRepository (no database)', () => {
         scheduledPlanId: PLAN,
         scheduledChangeAt: LATER,
         refundClaimedAt: NOW,
+        refundRequestedAt: NOW,
         refundedAt: LATER,
+        firstPaymentFree: true,
         syncLeaseToken: 'token',
         syncLeaseUntil: LATER,
       });
@@ -271,7 +278,10 @@ describe('SubscriptionsRepository (no database)', () => {
         refundedAt: null,
         $or: [{ refundClaimedAt: null }, { refundClaimedAt: { $lte: LATER.toISOString() } }],
       });
-      expect(t.updateOf('updateOne')).toEqual({ $set: { refundClaimedAt: NOW.toISOString() } });
+      expect(t.updateOf('updateOne')).toEqual({
+        $set: { refundClaimedAt: NOW.toISOString() },
+        $min: { refundRequestedAt: NOW.toISOString() },
+      });
     });
 
     it('answers false when a conditional update matched nothing', async () => {
@@ -382,7 +392,7 @@ describe('SubscriptionsRepository (no database)', () => {
   });
 
   describe('BR-012-13: the sync write', () => {
-    it('stores the snapshot, releases the lease and the open-checkout key, and clears what the provider no longer has', async () => {
+    it('stores the snapshot, releases the lease, and clears what the provider no longer has', async () => {
       const t = build();
       t.answer('findOneAndUpdate', { _id: new Types.ObjectId(ID), syncRequestedAt: undefined });
 
@@ -403,12 +413,13 @@ describe('SubscriptionsRepository (no database)', () => {
           currentPeriodStart: NOW.toISOString(),
           currentPeriodEnd: LATER.toISOString(),
           firstPaidAt: NOW.toISOString(),
+          firstPaymentFree: false,
         },
         $unset: {
           syncLeaseToken: '',
           syncLeaseUntil: '',
           syncRequestedAt: '',
-          openCheckoutKey: '',
+          lastReconcileFailedAt: '',
           scheduledPlanId: '',
           scheduledChangeAt: '',
           lapsedAt: '',
@@ -446,18 +457,45 @@ describe('SubscriptionsRepository (no database)', () => {
       });
     });
 
-    it('BR-012-07: a record the provider still shows as incomplete keeps its open-checkout key', async () => {
+    it.each(['PENDING', 'ACTIVE', 'PAST_DUE', 'CANCELING'] as const)(
+      'BR-012-07, BR-012-08: a %s record keeps its open-checkout key (the buyer holds it until the office is attached)',
+      async (status) => {
+        const t = build();
+        t.answer('findOneAndUpdate', { _id: new Types.ObjectId(ID) });
+
+        await t.repository.writeSync(ID, 'token', patch({ status }));
+
+        expect(
+          (t.updateOf('findOneAndUpdate') as { $unset: Record<string, string> }).$unset,
+        ).not.toHaveProperty('openCheckoutKey');
+      },
+    );
+
+    it('BR-012-08: a LAPSED record gives its open-checkout key back, so the office can subscribe again', async () => {
       const t = build();
       t.answer('findOneAndUpdate', { _id: new Types.ObjectId(ID) });
 
-      await t.repository.writeSync(ID, 'token', patch({ status: 'PENDING' }));
+      await t.repository.writeSync(ID, 'token', patch({ status: 'LAPSED', lapsedAt: NOW }));
 
-      expect(t.updateOf('findOneAndUpdate')).toMatchObject({
-        $unset: { syncLeaseToken: '' },
-      });
-      expect(
-        (t.updateOf('findOneAndUpdate') as { $unset: Record<string, string> }).$unset,
-      ).not.toHaveProperty('openCheckoutKey');
+      expect(t.updateOf('findOneAndUpdate')).toMatchObject({ $unset: { openCheckoutKey: '' } });
+    });
+
+    it('BR-012-29: the first payment instant and whether it was free are stored together, and only with it', async () => {
+      const t = build();
+      t.answer('findOneAndUpdate', { _id: new Types.ObjectId(ID) });
+
+      await t.repository.writeSync(ID, 'token', patch({ firstPaymentFree: true }));
+      await t.repository.writeSync(
+        ID,
+        'token',
+        patch({ firstPaidAt: null, firstPaymentFree: true }),
+      );
+
+      const updates = t.calls
+        .filter((call) => call.method === 'findOneAndUpdate')
+        .map((call) => plain(call.args[1]) as { $set: Record<string, unknown> });
+      expect(updates[0]?.$set).toMatchObject({ firstPaymentFree: true });
+      expect(updates[1]?.$set).not.toHaveProperty('firstPaymentFree');
     });
 
     it('answers dirty when a delivery asked for a re-read while the lease was held', async () => {
@@ -529,6 +567,7 @@ describe('SubscriptionsRepository (no database)', () => {
         officeId: { $eq: OFFICE },
         _id: { $ne: ID },
         firstPaidAt: { $lt: NOW.toISOString() },
+        firstPaymentFree: { $ne: true },
       });
     });
 
@@ -558,6 +597,7 @@ describe('SubscriptionsRepository (no database)', () => {
 
       expect(due).toEqual([{ id: ID, status: 'ACTIVE' }]);
       expect(t.calls.find((call) => call.method === 'find.sort')?.args[0]).toEqual({
+        lastReconcileFailedAt: 1,
         lastSyncedAt: 1,
         _id: 1,
       });
@@ -568,10 +608,11 @@ describe('SubscriptionsRepository (no database)', () => {
       const t = build();
       t.answer('deleteMany', { deletedCount: 3 });
 
-      expect(await t.repository.purgeStalePending(NOW)).toBe(3);
+      expect(await t.repository.purgeOrphanedPending(NOW)).toBe(3);
       expect(t.filterOf('deleteMany')).toEqual({
         status: { $eq: 'PENDING' },
         stripeSubscriptionId: null,
+        checkoutSessionId: null,
         createdAt: { $lt: NOW.toISOString() },
       });
     });
@@ -582,6 +623,101 @@ describe('SubscriptionsRepository (no database)', () => {
 
       expect(await t.repository.deletePendingById(ID)).toBe(true);
       expect(await t.repository.deleteAbandonedPending('cs_1')).toBe(false);
+    });
+  });
+
+  describe('F2, F3, F4, F9, F10: recovery and guards', () => {
+    it('BR-012-07: attaching the office also gives the buyer open-checkout key back', async () => {
+      const t = build();
+      t.answer('updateOne', { modifiedCount: 1 });
+
+      expect(await t.repository.attachOffice(ID, OFFICE, NOW)).toBe('attached');
+
+      expect(t.updateOf('updateOne')).toMatchObject({ $unset: { openCheckoutKey: '' } });
+    });
+
+    it('BR-012-29: the refund claim goes back only to its holder (the instant it took), and the request stays', async () => {
+      const t = build();
+      t.answer('updateOne', { modifiedCount: 1 });
+
+      await t.repository.releaseRefundClaim(ID, NOW);
+      await t.repository.releaseRefundClaim('not-an-id', NOW);
+
+      expect(t.filterOf('updateOne')).toEqual({
+        _id: { $eq: ID },
+        refundClaimedAt: { $eq: NOW.toISOString() },
+      });
+      expect(t.updateOf('updateOne')).toEqual({ $unset: { refundClaimedAt: '' } });
+      expect(t.calls.filter((call) => call.method === 'updateOne')).toHaveLength(1);
+    });
+
+    it('BR-012-29: finds the subscriptions in effect whose refund was requested or made, bounded', async () => {
+      const t = build();
+      t.answer('find', [MINIMAL_ROW]);
+
+      const found = await t.repository.findRefundsToFinish(25);
+
+      expect(found).toHaveLength(1);
+      expect(t.filterOf('find')).toEqual({
+        status: { $in: ['ACTIVE', 'PAST_DUE', 'CANCELING'] },
+        $or: [{ refundedAt: { $exists: true } }, { refundRequestedAt: { $exists: true } }],
+      });
+      expect(t.calls.find((call) => call.method === 'find.limit')?.args[0]).toBe(25);
+    });
+
+    it('ADR-005: finds the unconfirmed checkouts that have a session, older than the cutoff', async () => {
+      const t = build();
+      t.answer('find', [MINIMAL_ROW]);
+
+      const found = await t.repository.findPendingWithSession(NOW, 10);
+
+      expect(found).toHaveLength(1);
+      expect(t.filterOf('find')).toEqual({
+        status: { $eq: 'PENDING' },
+        stripeSubscriptionId: null,
+        checkoutSessionId: { $exists: true },
+        createdAt: { $lt: NOW.toISOString() },
+      });
+    });
+
+    it('ADR-005: marks a record the job could not read, ignoring a malformed id', async () => {
+      const t = build();
+      t.answer('updateOne', { modifiedCount: 1 });
+
+      await t.repository.markReconcileFailed(ID, NOW);
+      await t.repository.markReconcileFailed('not-an-id', NOW);
+
+      expect(t.updateOf('updateOne')).toEqual({
+        $set: { lastReconcileFailedAt: NOW.toISOString() },
+      });
+      expect(t.calls.filter((call) => call.method === 'updateOne')).toHaveLength(1);
+    });
+
+    it('BR-012-07: a first subscription of the buyer that is in effect and has no office is found by the buyer', async () => {
+      const t = build();
+      t.answer('findOne', MINIMAL_ROW, null);
+
+      expect((await t.repository.findInEffectByBuyerWithoutOffice(BUYER))?.id).toBe(ID);
+      expect(await t.repository.findInEffectByBuyerWithoutOffice(BUYER)).toBeNull();
+      expect(await t.repository.findInEffectByBuyerWithoutOffice('not-an-id')).toBeNull();
+      expect(t.filterOf('findOne')).toEqual({
+        buyerUserId: { $eq: BUYER },
+        officeId: null,
+        status: { $in: ['ACTIVE', 'PAST_DUE', 'CANCELING'] },
+      });
+    });
+
+    it('one customer per buyer: the latest stored customer of the buyer, or none', async () => {
+      const t = build();
+      t.answer(
+        'findOne',
+        { _id: new Types.ObjectId(ID), stripeCustomerId: 'cus_1' },
+        { _id: new Types.ObjectId(ID) },
+      );
+
+      expect(await t.repository.findCustomerIdOfBuyer(BUYER)).toBe('cus_1');
+      expect(await t.repository.findCustomerIdOfBuyer(BUYER)).toBeNull();
+      expect(await t.repository.findCustomerIdOfBuyer('not-an-id')).toBeNull();
     });
   });
 });

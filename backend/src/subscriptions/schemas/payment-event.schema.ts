@@ -31,6 +31,14 @@ export class PaymentEventEntity {
   @Prop({ type: Date })
   emailClaimedAt?: Date;
 
+  /** The claim is a lease: after this instant a crashed sender's claim can be taken again. */
+  @Prop({ type: Date })
+  emailClaimedUntil?: Date;
+
+  /** Set once somebody was told: the email is never sent twice for this event. */
+  @Prop({ type: Date })
+  emailSentAt?: Date;
+
   /**
    * SC-11: a delivery of this event is being handled until `processingUntil` (a lease): another
    * delivery of the SAME event id meanwhile is told to retry instead of running the handler too.

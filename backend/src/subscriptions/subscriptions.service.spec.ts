@@ -22,6 +22,7 @@ import { testBusinessConfig } from '../../test/support/test-env.js';
 import { effectiveJourneyLimit } from './domain/subscription-status.js';
 import type { PaymentEventsRepository } from './payment-events.repository.js';
 import {
+  EMAIL_CLAIM_MS,
   EVENT_PROCESSING_MS,
   SYNC_LEASE_MS,
   SubscriptionsService,
@@ -724,7 +725,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           id: providerId,
           subscriptionRef: record.id,
           priceId: 'price_5',
-          latestInvoicePaidAt: new Date(paidAt),
+          firstInvoicePaidAt: new Date(paidAt),
         }),
       );
       await t.service.handleProviderEvent(completed(`evt_${providerId}`, record.id, providerId));
@@ -763,7 +764,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           id: 'sub_2',
           subscriptionRef: second.id,
           priceId: 'price_5',
-          latestInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
+          firstInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
         }),
       );
 
@@ -786,7 +787,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           id: 'sub_old',
           subscriptionRef: older.id,
           priceId: 'price_5',
-          latestInvoicePaidAt: new Date('2026-01-05T00:00:00.000Z'),
+          firstInvoicePaidAt: new Date('2026-01-05T00:00:00.000Z'),
         }),
       );
 
@@ -806,7 +807,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           id: 'sub_2',
           subscriptionRef: second.id,
           priceId: 'price_5',
-          latestInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
+          firstInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
         }),
       );
       await t.service.handleProviderEvent(completed('evt_2', second.id, 'sub_2'));
@@ -1049,6 +1050,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           scheduledPlanId: null,
           scheduledChangeAt: null,
           firstPaidAt: NOW,
+          firstPaymentFree: false,
           lapsedAt: null,
           readOnlyAt: null,
           lastSyncedAt: NOW,
@@ -1273,7 +1275,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       const pending = await t.startCheckout(OFFICE);
       t.providerHas(pending.id, { status: 'past_due' });
       await t.ledger.record('evt_1', 'invoice.payment_failed', NOW);
-      await t.ledger.claimEmail('evt_1', NOW); // it claimed, then died
+      await t.ledger.claimEmail('evt_1', NOW, new Date(NOW.getTime() + EMAIL_CLAIM_MS)); // it claimed, then died
 
       await t.service.handleProviderEvent(failed('evt_1'));
 
@@ -1292,6 +1294,34 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
 
       await t.service.handleProviderEvent(failed('evt_1'));
       expect(t.notifier.notified).toEqual([OFFICE]);
+    });
+
+    it('BR-012-20: a sender that died between the claim and the send loses the claim at its expiry; the retried event sends the email', async () => {
+      const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id, { status: 'past_due' });
+      await t.ledger.record('evt_1', 'invoice.payment_failed', NOW);
+      await t.ledger.claimEmail('evt_1', NOW, new Date(NOW.getTime() + EMAIL_CLAIM_MS));
+      t.clock.advance(EMAIL_CLAIM_MS); // the claim is past its end
+
+      await t.service.handleProviderEvent(failed('evt_1'));
+
+      expect(t.notifier.notified).toEqual([OFFICE]);
+    });
+
+    it('BR-012-20: when nobody could be told (no member known yet) the claim is given back, so a retry tells them', async () => {
+      const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id, { status: 'past_due' });
+      t.notifier.told = 0;
+      await t.service.handleProviderEvent(failed('evt_1'));
+      expect(t.ledger.ledger.get('evt_1')?.emailClaimedAt).toBeUndefined();
+      expect(t.ledger.ledger.get('evt_1')?.emailSentAt).toBeUndefined();
+
+      t.notifier.told = 2;
+      await t.ledger.markProcessed('evt_1', NOW); // processed: the retry is a NEW delivery of another event
+      await t.service.handleProviderEvent(failed('evt_2'));
+
+      expect(t.notifier.notified).toEqual([OFFICE, OFFICE]);
+      expect(t.ledger.ledger.get('evt_2')?.emailSentAt).toEqual(NOW);
     });
 
     it('a failed-payment event covered by a holder is retried, never acknowledged unread (the email decision needs its own read)', async () => {

@@ -6,7 +6,7 @@
 // SC-15: the log carries counts only, never an address or a name. A send that fails for ONE member
 // does not stop the others and is not retried (a retry would email the members who already got it
 // twice); when NOTHING could be sent it throws, which releases the claim so the provider's retry
-// sends the email.
+// sends the email. It answers how many members were told; 0 (nobody known) releases the claim.
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EmailService } from '../email/email.service.js';
 import { OFFICE_MEMBERS_SOURCE, type OfficeMembersSource } from './ports/office-members.source.js';
@@ -21,7 +21,7 @@ export class EmailPaymentFailedNotifier implements PaymentFailedNotifier {
     private readonly email: EmailService,
   ) {}
 
-  async notifyPaymentFailed(officeId: string): Promise<void> {
+  async notifyPaymentFailed(officeId: string): Promise<number> {
     const contacts = await this.members.memberContacts(officeId);
     let sent = 0;
     let failed = 0;
@@ -39,5 +39,6 @@ export class EmailPaymentFailedNotifier implements PaymentFailedNotifier {
     }
     if (sent === 0 && failed > 0) throw new Error('No payment failed email could be sent');
     this.logger.log(`Payment failed email sent to ${sent} of ${contacts.length} members`);
+    return sent;
   }
 }

@@ -48,6 +48,12 @@ export const SYNC_LEASE_MS = 30_000;
  */
 export const EVENT_PROCESSING_MS = 120_000;
 
+/**
+ * BR-012-20: how long a claim on the payment-failed email lasts. A sender that dies between the
+ * claim and the send loses it at expiry, and the retried event sends the email.
+ */
+export const EMAIL_CLAIM_MS = 10 * 60 * 1000;
+
 /** A delivery that finds the lease taken tries to take it this many times (ADR-005). */
 const MAX_ACQUIRE_ATTEMPTS = 3;
 /** A holder reads the provider again, while deliveries keep asking, at most this many times. */
@@ -146,6 +152,16 @@ export class SubscriptionsService {
       throw error;
     }
     await this.events.markProcessed(event.id, this.clock.now());
+  }
+
+  /**
+   * ADR-005: a checkout whose payment the provider confirms (its session is complete) but whose
+   * events never reached us: reads the subscription it created through the same sync, naming our
+   * record by ref. Returns the record as stored afterwards.
+   */
+  async recoverCheckout(ref: string, providerSubscriptionId: string): Promise<StoredSubscription> {
+    const result = await this.syncFromProvider(providerSubscriptionId, ref);
+    return result.kind === 'synced' ? result.record : this.reload(ref);
   }
 
   /**
@@ -532,12 +548,18 @@ export class SubscriptionsService {
   private async notifyPaymentFailed(eventId: string, record: StoredSubscription): Promise<void> {
     // A first payment that fails never reaches PAST_DUE (it stays pending): no office, no one.
     if (record.officeId === null) return;
-    if (!(await this.events.claimEmail(eventId, this.clock.now()))) return;
+    const claimedAt = this.clock.now();
+    const until = new Date(claimedAt.getTime() + EMAIL_CLAIM_MS);
+    if (!(await this.events.claimEmail(eventId, claimedAt, until))) return;
+    let told: number;
     try {
-      await this.notifier.notifyPaymentFailed(record.officeId);
+      told = await this.notifier.notifyPaymentFailed(record.officeId);
     } catch (error) {
       await this.events.releaseEmailClaim(eventId);
       throw error;
     }
+    // Nobody was told (no member known yet): the claim goes back so a retry can tell them.
+    if (told === 0) await this.events.releaseEmailClaim(eventId);
+    else await this.events.markEmailSent(eventId, this.clock.now());
   }
 }

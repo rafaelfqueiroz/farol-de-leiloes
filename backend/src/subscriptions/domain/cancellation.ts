@@ -14,6 +14,11 @@ export type CancelDecision =
 export function decideCancel(subscription: {
   status: SubscriptionStatus;
   cancelAtPeriodEnd: boolean;
+  /**
+   * The right of withdrawal applies (BR-012-29), judged at the instant the member's cancel was
+   * first accepted (`refundRequestedAt`) when there is one, so a retry after the window of a
+   * request made inside it still completes.
+   */
   refundEligible: boolean;
   /** The refund was made (BR-012-29) but the subscription is still in effect: a crash between. */
   refunded: boolean;
@@ -21,8 +26,10 @@ export function decideCancel(subscription: {
   if (!isInEffect(subscription.status)) return 'not_cancelable';
   // The money went back: the subscription must end now, whatever the window says any more.
   if (subscription.refunded) return 'refund_and_cancel';
-  if (subscription.cancelAtPeriodEnd) return 'noop';
-  return subscription.refundEligible ? 'refund_and_cancel' : 'cancel_at_period_end';
+  // Eligibility comes BEFORE "already cancelling": a member who chose the period end on day 2 and
+  // changes their mind on day 5 still has the right of withdrawal (CDC art. 49).
+  if (subscription.refundEligible) return 'refund_and_cancel';
+  return subscription.cancelAtPeriodEnd ? 'noop' : 'cancel_at_period_end';
 }
 
 export type UndoDecision =

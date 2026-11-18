@@ -30,6 +30,8 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
   readonly requested = new Set<string>();
   /** The open-checkout key of each record that holds one (BR-012-07, BR-012-08). */
   readonly openKeys = new Map<string, string>();
+  /** When the reconcile job last failed to read a record (failures sort last). */
+  readonly reconcileFailures = new Map<string, Date>();
   private sequence = 0;
 
   /** `now` stamps `createdAt`; a spec passes its clock. */
@@ -67,10 +69,12 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
       scheduledPlanId: null,
       scheduledChangeAt: null,
       firstPaidAt: null,
+      firstPaymentFree: false,
       lapsedAt: null,
       readOnlyAt: null,
       provisionedAt: null,
       refundClaimedAt: null,
+      refundRequestedAt: null,
       refundedAt: null,
       syncLeaseToken: null,
       syncLeaseUntil: null,
@@ -159,6 +163,8 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
     row.scheduledPlanId = patch.scheduledPlanId;
     row.scheduledChangeAt = patch.scheduledChangeAt;
     row.firstPaidAt = patch.firstPaidAt;
+    if (patch.firstPaidAt !== null) row.firstPaymentFree = patch.firstPaymentFree;
+    this.reconcileFailures.delete(id);
     row.lapsedAt = patch.lapsedAt;
     row.readOnlyAt = patch.readOnlyAt;
     row.lastSyncedAt = patch.lastSyncedAt;
@@ -169,7 +175,7 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
     }
     row.syncLeaseToken = null;
     row.syncLeaseUntil = null;
-    if (patch.status !== 'PENDING') this.openKeys.delete(id);
+    if (patch.status === 'LAPSED') this.openKeys.delete(id);
     const dirty = this.requested.delete(id);
     return { outcome: 'written', dirty };
   }
@@ -184,6 +190,7 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
     if (other && isInEffect(row.status)) return 'duplicate_in_effect';
     row.officeId = officeId;
     row.provisionedAt = now;
+    this.openKeys.delete(id); // the buyer's key is held until the office is attached
     return 'attached';
   }
 
@@ -269,6 +276,7 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
         row.officeId === officeId &&
         row.id !== exceptId &&
         row.firstPaidAt !== null &&
+        !row.firstPaymentFree &&
         row.firstPaidAt.getTime() < before.getTime(),
     );
   }
@@ -280,7 +288,58 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
       return false;
     }
     row.refundClaimedAt = now;
+    if (row.refundRequestedAt === null || row.refundRequestedAt.getTime() > now.getTime()) {
+      row.refundRequestedAt = now;
+    }
     return true;
+  }
+
+  async releaseRefundClaim(id: string, claimedAt: Date): Promise<void> {
+    const row = this.rows.get(id);
+    if (row?.refundClaimedAt?.getTime() === claimedAt.getTime()) row.refundClaimedAt = null;
+  }
+
+  async findRefundsToFinish(limit: number): Promise<StoredSubscription[]> {
+    return [...this.rows.values()]
+      .filter(
+        (row) =>
+          isInEffect(row.status) && (row.refundedAt !== null || row.refundRequestedAt !== null),
+      )
+      .slice(0, limit)
+      .map((row) => ({ ...row }));
+  }
+
+  async findPendingWithSession(before: Date, limit: number): Promise<StoredSubscription[]> {
+    return [...this.rows.values()]
+      .filter(
+        (row) =>
+          row.status === 'PENDING' &&
+          row.stripeSubscriptionId === null &&
+          row.checkoutSessionId !== null &&
+          row.createdAt.getTime() < before.getTime(),
+      )
+      .slice(0, limit)
+      .map((row) => ({ ...row }));
+  }
+
+  async markReconcileFailed(id: string, now: Date): Promise<void> {
+    this.reconcileFailures.set(id, now);
+  }
+
+  async findInEffectByBuyerWithoutOffice(buyerUserId: string): Promise<StoredSubscription | null> {
+    for (const row of this.rows.values()) {
+      if (row.buyerUserId === buyerUserId && row.officeId === null && isInEffect(row.status)) {
+        return { ...row };
+      }
+    }
+    return null;
+  }
+
+  async findCustomerIdOfBuyer(buyerUserId: string): Promise<string | null> {
+    const withCustomer = [...this.rows.values()]
+      .filter((row) => row.buyerUserId === buyerUserId && row.stripeCustomerId !== null)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return withCustomer[0]?.stripeCustomerId ?? null;
   }
 
   async markRefunded(id: string, now: Date): Promise<boolean> {
@@ -296,6 +355,8 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
     limit: number;
   }): Promise<Array<{ id: string; status: StoredSubscription['status'] }>> {
     const syncedAt = (row: StoredSubscription) => row.lastSyncedAt?.getTime() ?? 0;
+    const failedAt = (row: StoredSubscription) =>
+      this.reconcileFailures.get(row.id)?.getTime() ?? 0;
     return [...this.rows.values()]
       .filter(
         (row) =>
@@ -304,17 +365,18 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
           (row.status !== 'LAPSED' ||
             (row.lapsedAt !== null && row.lapsedAt.getTime() >= args.lapsedSince.getTime())),
       )
-      .sort((a, b) => syncedAt(a) - syncedAt(b))
+      .sort((a, b) => failedAt(a) - failedAt(b) || syncedAt(a) - syncedAt(b))
       .slice(0, args.limit)
       .map((row) => ({ id: row.id, status: row.status }));
   }
 
-  async purgeStalePending(before: Date): Promise<number> {
+  async purgeOrphanedPending(before: Date): Promise<number> {
     let purged = 0;
     for (const row of [...this.rows.values()]) {
       if (
         row.status === 'PENDING' &&
         row.stripeSubscriptionId === null &&
+        row.checkoutSessionId === null &&
         row.createdAt.getTime() < before.getTime()
       ) {
         this.rows.delete(row.id);

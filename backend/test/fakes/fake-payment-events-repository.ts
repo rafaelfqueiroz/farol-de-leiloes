@@ -10,6 +10,8 @@ interface Ledger {
   receivedAt: Date;
   processedAt?: Date;
   emailClaimedAt?: Date;
+  emailClaimedUntil?: Date;
+  emailSentAt?: Date;
   processingToken?: string;
   processingUntil?: Date;
 }
@@ -67,15 +69,29 @@ export class FakePaymentEventsRepository implements Port<PaymentEventsRepository
     }
   }
 
-  async claimEmail(stripeEventId: string, claimedAt: Date): Promise<boolean> {
+  async claimEmail(stripeEventId: string, claimedAt: Date, until: Date): Promise<boolean> {
     const existing = this.ledger.get(stripeEventId);
-    if (!existing || existing.emailClaimedAt !== undefined) return false;
+    if (!existing || existing.emailSentAt !== undefined) return false;
+    const live =
+      existing.emailClaimedAt !== undefined &&
+      (existing.emailClaimedUntil === undefined ||
+        existing.emailClaimedUntil.getTime() > claimedAt.getTime());
+    if (live) return false;
     existing.emailClaimedAt = claimedAt;
+    existing.emailClaimedUntil = until;
     return true;
+  }
+
+  async markEmailSent(stripeEventId: string, sentAt: Date): Promise<void> {
+    const existing = this.ledger.get(stripeEventId);
+    if (existing && existing.emailSentAt === undefined) existing.emailSentAt = sentAt;
   }
 
   async releaseEmailClaim(stripeEventId: string): Promise<void> {
     const existing = this.ledger.get(stripeEventId);
-    if (existing) delete existing.emailClaimedAt;
+    if (existing && existing.emailSentAt === undefined) {
+      delete existing.emailClaimedAt;
+      delete existing.emailClaimedUntil;
+    }
   }
 }

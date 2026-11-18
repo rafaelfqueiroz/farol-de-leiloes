@@ -87,9 +87,24 @@ export class SubscriptionEntity {
   @Prop({ type: Date })
   provisionedAt?: Date;
 
-  /** The refund claim (BR-012-29, PR2): re-claimable after 5 minutes. */
+  /** The refund lease (BR-012-29): unset on failure, re-claimable after 5 minutes. */
   @Prop({ type: Date })
   refundClaimedAt?: Date;
+
+  /**
+   * When the first in-window cancel was accepted (set once, `$min`): the right of withdrawal is
+   * judged at THIS instant, so a retry after the window completes a legitimate request.
+   */
+  @Prop({ type: Date })
+  refundRequestedAt?: Date;
+
+  /** The first payment charged nothing (a 100% coupon), stored with `firstPaidAt` (BR-012-29). */
+  @Prop({ type: Boolean })
+  firstPaymentFree?: boolean;
+
+  /** The last time the reconcile job could not read this record: failures sort last (ADR-005). */
+  @Prop({ type: Date })
+  lastReconcileFailedAt?: Date;
 
   @Prop({ type: Date })
   refundedAt?: Date;

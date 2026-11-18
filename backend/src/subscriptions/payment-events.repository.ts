@@ -90,24 +90,43 @@ export class PaymentEventsRepository {
 
   /**
    * BR-012-20: claims the right to send the payment-failed email for this event, in ONE
-   * conditional update. Exactly one delivery gets true; a replay gets false and sends nothing.
+   * conditional update. It is a LEASE: exactly one delivery gets true while the claim is live, a
+   * claim whose holder died before it sent (past `until`) can be taken again, and once somebody
+   * was told (`markEmailSent`) the email is never claimed again.
    */
-  async claimEmail(stripeEventId: string, claimedAt: Date): Promise<boolean> {
+  async claimEmail(stripeEventId: string, claimedAt: Date, until: Date): Promise<boolean> {
     const result = await this.model
       .updateOne(
-        { stripeEventId: { $eq: stripeEventId }, emailClaimedAt: null },
-        { $set: { emailClaimedAt: claimedAt } },
+        {
+          stripeEventId: { $eq: stripeEventId },
+          emailSentAt: null,
+          $or: [
+            { emailClaimedAt: null },
+            { emailClaimedUntil: serverOperators({ $lte: claimedAt }) },
+          ],
+        },
+        { $set: { emailClaimedAt: claimedAt, emailClaimedUntil: until } },
       )
       .exec();
     return result.modifiedCount === 1;
   }
 
-  /** A send that failed gives the claim back, so the retried event sends it. */
+  /** Somebody was told: the email is done for this event, for good. */
+  async markEmailSent(stripeEventId: string, sentAt: Date): Promise<void> {
+    await this.model
+      .updateOne(
+        { stripeEventId: { $eq: stripeEventId }, emailSentAt: null },
+        { $set: { emailSentAt: sentAt } },
+      )
+      .exec();
+  }
+
+  /** A send that failed, or that reached nobody, gives the claim back, so the retried event sends it. */
   async releaseEmailClaim(stripeEventId: string): Promise<void> {
     await this.model
       .updateOne(
-        { stripeEventId: { $eq: stripeEventId }, emailClaimedAt: serverOperators({ $ne: null }) },
-        { $unset: { emailClaimedAt: '' } },
+        { stripeEventId: { $eq: stripeEventId }, emailSentAt: null },
+        { $unset: { emailClaimedAt: '', emailClaimedUntil: '' } },
       )
       .exec();
   }

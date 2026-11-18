@@ -34,7 +34,7 @@ describe('EmailPaymentFailedNotifier', () => {
   it('BR-012-20: emails every current member of the office, by name', async () => {
     const t = build([ANA, BRUNO]);
 
-    await t.notifier.notifyPaymentFailed(OFFICE);
+    await expect(t.notifier.notifyPaymentFailed(OFFICE)).resolves.toBe(2);
 
     expect(t.members.asked).toEqual([OFFICE]);
     expect(t.mailbox.paymentFailedEmails).toEqual([
@@ -46,7 +46,8 @@ describe('EmailPaymentFailedNotifier', () => {
   it('BR-012-20: an office with no known member sends nothing and does not fail', async () => {
     const t = build([]);
 
-    await expect(t.notifier.notifyPaymentFailed(OFFICE)).resolves.toBeUndefined();
+    // 0 told: the webhook gives the event's email claim back, so a retry can tell them.
+    await expect(t.notifier.notifyPaymentFailed(OFFICE)).resolves.toBe(0);
 
     expect(t.mailbox.paymentFailedEmails).toEqual([]);
   });
@@ -55,7 +56,7 @@ describe('EmailPaymentFailedNotifier', () => {
     const t = build([ANA, BRUNO]);
     t.mailbox.failFor.add(ANA.email);
 
-    await expect(t.notifier.notifyPaymentFailed(OFFICE)).resolves.toBeUndefined();
+    await expect(t.notifier.notifyPaymentFailed(OFFICE)).resolves.toBe(1);
 
     expect(t.mailbox.paymentFailedEmails.map((sent) => sent.email)).toEqual([BRUNO.email]);
   });

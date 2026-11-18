@@ -10,5 +10,8 @@ describe('reconcileCutoffs', () => {
     expect(cutoffs.staleBefore.toISOString()).toBe('2026-03-20T00:00:00.000Z');
     expect(cutoffs.lapsedSince.toISOString()).toBe('2026-03-06T12:00:00.000Z');
     expect(cutoffs.pendingBefore.toISOString()).toBe('2026-03-17T12:00:00.000Z');
+    // 12:00 - 10 min = 11:50; 2026-03-20T12:00 - 24 h = 2026-03-19T12:00
+    expect(cutoffs.sessionBefore.toISOString()).toBe('2026-03-20T11:50:00.000Z');
+    expect(cutoffs.openSessionBefore.toISOString()).toBe('2026-03-19T12:00:00.000Z');
   });
 });

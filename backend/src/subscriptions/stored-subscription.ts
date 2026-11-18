@@ -20,10 +20,18 @@ export interface StoredSubscription {
   readonly scheduledPlanId: string | null;
   readonly scheduledChangeAt: Date | null;
   readonly firstPaidAt: Date | null;
+  /** The first payment charged nothing (a 100% coupon): not an "earlier paid" subscription. */
+  readonly firstPaymentFree: boolean;
   readonly lapsedAt: Date | null;
   readonly readOnlyAt: Date | null;
   readonly provisionedAt: Date | null;
+  /** The lease on the refund (BR-012-29): released on failure, retakeable after 5 minutes. */
   readonly refundClaimedAt: Date | null;
+  /**
+   * The instant a member's in-window cancel was FIRST accepted: the right of withdrawal is judged
+   * at it, so a retry after the window still completes. Set by the first successful claim.
+   */
+  readonly refundRequestedAt: Date | null;
   readonly refundedAt: Date | null;
   readonly syncLeaseToken: string | null;
   readonly syncLeaseUntil: Date | null;
