@@ -61,6 +61,15 @@ describe('plan catalog (integration, SPEC-012)', () => {
         .useValue(provisioner),
     );
     plans = harness.moduleRef.get(PlansService, { strict: false });
+    // The provider holds every price the catalog names (the script checks them, BR-012-02); the
+    // specs that need a divergence say so with gateway.listsPlan(..., overrides).
+    const upsertCatalog = plans.upsertCatalog.bind(plans);
+    plans.upsertCatalog = (definitions) => {
+      for (const plan of definitions) {
+        if (!gateway.prices.has(plan.stripePriceId)) gateway.listsPlan(plan);
+      }
+      return upsertCatalog(definitions);
+    };
     model = harness.moduleRef.get(getModelToken(PlanEntity.name));
     await model.syncIndexes(); // the unique indexes migration 0006 builds in the deploy
   });
@@ -105,21 +114,35 @@ describe('plan catalog (integration, SPEC-012)', () => {
       expect(await raw('idem')).toEqual(before); // not even updatedAt moved
     });
 
-    it('changes the limit and the displayed price of a code in place', async () => {
+    it('changes the limit and the name of a code in place', async () => {
       await plans.upsertCatalog([definition({ code: 'edit', stripePriceId: 'price_edit' })]);
 
       const outcome = await plans.upsertCatalog([
         definition({
           code: 'edit',
           stripePriceId: 'price_edit',
+          name: 'Escritório 9',
           activeJourneyLimit: 9,
-          price: new Decimal('299.90'),
         }),
       ]);
 
       expect(outcome).toMatchObject({ result: 'applied', updated: 1 });
-      expect(await plans.findByCode('edit')).toMatchObject({ activeJourneyLimit: 9 });
-      expect((await plans.findByCode('edit'))?.price.toFixed(2)).toBe('299.90');
+      expect(await plans.findByCode('edit')).toMatchObject({
+        name: 'Escritório 9',
+        activeJourneyLimit: 9,
+      });
+    });
+
+    it('BR-012-02: a displayed price the provider does not charge is refused, and the stored plan is left alone', async () => {
+      await plans.upsertCatalog([definition({ code: 'shown', stripePriceId: 'price_shown' })]);
+
+      // The provider still charges R$ 199,90 on this price (a provider price is immutable).
+      const outcome = await plans.upsertCatalog([
+        definition({ code: 'shown', stripePriceId: 'price_shown', price: new Decimal('299.90') }),
+      ]);
+
+      expect(outcome).toEqual({ result: 'refused_price_mismatch', conflicts: 1 });
+      expect((await plans.findByCode('shown'))?.price.toFixed(2)).toBe('199.90');
     });
 
     it('refuses a provider price that belongs to another plan, writing nothing', async () => {

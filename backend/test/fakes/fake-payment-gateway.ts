@@ -84,6 +84,24 @@ export class FakePaymentGateway extends PaymentGateway {
   readonly invoicesByCustomer = new Map<string, ProviderInvoice[]>();
   /** The provider's prices by id (BR-012-02); an absent one does not exist. */
   readonly prices = new Map<string, ProviderPrice>();
+  /**
+   * The provider has a price exactly like this plan's (BR-012-02): what the catalog script finds
+   * when it checks a definition. `overrides` makes it diverge.
+   */
+  listsPlan(
+    plan: { stripePriceId: string; price: Decimal; interval: 'month' | 'year' },
+    overrides: Partial<ProviderPrice> = {},
+  ): void {
+    this.prices.set(plan.stripePriceId, {
+      id: plan.stripePriceId,
+      active: true,
+      amount: plan.price,
+      interval: plan.interval,
+      currency: 'brl',
+      ...overrides,
+    });
+  }
+
   /** Makes the next createOfficeCheckout / createBillingPortalSession / listInvoices fail. */
   failCheckout = false;
   failPortal = false;

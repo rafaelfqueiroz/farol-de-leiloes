@@ -115,18 +115,18 @@ describe('office subscriptions over MongoDB (integration, SPEC-012)', () => {
     const planModel = harness.moduleRef.get<Model<PlanDocument>>(getModelToken(PlanEntity.name));
     await planModel.syncIndexes();
     const plans = get(PlansService);
-    await plans.upsertCatalog([
-      {
-        code: 'escritorio-5',
-        name: 'Escritório 5',
-        price: new Decimal('199.90'),
-        interval: 'month',
-        activeJourneyLimit: 5,
-        stripePriceId: 'price_5',
-        status: 'OFFERED',
-        sortOrder: 10,
-      },
-    ]);
+    const catalog = {
+      code: 'escritorio-5',
+      name: 'Escritório 5',
+      price: new Decimal('199.90'),
+      interval: 'month' as const,
+      activeJourneyLimit: 5,
+      stripePriceId: 'price_5',
+      status: 'OFFERED' as const,
+      sortOrder: 10,
+    };
+    gateway.listsPlan(catalog); // the catalog script checks the price at the provider
+    await plans.upsertCatalog([catalog]);
     planId = (await plans.findByCode('escritorio-5'))?.id ?? '';
   });
 
