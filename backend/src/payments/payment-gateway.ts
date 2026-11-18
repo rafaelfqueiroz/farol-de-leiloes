@@ -58,17 +58,43 @@ export interface SetCancelAtPeriodEndInput {
   idempotencyKey: string;
 }
 
-/** SPEC-012 BR-012-29: the full refund of the latest paid invoice of a subscription. */
-export interface RefundLatestPaymentInput {
-  subscriptionId: string;
-  /** Stable per refund (`refund:<ref>`): a retry after a crash refunds once. */
+/** Why the provider issued an invoice (the ones SPEC-012 tells apart). */
+export type InvoiceReason =
+  'subscription_create' | 'subscription_cycle' | 'subscription_update' | 'other';
+
+/**
+ * SPEC-012 BR-012-29: one invoice of a subscription as the refund reads it. `amountPaid` is what
+ * the customer paid for it (after discounts, zero for a 100% coupon) and `amountRefunded` what was
+ * already given back, so "refund in full what it paid" is the difference, invoice by invoice.
+ */
+export interface SubscriptionInvoice {
+  readonly id: string;
+  readonly reason: InvoiceReason;
+  readonly status: 'draft' | 'open' | 'paid' | 'uncollectible' | 'void';
+  /** AR-17: reais. */
+  readonly amountPaid: Decimal;
+  /** AR-17: reais. */
+  readonly amountRefunded: Decimal;
+}
+
+/** Refunds what remains of one paid invoice (BR-012-29). */
+export interface RefundInvoiceInput {
+  invoiceId: string;
+  /** Stable per invoice (`refund:<ref>:<invoiceId>`): a retry after a crash refunds once. */
   idempotencyKey: string;
 }
 
-/** What a refund did: the amount returned, zero when nothing had been paid (a 100% coupon). */
+/** What a refund did: the amount returned now, in reais. */
 export interface RefundResult {
-  /** AR-17: reais. */
+  /** AR-17: reais. Zero only when nothing remained to give back. */
   readonly refunded: Decimal;
+}
+
+/** Where a checkout session stands at the provider (BR-012-09, ADR-005). */
+export interface ProviderCheckoutSession {
+  readonly state: 'open' | 'complete' | 'expired';
+  /** The subscription the buyer's payment created, once the session is complete. */
+  readonly subscriptionId: string | null;
 }
 
 /** SPEC-012 BR-012-11: one line of the billing history. */
@@ -96,6 +122,12 @@ export interface ProviderPrice {
   /** AR-17: reais per interval. */
   readonly amount: Decimal;
   readonly interval: 'day' | 'week' | 'month' | 'year' | null;
+  /** Intervals per charge: a plan bills every 1 month or year, never every 3. */
+  readonly intervalCount: number | null;
+  /** A licensed (fixed per-unit) price, not metered usage. */
+  readonly licensed: boolean;
+  /** One unit price, not tiered or volume. */
+  readonly perUnit: boolean;
   /** Lower-case ISO 4217, as the provider names it ('brl'). */
   readonly currency: string;
 }
@@ -143,8 +175,14 @@ export interface ProviderSubscription {
   /** A downgrade scheduled for the next period: its price and when it starts (BR-012-17). */
   readonly scheduledPriceId: string | null;
   readonly scheduledChangeAt: Date | null;
-  /** When the latest invoice was paid, if it was: the provider's confirmation of payment. */
-  readonly latestInvoicePaidAt: Date | null;
+  /**
+   * When the invoice that STARTED the subscription (its `subscription_create` invoice) was paid:
+   * the provider's confirmation of the first payment (BR-012-29, DL-012-10). Never the latest
+   * invoice, which after an upgrade or a renewal is another payment.
+   */
+  readonly firstInvoicePaidAt: Date | null;
+  /** The first invoice was paid and charged nothing (a 100% coupon): no money to give back. */
+  readonly firstInvoiceFree: boolean;
   /** Our subscription ref, set on the provider subscription at checkout. */
   readonly subscriptionRef: string | null;
   /** When cancellation was requested (not when it takes effect). */
@@ -220,10 +258,28 @@ export abstract class PaymentGateway {
   abstract setCancelAtPeriodEnd(input: SetCancelAtPeriodEndInput): Promise<void>;
 
   /**
-   * BR-012-29: refunds in full what the latest paid invoice charged. Idempotent by key, and a
-   * payment already refunded counts as done. Zero paid (a 100% coupon) refunds nothing.
+   * BR-012-29: the invoices of a subscription (every one, newest first) with what each was paid and
+   * already refunded. The refund reads THESE, never `latest_invoice`: the first payment is the
+   * `subscription_create` invoice, and an upgrade paid inside the window is another invoice.
    */
-  abstract refundLatestPayment(input: RefundLatestPaymentInput): Promise<RefundResult>;
+  abstract listSubscriptionInvoices(subscriptionId: string): Promise<SubscriptionInvoice[]>;
+
+  /**
+   * BR-012-29: refunds what remains of one paid invoice (paid minus already refunded), idempotent by
+   * key. An error saying the key or the charge was already used counts as done only after the
+   * provider's own refunded amount for that invoice is read back and found to cover it; any other
+   * failure throws. Zero is returned only when nothing remained.
+   */
+  abstract refundInvoice(input: RefundInvoiceInput): Promise<RefundResult>;
+
+  /** Voids an unpaid invoice so it can never be paid after a refund and cancel. Idempotent. */
+  abstract voidInvoice(invoiceId: string): Promise<void>;
+
+  /** Where a checkout session stands, and the subscription it created if the buyer paid. */
+  abstract retrieveCheckoutSession(sessionId: string): Promise<ProviderCheckoutSession>;
+
+  /** The provider customer already made for this account (our user id in its metadata), if any. */
+  abstract findCustomerByUserId(userId: string): Promise<string | null>;
 
   /** BR-012-11: the customer's invoices, newest first. */
   abstract listInvoices(customerId: string, limit: number): Promise<ProviderInvoice[]>;

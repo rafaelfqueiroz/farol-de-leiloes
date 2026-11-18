@@ -16,12 +16,15 @@ import {
   type FixedDiscount,
   PaymentGateway,
   type PaymentEvent,
+  type InvoiceReason,
+  type ProviderCheckoutSession,
   type ProviderInvoice,
   type ProviderPrice,
   type ProviderSubscription,
-  type RefundLatestPaymentInput,
+  type RefundInvoiceInput,
   type RefundResult,
   type SetCancelAtPeriodEndInput,
+  type SubscriptionInvoice,
   WebhookSignatureError,
 } from '../payment-gateway.js';
 
@@ -99,6 +102,15 @@ function onlyItem(subscription: Stripe.Subscription): Stripe.SubscriptionItem {
     throw new Error('The provider subscription does not have exactly one item');
   }
   return item;
+}
+
+/** Why an invoice was issued, reduced to the reasons SPEC-012 tells apart. */
+function invoiceReasonOf(reason: Stripe.Invoice.BillingReason | null): InvoiceReason {
+  return reason === 'subscription_create' ||
+    reason === 'subscription_cycle' ||
+    reason === 'subscription_update'
+    ? reason
+    : 'other';
 }
 
 /**
@@ -286,38 +298,104 @@ export class StripePaymentGateway extends PaymentGateway {
     );
   }
 
-  async refundLatestPayment({
-    subscriptionId,
-    idempotencyKey,
-  }: RefundLatestPaymentInput): Promise<RefundResult> {
-    const subscription = await this.stripe.subscriptions.retrieve(subscriptionId, {
-      expand: ['latest_invoice'],
-    });
-    const invoice = expanded(subscription.latest_invoice);
-    if (invoice?.status !== 'paid') return { refunded: new Decimal(0) };
-    const paid = invoice.amount_paid;
-    if (paid <= 0) return { refunded: new Decimal(0) }; // a 100% coupon: nothing to give back
+  async listSubscriptionInvoices(subscriptionId: string): Promise<SubscriptionInvoice[]> {
+    const invoices = await this.stripe.invoices.list({ subscription: subscriptionId, limit: 100 });
+    return Promise.all(
+      invoices.data.map(async (invoice) => {
+        // Only a paid invoice can have been refunded: read the charge it was paid by.
+        const refunded =
+          invoice.status === 'paid' && invoice.amount_paid > 0
+            ? ((await this.paidPaymentOf(invoice.id))?.charge?.amount_refunded ?? 0)
+            : 0;
+        return {
+          id: invoice.id,
+          reason: invoiceReasonOf(invoice.billing_reason),
+          status: invoice.status ?? 'draft',
+          amountPaid: centavosToReais(invoice.amount_paid),
+          amountRefunded: centavosToReais(refunded),
+        };
+      }),
+    );
+  }
+
+  /** The paid payment of an invoice with its payment intent and charge (expanded). */
+  private async paidPaymentOf(invoiceId: string): Promise<{
+    intentId: string;
+    amountPaid: number;
+    charge: Stripe.Charge | null;
+  } | null> {
     const payments = await this.stripe.invoicePayments.list({
-      invoice: invoice.id,
+      invoice: invoiceId,
       status: 'paid',
-      expand: ['data.payment.payment_intent'],
+      expand: ['data.payment.payment_intent.latest_charge'],
     });
-    const paymentIntent = payments.data
-      .map((entry) => entry.payment)
-      .find((payment) => payment.type === 'payment_intent');
-    const intentId = idOf(paymentIntent?.payment_intent);
-    if (intentId === null) throw new Error('The paid invoice has no payment to refund');
+    for (const entry of payments.data) {
+      if (entry.payment.type !== 'payment_intent') continue;
+      const intent = expanded(entry.payment.payment_intent);
+      const intentId = intent?.id ?? idOf(entry.payment.payment_intent);
+      if (intentId === null) continue;
+      return {
+        intentId,
+        amountPaid: entry.amount_paid ?? 0,
+        charge: expanded(intent?.latest_charge),
+      };
+    }
+    return null;
+  }
+
+  async refundInvoice({ invoiceId, idempotencyKey }: RefundInvoiceInput): Promise<RefundResult> {
+    const payment = await this.paidPaymentOf(invoiceId);
+    if (payment === null) throw new Error('The paid invoice has no payment to refund');
+    const refundedSoFar = payment.charge?.amount_refunded ?? 0;
+    const remaining = payment.amountPaid - refundedSoFar;
+    if (remaining <= 0) return { refunded: new Decimal(0) }; // nothing remained: already given back
     try {
       await this.stripe.refunds.create(
-        { payment_intent: intentId, amount: paid, reason: 'requested_by_customer' },
+        { payment_intent: payment.intentId, amount: remaining, reason: 'requested_by_customer' },
         { idempotencyKey },
       );
     } catch (error) {
-      // The idempotency key outlives 24 h only in our ledger: a payment already refunded in full
-      // (an earlier run that crashed before it recorded it) is a success.
-      if (stripeErrorCode(error) !== 'charge_already_refunded') throw error;
+      // The key was used before (a run that crashed after the refund) or the charge was already
+      // refunded: that is "done" only if the provider itself shows the invoice refunded in full.
+      const code = stripeErrorCode(error);
+      if (code !== 'idempotency_error' && code !== 'charge_already_refunded') throw error;
+      const after = await this.paidPaymentOf(invoiceId);
+      if (after !== null && after.amountPaid - (after.charge?.amount_refunded ?? 0) <= 0) {
+        return { refunded: centavosToReais(remaining) };
+      }
+      throw error;
     }
-    return { refunded: centavosToReais(paid) };
+    return { refunded: centavosToReais(remaining) };
+  }
+
+  async voidInvoice(invoiceId: string): Promise<void> {
+    try {
+      await this.stripe.invoices.voidInvoice(invoiceId);
+    } catch (error) {
+      // Paid meanwhile is NOT void: the caller reads the invoices again. Already void is done.
+      const current = await this.stripe.invoices.retrieve(invoiceId).catch(() => null);
+      if (current?.status === 'void') return;
+      throw error;
+    }
+  }
+
+  async retrieveCheckoutSession(sessionId: string): Promise<ProviderCheckoutSession> {
+    const session = await this.stripe.checkout.sessions.retrieve(sessionId);
+    return {
+      state:
+        session.status === 'complete' || session.status === 'expired' ? session.status : 'open',
+      subscriptionId: idOf(session.subscription),
+    };
+  }
+
+  async findCustomerByUserId(userId: string): Promise<string | null> {
+    // userId is OUR ObjectId (hex): it cannot carry a quote, and the query is built from it alone.
+    if (!/^[0-9a-f]{24}$/.test(userId)) return null;
+    const found = await this.stripe.customers.search({
+      query: `metadata['userId']:'${userId}'`,
+      limit: 1,
+    });
+    return found.data[0]?.id ?? null;
   }
 
   async listInvoices(customerId: string, limit: number): Promise<ProviderInvoice[]> {
@@ -355,6 +433,9 @@ export class StripePaymentGateway extends PaymentGateway {
         // A price without a fixed amount (metered, tiered) is not a plan price: 0 never matches.
         amount: centavosToReais(price.unit_amount ?? 0),
         interval: price.recurring?.interval ?? null,
+        intervalCount: price.recurring?.interval_count ?? null,
+        licensed: price.recurring?.usage_type === 'licensed',
+        perUnit: price.billing_scheme === 'per_unit',
         currency: price.currency,
       };
     } catch (error) {
@@ -384,7 +465,7 @@ export class StripePaymentGateway extends PaymentGateway {
     if (!item || others.length > 0) {
       throw new Error('The provider subscription does not have exactly one item');
     }
-    const invoice = expanded(subscription.latest_invoice);
+    const first = await this.firstInvoiceOf(subscription);
     const schedule = expanded(subscription.schedule);
     const next = schedule ? nextPhaseOf(schedule) : null;
     return {
@@ -398,12 +479,28 @@ export class StripePaymentGateway extends PaymentGateway {
       priceId: item.price.id,
       scheduledPriceId: next?.priceId ?? null,
       scheduledChangeAt: next?.startsAt ?? null,
-      latestInvoicePaidAt:
-        invoice?.status === 'paid' ? fromUnixSeconds(invoice.status_transitions.paid_at) : null,
+      // BR-012-29, DL-012-10: the first payment is the invoice that CREATED the subscription,
+      // not the latest one (an upgrade's proration or a renewal is another payment).
+      firstInvoicePaidAt:
+        first?.status === 'paid' ? fromUnixSeconds(first.status_transitions.paid_at) : null,
+      firstInvoiceFree: first?.status === 'paid' && first.amount_paid === 0,
       subscriptionRef: refOf(subscription.metadata),
       canceledAt: fromUnixSeconds(subscription.canceled_at),
       endedAt: fromUnixSeconds(subscription.ended_at),
     };
+  }
+
+  /**
+   * The `subscription_create` invoice of a subscription. It is the latest invoice until the first
+   * renewal or change; after that it is looked for among the subscription's invoices.
+   */
+  private async firstInvoiceOf(subscription: Stripe.Subscription): Promise<Stripe.Invoice | null> {
+    const latest = expanded(subscription.latest_invoice);
+    if (latest?.billing_reason === 'subscription_create') return latest;
+    const invoices = await this.stripe.invoices.list({ subscription: subscription.id, limit: 100 });
+    return (
+      invoices.data.find((invoice) => invoice.billing_reason === 'subscription_create') ?? null
+    );
   }
 
   async createFixedDiscount({

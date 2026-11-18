@@ -115,9 +115,14 @@ export class PlansService {
     if (price === null) return false;
     // A withdrawn plan's price may be archived at the provider; subscribers keep paying it.
     if (definition.status === 'OFFERED' && !price.active) return false;
+    // A plan bills EVERY month or year, a fixed amount per unit: a price for every 3 months, a
+    // metered one or a tiered one would charge something the plans page does not say.
     return (
       price.amount.equals(definition.price) &&
       price.interval === definition.interval &&
+      price.intervalCount === 1 &&
+      price.licensed &&
+      price.perUnit &&
       price.currency === 'brl'
     );
   }

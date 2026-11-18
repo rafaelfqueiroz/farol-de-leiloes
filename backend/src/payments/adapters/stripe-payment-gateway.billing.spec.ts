@@ -11,7 +11,7 @@ import { testConfigService } from '../../../test/support/test-env.js';
 function build() {
   const gateway = new StripePaymentGateway(testConfigService());
   const stripe = {
-    customers: { create: vi.fn().mockResolvedValue({ id: 'cus_1' }) },
+    customers: { create: vi.fn().mockResolvedValue({ id: 'cus_1' }), search: vi.fn() },
     checkout: {
       sessions: {
         create: vi.fn().mockResolvedValue({ id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' }),
@@ -32,7 +32,7 @@ function build() {
     prices: { retrieve: vi.fn() },
     refunds: { create: vi.fn().mockResolvedValue({ id: 're_1' }) },
     invoicePayments: { list: vi.fn() },
-    invoices: { list: vi.fn() },
+    invoices: { list: vi.fn(), voidInvoice: vi.fn().mockResolvedValue({}), retrieve: vi.fn() },
     billingPortal: {
       sessions: { create: vi.fn().mockResolvedValue({ url: 'https://billing.stripe.test/s' }) },
     },
@@ -317,81 +317,260 @@ describe('StripePaymentGateway billing operations', () => {
     });
   });
 
-  describe('refundLatestPayment (BR-012-29)', () => {
-    const paidInvoice = { id: 'in_1', status: 'paid', amount_paid: 19990 };
-    const withInvoice = (stripe: ReturnType<typeof build>['stripe'], invoice: unknown) =>
-      stripe.subscriptions.retrieve.mockResolvedValue({ latest_invoice: invoice });
-    const withPayment = (stripe: ReturnType<typeof build>['stripe']) =>
-      stripe.invoicePayments.list.mockResolvedValue({
-        data: [{ payment: { type: 'payment_intent', payment_intent: 'pi_1' } }],
-      });
-
-    it('refunds the whole amount paid of the latest invoice, with a stable key, and answers it in reais', async () => {
+  describe('listSubscriptionInvoices (BR-012-29)', () => {
+    it('reads EVERY invoice of the subscription with what each paid and what was already refunded, in reais', async () => {
       const { gateway, stripe } = build();
-      withInvoice(stripe, paidInvoice);
-      withPayment(stripe);
-
-      const result = await gateway.refundLatestPayment({
-        subscriptionId: 'sub_1',
-        idempotencyKey: 'refund:ref_1',
+      stripe.invoices.list.mockResolvedValue({
+        data: [
+          {
+            id: 'in_proration',
+            status: 'paid',
+            amount_paid: 8000,
+            billing_reason: 'subscription_update',
+          },
+          {
+            id: 'in_create',
+            status: 'paid',
+            amount_paid: 19990,
+            billing_reason: 'subscription_create',
+          },
+          { id: 'in_open', status: 'open', amount_paid: 0, billing_reason: 'subscription_update' },
+          { id: 'in_odd', status: null, amount_paid: 0, billing_reason: 'manual' },
+        ],
       });
-
-      expect(stripe.refunds.create).toHaveBeenCalledWith(
-        { payment_intent: 'pi_1', amount: 19990, reason: 'requested_by_customer' },
-        { idempotencyKey: 'refund:ref_1' },
+      stripe.invoicePayments.list.mockImplementation(({ invoice }: { invoice: string }) =>
+        Promise.resolve({
+          data: [
+            {
+              amount_paid: invoice === 'in_create' ? 19990 : 8000,
+              payment: {
+                type: 'payment_intent',
+                payment_intent: {
+                  id: `pi_${invoice}`,
+                  latest_charge: { amount_refunded: invoice === 'in_create' ? 5000 : 0 },
+                },
+              },
+            },
+          ],
+        }),
       );
-      expect(result.refunded.equals(new Decimal('199.9'))).toBe(true);
+
+      const invoices = await gateway.listSubscriptionInvoices('sub_1');
+
+      expect(stripe.invoices.list).toHaveBeenCalledWith({ subscription: 'sub_1', limit: 100 });
+      expect(
+        invoices.map((invoice) => [
+          invoice.id,
+          invoice.reason,
+          invoice.status,
+          invoice.amountPaid.toFixed(),
+          invoice.amountRefunded.toFixed(),
+        ]),
+      ).toEqual([
+        ['in_proration', 'subscription_update', 'paid', '80', '0'],
+        ['in_create', 'subscription_create', 'paid', '199.9', '50'],
+        ['in_open', 'subscription_update', 'open', '0', '0'],
+        ['in_odd', 'other', 'draft', '0', '0'],
+      ]);
     });
 
-    it('refunds nothing for an invoice that charged nothing (a 100% coupon) or is not paid', async () => {
+    it('a paid invoice whose payment has no expanded charge counts nothing as refunded', async () => {
       const { gateway, stripe } = build();
-      const input = { subscriptionId: 'sub_1', idempotencyKey: 'k' };
+      stripe.invoices.list.mockResolvedValue({
+        data: [
+          { id: 'in_1', status: 'paid', amount_paid: 1000, billing_reason: 'subscription_cycle' },
+        ],
+      });
+      stripe.invoicePayments.list.mockResolvedValue({
+        data: [
+          { payment: { type: 'charge' } },
+          { amount_paid: 1000, payment: { type: 'payment_intent', payment_intent: 'pi_1' } },
+        ],
+      });
 
-      withInvoice(stripe, { ...paidInvoice, amount_paid: 0 });
-      expect((await gateway.refundLatestPayment(input)).refunded.isZero()).toBe(true);
-      withInvoice(stripe, { ...paidInvoice, status: 'open' });
-      expect((await gateway.refundLatestPayment(input)).refunded.isZero()).toBe(true);
-      withInvoice(stripe, 'in_not_expanded');
-      expect((await gateway.refundLatestPayment(input)).refunded.isZero()).toBe(true);
+      const [invoice] = await gateway.listSubscriptionInvoices('sub_1');
 
+      expect(invoice?.amountRefunded.isZero()).toBe(true);
+      expect(invoice?.reason).toBe('subscription_cycle');
+    });
+
+    it('a paid invoice with no payment intent at all counts nothing as refunded', async () => {
+      const { gateway, stripe } = build();
+      stripe.invoices.list.mockResolvedValue({
+        data: [{ id: 'in_1', status: 'paid', amount_paid: 1000, billing_reason: null }],
+      });
+      stripe.invoicePayments.list.mockResolvedValue({ data: [] });
+
+      const [invoice] = await gateway.listSubscriptionInvoices('sub_1');
+
+      expect(invoice?.amountRefunded.isZero()).toBe(true);
+    });
+  });
+
+  describe('refundInvoice (BR-012-29)', () => {
+    const payment = (refunded: number, paid = 19990) => ({
+      data: [
+        {
+          amount_paid: paid,
+          payment: {
+            type: 'payment_intent',
+            payment_intent: {
+              id: 'pi_1',
+              latest_charge: { id: 'ch_1', amount_refunded: refunded },
+            },
+          },
+        },
+      ],
+    });
+    const input = { invoiceId: 'in_create', idempotencyKey: 'refund:ref_1:in_create' };
+
+    it('refunds what remains of the invoice (paid minus refunded), with the stable key, answering it in reais', async () => {
+      const { gateway, stripe } = build();
+      stripe.invoicePayments.list.mockResolvedValue(payment(5000));
+
+      const result = await gateway.refundInvoice(input);
+
+      // 19990 paid - 5000 refunded = 14990 centavos = R$ 149,90
+      expect(stripe.refunds.create).toHaveBeenCalledWith(
+        { payment_intent: 'pi_1', amount: 14990, reason: 'requested_by_customer' },
+        { idempotencyKey: 'refund:ref_1:in_create' },
+      );
+      expect(result.refunded.equals(new Decimal('149.9'))).toBe(true);
+    });
+
+    it('nothing remains to give back: nothing is asked of the provider and zero is answered', async () => {
+      const { gateway, stripe } = build();
+      stripe.invoicePayments.list.mockResolvedValue(payment(19990));
+
+      expect((await gateway.refundInvoice(input)).refunded.isZero()).toBe(true);
       expect(stripe.refunds.create).not.toHaveBeenCalled();
     });
 
-    it('a payment that was already refunded in full (an earlier run, past the key retention) counts as done', async () => {
+    it.each(['idempotency_error', 'charge_already_refunded'])(
+      'a %s counts as done only after the provider is read back and shows the invoice refunded in full',
+      async (code) => {
+        const { gateway, stripe } = build();
+        stripe.invoicePayments.list
+          .mockResolvedValueOnce(payment(0)) // before: nothing refunded
+          .mockResolvedValueOnce(payment(19990)); // after the error: refunded in full
+        stripe.refunds.create.mockRejectedValue(Object.assign(new Error('used'), { code }));
+
+        const result = await gateway.refundInvoice(input);
+
+        expect(result.refunded.equals(new Decimal('199.9'))).toBe(true);
+      },
+    );
+
+    it('an idempotency error while the provider shows the invoice NOT refunded is not "done": it throws', async () => {
       const { gateway, stripe } = build();
-      withInvoice(stripe, paidInvoice);
-      withPayment(stripe);
+      stripe.invoicePayments.list.mockResolvedValue(payment(0));
       stripe.refunds.create.mockRejectedValue(
-        Object.assign(new Error('already refunded'), { code: 'charge_already_refunded' }),
+        Object.assign(new Error('different parameters'), { code: 'idempotency_error' }),
       );
 
-      const result = await gateway.refundLatestPayment({
-        subscriptionId: 'sub_1',
-        idempotencyKey: 'k',
-      });
+      await expect(gateway.refundInvoice(input)).rejects.toThrow('different parameters');
+    });
 
-      expect(result.refunded.equals(new Decimal('199.9'))).toBe(true);
+    it('an idempotency error when the invoice vanished from the read-back throws too', async () => {
+      const { gateway, stripe } = build();
+      stripe.invoicePayments.list
+        .mockResolvedValueOnce(payment(0))
+        .mockResolvedValueOnce({ data: [] });
+      stripe.refunds.create.mockRejectedValue(
+        Object.assign(new Error('used'), { code: 'idempotency_error' }),
+      );
+
+      await expect(gateway.refundInvoice(input)).rejects.toThrow('used');
     });
 
     it('any other refund failure surfaces, so nothing is recorded as refunded', async () => {
       const { gateway, stripe } = build();
-      withInvoice(stripe, paidInvoice);
-      withPayment(stripe);
+      stripe.invoicePayments.list.mockResolvedValue(payment(0));
       stripe.refunds.create.mockRejectedValue(new Error('provider unreachable'));
 
-      await expect(
-        gateway.refundLatestPayment({ subscriptionId: 'sub_1', idempotencyKey: 'k' }),
-      ).rejects.toThrow('provider unreachable');
+      await expect(gateway.refundInvoice(input)).rejects.toThrow('provider unreachable');
     });
 
     it('a paid invoice with no payment to refund is a fault', async () => {
       const { gateway, stripe } = build();
-      withInvoice(stripe, paidInvoice);
       stripe.invoicePayments.list.mockResolvedValue({ data: [{ payment: { type: 'charge' } }] });
 
-      await expect(
-        gateway.refundLatestPayment({ subscriptionId: 'sub_1', idempotencyKey: 'k' }),
-      ).rejects.toThrow('no payment to refund');
+      await expect(gateway.refundInvoice(input)).rejects.toThrow('no payment to refund');
+    });
+  });
+
+  describe('voidInvoice (BR-012-29)', () => {
+    it('voids an unpaid invoice', async () => {
+      const { gateway, stripe } = build();
+
+      await gateway.voidInvoice('in_open');
+
+      expect(stripe.invoices.voidInvoice).toHaveBeenCalledWith('in_open');
+    });
+
+    it('an invoice that is already void is done; one that was paid meanwhile is NOT: the error surfaces', async () => {
+      const { gateway, stripe } = build();
+      stripe.invoices.voidInvoice.mockRejectedValue(new Error('cannot void'));
+
+      stripe.invoices.retrieve.mockResolvedValue({ status: 'void' });
+      await expect(gateway.voidInvoice('in_open')).resolves.toBeUndefined();
+      stripe.invoices.retrieve.mockResolvedValue({ status: 'paid' });
+      await expect(gateway.voidInvoice('in_open')).rejects.toThrow('cannot void');
+      stripe.invoices.retrieve.mockRejectedValue(new Error('unreachable'));
+      await expect(gateway.voidInvoice('in_open')).rejects.toThrow('cannot void');
+    });
+  });
+
+  describe('retrieveCheckoutSession (ADR-005)', () => {
+    it.each([
+      ['complete', 'complete'],
+      ['expired', 'expired'],
+      ['open', 'open'],
+      [null, 'open'],
+    ])(
+      'maps the provider status %s to %s, with the subscription it created',
+      async (status, state) => {
+        const { gateway, stripe } = build();
+        stripe.checkout.sessions.retrieve.mockResolvedValue({ status, subscription: 'sub_9' });
+
+        await expect(gateway.retrieveCheckoutSession('cs_1')).resolves.toEqual({
+          state,
+          subscriptionId: 'sub_9',
+        });
+      },
+    );
+
+    it('has no subscription until the buyer paid', async () => {
+      const { gateway, stripe } = build();
+      stripe.checkout.sessions.retrieve.mockResolvedValue({ status: 'open', subscription: null });
+
+      expect((await gateway.retrieveCheckoutSession('cs_1')).subscriptionId).toBeNull();
+    });
+  });
+
+  describe('findCustomerByUserId (one customer per buyer)', () => {
+    const userId = '64b7f0000000000000000b01';
+
+    it('looks the customer up by our user id in its metadata', async () => {
+      const { gateway, stripe } = build();
+      stripe.customers.search.mockResolvedValue({ data: [{ id: 'cus_known' }] });
+
+      await expect(gateway.findCustomerByUserId(userId)).resolves.toBe('cus_known');
+
+      expect(stripe.customers.search).toHaveBeenCalledWith({
+        query: `metadata['userId']:'${userId}'`,
+        limit: 1,
+      });
+    });
+
+    it('answers null when there is none, and never builds a query from a value that is not an id', async () => {
+      const { gateway, stripe } = build();
+      stripe.customers.search.mockResolvedValue({ data: [] });
+
+      await expect(gateway.findCustomerByUserId(userId)).resolves.toBeNull();
+      await expect(gateway.findCustomerByUserId("x' OR metadata['a']:'b")).resolves.toBeNull();
+
+      expect(stripe.customers.search).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -494,12 +673,18 @@ describe('StripePaymentGateway billing operations', () => {
         active: true,
         unit_amount: null,
         currency: 'brl',
+        billing_scheme: 'tiered',
         recurring: null,
       });
 
       const price = await gateway.getPrice('price_x');
 
-      expect(price?.interval).toBeNull();
+      expect(price).toMatchObject({
+        interval: null,
+        intervalCount: null,
+        licensed: false,
+        perUnit: false,
+      });
       expect(price?.amount.isZero()).toBe(true);
     });
 

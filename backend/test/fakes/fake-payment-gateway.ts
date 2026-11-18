@@ -1,4 +1,5 @@
 import { Decimal } from '../../src/common/money/money.js';
+import { aProviderPrice } from '../builders/provider-price.builder.js';
 import {
   type ChangePriceInput,
   type CheckoutSession,
@@ -12,10 +13,14 @@ import {
   type ProviderInvoice,
   type ProviderPrice,
   type ProviderSubscription,
-  type RefundLatestPaymentInput,
+  type ProviderCheckoutSession,
+  type RefundInvoiceInput,
   type RefundResult,
   type SetCancelAtPeriodEndInput,
+  type SubscriptionInvoice,
 } from '../../src/payments/payment-gateway.js';
+
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
 /**
  * TS-03 / TS-07: a hand-written fake of the PaymentGateway port. It records what services asked
@@ -71,13 +76,24 @@ export class FakePaymentGateway extends PaymentGateway {
   /** The subscriptions whose scheduled change was released, in order. */
   readonly releasedSchedules: string[] = [];
   readonly cancelAtPeriodEndChanges: SetCancelAtPeriodEndInput[] = [];
-  /** Refunds actually made (a repeated idempotency key is made once), BR-012-29. */
-  readonly refunds: Array<RefundLatestPaymentInput & { refunded: Decimal }> = [];
+  /** Refunds actually made (a repeated idempotency key is made once), per invoice, BR-012-29. */
+  readonly refunds: Array<RefundInvoiceInput & { refunded: Decimal }> = [];
   /** Every refund REQUEST, repeats included: proves the call happened, not the money moved. */
   readonly refundRequests: string[] = [];
+  /** The invoices voided by `voidInvoice`. */
+  readonly voidedInvoices: string[] = [];
+  /** The sessions asked about by `retrieveCheckoutSession`, and what the provider says of them. */
+  readonly checkoutSessions = new Map<string, ProviderCheckoutSession>();
+  /** The customers `findCustomerByUserId` knows, by our user id. */
+  readonly customersByUser = new Map<string, string>();
   readonly portalSessions: CreateBillingPortalSessionInput[] = [];
-  /** What each subscription's latest invoice charged, in reais (BR-012-29). */
+  /**
+   * What the first (create) invoice of a subscription charged, in reais, when the spec set no
+   * invoices of its own: a shortcut for the common case (BR-012-29). Default R$ 199,90.
+   */
   readonly paidAmounts = new Map<string, Decimal>();
+  /** The invoices of a subscription, newest first; absent means one paid create invoice. */
+  readonly subscriptionInvoices = new Map<string, Mutable<SubscriptionInvoice>[]>();
   /** The invoices `listInvoices` answers (BR-012-11), newest first. */
   invoices: ProviderInvoice[] = [];
   /** Invoices of one customer; a customer without an entry gets `invoices`. */
@@ -92,16 +108,31 @@ export class FakePaymentGateway extends PaymentGateway {
     plan: { stripePriceId: string; price: Decimal; interval: 'month' | 'year' },
     overrides: Partial<ProviderPrice> = {},
   ): void {
-    this.prices.set(plan.stripePriceId, {
-      id: plan.stripePriceId,
-      active: true,
-      amount: plan.price,
-      interval: plan.interval,
-      currency: 'brl',
-      ...overrides,
-    });
+    this.prices.set(
+      plan.stripePriceId,
+      aProviderPrice({
+        id: plan.stripePriceId,
+        amount: plan.price,
+        interval: plan.interval,
+        ...overrides,
+      }),
+    );
   }
 
+  /** Makes refundInvoice fail for these invoices, as an unreachable provider would. */
+  readonly failRefundFor = new Set<string>();
+  /** Makes refundInvoice answer zero without moving money (the bug F1 must not accept). */
+  refundAnswersZero = false;
+  /** The order of the plan-change calls (price, schedule, release), BR-012-16/17. */
+  readonly callLog: string[] = [];
+  /** How many times the invoice list was read from the provider (the cache, F9). */
+  invoiceReads = 0;
+  /** Makes the plan-change calls (price, schedule, release) fail, as a rejecting provider would. */
+  failChanges = false;
+  /** Makes getPrice fail. */
+  failPriceLookup = false;
+  /** Makes retrieveCheckoutSession fail. */
+  failSessionLookup = false;
   /** Makes the next createOfficeCheckout / createBillingPortalSession / listInvoices fail. */
   failCheckout = false;
   failPortal = false;
@@ -109,7 +140,7 @@ export class FakePaymentGateway extends PaymentGateway {
   /** An upgrade is applied at once (a paid proration) instead of pending until `payPendingChange`. */
   payUpgradesAtOnce = false;
   /** Runs at the start of every refund request, before it is recorded (concurrency specs). */
-  onRefund: ((subscriptionId: string) => Promise<void> | void) | undefined;
+  onRefund: ((invoiceId: string) => Promise<void> | void) | undefined;
 
   private readonly pendingPriceChanges = new Map<string, string>();
   private readonly refundKeys = new Map<string, Decimal>();
@@ -129,12 +160,14 @@ export class FakePaymentGateway extends PaymentGateway {
     if (this.failCheckout) throw new Error('provider unreachable');
     this.checkouts.push(input);
     const sessionId = `cs_fake_${this.checkouts.length}`;
+    this.checkoutSessions.set(sessionId, { state: 'open', subscriptionId: null });
     return { sessionId, url: `https://checkout.example.test/${sessionId}` };
   }
 
   async expireCheckoutSession(sessionId: string): Promise<'expired' | 'completed'> {
     if (this.completedSessions.has(sessionId)) return 'completed';
     this.expiredSessions.push(sessionId);
+    this.checkoutSessions.set(sessionId, { state: 'expired', subscriptionId: null });
     return 'expired';
   }
 
@@ -146,6 +179,8 @@ export class FakePaymentGateway extends PaymentGateway {
   }
 
   async changeSubscriptionPrice(input: ChangePriceInput): Promise<void> {
+    if (this.failChanges) throw new Error('the provider rejected the change');
+    this.callLog.push('price');
     this.priceChanges.push(input);
     // BR-012-16: pending until the prorated invoice is paid, unless the spec pays at once.
     if (this.payUpgradesAtOnce) this.apply(input.subscriptionId, { priceId: input.priceId });
@@ -161,6 +196,8 @@ export class FakePaymentGateway extends PaymentGateway {
   }
 
   async scheduleSubscriptionPrice(input: ChangePriceInput): Promise<void> {
+    if (this.failChanges) throw new Error('the provider rejected the change');
+    this.callLog.push('schedule');
     this.scheduledChanges.push(input);
     const current = this.current(input.subscriptionId);
     this.apply(input.subscriptionId, {
@@ -170,6 +207,8 @@ export class FakePaymentGateway extends PaymentGateway {
   }
 
   async releaseScheduledChange(subscriptionId: string): Promise<void> {
+    if (this.failChanges) throw new Error('the provider rejected the change');
+    this.callLog.push('release');
     this.releasedSchedules.push(subscriptionId);
     this.apply(subscriptionId, { scheduledPriceId: null, scheduledChangeAt: null });
   }
@@ -179,19 +218,70 @@ export class FakePaymentGateway extends PaymentGateway {
     this.apply(input.subscriptionId, { cancelAtPeriodEnd: input.cancel });
   }
 
-  async refundLatestPayment(input: RefundLatestPaymentInput): Promise<RefundResult> {
-    await this.onRefund?.(input.subscriptionId);
+  /** The invoices of a subscription; the default is one paid create invoice (see `paidAmounts`). */
+  private invoicesOf(subscriptionId: string): Mutable<SubscriptionInvoice>[] {
+    let own = this.subscriptionInvoices.get(subscriptionId);
+    if (!own) {
+      own = [
+        {
+          id: `in_create_${subscriptionId}`,
+          reason: 'subscription_create',
+          status: 'paid',
+          amountPaid: this.paidAmounts.get(subscriptionId) ?? new Decimal('199.90'),
+          amountRefunded: new Decimal(0),
+        },
+      ];
+      this.subscriptionInvoices.set(subscriptionId, own);
+    }
+    return own;
+  }
+
+  async listSubscriptionInvoices(subscriptionId: string): Promise<SubscriptionInvoice[]> {
+    return this.invoicesOf(subscriptionId).map((invoice) => ({ ...invoice }));
+  }
+
+  async refundInvoice(input: RefundInvoiceInput): Promise<RefundResult> {
+    await this.onRefund?.(input.invoiceId);
     this.refundRequests.push(input.idempotencyKey);
+    if (this.failRefundFor.has(input.invoiceId)) throw new Error('provider unreachable');
     // The provider deduplicates by key: a repeat answers the first refund, moving no money again.
-    const earlier = this.refundKeys.get(input.idempotencyKey);
-    if (earlier !== undefined) return { refunded: earlier };
-    const refunded = this.paidAmounts.get(input.subscriptionId) ?? new Decimal('199.90');
-    this.refundKeys.set(input.idempotencyKey, refunded);
-    if (refunded.greaterThan(0)) this.refunds.push({ ...input, refunded });
-    return { refunded };
+    const earlier = this.refunds.find((refund) => refund.idempotencyKey === input.idempotencyKey);
+    if (earlier) return { refunded: earlier.refunded };
+    if (this.refundAnswersZero) return { refunded: new Decimal(0) };
+    const invoice = this.findInvoice(input.invoiceId);
+    const remaining = invoice.amountPaid.minus(invoice.amountRefunded);
+    invoice.amountRefunded = invoice.amountPaid;
+    if (remaining.greaterThan(0)) this.refunds.push({ ...input, refunded: remaining });
+    return { refunded: remaining };
+  }
+
+  private findInvoice(invoiceId: string): Mutable<SubscriptionInvoice> {
+    if (invoiceId.startsWith('in_create_')) this.invoicesOf(invoiceId.replace('in_create_', ''));
+    for (const own of this.subscriptionInvoices.values()) {
+      const invoice = own.find((candidate) => candidate.id === invoiceId);
+      if (invoice) return invoice;
+    }
+    throw new Error('resource_missing');
+  }
+
+  async voidInvoice(invoiceId: string): Promise<void> {
+    this.voidedInvoices.push(invoiceId);
+    this.findInvoice(invoiceId).status = 'void';
+  }
+
+  async retrieveCheckoutSession(sessionId: string): Promise<ProviderCheckoutSession> {
+    if (this.failSessionLookup) throw new Error('provider unreachable');
+    const known = this.checkoutSessions.get(sessionId);
+    if (known) return known;
+    throw new Error('resource_missing');
+  }
+
+  async findCustomerByUserId(userId: string): Promise<string | null> {
+    return this.customersByUser.get(userId) ?? null;
   }
 
   async listInvoices(customerId: string): Promise<ProviderInvoice[]> {
+    this.invoiceReads += 1;
     if (this.failInvoices) throw new Error('provider unreachable');
     return this.invoicesByCustomer.get(customerId) ?? this.invoices;
   }
@@ -205,6 +295,7 @@ export class FakePaymentGateway extends PaymentGateway {
   }
 
   async getPrice(priceId: string): Promise<ProviderPrice | null> {
+    if (this.failPriceLookup) throw new Error('provider unreachable');
     return this.prices.get(priceId) ?? null;
   }
 

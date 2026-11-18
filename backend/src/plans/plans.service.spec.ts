@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Decimal } from '../common/money/money.js';
 import { aPlan } from '../../test/builders/plan.builder.js';
+import { aProviderPrice } from '../../test/builders/provider-price.builder.js';
 import { FakePaymentGateway } from '../../test/fakes/fake-payment-gateway.js';
 import { FakePlansRepository } from '../../test/fakes/fake-plans-repository.js';
 import type { ProviderPrice } from '../payments/payment-gateway.js';
@@ -32,14 +33,15 @@ describe('PlansService', () => {
 
   /** The provider has this definition's price, as the catalog says it (so the check passes). */
   function providerHas(plan: PlanDefinition, overrides: Partial<ProviderPrice> = {}): void {
-    gateway.prices.set(plan.stripePriceId, {
-      id: plan.stripePriceId,
-      active: true,
-      amount: plan.price,
-      interval: plan.interval,
-      currency: 'brl',
-      ...overrides,
-    });
+    gateway.prices.set(
+      plan.stripePriceId,
+      aProviderPrice({
+        id: plan.stripePriceId,
+        amount: plan.price,
+        interval: plan.interval,
+        ...overrides,
+      }),
+    );
   }
 
   /** upsertCatalog with the provider holding every price of the definitions. */
@@ -184,6 +186,10 @@ describe('PlansService', () => {
         ['charges another amount', { amount: new Decimal('199.91') }],
         ['bills another interval', { interval: 'year' as const }],
         ['is in another currency', { currency: 'usd' }],
+        ['bills every 3 months', { intervalCount: 3 }],
+        ['has no interval count', { intervalCount: null }],
+        ['is metered, not licensed', { licensed: false }],
+        ['is tiered, not per unit', { perUnit: false }],
       ])('refuses a catalog whose price %s, and writes nothing', async (_label, divergence) => {
         const plans = catalog();
         plans.forEach((plan) => providerHas(plan));
