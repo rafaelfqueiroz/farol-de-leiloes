@@ -33,6 +33,29 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
 });
 
+// These tests are about the payload, not the keystrokes (DateField's own tests cover typing into
+// the pickers). Two things made the create flow cost 1.4 s unloaded and pass the 5 s limit on a
+// loaded CI runner (#165, TS-25): every typed key re-renders the page and its MUI dialog (~15 keys
+// at ~50 ms each), and `getByRole` walks the accessibility tree through jsdom's getComputedStyle
+// (30-200 ms a call under load). So: one paste per field, and role lookups that skip the
+// accessibility-tree visibility check (`hidden: true`; the dialog is open and nothing here
+// asserts visibility).
+const byRole = (role: 'button' | 'spinbutton', name: string | RegExp) =>
+  screen.getByRole(role, { name, hidden: true });
+
+async function pasteInto(field: HTMLElement, text: string) {
+  await userEvent.click(field);
+  await userEvent.paste(text);
+}
+
+async function fillCouponForm(code: string, discount: string) {
+  await userEvent.click(byRole('button', /Novo Cupom/));
+  await pasteInto(screen.getByLabelText(/Código do cupom/), code);
+  await pasteInto(screen.getByLabelText(/Valor do desconto/), discount);
+  await pasteInto(byRole('spinbutton', 'Dia'), '31/12/2099');
+  await userEvent.click(byRole('button', 'Criar Cupom'));
+}
+
 // AR-17: the coupon discount is a reais string both ways; there is no centavos conversion.
 describe('AdminCouponsPage coupon discount', () => {
   it('shows the discount string and the Brasília date', async () => {
@@ -46,12 +69,7 @@ describe('AdminCouponsPage coupon discount', () => {
     render(<AdminCouponsPage />);
     await screen.findByText('R$ 10,00');
 
-    await userEvent.click(screen.getByRole('button', { name: /Novo Cupom/ }));
-    await userEvent.type(screen.getByLabelText(/Código do cupom/), 'ABC');
-    await userEvent.type(screen.getByLabelText(/Valor do desconto/), '12.5');
-    await userEvent.click(screen.getByRole('spinbutton', { name: 'Dia' }));
-    await userEvent.keyboard('31122099');
-    await userEvent.click(screen.getByRole('button', { name: 'Criar Cupom' }));
+    await fillCouponForm('ABC', '12.5');
 
     await waitFor(() => {
       const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
@@ -68,12 +86,7 @@ describe('AdminCouponsPage coupon discount', () => {
     render(<AdminCouponsPage />);
     await screen.findByText('R$ 10,00');
 
-    await userEvent.click(screen.getByRole('button', { name: /Novo Cupom/ }));
-    await userEvent.type(screen.getByLabelText(/Código do cupom/), 'ABC');
-    await userEvent.type(screen.getByLabelText(/Valor do desconto/), '10.555');
-    await userEvent.click(screen.getByRole('spinbutton', { name: 'Dia' }));
-    await userEvent.keyboard('31122099');
-    await userEvent.click(screen.getByRole('button', { name: 'Criar Cupom' }));
+    await fillCouponForm('ABC', '10.555');
 
     expect(await screen.findByText(/até duas casas decimais/)).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
