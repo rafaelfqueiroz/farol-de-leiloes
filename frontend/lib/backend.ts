@@ -117,6 +117,22 @@ export function pageQuery(request: NextRequest): string {
   return params.toString();
 }
 
+/**
+ * The query of a request that takes only these parameters (SPEC-012: `officeId`, `page`,
+ * `pageSize`): each is forwarded as sent, anything else is dropped, and the backend alone
+ * validates them. The office is only a CHOICE among the caller's own offices (BR-002-11); the
+ * backend answers a stranger's id exactly as a missing one.
+ */
+export function pickQuery(request: NextRequest, names: readonly string[]): string {
+  const { searchParams } = request.nextUrl;
+  const params = new URLSearchParams();
+  for (const name of names) {
+    const value = searchParams.get(name);
+    if (value) params.set(name, value);
+  }
+  return params.toString();
+}
+
 interface ProxyOptions {
   /** The route needs a signed-in caller: answer 401 UNAUTHENTICATED here when there is no cookie. */
   auth?: boolean;

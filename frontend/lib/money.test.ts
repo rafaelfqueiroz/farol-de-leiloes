@@ -1,14 +1,17 @@
 import Decimal from 'decimal.js';
 import { describe, expect, it } from 'vitest';
 import {
+  absMoney,
   discountPercent,
   formatMoney,
   formatMoneyCompact,
   formatPercent,
   isMoneyString,
+  isPositiveMoney,
   moneyFromSlider,
   moneyToSlider,
   parseMoneyInput,
+  sumMoney,
 } from './money';
 
 const NBSP = '\u00a0';
@@ -165,5 +168,25 @@ describe('formatPercent', () => {
     expect(formatPercent('1234.5', 0)).toBe('1.234%');
     expect(formatPercent('-25')).toBe('-25,0%');
     expect(formatPercent('-0.01')).toBe('0,0%');
+  });
+});
+
+describe('sumMoney, absMoney, isPositiveMoney (SPEC-012 preview lines)', () => {
+  it('adds signed money strings exactly, to two places', () => {
+    expect(sumMoney(['12990.00', '-389.91'])).toBe('12600.09');
+    expect(sumMoney(['0.1', '0.2'])).toBe('0.30');
+    expect(sumMoney([])).toBe('0.00');
+    expect(sumMoney([new Decimal('1.005'), '1'])).toBe('2.00');
+  });
+
+  it('takes the absolute value', () => {
+    expect(absMoney('-389.91')).toBe('389.91');
+    expect(absMoney('5')).toBe('5.00');
+  });
+
+  it('says whether an amount is a charge', () => {
+    expect(isPositiveMoney('0.01')).toBe(true);
+    expect(isPositiveMoney('0')).toBe(false);
+    expect(isPositiveMoney('-1')).toBe(false);
   });
 });

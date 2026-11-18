@@ -17,6 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { AuthFormPage } from '@/app/components/patterns/PublicScreens';
 import GoogleSignInButton from '@/app/components/account/GoogleSignInButton';
 import { ApiError, useApiErrorMessage } from '@/lib/api-error';
+import { safeNextPath } from '@/lib/safe-redirect';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,6 +29,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // where to go after signing in (`?next=/plans` from "Entrar para assinar"); a same-site path only
+  const [next, setNext] = useState<string | null>(null);
   const alertRef = useRef<HTMLDivElement>(null);
 
   // Frame 2: when a refusal appears, focus moves to its alert so it is read at once
@@ -37,9 +40,11 @@ export default function LoginPage() {
 
   // The Google callback sends a refusal back as /login?error=<CODE> (BR-001-08); show its message.
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get('error');
+    const query = new URLSearchParams(window.location.search);
+    const code = query.get('error');
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the query string is an external system, readable only after mount
     if (code) setError(apiErrorMessage(new ApiError(code)));
+    setNext(safeNextPath(query.get('next')));
   }, [apiErrorMessage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,7 +56,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push('/');
+      router.push(next ?? '/');
     } catch (err: unknown) {
       setError(apiErrorMessage(err));
     } finally {

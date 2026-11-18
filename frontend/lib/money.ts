@@ -129,3 +129,20 @@ export function formatPercent(value: MoneyInput, places = 1): string {
   const sign = rounded.isNegative() && !rounded.isZero() ? '-' : '';
   return `${sign}${groupPtBr(rounded.abs().toFixed(places))}%`;
 }
+
+/** AR-17: the sum of money strings, as a two-place string (used for signed lines, e.g. a proration preview). */
+export function sumMoney(values: readonly MoneyInput[]): string {
+  return values
+    .reduce<Decimal>((total, value) => total.plus(toDecimal(value)), new D(0))
+    .toFixed(2);
+}
+
+/** AR-17: the absolute value of a money string, as a two-place string. */
+export function absMoney(value: MoneyInput): string {
+  return toDecimal(value).abs().toFixed(2);
+}
+
+/** AR-17: true when the amount is above zero (a charge, not a credit or nothing). */
+export function isPositiveMoney(value: MoneyInput): boolean {
+  return toDecimal(value).greaterThan(0);
+}

@@ -395,7 +395,8 @@
       "confirmed": {
         "title": "Pagamento confirmado",
         "description": "O plano {plan} do seu escritório está ativo. Já é possível ter até {count, plural, one {# jornada em andamento} other {# jornadas em andamento}} ao mesmo tempo.",
-        "action": "Ver plano do escritório"
+        "action": "Ver plano do escritório",
+        "descriptionNoPlan": "O plano do seu escritório está ativo."
       },
       "slow": {
         "title": "A confirmação está demorando mais que o normal",
@@ -760,14 +761,22 @@
       "confirm": "Confirmar mudança",
       "confirming": "Mudando de plano…",
       "back": "Voltar",
-      "effectUpgrade": "Vale a partir da confirmação do pagamento. Cobramos agora <due></due>{credit, select, none {} other { ({charge} do novo plano menos {credit} de crédito pelo restante do plano atual)}}. Próxima cobrança em <date></date>. Valor calculado pela Stripe antes do pagamento.",
-      "effectUpgradeNoDate": "Vale a partir da confirmação do pagamento. Cobramos agora <due></due>. Valor calculado pela Stripe antes do pagamento.",
+      "calculating": "Calculando o valor…",
+      "belowCount": "Seu escritório tem {inProgress, plural, one {# jornada em andamento} other {# jornadas em andamento}}. Elas continuam normalmente, mas novas jornadas só poderão ser iniciadas quando houver menos de {limit} em andamento.",
+      "previewFailed": "Não foi possível calcular o valor da mudança.",
+      "effectUpgrade": "Vale a partir da confirmação do pagamento. Cobramos agora <due></due>: <charge></charge> do novo plano menos <credit></credit> de crédito pelo restante do plano atual.",
+      "effectUpgradeSimple": "Vale a partir da confirmação do pagamento. Cobramos agora <due></due>.",
+      "effectUpgradeFree": "Vale a partir da confirmação do pagamento. Não há cobrança agora: o crédito pelo restante do plano atual cobre o valor do novo plano.",
+      "nextCharge": "Próxima cobrança em <date></date>.",
+      "providerCalculated": "Valor calculado pela Stripe antes do pagamento.",
       "effectDowngrade": "Vale a partir do próximo período (<date></date>). Até lá, o plano atual continua.",
       "effectDowngradeNoDate": "Vale a partir do próximo período. Até lá, o plano atual continua.",
       "effectRelease": "A mudança agendada é desfeita e o plano atual continua.",
-      "calculating": "Calculando o valor…",
-      "belowCount": "Seu escritório tem {inProgress, plural, one {# jornada em andamento} other {# jornadas em andamento}}. Elas continuam normalmente, mas novas jornadas só poderão ser iniciadas quando houver menos de {limit, plural, one {# em andamento} other {# em andamento}}.",
-      "previewFailed": "Não foi possível calcular o valor da mudança."
+      "effectKeep": "Esta mudança já está agendada."
+    },
+    "toast": {
+      "upgrade": "Mudança para o plano {name} solicitada",
+      "scheduled": "Mudança para o plano {name} agendada"
     }
   },
   "profile": {

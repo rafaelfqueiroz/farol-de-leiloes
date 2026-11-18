@@ -6,6 +6,8 @@ import { POST as chat } from './chat/route';
 import { GET as coupons } from './coupons/route';
 import { GET as favorites } from './favorites/route';
 import { GET as favoriteCodes } from './favorites/codes/route';
+import { GET as invoices } from './office/subscription/invoices/route';
+import { GET as officeSubscription } from './office/subscription/route';
 import { GET as reminders } from './reminders/route';
 import { GET as savedFilters } from './saved-filters/route';
 import { GET as search } from './search/route';
@@ -51,6 +53,47 @@ describe('GET /api/search', () => {
       page: '3',
       pageSize: '50',
     });
+  });
+});
+
+// SPEC-012 BR-012-11: the billing history is paged too; `officeId` is the one other parameter
+// that reaches the backend, and only as a choice among the caller's own offices.
+describe('GET /api/office/subscription/invoices', () => {
+  const path = '/api/office/subscription/invoices';
+
+  it('forwards officeId, page and pageSize and nothing else', async () => {
+    await invoices(
+      request(`${path}?page=2&pageSize=6&officeId=64b7f0000000000000000c01&x=1`, signedIn),
+    );
+
+    expect(calledUrl()).toBe(
+      'http://backend:3000/api/office/subscription/invoices?officeId=64b7f0000000000000000c01&page=2&pageSize=6',
+    );
+  });
+
+  it('forwards no query for a request without any', async () => {
+    await invoices(request(path, signedIn));
+
+    expect(calledUrl()).toBe('http://backend:3000/api/office/subscription/invoices');
+  });
+
+  it('answers 401 UNAUTHENTICATED without calling the backend when signed out', async () => {
+    const response = await invoices(request(path));
+
+    expect(response.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/office/subscription', () => {
+  it('forwards only the office choice', async () => {
+    await officeSubscription(
+      request('/api/office/subscription?officeId=64b7f0000000000000000c01&page=3', signedIn),
+    );
+
+    expect(calledUrl()).toBe(
+      'http://backend:3000/api/office/subscription?officeId=64b7f0000000000000000c01',
+    );
   });
 });
 

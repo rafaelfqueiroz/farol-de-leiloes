@@ -109,6 +109,24 @@ describe('LoginPage', () => {
     expect(env.push).toHaveBeenCalledWith('/');
   });
 
+  it('SPEC-012: returns to the same-site page named by ?next after signing in (Entrar para assinar)', async () => {
+    window.history.pushState({}, '', '/login?next=%2Fplans');
+    env.login.mockResolvedValue(undefined);
+    await submit();
+
+    expect(env.push).toHaveBeenCalledWith('/plans');
+    window.history.pushState({}, '', '/');
+  });
+
+  it('never follows a ?next that leaves the site', async () => {
+    window.history.pushState({}, '', '/login?next=https%3A%2F%2Fevil.example');
+    env.login.mockResolvedValue(undefined);
+    await submit();
+
+    expect(env.push).toHaveBeenCalledWith('/');
+    window.history.pushState({}, '', '/');
+  });
+
   it('BR-001-08: shows the message of the error code the Google callback redirected with', async () => {
     window.history.pushState({}, '', '/login?error=GOOGLE_EMAIL_NOT_VERIFIED');
     render(<LoginPage />);

@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 export interface InlineAlertProps {
   severity: AlertColor;
   /** A short statement of what happened, above the text: "Cancelamento agendado". */
-  title?: string;
+  title?: ReactNode;
   /** The message; what to do about it. */
   children?: ReactNode;
   /** The one action, usually a `Button`; on a phone it moves under the text (DS-13, DS-16). */
