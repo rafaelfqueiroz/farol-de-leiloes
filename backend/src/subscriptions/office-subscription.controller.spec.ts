@@ -243,6 +243,18 @@ describe('OfficeSubscriptionController over HTTP', () => {
     expect(billing[method].mock.calls.map((call) => call[1])).toEqual([undefined, OFFICE]);
   });
 
+  it('AR-34: an action with no body at all is the same as an empty one; an over-long office id is refused', async () => {
+    billing.cancel.mockResolvedValue(VIEW);
+
+    await request(server()).post('/api/office/subscription/cancel').expect(200);
+    await request(server())
+      .get(`/api/office/subscription?officeId=${'x'.repeat(65)}`)
+      .expect(400);
+
+    expect(billing.cancel).toHaveBeenCalledTimes(1);
+    expect(billing.view).not.toHaveBeenCalled();
+  });
+
   it('answers the portal URL', async () => {
     billing.billingPortal.mockResolvedValue({ url: 'https://billing.example.test/s' });
 
