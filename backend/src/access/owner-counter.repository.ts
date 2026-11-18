@@ -70,6 +70,30 @@ export class OwnerCounterRepository extends OwnerScopedRepository<OwnerCounterEn
   }
 
   /**
+   * The current value of `key` for the acting owner, 0 when its counter does not exist yet
+   * (SPEC-012 BR-012-26, "4 of 5 journeys in progress"). A READ: it works for an office that is
+   * read-only too (D-47), unlike `tryAcquire`. The owner is the request's acting owner
+   * (BR-002-11), never an id from the caller.
+   */
+  async readValue(
+    ctx: AccessContext,
+    key: string,
+    options: { actingOwner?: ActingOwner } = {},
+  ): Promise<number> {
+    const acting = options.actingOwner ?? ctx.resolveActingOwner();
+    if (acting.context !== ctx) {
+      throw new Error('The acting owner was resolved for another request (BR-002-11)');
+    }
+    if (!ctx.canReadOwner(acting.owner)) throw new DomainError('NOT_FOUND');
+    const counter = await this.counters
+      .findOne(this.identity(acting.owner, key))
+      .select('value')
+      .lean<{ value: number }>()
+      .exec();
+    return counter?.value ?? 0;
+  }
+
+  /**
    * Takes one slot of `key` for the acting owner when fewer than `limit` are taken, atomically
    * (BR-002-13). Answers whether it did; at the limit nothing changes. With `session`, the counter
    * must already exist (`ensureCounter` before `startTransaction`); a missing one throws.
