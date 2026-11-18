@@ -14,14 +14,14 @@ ADR-002 puts the backend on a Hostinger VPS in Brazil. The importer and scraper 
 
 **Radware Bot Manager challenges automated clients, everywhere.** It sits behind Azion, so it is the same whatever network the request comes from.
 
-| Request                                | Home connection                                    | Google Cloud Shell                | VPS direct  | VPS through Cloudflare WARP                     |
-| -------------------------------------- | -------------------------------------------------- | --------------------------------- | ----------- | ----------------------------------------------- |
-| List, `curl`                           | 200, then CAPTCHA after about 8 downloads in a day | 200, then CAPTCHA after about 4   | 403 (Azion) | 200, 8 MB in 1.5–9.6 s                          |
-| Detail page, `curl`                    | CAPTCHA on the first request                       | CAPTCHA (address already flagged) | 403         | not tried                                       |
-| Detail page, headless Chromium         | CAPTCHA on the first request                       | —                                 | 403         | CAPTCHA on the first request                    |
-| Detail page, visible Chromium (Xvfb)   | 200 (a normal browser, by hand)                    | —                                 | —           | **200**, then **30 of 30** at one page a minute |
-| Detail page, headless + stealth plugin | —                                                  | —                                 | —           | **200** (one request)                           |
-| Matrícula PDF and photo, `curl`        | —                                                  | no challenge (path 404)           | —           | **200**, real files, 4 requests 5 s apart       |
+| Request | Home connection | Google Cloud Shell | VPS direct | VPS through Cloudflare WARP |
+|---|---|---|---|---|
+| List, `curl` | 200, then CAPTCHA after about 8 downloads in a day | 200, then CAPTCHA after about 4 | 403 (Azion) | 200, 8 MB in 1.5–9.6 s |
+| Detail page, `curl` | CAPTCHA on the first request | CAPTCHA (address already flagged) | 403 | not tried |
+| Detail page, headless Chromium | CAPTCHA on the first request | — | 403 | CAPTCHA on the first request |
+| Detail page, visible Chromium (Xvfb) | 200 (a normal browser, by hand) | — | — | **200**, then **30 of 30** at one page a minute |
+| Detail page, headless + stealth plugin | — | — | — | **200** (one request) |
+| Matrícula PDF and photo, `curl` | — | no challenge (path 404) | — | **200**, real files, 4 requests 5 s apart |
 
 Three more facts shape the design:
 
