@@ -81,6 +81,8 @@ readonly ENTRIES=(
   "NEIGHBORHOODS_CACHE_TTL      variable  backend  optional"
   "SAVED_FILTERS_MAX_PER_USER   variable  backend  optional"
   "UNAVAILABLE_AUCTION_RETENTION_DAYS variable backend optional"
+  "SUBSCRIPTION_GRACE_DAYS      variable  backend  optional"
+  "REFUND_WINDOW_DAYS           variable  backend  optional"
   "LOG_LEVEL                    variable  backend  optional"
   "LOG_HASH_SECRET              secret    backend  required"
   "SENTRY_DSN                   secret    backend  optional"

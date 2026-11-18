@@ -144,6 +144,7 @@
     "INVALID_PLAN": "O plano escolhido não existe. Escolha um dos planos disponíveis.",
     "CHECKOUT_SESSION_FAILED": "Não foi possível iniciar o pagamento. Tente novamente em instantes.",
     "INVALID_WEBHOOK_SIGNATURE": "A notificação de pagamento não pôde ser validada.",
+    "WEBHOOK_BUSY": "Estamos processando uma atualização do pagamento. Tente novamente em instantes.",
     "COUPON_INVALID": "Este cupom é inválido ou expirou.",
     "SAVED_FILTER_LIMIT_REACHED": "Você atingiu o limite de {limit, plural, one {# filtro salvo} other {# filtros salvos}}. Remova um filtro para salvar outro.",
     "SAVED_FILTER_NAME_TAKEN": "Já existe um filtro com este nome. Escolha outro nome.",

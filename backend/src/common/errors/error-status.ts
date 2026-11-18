@@ -56,6 +56,8 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // Stripe answered without a checkout URL: an upstream failure, not the caller's.
   CHECKOUT_SESSION_FAILED: HttpStatus.BAD_GATEWAY,
   INVALID_WEBHOOK_SIGNATURE: HttpStatus.BAD_REQUEST,
+  // SPEC-012 BR-012-13: another delivery is syncing the same subscription; the provider retries.
+  WEBHOOK_BUSY: HttpStatus.SERVICE_UNAVAILABLE,
   COUPON_INVALID: HttpStatus.BAD_REQUEST,
 
   SAVED_FILTER_LIMIT_REACHED: HttpStatus.CONFLICT,
