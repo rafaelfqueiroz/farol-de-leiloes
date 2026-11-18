@@ -59,6 +59,19 @@ function fromUnixSeconds(seconds: number | null | undefined): Date | null {
   return typeof seconds === 'number' ? new Date(seconds * 1000) : null;
 }
 
+/**
+ * The provider's page for an invoice becomes a link in our interface, so only an https URL is
+ * passed on: anything else (a malformed value, `javascript:`, `http:`) is no link at all.
+ */
+function httpsUrlOrNull(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  try {
+    return new URL(value).protocol === 'https:' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /** A Stripe reference that may be expanded into an object or left as its id. */
 function idOf(reference: string | { id: string } | null | undefined): string | null {
   if (reference === null || reference === undefined) return null;
@@ -441,7 +454,7 @@ export class StripePaymentGateway extends PaymentGateway {
       // The invoice's total after discounts; AR-20: centavos become reais here and nowhere else.
       amount: centavosToReais(invoice.total),
       status: invoice.status ?? 'draft',
-      hostedUrl: invoice.hosted_invoice_url ?? null,
+      hostedUrl: httpsUrlOrNull(invoice.hosted_invoice_url),
     }));
   }
 

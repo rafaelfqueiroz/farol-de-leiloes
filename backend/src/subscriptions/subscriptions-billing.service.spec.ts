@@ -30,6 +30,7 @@ import { JourneySlotsService, ACTIVE_JOURNEYS_KEY } from './journey-slots.servic
 import type { PaymentEventsRepository } from './payment-events.repository.js';
 import {
   INVOICE_CACHE_MS,
+  PREVIEW_CACHE_MS,
   REFUND_CLAIM_STALE_MS,
   SubscriptionsBillingService,
 } from './subscriptions-billing.service.js';
@@ -859,6 +860,31 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
         code: 'SUBSCRIPTION_NOT_CHANGEABLE',
       });
       expect((await t.billing.previewChange(ctx, { planCode: PLAN_5.code })).change).toBe('keep');
+    });
+
+    it("an upgrade's preview is reused for 10 seconds, dropped by every action of ours, and a failure is never cached", async () => {
+      await t.subscribeOffice(OFFICE);
+      const ctx = await t.memberOf();
+      const ask = (planCode: string) => t.billing.previewChange(ctx, { planCode });
+
+      await ask(PLAN_10.code);
+      await ask(PLAN_10.code);
+      expect(t.gateway.previewRequests).toHaveLength(1);
+      t.clock.advance(PREVIEW_CACHE_MS);
+      await ask(PLAN_10.code);
+      expect(t.gateway.previewRequests).toHaveLength(2);
+
+      // an action of ours (here a downgrade scheduled) refreshes the subscription and drops them
+      await t.billing.changePlan(ctx, { planCode: PLAN_2.code });
+      await ask(PLAN_10.code);
+      expect(t.gateway.previewRequests).toHaveLength(3);
+
+      t.clock.advance(PREVIEW_CACHE_MS);
+      t.gateway.failPreview = true;
+      await expect(ask(PLAN_10.code)).rejects.toMatchObject({ code: 'CHANGE_PREVIEW_FAILED' });
+      t.gateway.failPreview = false;
+      await ask(PLAN_10.code);
+      expect(t.gateway.previewRequests).toHaveLength(4);
     });
 
     it('a price the provider no longer sells is INVALID_PLAN; a provider that cannot compute is CHANGE_PREVIEW_FAILED', async () => {

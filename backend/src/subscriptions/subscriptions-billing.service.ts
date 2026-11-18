@@ -56,6 +56,7 @@ import { OFFICE_PROVISIONER, type OfficeProvisioner } from './ports/office-provi
 import type { StoredSubscription } from './stored-subscription.js';
 import { OpenCheckoutExistsError, SubscriptionsRepository } from './subscriptions.repository.js';
 import { SubscriptionsService } from './subscriptions.service.js';
+import { TtlCache } from './ttl-cache.js';
 
 /** A refund claim older than this is a caller that died before it refunded: it can be retaken. */
 export const REFUND_CLAIM_STALE_MS = 5 * 60 * 1000;
@@ -70,6 +71,10 @@ const RECENT_SUBSCRIPTIONS = 20;
 const MINUTE_MS = 60 * 1000;
 /** How long an office's invoice list is reused (invalidated by every action of ours). */
 export const INVOICE_CACHE_MS = 30 * 1000;
+/** How long an upgrade's preview is reused (the figure is the provider's, read a moment ago). */
+export const PREVIEW_CACHE_MS = 10 * 1000;
+/** Each in-memory provider cache holds at most this many entries (oldest dropped first). */
+export const MAX_CACHED_ENTRIES = 500;
 
 /** The account that starts a checkout, as the provider's customer is named (SC-15: sent, not logged). */
 export interface CheckoutBuyer {
@@ -159,7 +164,12 @@ export type CheckoutRecovery = 'recovered' | 'removed' | 'waiting';
 export class SubscriptionsBillingService {
   private readonly logger = new Logger(SubscriptionsBillingService.name);
   /** The invoice list per provider customer, reused for INVOICE_CACHE_MS (one read per office). */
-  private readonly invoiceCache = new Map<string, { until: number; invoices: ProviderInvoice[] }>();
+  private readonly invoiceCache = new TtlCache<ProviderInvoice[]>(MAX_CACHED_ENTRIES);
+  /**
+   * An upgrade's preview per subscription and plan, reused for PREVIEW_CACHE_MS: choosing a plan in
+   * the dialog back and forth must not ask the provider each time. Dropped by every action of ours.
+   */
+  private readonly previewCache = new TtlCache<PlanChangePreviewView>(MAX_CACHED_ENTRIES);
 
   constructor(
     private readonly subscriptions: SubscriptionsRepository,
@@ -463,6 +473,10 @@ export class SubscriptionsBillingService {
         nextChargeAmount: target.price,
       };
     }
+    const cacheKey = `${subscription.id}:${target.code}`;
+    const now = this.clock.now().getTime();
+    const cached = this.previewCache.get(cacheKey, now);
+    if (cached !== undefined) return cached;
     try {
       const price = await this.gateway.getPrice(target.stripePriceId);
       if (price === null || !price.active) throw new DomainError('INVALID_PLAN');
@@ -470,7 +484,7 @@ export class SubscriptionsBillingService {
         subscriptionId: this.providerIdOf(subscription),
         priceId: target.stripePriceId,
       });
-      return {
+      const view: PlanChangePreviewView = {
         change,
         amountDue: preview.amountDue,
         currency: 'BRL',
@@ -479,6 +493,8 @@ export class SubscriptionsBillingService {
         nextChargeAt: preview.nextChargeAt ?? periodEnd,
         nextChargeAmount: target.price,
       };
+      this.previewCache.set(cacheKey, view, now, PREVIEW_CACHE_MS);
+      return view;
     } catch (error) {
       if (error instanceof DomainError) throw error;
       this.logger.warn(`Plan change preview of ${subscription.id} failed: ${logSafeError(error)}`);
@@ -797,6 +813,8 @@ export class SubscriptionsBillingService {
     if (subscription.stripeCustomerId !== null) {
       this.invoiceCache.delete(subscription.stripeCustomerId);
     }
+    // what a change would charge moves with every action of ours (the period, the plan, the schedule)
+    this.previewCache.deleteByPrefix(`${subscription.id}:`);
     return this.sync.refresh(subscription.id);
   }
 
@@ -905,11 +923,11 @@ export class SubscriptionsBillingService {
    */
   private async invoiceListOf(customerId: string): Promise<ProviderInvoice[]> {
     const now = this.clock.now().getTime();
-    const cached = this.invoiceCache.get(customerId);
-    if (cached && cached.until > now) return cached.invoices;
+    const cached = this.invoiceCache.get(customerId, now);
+    if (cached !== undefined) return cached;
     try {
       const invoices = await this.gateway.listInvoices(customerId, BILLING_HISTORY_LIMIT);
-      this.invoiceCache.set(customerId, { until: now + INVOICE_CACHE_MS, invoices });
+      this.invoiceCache.set(customerId, invoices, now, INVOICE_CACHE_MS);
       return invoices;
     } catch (error) {
       this.logger.warn(`The billing history could not be read: ${logSafeError(error)}`);

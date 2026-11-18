@@ -643,6 +643,33 @@ describe('StripePaymentGateway billing operations', () => {
     });
   });
 
+  describe('listInvoices: the invoice page becomes a link only when it is https', () => {
+    it.each([
+      ['javascript:alert(1)'],
+      ['http://invoice.stripe.test/in_1'],
+      ['not a url'],
+      [''],
+      [null],
+    ])('passes %s on as no link', async (hosted) => {
+      const { gateway, stripe } = build();
+      stripe.invoices.list.mockResolvedValue({
+        data: [
+          {
+            id: 'in_1',
+            status: 'paid',
+            total: 100,
+            status_transitions: { paid_at: 1772366405 },
+            hosted_invoice_url: hosted,
+          },
+        ],
+      });
+
+      const [invoice] = await gateway.listInvoices('cus_1', 6);
+
+      expect(invoice?.hostedUrl).toBeNull();
+    });
+  });
+
   describe('previewPlanChange (BR-012-16)', () => {
     it('asks the provider upcoming invoice with the proration the upgrade uses, in reais, and creates nothing', async () => {
       const { gateway, stripe } = build();
