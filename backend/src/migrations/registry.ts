@@ -7,6 +7,7 @@ import { accountTokens } from './0003-account-tokens.migration.js';
 import { adminCapability } from './0004-admin-capability.migration.js';
 import { adminAccessIndexes } from './0005-admin-access-indexes.migration.js';
 import { subscriptionIndexes } from './0006-subscription-indexes.migration.js';
+import { billingIndexes } from './0007-billing-indexes.migration.js';
 import type { Migration } from './migration.js';
 
 export const MIGRATIONS: readonly Migration[] = [
@@ -16,4 +17,5 @@ export const MIGRATIONS: readonly Migration[] = [
   adminCapability,
   adminAccessIndexes,
   subscriptionIndexes,
+  billingIndexes,
 ];

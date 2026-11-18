@@ -28,9 +28,10 @@ export interface StoredSubscription {
   readonly syncLeaseToken: string | null;
   readonly syncLeaseUntil: Date | null;
   readonly lastSyncedAt: Date | null;
+  readonly createdAt: Date;
 }
 
-/** What starting a checkout stores (PR2 calls it; the sync specs seed with it). */
+/** What starting a checkout stores (billing calls it; the sync specs seed with it). */
 export interface NewPendingSubscription {
   readonly buyerUserId: string;
   readonly planId: string;
@@ -39,4 +40,10 @@ export interface NewPendingSubscription {
   /** Absent for a first subscription: the office does not exist yet (BR-012-07). */
   readonly officeId?: string;
   readonly checkoutSessionId?: string;
+  /**
+   * SPEC-012 BR-012-07, BR-012-08: unique among open checkouts (`openCheckoutKey()`), so two
+   * checkouts of one office, or of one buyer without an office, cannot both exist. Held only while
+   * the record is PENDING: the sync releases it when the provider moves the subscription on.
+   */
+  readonly openCheckoutKey?: string;
 }

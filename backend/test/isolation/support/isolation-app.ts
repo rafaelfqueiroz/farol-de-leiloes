@@ -10,6 +10,7 @@
 // through the production guards, ConfirmedEmailGuard included.
 import type { INestApplication, ModuleMetadata } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
+import type { TestingModuleBuilder } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import request from 'supertest';
 import { CLIENT_LINK_SOURCE } from '../../../src/access/sources/client-link.source.js';
@@ -64,6 +65,8 @@ export async function createIsolationApp(
   env: Record<string, string> = {},
   /** Runs on the app before it starts (the log scan installs the production pino logger). */
   prepareApp?: (app: INestApplication) => void,
+  /** More providers to replace with fakes (e.g. the payment provider, TS-07). */
+  customize: (builder: TestingModuleBuilder) => TestingModuleBuilder = (builder) => builder,
 ): Promise<IsolationApp> {
   const sources = new FakeAccessSources();
   const supportRequests = new FakeSupportRequests();
@@ -72,17 +75,19 @@ export async function createIsolationApp(
     imports,
     { IMPORT_ENABLED: 'false', SCRAPER_ENABLED: 'false', REMINDERS_ENABLED: 'false', ...env },
     (builder) =>
-      builder
-        .overrideProvider(MEMBERSHIP_SOURCE)
-        .useValue(sources)
-        .overrideProvider(CLIENT_LINK_SOURCE)
-        .useValue(sources)
-        .overrideProvider(SELF_ADVISED_SOURCE)
-        .useValue(sources)
-        .overrideProvider(OFFICE_PLAN_SOURCE)
-        .useValue(sources)
-        .overrideProvider(SUPPORT_REQUEST_SOURCE)
-        .useValue(supportRequests),
+      customize(
+        builder
+          .overrideProvider(MEMBERSHIP_SOURCE)
+          .useValue(sources)
+          .overrideProvider(CLIENT_LINK_SOURCE)
+          .useValue(sources)
+          .overrideProvider(SELF_ADVISED_SOURCE)
+          .useValue(sources)
+          .overrideProvider(OFFICE_PLAN_SOURCE)
+          .useValue(sources)
+          .overrideProvider(SUPPORT_REQUEST_SOURCE)
+          .useValue(supportRequests),
+      ),
     prepareApp,
   );
   const server = () => harness.app.getHttpServer() as Parameters<typeof request>[0];

@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Schema } from 'mongoose';
 import { SUBSCRIPTION_INDEXES } from '../../migrations/0006-subscription-indexes.migration.js';
+import { BILLING_INDEXES } from '../../migrations/0007-billing-indexes.migration.js';
 import { PaymentEventSchema } from './payment-event.schema.js';
 import { SubscriptionSchema } from './subscription.schema.js';
 
@@ -21,7 +22,11 @@ describe('the indexes mirror the schemas (no drift)', () => {
     }));
 
   it('subscriptions', () => {
-    expect(declared(SubscriptionSchema)).toEqual(SUBSCRIPTION_INDEXES['subscriptions']);
+    // Migration 0006 built the first set, 0007 (billing) adds the rest, in the schema's order.
+    expect(declared(SubscriptionSchema)).toEqual([
+      ...(SUBSCRIPTION_INDEXES['subscriptions'] ?? []),
+      ...(BILLING_INDEXES['subscriptions'] ?? []),
+    ]);
   });
 
   it('paymentEvents', () => {

@@ -59,6 +59,20 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // SPEC-012 BR-012-13: another delivery is syncing the same subscription; the provider retries.
   WEBHOOK_BUSY: HttpStatus.SERVICE_UNAVAILABLE,
   COUPON_INVALID: HttpStatus.BAD_REQUEST,
+  // SPEC-012 BR-012-08: the office already has a subscription in effect; change it instead.
+  SUBSCRIPTION_ALREADY_ACTIVE: HttpStatus.CONFLICT,
+  // BR-012-19: there is nothing in effect to cancel.
+  SUBSCRIPTION_NOT_CANCELABLE: HttpStatus.CONFLICT,
+  // BR-012-16..18: the subscription is not in a state that allows this change.
+  SUBSCRIPTION_NOT_CHANGEABLE: HttpStatus.CONFLICT,
+  // A checkout of the same buyer (or office) is open or its payment is being confirmed.
+  CHECKOUT_IN_PROGRESS: HttpStatus.CONFLICT,
+  // BR-012-07: no office can be created for a first payment yet (SPEC-011): nothing is charged.
+  OFFICE_CREATION_UNAVAILABLE: HttpStatus.SERVICE_UNAVAILABLE,
+  // The payment provider's billing portal could not be opened: an upstream failure.
+  BILLING_PORTAL_FAILED: HttpStatus.BAD_GATEWAY,
+  // BR-012-23 / BR-012-25: the office is at its active-journey limit.
+  JOURNEY_LIMIT_REACHED: HttpStatus.CONFLICT,
 
   SAVED_FILTER_LIMIT_REACHED: HttpStatus.CONFLICT,
   SAVED_FILTER_NAME_TAKEN: HttpStatus.CONFLICT,

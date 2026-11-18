@@ -13,6 +13,9 @@ import type { SubscriptionStatus } from './domain/subscription-status.js';
 import type { NewPendingSubscription, StoredSubscription } from './stored-subscription.js';
 import { SubscriptionEntity, type SubscriptionDocument } from './schemas/subscription.schema.js';
 
+/** The statuses of a subscription that has not lapsed. */
+const NOT_LAPSED: SubscriptionStatus[] = ['PENDING', ...IN_EFFECT_STATUSES];
+
 /** MongoDB's duplicate-key error code. */
 const DUPLICATE_KEY = 11000;
 
@@ -42,6 +45,8 @@ interface Row {
   syncLeaseUntil?: Date;
   syncRequestedAt?: Date;
   lastSyncedAt?: Date;
+  openCheckoutKey?: string;
+  createdAt: Date;
 }
 
 function toStored(row: Row): StoredSubscription {
@@ -70,6 +75,7 @@ function toStored(row: Row): StoredSubscription {
     syncLeaseToken: row.syncLeaseToken ?? null,
     syncLeaseUntil: row.syncLeaseUntil ?? null,
     lastSyncedAt: row.lastSyncedAt ?? null,
+    createdAt: row.createdAt,
   });
 }
 
@@ -103,6 +109,20 @@ export interface SyncWriteResult {
 
 export type AttachOfficeOutcome = 'attached' | 'already_attached' | 'duplicate_in_effect';
 
+/** BR-012-07, BR-012-08: another checkout of the same office, or buyer, is open. */
+export class OpenCheckoutExistsError extends Error {
+  constructor() {
+    super('Another checkout of this office or buyer is open');
+    this.name = 'OpenCheckoutExistsError';
+  }
+}
+
+/** Whether a failed write was the unique index on one open checkout per key. */
+function isOpenCheckoutDuplicate(error: unknown): boolean {
+  const failure = error as { code?: unknown; keyPattern?: Record<string, unknown> } | null;
+  return failure?.code === DUPLICATE_KEY && failure.keyPattern?.openCheckoutKey !== undefined;
+}
+
 /** Whether a failed write was the unique index on one in-effect subscription per office. */
 function isInEffectDuplicate(error: unknown): boolean {
   const failure = error as { code?: unknown; keyPattern?: Record<string, unknown> } | null;
@@ -115,24 +135,35 @@ export class SubscriptionsRepository {
     @InjectModel(SubscriptionEntity.name) private readonly model: Model<SubscriptionDocument>,
   ) {}
 
-  /** BR-012-09: starts PENDING; it grants nothing until the provider confirms payment. */
+  /**
+   * BR-012-09: starts PENDING; it grants nothing until the provider confirms payment. Throws
+   * `OpenCheckoutExistsError` when the unique open-checkout key is taken (BR-012-07, BR-012-08).
+   */
   async createPending(input: NewPendingSubscription): Promise<StoredSubscription> {
-    const [created] = await this.model.create([
-      {
-        buyerUserId: new Types.ObjectId(input.buyerUserId),
-        planId: new Types.ObjectId(input.planId),
-        planCode: input.planCode,
-        activeJourneyLimit: input.activeJourneyLimit,
-        status: 'PENDING',
-        cancelAtPeriodEnd: false,
-        ...(input.officeId === undefined ? {} : { officeId: new Types.ObjectId(input.officeId) }),
-        ...(input.checkoutSessionId === undefined
-          ? {}
-          : { checkoutSessionId: input.checkoutSessionId }),
-      },
-    ]);
-    if (!created) throw new Error('MongoDB created no subscription');
-    return toStored(created.toObject() as unknown as Row);
+    try {
+      const [created] = await this.model.create([
+        {
+          buyerUserId: new Types.ObjectId(input.buyerUserId),
+          planId: new Types.ObjectId(input.planId),
+          planCode: input.planCode,
+          activeJourneyLimit: input.activeJourneyLimit,
+          status: 'PENDING',
+          cancelAtPeriodEnd: false,
+          ...(input.officeId === undefined ? {} : { officeId: new Types.ObjectId(input.officeId) }),
+          ...(input.checkoutSessionId === undefined
+            ? {}
+            : { checkoutSessionId: input.checkoutSessionId }),
+          ...(input.openCheckoutKey === undefined
+            ? {}
+            : { openCheckoutKey: input.openCheckoutKey }),
+        },
+      ]);
+      if (!created) throw new Error('MongoDB created no subscription');
+      return toStored(created.toObject() as unknown as Row);
+    } catch (error) {
+      if (isOpenCheckoutDuplicate(error)) throw new OpenCheckoutExistsError();
+      throw error;
+    }
   }
 
   async findById(id: string): Promise<StoredSubscription | null> {
@@ -268,6 +299,9 @@ export class SubscriptionsRepository {
       syncLeaseUntil: '',
       syncRequestedAt: '',
     };
+    // BR-012-07, BR-012-08: the open-checkout key is held while the provider has not confirmed
+    // anything; once the subscription is out of PENDING it is the guards on the office that rule.
+    if (patch.status !== 'PENDING') unset.openCheckoutKey = '';
     const optional: Record<string, Date | Types.ObjectId | null> = {
       currentPeriodStart: patch.currentPeriodStart,
       currentPeriodEnd: patch.currentPeriodEnd,
@@ -361,5 +395,188 @@ export class SubscriptionsRepository {
       })
       .exec();
     return result.deletedCount === 1;
+  }
+
+  // ---- Billing (SPEC-012 PR2) ----------------------------------------------------------------
+
+  /** The open checkout that holds this key (`openCheckoutKey()`), if any. */
+  async findOpenCheckout(key: string): Promise<StoredSubscription | null> {
+    if (typeof key !== 'string') return null;
+    const row = await this.model
+      .findOne({ openCheckoutKey: { $eq: key } })
+      .lean<Row>()
+      .exec();
+    return row ? toStored(row) : null;
+  }
+
+  /**
+   * Stores the provider's checkout session (and customer) on the record right after the session
+   * was created, so `checkout.session.expired` can find it (ADR-005). Only a PENDING record that
+   * has no session yet takes it. True when stored.
+   */
+  async setCheckoutSession(
+    id: string,
+    checkoutSessionId: string,
+    stripeCustomerId: string,
+  ): Promise<boolean> {
+    if (!isObjectIdString(id)) return false;
+    const result = await this.model
+      .updateOne(
+        { _id: { $eq: id }, status: { $eq: 'PENDING' }, checkoutSessionId: null },
+        { $set: { checkoutSessionId, stripeCustomerId } },
+      )
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /**
+   * Removes a checkout that never got a provider subscription (a failed or replaced checkout).
+   * Matches only a PENDING record with no provider subscription, so a paid one is never removed.
+   */
+  async deletePendingById(id: string): Promise<boolean> {
+    if (!isObjectIdString(id)) return false;
+    const result = await this.model
+      .deleteOne({ _id: { $eq: id }, status: { $eq: 'PENDING' }, stripeSubscriptionId: null })
+      .exec();
+    return result.deletedCount === 1;
+  }
+
+  /** BR-012-08: the subscription of this office that is in effect now. */
+  async findInEffectByOffice(officeId: string): Promise<StoredSubscription | null> {
+    if (!isObjectIdString(officeId)) return null;
+    const row = await this.model
+      .findOne({
+        officeId: { $eq: new Types.ObjectId(officeId) },
+        status: serverOperators({ $in: [...IN_EFFECT_STATUSES] }),
+      })
+      .lean<Row>()
+      .exec();
+    return row ? toStored(row) : null;
+  }
+
+  /** BR-012-11: the latest subscriptions of an office, newest first (the plan page picks one). */
+  async findRecentForOffice(officeId: string, limit: number): Promise<StoredSubscription[]> {
+    if (!isObjectIdString(officeId)) return [];
+    const rows = await this.model
+      .find({ officeId: { $eq: new Types.ObjectId(officeId) } })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .lean<Row[]>()
+      .exec();
+    return rows.map(toStored);
+  }
+
+  /** The provider customer an office already has (its latest subscription that has one). */
+  async findCustomerIdOfOffice(officeId: string): Promise<string | null> {
+    if (!isObjectIdString(officeId)) return null;
+    const row = await this.model
+      .findOne({
+        officeId: { $eq: new Types.ObjectId(officeId) },
+        stripeCustomerId: serverOperators({ $exists: true }),
+      })
+      .sort({ createdAt: -1, _id: -1 })
+      .select('stripeCustomerId')
+      .lean<Pick<Row, '_id' | 'stripeCustomerId'>>()
+      .exec();
+    return row?.stripeCustomerId ?? null;
+  }
+
+  /**
+   * BR-012-29: whether the office had another subscription that was paid BEFORE `before` (the
+   * first payment of the one being asked about): then that one is not its first.
+   */
+  async existsEarlierPaid(officeId: string, exceptId: string, before: Date): Promise<boolean> {
+    if (!isObjectIdString(officeId) || !isObjectIdString(exceptId)) return false;
+    const found = await this.model
+      .exists({
+        officeId: { $eq: new Types.ObjectId(officeId) },
+        _id: serverOperators({ $ne: new Types.ObjectId(exceptId) }),
+        firstPaidAt: serverOperators({ $lt: before }),
+      })
+      .exec();
+    return found !== null;
+  }
+
+  /**
+   * BR-012-29: claims the refund of an in-effect subscription in ONE conditional update. Exactly
+   * one of any number of concurrent callers gets true. A claim older than `staleBefore` (a caller
+   * that died before it refunded) can be taken again; the refund itself is idempotent by key.
+   */
+  async claimRefund(id: string, now: Date, staleBefore: Date): Promise<boolean> {
+    if (!isObjectIdString(id)) return false;
+    const result = await this.model
+      .updateOne(
+        {
+          _id: { $eq: id },
+          status: serverOperators({ $in: [...IN_EFFECT_STATUSES] }),
+          refundedAt: null,
+          $or: [
+            { refundClaimedAt: null },
+            { refundClaimedAt: serverOperators({ $lte: staleBefore }) },
+          ],
+        },
+        { $set: { refundClaimedAt: now } },
+      )
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /** Records that the refund was made, once. True on the call that recorded it. */
+  async markRefunded(id: string, now: Date): Promise<boolean> {
+    if (!isObjectIdString(id)) return false;
+    const result = await this.model
+      .updateOne({ _id: { $eq: id }, refundedAt: null }, { $set: { refundedAt: now } })
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /**
+   * ADR-005: the records the reconcile job re-reads, oldest sync first and bounded: those with a
+   * provider subscription that are not lapsed, or that lapsed since `lapsedSince`, and were last
+   * synced before `staleBefore` (or never).
+   */
+  async findIdsToReconcile(args: {
+    staleBefore: Date;
+    lapsedSince: Date;
+    limit: number;
+  }): Promise<Array<{ id: string; status: SubscriptionStatus }>> {
+    const stale = {
+      $or: [{ lastSyncedAt: null }, { lastSyncedAt: serverOperators({ $lt: args.staleBefore }) }],
+    };
+    const rows = await this.model
+      .find({
+        stripeSubscriptionId: serverOperators({ $exists: true }),
+        $and: [
+          stale,
+          {
+            $or: [
+              { status: serverOperators({ $in: NOT_LAPSED }) },
+              { status: { $eq: 'LAPSED' }, lapsedAt: serverOperators({ $gte: args.lapsedSince }) },
+            ],
+          },
+        ],
+      })
+      .sort({ lastSyncedAt: 1, _id: 1 })
+      .limit(args.limit)
+      .select('_id status')
+      .lean<Array<Pick<Row, '_id' | 'status'>>>()
+      .exec();
+    return rows.map((row) => ({ id: row._id.toHexString(), status: row.status }));
+  }
+
+  /**
+   * An abandoned checkout leaves nothing (acceptance criteria): removes PENDING records with no
+   * provider subscription created before `before` (their sessions expired long ago). Returns how
+   * many.
+   */
+  async purgeStalePending(before: Date): Promise<number> {
+    const result = await this.model
+      .deleteMany({
+        status: { $eq: 'PENDING' },
+        stripeSubscriptionId: null,
+        createdAt: serverOperators({ $lt: before }),
+      })
+      .exec();
+    return result.deletedCount;
   }
 }

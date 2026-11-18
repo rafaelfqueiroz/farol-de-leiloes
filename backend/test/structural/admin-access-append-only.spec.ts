@@ -94,12 +94,14 @@ const NAMING_CALLS = new Set(['model', 'collection', 'getModelToken', 'InjectMod
 const REGISTRY_MEMBERS = new Set(['models', 'collections', 'modelNames']);
 /**
  * Files outside admin-access allowed a `.collection(<non-literal>)` that cannot be resolved
- * statically (6). 0001 iterates a fixed list of money collections and 0006 a fixed record of the
- * plans, subscriptions and paymentEvents indexes, none of the two protected ones.
+ * statically (6). 0001 iterates a fixed list of money collections, 0006 a fixed record of the
+ * plans, subscriptions and paymentEvents indexes and 0007 one of the subscriptions and ownerCounters
+ * indexes, none of the two protected ones.
  */
 const UNRESOLVED_ALLOWED = [
   'migrations/0001-money-decimal128.migration.ts',
   'migrations/0006-subscription-indexes.migration.ts',
+  'migrations/0007-billing-indexes.migration.ts',
 ];
 
 const PRIVATE_PATHS = [
