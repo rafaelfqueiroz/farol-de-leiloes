@@ -13,6 +13,8 @@ COPY src ./src
 COPY scripts ./scripts
 COPY test/e2e-stack ./test/e2e-stack
 COPY test/fakes ./test/fakes
+# the fake payment gateway builds provider prices with the test builder (SPEC-012)
+COPY test/builders ./test/builders
 RUN npx tsc -p tsconfig.e2e.json
 USER node
 EXPOSE 3000

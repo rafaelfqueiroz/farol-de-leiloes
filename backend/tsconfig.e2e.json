@@ -5,6 +5,12 @@
     "outDir": "./dist-e2e",
     "incremental": false
   },
-  "include": ["src/**/*", "scripts/**/*", "test/e2e-stack/**/*", "test/fakes/**/*"],
+  "include": [
+    "src/**/*",
+    "scripts/**/*",
+    "test/e2e-stack/**/*",
+    "test/fakes/**/*",
+    "test/builders/**/*"
+  ],
   "exclude": ["node_modules", "dist", "dist-e2e", "**/*.spec.ts"]
 }
