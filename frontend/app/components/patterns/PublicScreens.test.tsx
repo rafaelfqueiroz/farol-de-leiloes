@@ -61,6 +61,50 @@ describe('ResultScreen', () => {
   });
 });
 
+describe('ResultScreen waiting variant (SPEC-012)', () => {
+  it.each(['light', 'dark'] as const)(
+    'shows the spinner, the text and a polite live status that exists from the first render (%s)',
+    async (scheme) => {
+      const { container } = renderWithProviders(
+        <ResultScreen
+          loading
+          title="Aguardando confirmação do pagamento"
+          description="Você não precisa recarregar a página."
+          liveStatus="Conferindo automaticamente a cada poucos segundos."
+        >
+          <button type="button">Ir para a busca</button>
+        </ResultScreen>,
+        { scheme },
+      );
+
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent('Conferindo automaticamente a cada poucos segundos.');
+      expect(status).toHaveAttribute('aria-live', 'polite');
+      expect(document.querySelector('.MuiCircularProgress-root')).toBeInTheDocument();
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
+
+  it('moves focus to the new title when the state changes, never on the first render', () => {
+    const { rerender } = renderWithProviders(
+      <ResultScreen loading title="Aguardando" focusTitle />,
+    );
+    const first = screen.getByRole('heading', { level: 1, name: 'Aguardando' });
+    expect(first).not.toHaveFocus();
+
+    rerender(<ResultScreen icon={InfoOutlined} title="Pagamento confirmado" focusTitle />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Pagamento confirmado' })).toHaveFocus();
+  });
+
+  it('leaves focus alone when focusTitle is off', () => {
+    const { rerender } = renderWithProviders(<ResultScreen title="Um" />);
+    rerender(<ResultScreen title="Dois" />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Dois' })).not.toHaveFocus();
+  });
+});
+
 describe('LoadingScreen', () => {
   it('exposes a visually hidden h1 next to the spinner and passes axe', async () => {
     const { container } = renderWithProviders(<LoadingScreen title="Autenticando…" />);

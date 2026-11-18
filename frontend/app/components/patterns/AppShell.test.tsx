@@ -66,13 +66,14 @@ type Role = 'free' | 'standard' | 'premium' | 'admin';
 const logout = vi.fn(async () => signOut());
 
 // TS-27: obviously fake people. `isAdmin` is the SPEC-002 capability, separate from the plan.
-function signIn(role: Role, isAdmin = false) {
+function signIn(role: Role, isAdmin = false, personas: string[] = ['searcher']) {
   env.setAuth({
-    user: { _id: 'user-1', name: 'Ana Teste', email: 'ana@exemplo.test', role, isAdmin },
+    user: { _id: 'user-1', name: 'Ana Teste', email: 'ana@exemplo.test', role, isAdmin, personas },
     loading: false,
     isAuthenticated: true,
     role,
     isAdmin,
+    personas,
     hasSubscription: role !== 'free',
     logout,
   });
@@ -350,6 +351,35 @@ describe('AppShell — navigation by role', () => {
     // Escritório has no destination yet, so its label never renders
     expect(groupLabels(nav)).toEqual(groups);
     expect(linkNames(nav)).toEqual(links);
+  });
+
+  it('SPEC-012: an office member sees Escritório with "Plano do escritório" current on /office/plan, and Assinatura opens it', () => {
+    setViewport(DESKTOP);
+    env.pathname = '/office/plan';
+    signIn('free', false, ['searcher', 'advisor']);
+    renderShell();
+
+    const nav = mainNav();
+    expect(groupLabels(nav)).toEqual(['Busca', 'Escritório', 'Conta']);
+    const current = within(nav).getByRole('link', { name: 'Plano do escritório' });
+    expect(current).toHaveAttribute('aria-current', 'page');
+    expect(current).toHaveAttribute('href', '/office/plan');
+    expect(within(nav).getByRole('link', { name: 'Assinatura' })).toHaveAttribute(
+      'href',
+      '/office/plan',
+    );
+  });
+
+  it('SPEC-012: everyone else keeps Assinatura on the catalogue', () => {
+    setViewport(DESKTOP);
+    signIn('free');
+    renderShell();
+
+    expect(within(mainNav()).getByRole('link', { name: 'Assinatura' })).toHaveAttribute(
+      'href',
+      '/plans',
+    );
+    expect(within(mainNav()).queryByRole('link', { name: 'Plano do escritório' })).toBeNull();
   });
 
   it.each([

@@ -46,6 +46,7 @@ import Logo from '@/app/components/patterns/Logo';
 import {
   currentItemId,
   formatCount,
+  subscriptionHref,
   visibleGroups,
   type CountSource,
   type NavGroup,
@@ -359,10 +360,12 @@ interface AccountMenuProps {
   name: string;
   email: string;
   plan: PlanKey;
+  /** Where "Assinatura" goes: the office's plan for a member, the catalogue otherwise. */
+  subscriptionHref: string;
   onSignOut: () => void;
 }
 
-function AccountMenu({ name, email, plan, onSignOut }: AccountMenuProps) {
+function AccountMenu({ name, email, plan, subscriptionHref, onSignOut }: AccountMenuProps) {
   const t = useTranslations('patterns.appShell');
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const id = useId();
@@ -434,7 +437,7 @@ function AccountMenu({ name, email, plan, onSignOut }: AccountMenuProps) {
             </ListItemIcon>
             <ListItemText>{t('items.profile')}</ListItemText>
           </MenuItem>
-          <MenuItem component={Link} href="/plans" onClick={close}>
+          <MenuItem component={Link} href={subscriptionHref} onClick={close}>
             <ListItemIcon>
               <WorkspacePremiumOutlined fontSize="small" />
             </ListItemIcon>
@@ -512,7 +515,8 @@ export default function AppShell({ children, banner }: AppShellProps) {
   // server markup never depends on these.
   const isMdUp = useMediaQuery(theme.breakpoints.up('md'));
   const isLgUp = useMediaQuery(theme.breakpoints.up('lg'));
-  const { user, loading, isAuthenticated, role, isAdmin, hasSubscription, logout } = useAuth();
+  const { user, loading, isAuthenticated, role, isAdmin, personas, hasSubscription, logout } =
+    useAuth();
   const counts = useCounts();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [railPinned, setRailPinned] = useState(false);
@@ -525,7 +529,8 @@ export default function AppShell({ children, banner }: AppShellProps) {
 
   // while auth loads, only the logo and theme show, so a member never sees "Entrar" flash
   const status = loading ? 'pending' : isAuthenticated && user ? 'member' : 'guest';
-  const groups = status === 'member' ? visibleGroups({ role, isAdmin }) : [];
+  const capabilities = { role, isAdmin, personas };
+  const groups = status === 'member' ? visibleGroups(capabilities) : [];
   const showReminders = groups.some((group) => group.items.some((item) => item.id === 'reminders'));
   const mode = isLgUp ? 'sidebar' : isMdUp ? 'rail' : 'drawer';
   const sidebarExpanded = mode === 'sidebar' || (mode === 'rail' && railPinned);
@@ -620,6 +625,7 @@ export default function AppShell({ children, banner }: AppShellProps) {
                 name={user.name}
                 email={user.email}
                 plan={planOf(role, hasSubscription)}
+                subscriptionHref={subscriptionHref(capabilities)}
                 onSignOut={signOut}
               />
             </>

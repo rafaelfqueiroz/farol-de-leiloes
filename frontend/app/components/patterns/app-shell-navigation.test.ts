@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import messages from '@/messages/pt-BR.json';
-import { NAV_GROUPS, currentItemId, formatCount, visibleGroups } from './app-shell-navigation';
+import {
+  NAV_GROUPS,
+  currentItemId,
+  formatCount,
+  isOfficeMember,
+  subscriptionHref,
+  visibleGroups,
+} from './app-shell-navigation';
 
 const query = (search = '') => new URLSearchParams(search);
 const as = (role: string, isAdmin = false) => ({ role, isAdmin });
@@ -76,6 +83,38 @@ describe('app-shell navigation config', () => {
     expect(itemIds('premium', true)).toEqual([...itemIds('premium'), 'coupons']);
   });
 
+  it('SPEC-012: an office member (the advisor persona) gets the Escritório group with the office plan, and Assinatura opens it', () => {
+    const member = { role: 'free', isAdmin: false, personas: ['searcher', 'advisor'] };
+    const groups = visibleGroups(member);
+
+    expect(groups.map((group) => group.id)).toEqual(['search', 'office', 'account']);
+    expect(groups.find((group) => group.id === 'office')?.items.map((item) => item.href)).toEqual([
+      '/office/plan',
+    ]);
+    const subscription = groups
+      .flatMap((group) => group.items)
+      .find((i) => i.id === 'subscription');
+    expect(subscription?.href).toBe('/office/plan');
+    expect(subscriptionHref(member)).toBe('/office/plan');
+    expect(isOfficeMember(member)).toBe(true);
+  });
+
+  it('SPEC-012: anyone else keeps Assinatura on the catalogue and never sees Escritório', () => {
+    for (const other of [
+      { role: 'premium', isAdmin: false },
+      { role: 'free', isAdmin: true, personas: ['searcher', 'investor'] },
+    ]) {
+      expect(visibleGroups(other).map((group) => group.id)).not.toContain('office');
+      expect(subscriptionHref(other)).toBe('/plans');
+      expect(
+        visibleGroups(other)
+          .flatMap((group) => group.items)
+          .find((item) => item.id === 'subscription')?.href,
+      ).toBe('/plans');
+      expect(isOfficeMember(other)).toBe(false);
+    }
+  });
+
   it.each([
     ['/search', '', 'search'],
     ['/search', 'view=favorites', 'favorites'],
@@ -86,12 +125,17 @@ describe('app-shell navigation config', () => {
     ['/admin/coupons', '', 'coupons'],
     ['/admin/coupons/abc', '', 'coupons'],
     ['/plans', '', 'subscription'],
+    ['/office/plan', '', 'officePlan'],
     ['/searching', '', null],
     ['/', '', null],
   ])('matches %s?%s to %s', (pathname, search, expected) => {
-    expect(currentItemId(visibleGroups(as('premium', true)), pathname, query(search))).toBe(
-      expected,
-    );
+    expect(
+      currentItemId(
+        visibleGroups({ ...as('premium', true), personas: ['advisor'] }),
+        pathname,
+        query(search),
+      ),
+    ).toBe(expected);
   });
 
   it('does not mark a destination the role cannot see', () => {

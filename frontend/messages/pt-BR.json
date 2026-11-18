@@ -103,7 +103,8 @@
         "profile": "Perfil",
         "subscription": "Assinatura",
         "support": "Suporte",
-        "coupons": "Cupons"
+        "coupons": "Cupons",
+        "officePlan": "Plano do escritório"
       }
     }
   },
@@ -384,15 +385,41 @@
     }
   },
   "plansResult": {
+    "success": {
+      "waiting": {
+        "title": "Aguardando confirmação do pagamento",
+        "description": "Recebemos o retorno do pagamento e estamos esperando a confirmação do provedor. Seu plano é ativado assim que ela chegar. Você não precisa recarregar a página.",
+        "live": "Conferindo automaticamente a cada poucos segundos. Isso costuma levar menos de um minuto.",
+        "goToSearch": "Ir para a busca"
+      },
+      "confirmed": {
+        "title": "Pagamento confirmado",
+        "description": "O plano {plan} do seu escritório está ativo. Já é possível ter até {count, plural, one {# jornada em andamento} other {# jornadas em andamento}} ao mesmo tempo.",
+        "action": "Ver plano do escritório"
+      },
+      "slow": {
+        "title": "A confirmação está demorando mais que o normal",
+        "description": "Ainda não recebemos a confirmação do pagamento. Se o valor foi cobrado, o plano é ativado assim que ela chegar, sem nenhuma ação sua. Você pode sair desta página.",
+        "retry": "Verificar de novo",
+        "back": "Voltar aos planos",
+        "support": "Falar com o suporte"
+      },
+      "failed": {
+        "title": "Não foi possível verificar o pagamento",
+        "description": "{message} Se o pagamento foi concluído, o plano é ativado quando a confirmação chegar.",
+        "code": "Código: {code}",
+        "retry": "Tentar de novo"
+      },
+      "missingRef": {
+        "title": "Não encontramos este pagamento",
+        "description": "O endereço desta página está incompleto. Se você concluiu um pagamento, o plano é ativado assim que o provedor confirmar, sem nenhuma ação sua.",
+        "action": "Voltar aos planos"
+      }
+    },
     "cancel": {
       "title": "Pagamento cancelado",
-      "description": "O pagamento foi cancelado. Você pode tentar novamente quando quiser.",
+      "description": "Você saiu do pagamento antes de concluir. Nenhuma cobrança foi feita e nenhum plano foi ativado. Você pode tentar de novo quando quiser.",
       "back": "Voltar aos planos"
-    },
-    "success": {
-      "title": "Assinatura realizada com sucesso!",
-      "description": "Você agora tem acesso a todos os recursos do plano Standard, incluindo a busca por IA. Você será redirecionado automaticamente.",
-      "goToSearch": "Ir para a busca"
     }
   },
   "notFound": {
@@ -664,23 +691,83 @@
   },
   "plans": {
     "title": "Planos",
-    "subtitle": "Escolha o plano ideal para suas necessidades",
-    "features": {
-      "includesFree": "Tudo do plano Gratuito",
-      "includesStandard": "Tudo do plano Standard"
+    "subtitle": {
+      "public": "Escolha o plano do seu escritório de assessoria. Os valores valem para novas assinaturas.",
+      "member": "O plano do seu escritório e as opções para mudar."
     },
-    "coupon": {
-      "placeholder": "Cupom de desconto",
-      "apply": "Aplicar",
-      "applied": "Cupom aplicado! Desconto de <discount></discount>"
+    "refundNotice": "Na primeira assinatura do escritório, cancele em até {days, plural, one {# dia} other {# dias}} após a cobrança e receba o reembolso integral.",
+    "footnote": "Cobrança recorrente, renovada automaticamente até o cancelamento. O pagamento é feito na página segura da Stripe: o Farol dos Leilões não recebe nem guarda dados do cartão.",
+    "list": {
+      "label": "Planos disponíveis"
     },
-    "currentPlan": "Plano Atual",
-    "subscribe": "Assinar {name}",
-    "cancelSubscription": "Cancelar assinatura",
-    "cancelSuccess": "Assinatura cancelada com sucesso",
-    "cancelDialog": {
-      "body": "Tem certeza que deseja cancelar sua assinatura? Você perderá acesso aos recursos do plano Standard.",
-      "confirm": "Confirmar cancelamento"
+    "card": {
+      "perInterval": "/{interval, select, year {ano} other {mês}}",
+      "perIntervalSr": "por {interval, select, year {ano} other {mês}}",
+      "limit": "{count, plural, one {<strong>#</strong> jornada simultânea} other {<strong>#</strong> jornadas simultâneas}}",
+      "current": "Plano atual"
+    },
+    "cta": {
+      "signIn": "Entrar para assinar",
+      "subscribe": "Assinar",
+      "subscribeAgain": "Assinar novamente",
+      "change": "Mudar para este plano",
+      "viewOffice": "Ver plano do escritório",
+      "opening": "Abrindo pagamento…"
+    },
+    "hint": {
+      "currentPlan": "Este é o plano do seu escritório.",
+      "upgrade": "Vale a partir da confirmação do pagamento proporcional.",
+      "downgrade": "Vale a partir do próximo período.",
+      "downgradeOn": "Vale a partir do próximo período (<date></date>).",
+      "scheduled": "Mudança já agendada para este plano.",
+      "stays": "Mudar para este plano desfaz a mudança agendada."
+    },
+    "summary": {
+      "label": "Plano do escritório",
+      "journeys": "{count, plural, one {# jornada simultânea} other {# jornadas simultâneas}}",
+      "withdrawn": "Este plano não está mais à venda. O escritório mantém o preço de <price></price> {interval, select, year {por ano} other {por mês}} e o limite de {count, plural, one {# jornada} other {# jornadas}} até mudar ou cancelar."
+    },
+    "status": {
+      "active": "Ativo",
+      "pastDue": "Pagamento pendente",
+      "canceling": "Cancelamento agendado",
+      "lapsed": "Encerrado"
+    },
+    "lapsed": {
+      "title": "O plano do escritório foi encerrado em <date></date>",
+      "text": "Assine de novo para voltar a iniciar jornadas. Nada foi apagado."
+    },
+    "checkoutError": {
+      "title": "Não foi possível iniciar o pagamento",
+      "failed": "Tente novamente em instantes. Nenhuma cobrança foi feita."
+    },
+    "loading": "Carregando planos…",
+    "empty": {
+      "title": "Nenhum plano disponível no momento",
+      "description": "Estamos atualizando os planos. Volte em breve.",
+      "action": "Buscar imóveis"
+    },
+    "error": {
+      "title": "Não foi possível carregar os planos"
+    },
+    "change": {
+      "title": "Mudar de plano",
+      "current": "Plano atual: {name} · {count, plural, one {# jornada simultânea} other {# jornadas simultâneas}}.",
+      "legend": "Planos disponíveis",
+      "optionPrice": "<price></price> {interval, select, year {/ano} other {/mês}}",
+      "limit": "{count, plural, one {# jornada simultânea} other {# jornadas simultâneas}}",
+      "currentBadge": "Plano atual",
+      "confirm": "Confirmar mudança",
+      "confirming": "Mudando de plano…",
+      "back": "Voltar",
+      "effectUpgrade": "Vale a partir da confirmação do pagamento. Cobramos agora <due></due>{credit, select, none {} other { ({charge} do novo plano menos {credit} de crédito pelo restante do plano atual)}}. Próxima cobrança em <date></date>. Valor calculado pela Stripe antes do pagamento.",
+      "effectUpgradeNoDate": "Vale a partir da confirmação do pagamento. Cobramos agora <due></due>. Valor calculado pela Stripe antes do pagamento.",
+      "effectDowngrade": "Vale a partir do próximo período (<date></date>). Até lá, o plano atual continua.",
+      "effectDowngradeNoDate": "Vale a partir do próximo período. Até lá, o plano atual continua.",
+      "effectRelease": "A mudança agendada é desfeita e o plano atual continua.",
+      "calculating": "Calculando o valor…",
+      "belowCount": "Seu escritório tem {inProgress, plural, one {# jornada em andamento} other {# jornadas em andamento}}. Elas continuam normalmente, mas novas jornadas só poderão ser iniciadas quando houver menos de {limit, plural, one {# em andamento} other {# em andamento}}.",
+      "previewFailed": "Não foi possível calcular o valor da mudança."
     }
   },
   "profile": {
@@ -780,5 +867,175 @@
       "sent": "Enviamos um novo link para {email}."
     },
     "googleSignIn": "Entrar com Google"
+  },
+  "officePlan": {
+    "title": "Plano do escritório",
+    "actions": {
+      "change": "Mudar de plano",
+      "payment": "Atualizar forma de pagamento",
+      "paymentOpening": "Abrindo o portal…",
+      "resubscribe": "Assinar novamente",
+      "viewPlan": "Ver plano do escritório",
+      "undoCancel": "Desfazer cancelamento",
+      "undoCancelBusy": "Desfazendo…",
+      "undoChange": "Desfazer mudança",
+      "undoChangeBusy": "Desfazendo…",
+      "retry": "Tentar de novo"
+    },
+    "current": {
+      "label": "Plano atual",
+      "lastLabel": "Último plano",
+      "price": "{interval, select, year {<price></price> por ano} other {<price></price> por mês}} · {count, plural, one {# jornada simultânea} other {# jornadas simultâneas}}",
+      "lastPlan": "{name} · limite atual de 0 jornadas",
+      "datesNote": "Datas no horário de Brasília."
+    },
+    "status": {
+      "active": "Ativo",
+      "pastDue": "Pagamento pendente",
+      "canceling": "Cancelamento agendado",
+      "lapsed": "Encerrado"
+    },
+    "usage": {
+      "label": "Jornadas em andamento",
+      "text": "{inProgress} de {limit} {limit, plural, one {jornada} other {jornadas}} em andamento",
+      "free": "{free, plural, =0 {Sem vagas livres} one {# vaga livre} other {# vagas livres}}",
+      "lapsedCount": "{count, plural, one {<b>#</b> jornada em andamento} other {<b>#</b> jornadas em andamento}}",
+      "lapsedGrace": "Elas continuam, mas novas jornadas não podem ser iniciadas.",
+      "lapsedReadOnly": "Visíveis para leitura. Não podem ser alteradas até um novo pagamento."
+    },
+    "facts": {
+      "nextCharge": "Próxima cobrança",
+      "nextAmount": "Valor da próxima cobrança",
+      "since": "Assinante desde",
+      "period": "Período atual",
+      "periodRange": "<start></start> a <end></end>",
+      "retryCharge": "Próxima tentativa de cobrança",
+      "pendingAmount": "Valor pendente",
+      "activeUntil": "Plano ativo até",
+      "noCharge": "Nenhuma",
+      "endedAt": "Plano encerrado em",
+      "readOnlyFrom": "Somente leitura a partir de",
+      "readOnlySince": "Somente leitura desde"
+    },
+    "limitReached": {
+      "text": "Limite de jornadas atingido: {inProgress} de {limit}. Encerre uma jornada ou mude de plano."
+    },
+    "scheduled": {
+      "title": "Mudança para o plano {name} em <date></date>",
+      "text": "Até lá, o plano {current} e o limite de {limit, plural, one {# jornada} other {# jornadas}} continuam valendo.",
+      "belowCount": "Seu escritório tem {inProgress, plural, one {# jornada em andamento} other {# jornadas em andamento}}: elas seguem normalmente, mas novas jornadas só poderão ser iniciadas quando houver menos de {next} em andamento."
+    },
+    "upgrading": {
+      "title": "Aguardando confirmação do pagamento do plano {name}",
+      "text": "O novo limite de {limit, plural, one {# jornada} other {# jornadas}} vale a partir da confirmação do pagamento proporcional. Esta página atualiza sozinha.",
+      "slow": "A confirmação está demorando. Se o valor foi cobrado, o novo plano é ativado assim que ela chegar. Recarregue a página mais tarde para conferir."
+    },
+    "pastDue": {
+      "title": "Não conseguimos cobrar a renovação de <date></date>",
+      "text": "O plano continua ativo enquanto o provedor tenta de novo. Atualize a forma de pagamento para evitar o encerramento do plano. Todos os membros receberam um e-mail com este aviso."
+    },
+    "canceling": {
+      "title": "Cancelamento agendado",
+      "text": "O plano continua ativo até <date></date> e não será renovado. Você pode desfazer o cancelamento até essa data.",
+      "textExpired": "O plano continua ativo até <date></date> e não será renovado."
+    },
+    "grace": {
+      "title": "Plano encerrado em <ended></ended>. Escritório fica somente leitura em <readonly></readonly>.",
+      "text": "Até lá, as jornadas em andamento e os cadastros continuam funcionando, mas não é possível iniciar novas jornadas. Assinar de novo restaura tudo na hora."
+    },
+    "readOnly": {
+      "title": "Escritório somente leitura. Assine novamente para voltar a editar.",
+      "text": "O plano foi encerrado em <ended></ended> e a carência de {days, plural, one {# dia} other {# dias}} terminou em <readonly></readonly>. Você e os investidores continuam vendo todas as jornadas e documentos. Nada foi apagado."
+    },
+    "history": {
+      "title": "Histórico de cobranças",
+      "columns": {
+        "date": "Data",
+        "description": "Descrição",
+        "amount": "Valor",
+        "status": "Status",
+        "invoice": "Fatura"
+      },
+      "subscription": "Assinatura · <start></start> a <end></end>",
+      "subscriptionNoPeriod": "Assinatura",
+      "proration": "Ajuste proporcional · mudança de plano",
+      "other": "Cobrança",
+      "paid": "Pago",
+      "open": "Em aberto",
+      "failed": "Falhou",
+      "void": "Cancelada",
+      "draft": "Rascunho",
+      "viewInvoice": "Ver fatura",
+      "viewInvoiceOf": "Ver fatura de {date}",
+      "more": "Ver mais cobranças",
+      "moreBusy": "Carregando…",
+      "empty": "Nenhuma cobrança ainda.",
+      "error": "Não foi possível carregar o histórico de cobranças."
+    },
+    "cancel": {
+      "title": "Cancelar assinatura",
+      "text": "O plano continua valendo até <date></date> e não é renovado. Você pode desfazer o cancelamento até essa data.",
+      "textNoDate": "O plano continua valendo até o fim do período pago e não é renovado.",
+      "refundText": "Você está dentro do prazo de {days, plural, one {# dia} other {# dias}} da primeira assinatura: cancelar agora devolve o valor integral pago e encerra o plano na hora.",
+      "action": "Cancelar assinatura",
+      "dialog": {
+        "title": "Cancelar a assinatura do plano {name}?",
+        "description": "A assinatura deixa de ser renovada. Você pode desfazer o cancelamento até <date></date>.",
+        "descriptionNoDate": "A assinatura deixa de ser renovada. Você pode desfazer o cancelamento até o fim do período pago.",
+        "stays": "O plano continua valendo até <date></date>, com o limite de {limit, plural, one {# jornada} other {# jornadas}}.",
+        "staysNoDate": "O plano continua valendo até o fim do período pago, com o limite de {limit, plural, one {# jornada} other {# jornadas}}.",
+        "after": "Depois disso o escritório não pode iniciar novas jornadas. Por {days, plural, one {# dia} other {# dias}} o restante continua funcionando; passado esse prazo, o escritório fica somente leitura.",
+        "kept": "Nada é apagado e os investidores continuam vendo suas jornadas.",
+        "noRefund": "Não há reembolso do período já pago.",
+        "confirm": "Cancelar assinatura",
+        "confirming": "Cancelando…",
+        "keep": "Manter plano"
+      },
+      "refund": {
+        "title": "Cancelar e receber o reembolso integral?",
+        "description": "Você assinou em <date></date>, dentro do prazo de {days, plural, one {# dia} other {# dias}}. Ao cancelar agora, devolvemos o valor integral que você pagou e o plano termina imediatamente. <strong>Isso não pode ser desfeito.</strong>",
+        "now": "O escritório deixa de poder iniciar novas jornadas a partir de agora.",
+        "grace": "Por {days, plural, one {# dia} other {# dias}}, as jornadas em andamento e os cadastros continuam funcionando. Depois, o escritório fica somente leitura.",
+        "confirm": "Cancelar e receber reembolso",
+        "confirming": "Cancelando…"
+      }
+    },
+    "empty": {
+      "title": "Você ainda não tem um escritório",
+      "description": "O plano do escritório aparece aqui depois da primeira assinatura. Escolha um plano para criar o seu escritório e acompanhar as jornadas dos investidores.",
+      "action": "Ver planos"
+    },
+    "loading": "Carregando o plano do escritório…",
+    "error": {
+      "title": "Não foi possível carregar o plano do escritório"
+    },
+    "toast": {
+      "changeScheduled": "Mudança para o plano {name} agendada",
+      "changeUpgrade": "Mudança para o plano {name} solicitada",
+      "changeUndone": "Mudança agendada desfeita",
+      "cancelUndone": "Cancelamento desfeito",
+      "canceled": "Assinatura cancelada",
+      "canceledRefund": "Assinatura cancelada e reembolso solicitado"
+    },
+    "actionError": {
+      "title": "Não foi possível concluir a ação"
+    },
+    "banner": {
+      "pastDue": {
+        "title": "O pagamento do plano do escritório falhou",
+        "text": "O plano continua valendo enquanto tentamos de novo. Atualize a forma de pagamento para evitar o encerramento.",
+        "action": "Atualizar forma de pagamento"
+      },
+      "grace": {
+        "title": "Plano encerrado em <ended></ended>",
+        "text": "O escritório fica somente leitura em <readonly></readonly>. Assine de novo para voltar a iniciar jornadas.",
+        "action": "Ver plano do escritório"
+      },
+      "readOnly": {
+        "title": "Escritório somente leitura",
+        "text": "Assine de novo para voltar a editar. Nada foi apagado e os investidores continuam vendo suas jornadas.",
+        "action": "Ver plano do escritório"
+      }
+    }
   }
 }

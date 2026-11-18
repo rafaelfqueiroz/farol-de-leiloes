@@ -7,8 +7,9 @@ import CardContent from '@mui/material/CardContent';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import SyncOutlined from '@mui/icons-material/SyncOutlined';
 import { visuallyHidden } from '@mui/utils';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import Logo from './Logo';
 import PageHeader from './PageHeader';
 import PageShell from './PageShell';
@@ -65,6 +66,17 @@ export interface ResultScreenProps {
   /** The page's only <h1> in this state. */
   title: string;
   description?: ReactNode;
+  /**
+   * The "waiting" variant (SPEC-012 frame r1): a live region under the text that says the page is
+   * checking on its own. It is a polite `role="status"`, present from the first render so changes
+   * to its text are announced.
+   */
+  liveStatus?: string;
+  /**
+   * Moves focus to the title when it changes (not on the first render): the states of one route
+   * replace each other, and a keyboard or screen-reader user is told which one they are in.
+   */
+  focusTitle?: boolean;
   /** Alerts and the next step (DS-19). */
   children?: ReactNode;
 }
@@ -76,8 +88,20 @@ export function ResultScreen({
   loading = false,
   title,
   description,
+  liveStatus,
+  focusTitle = false,
   children,
 }: ResultScreenProps) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (focusTitle) heading.current?.focus();
+  }, [title, focusTitle]);
+
   return (
     <Centered>
       <Card>
@@ -100,13 +124,42 @@ export function ResultScreen({
                 <Icon aria-hidden fontSize="medium" />
               </Box>
             ) : null}
-            <Typography variant="h1" component="h1" sx={{ textWrap: 'balance' }}>
+            <Typography
+              ref={heading}
+              variant="h1"
+              component="h1"
+              tabIndex={focusTitle ? -1 : undefined}
+              sx={{ textWrap: 'balance' }}
+            >
               {title}
             </Typography>
             {description ? (
               <Typography variant="body1" sx={{ color: 'text.secondary' }}>
                 {description}
               </Typography>
+            ) : null}
+            {liveStatus ? (
+              <Box
+                role="status"
+                aria-live="polite"
+                sx={{
+                  display: 'flex',
+                  gap: 1.5,
+                  alignItems: 'flex-start',
+                  textAlign: 'left',
+                  p: 1.5,
+                  borderRadius: 1,
+                  bgcolor: 'background.muted',
+                  color: 'text.primary',
+                }}
+              >
+                <SyncOutlined
+                  aria-hidden
+                  fontSize="small"
+                  sx={{ color: 'text.secondary', mt: 0.25 }}
+                />
+                <Typography variant="body2">{liveStatus}</Typography>
+              </Box>
             ) : null}
             {children ? (
               <Stack spacing={2} sx={{ width: '100%' }}>

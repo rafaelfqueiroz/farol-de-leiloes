@@ -229,6 +229,17 @@ export const theme = createTheme({
         }),
       },
     },
+    MuiLinearProgress: {
+      // DS-18: the usage bar (ProgressBar): a quiet track, a pill-shaped bar
+      styleOverrides: {
+        root: ({ theme }) => ({
+          height: theme.spacing(1),
+          borderRadius: theme.shape.pillRadius,
+          backgroundColor: theme.vars.palette.background.muted,
+        }),
+        bar: ({ theme }) => ({ borderRadius: theme.shape.pillRadius }),
+      },
+    },
     MuiPopover: {
       styleOverrides: {
         paper: ({ theme }) => ({
