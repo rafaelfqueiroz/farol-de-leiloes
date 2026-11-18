@@ -4,11 +4,14 @@
 // the service raises answered with the catalogue's status.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import request from 'supertest';
 import { AccessContext } from '../access/access-context.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { Decimal } from '../common/money/money.js';
 import { createHttpApp, TEST_USER } from '../../test/support/http-app.js';
+import { testEnv } from '../../test/support/test-env.js';
+import { BillingThrottlerModule } from './billing-throttler.module.js';
 import { CheckoutStatusController } from './checkout-status.controller.js';
 import { OfficeSubscriptionController } from './office-subscription.controller.js';
 import {
@@ -69,6 +72,10 @@ describe('OfficeSubscriptionController over HTTP', () => {
 
   beforeAll(async () => {
     const metadata = {
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: () => testEnv() }),
+        BillingThrottlerModule,
+      ],
       controllers: [OfficeSubscriptionController, CheckoutStatusController],
       providers: [{ provide: SubscriptionsBillingService, useValue: billing }],
     };
@@ -271,6 +278,8 @@ describe('OfficeSubscriptionController over HTTP', () => {
     ['CHECKOUT_IN_PROGRESS', 409],
     ['OFFICE_CREATION_UNAVAILABLE', 503],
     ['BILLING_PORTAL_FAILED', 502],
+    ['CHANGE_PLAN_FAILED', 502],
+    ['CANCEL_IN_PROGRESS', 409],
     ['CHECKOUT_SESSION_FAILED', 502],
     ['INVALID_PLAN', 400],
     ['COUPON_INVALID', 400],

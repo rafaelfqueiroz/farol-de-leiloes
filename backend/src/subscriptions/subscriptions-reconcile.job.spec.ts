@@ -15,10 +15,18 @@ import { FakePaymentGateway } from '../../test/fakes/fake-payment-gateway.js';
 import { FakeSubscriptionsRepository } from '../../test/fakes/fake-subscriptions-repository.js';
 import { InMemoryPlans } from '../../test/fakes/in-memory-plans.js';
 import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy.js';
-import { testBusinessConfig } from '../../test/support/test-env.js';
+import { testBusinessConfig, testConfigService } from '../../test/support/test-env.js';
+import { FakeCoupons } from '../../test/fakes/fake-coupons.js';
+import { FakeOwnerCounters } from '../../test/fakes/fake-owner-counters.js';
+import type { OwnerCounterRepository } from '../access/owner-counter.repository.js';
+import type { CouponsService } from '../coupons/coupons.service.js';
+import { JourneySlotsService } from './journey-slots.service.js';
+import { SubscriptionsBillingService } from './subscriptions-billing.service.js';
 import type { PaymentEventsRepository } from './payment-events.repository.js';
 import {
   RECONCILE_BATCH_SIZE,
+  RECONCILE_LOCK_ID,
+  RECONCILE_LOCK_MS,
   SUBSCRIPTIONS_RECONCILE_JOB,
   SubscriptionsReconcileJob,
 } from './subscriptions-reconcile.job.js';
@@ -47,20 +55,40 @@ function build(enabled = true) {
   const gateway = new FakePaymentGateway();
   const subscriptions = new FakeSubscriptionsRepository(() => clock.now());
   const jobs = new FakeJobs();
+  const provisioner = new FakeOfficeProvisioner();
+  const ledger = new FakePaymentEventsRepository();
   const sync = new SubscriptionsService(
     subscriptions as unknown as SubscriptionsRepository,
-    new FakePaymentEventsRepository() as unknown as PaymentEventsRepository,
+    ledger as unknown as PaymentEventsRepository,
     new InMemoryPlans([PLAN]) as unknown as PlansService,
     gateway,
     clock,
-    new FakeOfficeProvisioner(),
+    provisioner,
     new FakePaymentFailedNotifier(),
     testBusinessConfig(),
   );
   const config = { subscriptionsReconcile: { enabled } } as unknown as SchedulerConfig;
+  const plans = new InMemoryPlans([PLAN]);
+  const billing = new SubscriptionsBillingService(
+    subscriptions as unknown as SubscriptionsRepository,
+    sync,
+    plans as unknown as PlansService,
+    new FakeCoupons() as unknown as CouponsService,
+    new JourneySlotsService(
+      subscriptions as unknown as SubscriptionsRepository,
+      new FakeOwnerCounters() as unknown as OwnerCounterRepository,
+    ),
+    gateway,
+    clock,
+    provisioner,
+    testBusinessConfig(),
+    testConfigService(),
+  );
   const job = new SubscriptionsReconcileJob(
     subscriptions as unknown as SubscriptionsRepository,
     sync,
+    billing,
+    ledger as unknown as PaymentEventsRepository,
     jobs as unknown as JobExecutionService,
     clock,
     config,
@@ -108,7 +136,7 @@ function build(enabled = true) {
     );
     return created.id;
   }
-  return { clock, gateway, subscriptions, jobs, job, known };
+  return { clock, gateway, subscriptions, jobs, job, known, ledger, provisioner };
 }
 
 describe('SubscriptionsReconcileJob', () => {
@@ -118,7 +146,14 @@ describe('SubscriptionsReconcileJob', () => {
 
     const outcome = await t.job.run();
 
-    expect(outcome).toEqual({ reread: 1, healed: 1, failed: 0, purged: 0 });
+    expect(outcome).toEqual({
+      reread: 1,
+      healed: 1,
+      failed: 0,
+      purged: 0,
+      refundsFinished: 0,
+      recovered: 0,
+    });
     expect(t.subscriptions.get(id)).toMatchObject({ status: 'LAPSED', lapsedAt: NOW });
   });
 
@@ -181,7 +216,7 @@ describe('SubscriptionsReconcileJob', () => {
     expect(t.gateway.retrievals).toEqual([]);
   });
 
-  it('acceptance: removes PENDING checkouts with no provider subscription older than 3 days, and only those', async () => {
+  it('acceptance: removes checkouts whose creation never finished (no session id) older than 3 days, and only those', async () => {
     const t = build();
     const create = (key: string) =>
       t.subscriptions.createPending({
@@ -227,7 +262,14 @@ describe('SubscriptionsReconcileJob', () => {
 
     const outcome = await t.job.run();
 
-    expect(outcome).toEqual({ reread: 1, healed: 1, failed: 1, purged: 0 });
+    expect(outcome).toEqual({
+      reread: 1,
+      healed: 1,
+      failed: 1,
+      purged: 0,
+      refundsFinished: 0,
+      recovered: 0,
+    });
     expect(t.subscriptions.get(lost).lastSyncedAt).not.toEqual(NOW);
     expect(t.jobs.failures).toEqual([
       { job: SUBSCRIPTIONS_RECONCILE_JOB, mode: RunMode.AUTO, code: 'PARTIAL_FAILURE' },
@@ -260,7 +302,14 @@ describe('SubscriptionsReconcileJob', () => {
     await t.known({ providerStatus: 'canceled' });
     await t.job.run();
 
-    expect(await t.job.run()).toEqual({ reread: 0, healed: 0, failed: 0, purged: 0 });
+    expect(await t.job.run()).toEqual({
+      reread: 0,
+      healed: 0,
+      failed: 0,
+      purged: 0,
+      refundsFinished: 0,
+      recovered: 0,
+    });
   });
 
   it('AR-04: with SUBSCRIPTIONS_RECONCILE_ENABLED off the cron does nothing at all', async () => {
@@ -293,5 +342,223 @@ describe('SubscriptionsReconcileJob', () => {
     expect(logged).toContain('1 re-read, 1 healed, 0 failed');
     expectNoneLogged(logged, ['cus_test_1', '@']);
     vi.restoreAllMocks();
+  });
+
+  describe('F3: a checkout the buyer paid while no event arrived', () => {
+    /** A first checkout (no office), as the billing service leaves it: PENDING with a session. */
+    async function checkoutWithSession(t: ReturnType<typeof build>, session = 'cs_x') {
+      const created = await t.subscriptions.createPending({
+        buyerUserId: BUYER,
+        planId: PLAN.id,
+        planCode: PLAN.code,
+        activeJourneyLimit: 5,
+        checkoutSessionId: session,
+        openCheckoutKey: `buyer:${BUYER}`,
+      });
+      return created.id;
+    }
+
+    it('is recovered through the normal sync (the office is created) and NEVER purged', async () => {
+      const t = build();
+      const ref = await checkoutWithSession(t);
+      t.gateway.setSubscription(
+        aProviderSubscription({ id: 'sub_paid', subscriptionRef: ref, priceId: 'price_5' }),
+      );
+      t.gateway.checkoutSessions.set('cs_x', { state: 'complete', subscriptionId: 'sub_paid' });
+      t.clock.advance(4 * DAY); // older than every purge cutoff
+
+      const outcome = await t.job.run();
+
+      expect(outcome).toMatchObject({ recovered: 1, purged: 0, failed: 0 });
+      expect(t.subscriptions.get(ref)).toMatchObject({
+        status: 'ACTIVE',
+        stripeSubscriptionId: 'sub_paid',
+      });
+      expect(t.subscriptions.get(ref).officeId).not.toBeNull();
+    });
+
+    it('a record younger than 10 minutes is left to its webhook', async () => {
+      const t = build();
+      await checkoutWithSession(t);
+      t.gateway.failSessionLookup = true; // would fail the run if it were asked
+
+      const outcome = await t.job.run();
+
+      expect(outcome).toMatchObject({ recovered: 0, failed: 0 });
+    });
+
+    it('an expired session is removed; an open young one stays', async () => {
+      const t = build();
+      const expired = await checkoutWithSession(t, 'cs_expired');
+      t.clock.advance(11 * 60 * 1000);
+      t.gateway.checkoutSessions.set('cs_expired', { state: 'expired', subscriptionId: null });
+
+      const outcome = await t.job.run();
+      expect(outcome).toMatchObject({ purged: 1 });
+      expect(t.subscriptions.rows.has(expired)).toBe(false);
+
+      const open = await checkoutWithSession(t, 'cs_open');
+      t.clock.advance(11 * 60 * 1000);
+      t.gateway.checkoutSessions.set('cs_open', { state: 'open', subscriptionId: null });
+      await t.job.run();
+      expect(t.subscriptions.rows.has(open)).toBe(true);
+    });
+
+    it('a provider that cannot say keeps the record, never purges it unconfirmed, and the run is recorded as failed', async () => {
+      const t = build();
+      const ref = await checkoutWithSession(t);
+      t.clock.advance(4 * DAY);
+      t.gateway.failSessionLookup = true;
+
+      const outcome = await t.job.run();
+
+      expect(outcome).toMatchObject({ failed: 1, purged: 0 });
+      expect(t.subscriptions.rows.has(ref)).toBe(true);
+      expect(t.jobs.failures[0]?.code).toBe('PARTIAL_FAILURE');
+    });
+  });
+
+  describe('F2: a refund left half done', () => {
+    async function refunded(t: ReturnType<typeof build>, over: { claim?: boolean } = {}) {
+      const ref = await t.known({ syncedHoursAgo: 1 });
+      const row = t.subscriptions.rows.get(ref);
+      if (!row) throw new Error('no row');
+      row.refundedAt = NOW;
+      if (over.claim) row.refundClaimedAt = NOW;
+      return ref;
+    }
+
+    it('refunded but still active: the job ends it at the provider and the record follows (LAPSED, grace starts)', async () => {
+      const t = build();
+      const ref = await refunded(t);
+
+      const outcome = await t.job.run();
+
+      expect(outcome).toMatchObject({ refundsFinished: 1, failed: 0 });
+      expect(t.gateway.cancelledSubscriptions).toEqual(['sub_1']);
+      expect(t.subscriptions.get(ref)).toMatchObject({ status: 'LAPSED', lapsedAt: NOW });
+      expect(t.gateway.refundRequests).toEqual([]);
+    });
+
+    it('a refund requested whose claim died is completed by the job, once', async () => {
+      const t = build();
+      const ref = await t.known({ syncedHoursAgo: 1 });
+      const row = t.subscriptions.rows.get(ref);
+      if (!row) throw new Error('no row');
+      row.refundRequestedAt = NOW;
+      row.refundClaimedAt = new Date(NOW.getTime() - 10 * 60 * 1000); // stale
+
+      const outcome = await t.job.run();
+
+      expect(outcome).toMatchObject({ refundsFinished: 1 });
+      expect(t.gateway.refunds.map((refund) => refund.invoiceId)).toEqual(['in_create_sub_1']);
+      expect(t.subscriptions.get(ref).status).toBe('LAPSED');
+    });
+
+    it('a LIVE claim is another member’s cancel in progress: skipped, not a failure', async () => {
+      const t = build();
+      const ref = await t.known({ syncedHoursAgo: 1 });
+      const row = t.subscriptions.rows.get(ref);
+      if (!row) throw new Error('no row');
+      row.refundRequestedAt = NOW;
+      row.refundClaimedAt = NOW;
+
+      const outcome = await t.job.run();
+
+      expect(outcome).toMatchObject({ refundsFinished: 0, failed: 0 });
+      expect(t.gateway.cancelledSubscriptions).toEqual([]);
+    });
+
+    it('a refund the provider will not finish is a failure of the run, and the next run tries again', async () => {
+      const t = build();
+      await refunded(t);
+      const cancel = t.gateway.cancelSubscription.bind(t.gateway);
+      t.gateway.cancelSubscription = () => Promise.reject(new Error('provider unreachable'));
+
+      expect(await t.job.run()).toMatchObject({ refundsFinished: 0, failed: 1 });
+      t.gateway.cancelSubscription = cancel;
+      expect(await t.job.run()).toMatchObject({ refundsFinished: 1, failed: 0 });
+    });
+  });
+
+  describe('F10: a record the job cannot read cannot starve the others, and two replicas do not both run', () => {
+    it('a record that failed sorts after the others on the next run', async () => {
+      const t = build();
+      await t.known({ syncedHoursAgo: 30 }); // sub_1: the OLDEST sync, but it fails
+      await t.known({ syncedHoursAgo: 20 }); // sub_2
+      await t.known({ syncedHoursAgo: 15 }); // sub_3
+      const original = t.gateway.onRetrieve;
+      t.gateway.onRetrieve = (id) => {
+        if (id === 'sub_1') throw new Error('provider unreachable');
+        return original?.(id);
+      };
+      await t.job.run();
+      t.gateway.retrievals.length = 0;
+      t.clock.advance(13 * HOUR);
+      t.gateway.onRetrieve = original;
+
+      await t.job.run();
+
+      // sub_2 and sub_3 first (oldest sync first), the one that failed last.
+      expect(t.gateway.retrievals.filter((id, n, all) => all.indexOf(id) === n)).toEqual([
+        'sub_2',
+        'sub_3',
+        'sub_1',
+      ]);
+    });
+
+    it('a run that finds the lock held by another instance does nothing and records nothing', async () => {
+      const t = build();
+      await t.known({ providerStatus: 'canceled' });
+      await t.ledger.record(RECONCILE_LOCK_ID, 'job-lock', NOW);
+      await t.ledger.claimProcessing(
+        RECONCILE_LOCK_ID,
+        'other-replica',
+        NOW,
+        new Date(NOW.getTime() + RECONCILE_LOCK_MS),
+      );
+
+      expect(await t.job.run()).toBeNull();
+
+      expect(t.gateway.retrievals).toEqual([]);
+      expect(t.jobs.successes).toEqual([]);
+      expect(t.jobs.failures).toEqual([]);
+    });
+
+    it('releases the lock when it is done (the next run is free), and takes over one that expired', async () => {
+      const t = build();
+      await t.job.run();
+      expect(await t.job.run()).not.toBeNull();
+
+      await t.ledger.claimProcessing(
+        RECONCILE_LOCK_ID,
+        'dead-replica',
+        NOW,
+        new Date(NOW.getTime() + RECONCILE_LOCK_MS),
+      );
+      expect(await t.job.run()).toBeNull();
+      t.clock.advance(RECONCILE_LOCK_MS);
+      expect(await t.job.run()).not.toBeNull();
+    });
+
+    it('the lock is released even when the run fails', async () => {
+      const t = build();
+      t.subscriptions.findIdsToReconcile = () => Promise.reject(new TypeError('boom'));
+      expect(await t.job.run()).toBeNull();
+      t.subscriptions.findIdsToReconcile = () => Promise.resolve([]);
+
+      expect(await t.job.run()).not.toBeNull();
+    });
+
+    it('a lock that cannot be taken at all is a failed run, recorded', async () => {
+      const t = build();
+      t.ledger.claimProcessing = () => Promise.reject(new TypeError('boom'));
+
+      expect(await t.job.run()).toBeNull();
+
+      expect(t.jobs.failures).toEqual([
+        { job: SUBSCRIPTIONS_RECONCILE_JOB, mode: RunMode.AUTO, code: 'TypeError' },
+      ]);
+    });
   });
 });

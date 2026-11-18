@@ -242,13 +242,7 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
         sortOrder: plan.limit,
       }));
       for (const plan of catalog) {
-        gateway.prices.set(plan.stripePriceId, {
-          id: plan.stripePriceId,
-          active: true,
-          amount: plan.price,
-          interval: 'month',
-          currency: 'brl',
-        });
+        gateway.listsPlan(plan);
       }
       await plans.upsertCatalog(catalog);
       const subscriptions = moduleRef.get(SubscriptionsRepository);
@@ -269,7 +263,7 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
           priceId: 'price_mkr_5',
           currentPeriodStart: new Date('2099-01-10T12:00:00.000Z'),
           currentPeriodEnd: new Date('2099-02-10T12:00:00.000Z'),
-          latestInvoicePaidAt: new Date('2099-01-10T12:00:05.000Z'),
+          firstInvoicePaidAt: new Date('2099-01-10T12:00:05.000Z'),
         }),
       );
       await sync.handleProviderEvent({

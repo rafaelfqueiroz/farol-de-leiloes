@@ -71,6 +71,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   OFFICE_CREATION_UNAVAILABLE: HttpStatus.SERVICE_UNAVAILABLE,
   // The payment provider's billing portal could not be opened: an upstream failure.
   BILLING_PORTAL_FAILED: HttpStatus.BAD_GATEWAY,
+  // The payment provider rejected a plan change (e.g. a price it cannot switch to): upstream.
+  CHANGE_PLAN_FAILED: HttpStatus.BAD_GATEWAY,
+  // BR-012-29: another member's cancel is refunding this subscription right now; retry shortly.
+  CANCEL_IN_PROGRESS: HttpStatus.CONFLICT,
   // BR-012-23 / BR-012-25: the office is at its active-journey limit.
   JOURNEY_LIMIT_REACHED: HttpStatus.CONFLICT,
 

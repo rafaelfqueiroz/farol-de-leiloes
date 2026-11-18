@@ -115,15 +115,7 @@ describe('office subscription isolation through the API (SPEC-012 BR-012-11, TS-
       status: 'OFFERED' as const,
       sortOrder: plan.limit,
     }));
-    catalog.forEach((plan) =>
-      gateway.prices.set(plan.stripePriceId, {
-        id: plan.stripePriceId,
-        active: true,
-        amount: plan.price,
-        interval: 'month',
-        currency: 'brl',
-      }),
-    );
+    catalog.forEach((plan) => gateway.listsPlan(plan));
     await plans.upsertCatalog(catalog);
     subscriptions = moduleRef.get(SubscriptionsRepository);
     const sync = moduleRef.get(SubscriptionsService);
@@ -153,7 +145,7 @@ describe('office subscription isolation through the API (SPEC-012 BR-012-11, TS-
           // refund window and the period are computed against `Clock` (the harness's fake, 2099).
           currentPeriodStart: new Date('2099-01-10T12:00:00.000Z'),
           currentPeriodEnd: new Date('2099-02-10T12:00:00.000Z'),
-          latestInvoicePaidAt: new Date('2099-01-10T12:00:05.000Z'),
+          firstInvoicePaidAt: new Date('2099-01-10T12:00:05.000Z'),
         }),
       );
       await sync.handleProviderEvent({

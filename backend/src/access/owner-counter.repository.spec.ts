@@ -59,3 +59,49 @@ describe('OwnerCounterRepository.release', () => {
     expect(updateOne).not.toHaveBeenCalled();
   });
 });
+
+describe('OwnerCounterRepository.releaseByJob (AR-12: the named unscoped method)', () => {
+  it('takes no AccessContext: the owner is the ended record’s, normalised, and only a positive count is lowered', async () => {
+    const { repository, updateOne } = repositoryWithStubbedUpdate();
+
+    const released = await repository.releaseByJob(
+      { ownerType: 'office', ownerId: new Types.ObjectId('64b7f00000000000000b0b0b') },
+      'journeys',
+    );
+
+    expect(released).toBe(true);
+    const [filter, update] = updateOne.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ];
+    expect(filter).toMatchObject({
+      ownerType: 'office',
+      ownerId: '64b7f00000000000000b0b0b',
+      key: 'journeys',
+    });
+    expect(update).toEqual({ $inc: { value: -1 } });
+  });
+
+  it('answers false when nothing was lowered (the count was already zero)', async () => {
+    const { repository, updateOne } = repositoryWithStubbedUpdate();
+    updateOne.mockReturnValue({ exec: () => Promise.resolve({ modifiedCount: 0 }) } as never);
+
+    expect(
+      await repository.releaseByJob({ ownerType: 'office', ownerId: OFFICE }, 'journeys'),
+    ).toBe(false);
+  });
+});
+
+describe('OwnerCounterRepository.setCountByJob', () => {
+  it.each([-1, 1.5, Number.NaN])(
+    'refuses %s: a count is a whole number, zero or more',
+    async (bad) => {
+      const { repository, updateOne } = repositoryWithStubbedUpdate();
+
+      await expect(
+        repository.setCountByJob({ ownerType: 'office', ownerId: OFFICE }, 'journeys', bad),
+      ).rejects.toThrow(/whole number/);
+      expect(updateOne).not.toHaveBeenCalled();
+    },
+  );
+});

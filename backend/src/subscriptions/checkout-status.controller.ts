@@ -5,6 +5,7 @@ import { Access } from '../access/decorators/access.decorator.js';
 import { ApiConfirmedEmail } from '../auth/decorators/api-confirmed-email.decorator.js';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
 import { ConfirmedEmailGuard } from '../auth/guards/confirmed-email.guard.js';
+import { AccountThrottlerGuard } from './billing-throttler.module.js';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
 import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
 import { CheckoutStatusResponseDto } from './dto/office-subscription-response.dto.js';
@@ -20,7 +21,7 @@ import { SubscriptionsBillingService } from './subscriptions-billing.service.js'
 @ApiErrorResponses()
 @ApiJwtAuth()
 @ApiConfirmedEmail()
-@UseGuards(ConfirmedEmailGuard) // BR-001-04
+@UseGuards(ConfirmedEmailGuard, AccountThrottlerGuard) // BR-001-04, SC-04: per account
 @Controller('subscriptions/checkout')
 export class CheckoutStatusController {
   constructor(private readonly billing: SubscriptionsBillingService) {}

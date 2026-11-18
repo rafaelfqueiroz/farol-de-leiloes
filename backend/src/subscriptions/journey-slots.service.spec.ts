@@ -1,12 +1,13 @@
 // SPEC-012 BR-012-21..BR-012-25, BR-012-27: the office's active-journey slots, against fakes of the
 // subscription store and the counters (TS-03). The conditional update under real concurrency (20
 // reserves with one free slot) is test/integration/journey-slots.spec.ts (TS-02).
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccessContext, ActingOwner } from '../access/access-context.js';
 import type { OwnerCounterRepository } from '../access/owner-counter.repository.js';
 import type { OfficePlanState } from '../access/sources/office-plan.source.js';
 import { anAccessContext } from '../../test/fakes/fake-access-sources.js';
 import { FakeOwnerCounters } from '../../test/fakes/fake-owner-counters.js';
+import { spyOnLogger } from '../../test/support/logger-spy.js';
 import { FakeSubscriptionsRepository } from '../../test/fakes/fake-subscriptions-repository.js';
 import type { SubscriptionStatus } from './domain/subscription-status.js';
 import { ACTIVE_JOURNEYS_KEY, JourneySlotsService } from './journey-slots.service.js';
@@ -195,6 +196,66 @@ describe('JourneySlotsService (SPEC-012 BR-012-22..BR-012-25)', () => {
     await t.slots.ensureCounter(ctx, { actingOwner: t.actingOf(ctx) });
 
     expect(t.counters.get(OFFICE, ACTIVE_JOURNEYS_KEY)).toBe(0);
+  });
+
+  describe('F6: the system path, for endings no member of the office drives', () => {
+    const owner = { ownerType: 'office', ownerId: OFFICE } as const;
+
+    it('BR-012-22, D-13: a lost bid frees its slot with no AccessContext at all', async () => {
+      await t.subscriptionOf('ACTIVE', 2);
+      t.counters.set(OFFICE, ACTIVE_JOURNEYS_KEY, 2);
+
+      expect(await t.slots.releaseForSystem(owner)).toBe(true);
+
+      expect(t.counters.get(OFFICE, ACTIVE_JOURNEYS_KEY)).toBe(1);
+    });
+
+    it('BR-012-28: it frees the slot of a READ-ONLY, lapsed office too, where a member’s release is refused', async () => {
+      await t.subscriptionOf('LAPSED', 5);
+      t.counters.set(OFFICE, ACTIVE_JOURNEYS_KEY, 1);
+      const ctx = await t.member(READ_ONLY);
+      await expect(t.slots.release(ctx, owner)).rejects.toThrow('A slot is released only');
+
+      expect(await t.slots.releaseForSystem(owner)).toBe(true);
+
+      expect(t.counters.get(OFFICE, ACTIVE_JOURNEYS_KEY)).toBe(0);
+    });
+
+    it('never goes below zero, and takes the owner as the ended journey stores it (an ObjectId too)', async () => {
+      t.counters.set(OFFICE, ACTIVE_JOURNEYS_KEY, 1);
+
+      expect(await t.slots.releaseForSystem({ ownerType: 'office', ownerId: OFFICE })).toBe(true);
+      expect(await t.slots.releaseForSystem(owner)).toBe(false);
+      expect(t.counters.get(OFFICE, ACTIVE_JOURNEYS_KEY)).toBe(0);
+    });
+
+    it('BR-012-27: a self-advised owner is still a programming error on this path', async () => {
+      await expect(
+        t.slots.releaseForSystem({ ownerType: 'self_advised', ownerId: MEMBER }),
+      ).rejects.toThrow(/BR-012-27/);
+      await expect(
+        t.slots.reconcileCount({ ownerType: 'self_advised', ownerId: MEMBER }, 1),
+      ).rejects.toThrow(/BR-012-27/);
+    });
+
+    it('SPEC-016’s drift job: a counter that disagrees with the journeys really in progress is set to the truth, logging counts only', async () => {
+      const logger = spyOnLogger();
+      t.counters.set(OFFICE, ACTIVE_JOURNEYS_KEY, 7);
+
+      expect(await t.slots.reconcileCount(owner, 4)).toBe(true);
+
+      expect(t.counters.get(OFFICE, ACTIVE_JOURNEYS_KEY)).toBe(4);
+      expect(logger.loggedText()).toContain(
+        `Journey count of office ${OFFICE} repaired: 7 stored, 4 in progress`,
+      );
+      vi.restoreAllMocks();
+    });
+
+    it('a counter that already tells the truth is left alone and says so', async () => {
+      t.counters.set(OFFICE, ACTIVE_JOURNEYS_KEY, 4);
+
+      expect(await t.slots.reconcileCount(owner, 4)).toBe(false);
+    });
   });
 
   describe('BR-012-27: the self-advised limit of 3 is not a plan', () => {

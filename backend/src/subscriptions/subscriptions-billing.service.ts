@@ -9,7 +9,13 @@
 // change, then re-reads its subscription through the same lease-and-dirty-mark sync the webhook
 // uses (`SubscriptionsService.refresh`). Nothing writes a status, a plan or a limit locally, so an
 // upgrade reaches the limit only once the provider reports the new paid price (BR-012-16). Every
-// provider mutation carries an idempotency key. Logs carry ids and codes only (SC-15).
+// provider mutation carries an idempotency key derived from the FACTS that define the action, so a
+// retry is the same call whatever webhook synced in between. Logs carry ids and codes only (SC-15).
+//
+// "A full refund of what it paid" (BR-012-29, DL-012-10) means EVERY paid invoice of the first
+// subscription, each minus what was already refunded: the invoice that created it and an upgrade's
+// proration paid inside the window, never just the latest invoice. Unpaid invoices are voided. If
+// any refund cannot be confirmed, nothing is recorded and nothing is cancelled (the claim goes back).
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService, type ConfigType } from '@nestjs/config';
 import type { AccessContext, ActingOwner } from '../access/access-context.js';
@@ -32,7 +38,9 @@ import {
 import { pickDisplayedSubscription } from './domain/displayed-subscription.js';
 import { readOnlyAtOf } from './domain/grace.js';
 import { classifyPlanChange } from './domain/plan-change.js';
+import { planRefund } from './domain/refund-plan.js';
 import { refundEligibleUntil } from './domain/refund-eligibility.js';
+import { reconcileCutoffs } from './domain/reconcile-window.js';
 import {
   effectiveJourneyLimit,
   isInEffect,
@@ -50,6 +58,9 @@ export const REFUND_CLAIM_STALE_MS = 5 * 60 * 1000;
 export const BILLING_HISTORY_LIMIT = 24;
 /** How many of an office's latest subscriptions the plan page chooses from. */
 const RECENT_SUBSCRIPTIONS = 20;
+const MINUTE_MS = 60 * 1000;
+/** How long an office's invoice list is reused (invalidated by every action of ours). */
+export const INVOICE_CACHE_MS = 30 * 1000;
 
 /** The account that starts a checkout, as the provider's customer is named (SC-15: sent, not logged). */
 export interface CheckoutBuyer {
@@ -101,9 +112,14 @@ export interface OfficeSubscriptionView {
 /** The success page asks only this (BR-012-09): the redirect itself grants nothing. */
 export type CheckoutState = 'PENDING' | 'CONFIRMED';
 
+/** What asking the provider about an unconfirmed checkout came to (ADR-005). */
+export type CheckoutRecovery = 'recovered' | 'removed' | 'waiting';
+
 @Injectable()
 export class SubscriptionsBillingService {
   private readonly logger = new Logger(SubscriptionsBillingService.name);
+  /** The invoice list per provider customer, reused for INVOICE_CACHE_MS (one read per office). */
+  private readonly invoiceCache = new Map<string, { until: number; invoices: ProviderInvoice[] }>();
 
   constructor(
     private readonly subscriptions: SubscriptionsRepository,
@@ -134,10 +150,62 @@ export class SubscriptionsBillingService {
    * another account's ref is the same NOT_FOUND as one that does not exist (AR-14).
    */
   async checkoutState(ctx: AccessContext, ref: string): Promise<CheckoutState> {
-    const record = await this.subscriptions.findById(ref);
+    let record = await this.subscriptions.findById(ref);
     if (record === null || record.buyerUserId !== ctx.accountId) throw new DomainError('NOT_FOUND');
+    // ADR-005: a buyer who paid while the provider's events never arrived is not left waiting for
+    // the daily job: an old enough unconfirmed checkout asks the provider, here and now.
+    const { sessionBefore } = reconcileCutoffs(this.clock.now());
+    if (
+      record.status === 'PENDING' &&
+      record.stripeSubscriptionId === null &&
+      record.checkoutSessionId !== null &&
+      record.createdAt.getTime() < sessionBefore.getTime()
+    ) {
+      try {
+        if ((await this.recoverPendingCheckout(record)) !== 'waiting') {
+          record = await this.subscriptions.findById(ref);
+        }
+      } catch (error) {
+        // The page answers PENDING; the daily job asks again.
+        this.logger.warn(`Checkout ${ref} could not be checked: ${logSafeError(error)}`);
+      }
+    }
     // Confirmed means the provider confirmed it AND the office exists to manage it (BR-012-07).
-    return isInEffect(record.status) && record.officeId !== null ? 'CONFIRMED' : 'PENDING';
+    return record !== null && isInEffect(record.status) && record.officeId !== null
+      ? 'CONFIRMED'
+      : 'PENDING';
+  }
+
+  /**
+   * ADR-005: asks the provider what became of a checkout that has a session and no subscription of
+   * ours. A session the buyer PAID is read through the normal sync (office created, duplicates
+   * resolved) even though no event ever arrived; an expired one leaves nothing; one still open
+   * after 24 h is closed first (and read if the buyer paid it in that instant). A record whose
+   * session is not CONFIRMED expired or unpaid is never removed: a provider error propagates and the
+   * record stays.
+   */
+  async recoverPendingCheckout(record: StoredSubscription): Promise<CheckoutRecovery> {
+    if (record.checkoutSessionId === null) return 'waiting';
+    let session = await this.gateway.retrieveCheckoutSession(record.checkoutSessionId);
+    if (
+      session.state === 'open' &&
+      record.createdAt.getTime() < reconcileCutoffs(this.clock.now()).openSessionBefore.getTime()
+    ) {
+      const closed = await this.gateway.expireCheckoutSession(record.checkoutSessionId);
+      session = await this.gateway.retrieveCheckoutSession(record.checkoutSessionId);
+      if (closed === 'expired' && session.state === 'open') {
+        session = { state: 'expired', subscriptionId: null };
+      }
+    }
+    if (session.state === 'complete' && session.subscriptionId !== null) {
+      await this.sync.recoverCheckout(record.id, session.subscriptionId);
+      return 'recovered';
+    }
+    if (session.state === 'expired') {
+      await this.subscriptions.deletePendingById(record.id);
+      return 'removed';
+    }
+    return 'waiting';
   }
 
   // ---- Checkout -------------------------------------------------------------------------------
@@ -193,16 +261,12 @@ export class SubscriptionsBillingService {
 
     let sessionId: string | null = null;
     try {
-      const customerId =
-        target.customerId ??
-        (
-          await this.gateway.createCustomer({
-            email: buyer.email,
-            name: buyer.name,
-            userId: ctx.accountId,
-            idempotencyKey: `customer:${pending.id}`,
-          })
-        ).id;
+      // The guard above and the insert are not one step: a payment confirmed in between (a webhook
+      // landing now) must not be followed by a second checkout. Looked at again, now that this
+      // checkout is recorded, so a confirmation after this point finds the record and the
+      // duplicate resolution (BR-012-08) takes over.
+      await this.assertNothingInEffect(ctx.accountId, target.officeId);
+      const customerId = target.customerId ?? (await this.customerOf(ctx.accountId, buyer));
       const frontendUrl = this.env.get('FRONTEND_URL', { infer: true });
       const session = await this.gateway.createOfficeCheckout({
         customerId,
@@ -221,9 +285,13 @@ export class SubscriptionsBillingService {
       }
       return { url: session.url };
     } catch (error) {
-      this.logger.warn(`Checkout ${pending.id} could not be started: ${logSafeError(error)}`);
+      if (!(error instanceof DomainError)) {
+        this.logger.warn(`Checkout ${pending.id} could not be started: ${logSafeError(error)}`);
+      }
       if (sessionId !== null) await this.expireQuietly(sessionId);
       await this.subscriptions.deletePendingById(pending.id);
+      // A refusal (the office got a subscription meanwhile) is the refusal; a fault is a failed checkout.
+      if (error instanceof DomainError) throw error;
       throw new DomainError('CHECKOUT_SESSION_FAILED');
     }
   }
@@ -236,10 +304,15 @@ export class SubscriptionsBillingService {
    *
    *  - a HIGHER limit is an upgrade now: the provider invoices the prorated difference and changes
    *    the price only once it is paid. Our record, limit included, follows the provider's price
-   *    after the sync below reads it (BR-012-16); an unpaid upgrade changes nothing here;
+   *    after the sync below reads it (BR-012-16); an unpaid upgrade changes nothing here. The
+   *    price is changed FIRST and a scheduled downgrade is released only after that succeeded, so
+   *    a rejected upgrade does not lose the downgrade;
    *  - an EQUAL or LOWER limit is scheduled for the start of the next period (BR-012-17);
    *  - the journeys in progress do not matter (BR-012-18);
-   *  - a subscriber may stay on a WITHDRAWN plan (BR-012-04) but not move to one.
+   *  - a subscriber may stay on a WITHDRAWN plan (BR-012-04) but not move to one, and the price it
+   *    moves to must still be active at the provider;
+   *  - a subscription that stops at the period end is not changed (undo the cancellation first);
+   *  - the provider rejecting the change (e.g. a price it cannot switch to) is CHANGE_PLAN_FAILED.
    */
   async changePlan(
     ctx: AccessContext,
@@ -257,39 +330,52 @@ export class SubscriptionsBillingService {
     }
 
     const change = classifyPlanChange(subscription, target);
+    if (change === 'keep') return this.viewOf(ctx, acting, subscription);
+    // A subscription that stops at the period end has nothing to move to afterwards, and an
+    // upgrade would be billed for a period that is ending: undo the cancellation first.
+    if (subscription.cancelAtPeriodEnd) throw new DomainError('SUBSCRIPTION_NOT_CHANGEABLE');
+
     const subscriptionId = this.providerIdOf(subscription);
-    // The key follows the state we last synced, so a retry of the same request is the same call
-    // and a later, different change is not mistaken for it.
-    const key = `${subscription.id}:${target.id}:${subscription.lastSyncedAt?.getTime() ?? 0}`;
-    switch (change) {
-      case 'keep':
-        return this.viewOf(ctx, acting, subscription);
-      case 'release_schedule':
+    // The key is made of the facts that define the action, not of when we last synced, so a retry
+    // after an unrelated webhook is the same call and a later, different action is another.
+    const key = [
+      subscription.id,
+      subscription.planId,
+      target.id,
+      subscription.currentPeriodStart?.getTime() ?? 0,
+      subscription.scheduledPlanId ?? '-',
+    ].join(':');
+    try {
+      if (change === 'release_schedule') {
         await this.gateway.releaseScheduledChange(subscriptionId, `release:${key}`);
-        break;
-      case 'upgrade':
-        // A pending downgrade would fight the upgrade: drop it first (the schedule owns the
-        // subscription's items while it exists).
-        if (subscription.scheduledPlanId !== null) {
-          await this.gateway.releaseScheduledChange(subscriptionId, `release:${key}`);
+      } else {
+        // The price must still be sold at the provider (it may have been archived since).
+        const price = await this.gateway.getPrice(target.stripePriceId);
+        if (price === null || !price.active) throw new DomainError('INVALID_PLAN');
+        if (change === 'upgrade') {
+          await this.gateway.changeSubscriptionPrice({
+            subscriptionId,
+            priceId: target.stripePriceId,
+            idempotencyKey: `upgrade:${key}`,
+          });
+          // Only now that the upgrade was accepted: a downgrade scheduled before it is moot.
+          if (subscription.scheduledPlanId !== null) {
+            await this.gateway.releaseScheduledChange(subscriptionId, `release:${key}`);
+          }
+        } else {
+          await this.gateway.scheduleSubscriptionPrice({
+            subscriptionId,
+            priceId: target.stripePriceId,
+            idempotencyKey: `schedule:${key}`,
+          });
         }
-        await this.gateway.changeSubscriptionPrice({
-          subscriptionId,
-          priceId: target.stripePriceId,
-          idempotencyKey: `upgrade:${key}`,
-        });
-        break;
-      case 'schedule':
-        // A subscription that stops at the period end has nothing to move to afterwards.
-        if (subscription.cancelAtPeriodEnd) throw new DomainError('SUBSCRIPTION_NOT_CHANGEABLE');
-        await this.gateway.scheduleSubscriptionPrice({
-          subscriptionId,
-          priceId: target.stripePriceId,
-          idempotencyKey: `schedule:${key}`,
-        });
-        break;
+      }
+    } catch (error) {
+      if (error instanceof DomainError) throw error;
+      this.logger.warn(`Plan change of ${subscription.id} failed: ${logSafeError(error)}`);
+      throw new DomainError('CHANGE_PLAN_FAILED');
     }
-    return this.viewOf(ctx, acting, await this.sync.refresh(subscription.id));
+    return this.viewOf(ctx, acting, await this.refreshed(subscription));
   }
 
   // ---- Cancelling -----------------------------------------------------------------------------
@@ -297,16 +383,19 @@ export class SubscriptionsBillingService {
   /**
    * BR-012-19 / BR-012-29: cancels the office's subscription.
    *
-   *  - the office's FIRST subscription, inside the refund window and not yet refunded: a full
-   *    refund and the subscription ends at once (LAPSED, the grace period starts);
+   *  - the office's FIRST subscription, inside the refund window (judged at the instant the cancel
+   *    was first accepted, and also when renewal was already stopped) and not yet refunded: a full
+   *    refund of what it paid (see the header) and the subscription ends at once (LAPSED, the
+   *    grace period starts);
    *  - anything else: renewal stops and the plan stays in effect to the end of the paid period
    *    (CANCELING); no part of a paid period is refunded;
    *  - cancelling what is already cancelling is a success that does nothing.
    *
-   * Two members cancelling at once refund once: the refund is CLAIMED with one conditional update
-   * (a claim that is not followed by a refund within 5 minutes can be retaken), and the provider
-   * deduplicates the refund by a stable key. A crash between the refund and the cancel is
-   * repaired by the next cancel, which finds the refund recorded and finishes the cancel.
+   * Two members cancelling at once refund once: the refund is CLAIMED with one conditional update;
+   * the member who does not hold the claim gets CANCEL_IN_PROGRESS (409), never a silent 200. A
+   * failure before the refund is confirmed gives the claim back, so the retry starts at once; a
+   * crash after the refund is repaired by the next cancel (or the reconcile job), which finds it
+   * recorded and only finishes the cancel.
    */
   async cancel(ctx: AccessContext, requestedOfficeId?: string): Promise<OfficeSubscriptionView> {
     this.assertOwnContext(ctx);
@@ -328,7 +417,9 @@ export class SubscriptionsBillingService {
         return this.viewOf(ctx, acting, subscription);
       case 'cancel_at_period_end': {
         const subscriptionId = this.providerIdOf(subscription);
-        const stamp = `${subscription.id}:${subscription.lastSyncedAt?.getTime() ?? 0}`;
+        // The same cancel retried (or after an unrelated webhook) is the same call; a cancel after
+        // an undo, a minute later, is another.
+        const stamp = `${subscription.id}:${subscription.planId}:${subscription.currentPeriodStart?.getTime() ?? 0}:${Math.floor(now.getTime() / MINUTE_MS)}`;
         // A downgrade scheduled for after the period has no meaning once the plan ends.
         if (subscription.scheduledPlanId !== null) {
           await this.gateway.releaseScheduledChange(subscriptionId, `release:cancel:${stamp}`);
@@ -338,10 +429,10 @@ export class SubscriptionsBillingService {
           cancel: true,
           idempotencyKey: `cancel:${stamp}`,
         });
-        return this.viewOf(ctx, acting, await this.sync.refresh(subscription.id));
+        return this.viewOf(ctx, acting, await this.refreshed(subscription));
       }
       case 'refund_and_cancel':
-        await this.refundAndCancel(subscription, now);
+        await this.completeRefund(subscription);
         return this.viewOf(ctx, acting, await this.displayedFor(acting.owner.ownerId));
     }
   }
@@ -356,15 +447,16 @@ export class SubscriptionsBillingService {
     const subscription = await this.subscriptions.findInEffectByOffice(acting.owner.ownerId);
     if (subscription === null) throw new DomainError('SUBSCRIPTION_NOT_CHANGEABLE');
 
-    const decision = decideUndoCancel(subscription, this.clock.now());
+    const now = this.clock.now();
+    const decision = decideUndoCancel(subscription, now);
     if (decision === 'not_changeable') throw new DomainError('SUBSCRIPTION_NOT_CHANGEABLE');
     if (decision === 'noop') return this.viewOf(ctx, acting, subscription);
     await this.gateway.setCancelAtPeriodEnd({
       subscriptionId: this.providerIdOf(subscription),
       cancel: false,
-      idempotencyKey: `undo-cancel:${subscription.id}:${subscription.lastSyncedAt?.getTime() ?? 0}`,
+      idempotencyKey: `undo-cancel:${subscription.id}:${subscription.planId}:${subscription.currentPeriodStart?.getTime() ?? 0}:${Math.floor(now.getTime() / MINUTE_MS)}`,
     });
-    return this.viewOf(ctx, acting, await this.sync.refresh(subscription.id));
+    return this.viewOf(ctx, acting, await this.refreshed(subscription));
   }
 
   // ---- Payment method -------------------------------------------------------------------------
@@ -382,6 +474,18 @@ export class SubscriptionsBillingService {
     const configurationId = this.env.get('STRIPE_BILLING_PORTAL_CONFIGURATION_ID', {
       infer: true,
     });
+    // SC-16 (fail closed): without the restricted configuration Stripe would use the account's
+    // default portal, which may let a customer cancel or switch plan outside our rules
+    // (BR-012-17, BR-012-19, BR-012-29). In production the feature is off until the owner sets it.
+    if (
+      configurationId === undefined &&
+      this.env.get('NODE_ENV', { infer: true }) === 'production'
+    ) {
+      this.logger.warn(
+        'The billing portal is off: STRIPE_BILLING_PORTAL_CONFIGURATION_ID is not set (SC-16)',
+      );
+      throw new DomainError('BILLING_PORTAL_FAILED');
+    }
     try {
       return await this.gateway.createBillingPortalSession({
         customerId,
@@ -419,9 +523,7 @@ export class SubscriptionsBillingService {
   ): Promise<{ officeId?: string; customerId: string | null }> {
     if (ctx.memberships.length > 0 || requestedOfficeId !== undefined) {
       const { owner } = this.officeOf(ctx, requestedOfficeId);
-      if ((await this.subscriptions.findInEffectByOffice(owner.ownerId)) !== null) {
-        throw new DomainError('SUBSCRIPTION_ALREADY_ACTIVE');
-      }
+      await this.assertNothingInEffect(ctx.accountId, owner.ownerId);
       return {
         officeId: owner.ownerId,
         customerId: await this.subscriptions.findCustomerIdOfOffice(owner.ownerId),
@@ -431,7 +533,49 @@ export class SubscriptionsBillingService {
     if (ctx.isAdmin) throw new DomainError('FORBIDDEN');
     // BR-012-07: nobody pays for an office that cannot be created.
     if (!this.provisioner.available) throw new DomainError('OFFICE_CREATION_UNAVAILABLE');
+    await this.assertNothingInEffect(ctx.accountId, undefined);
     return { customerId: null };
+  }
+
+  /**
+   * BR-012-08, BR-012-07: nothing is in effect for the office, or, for a buyer without an office,
+   * no first subscription of theirs is in effect (it is waiting for its office, and a second
+   * payment would be a second office). Asked before the record is made AND after it, because a
+   * payment confirmed in between is exactly the race.
+   */
+  private async assertNothingInEffect(
+    buyerUserId: string,
+    officeId: string | undefined,
+  ): Promise<void> {
+    const found =
+      officeId === undefined
+        ? await this.subscriptions.findInEffectByBuyerWithoutOffice(buyerUserId)
+        : await this.subscriptions.findInEffectByOffice(officeId);
+    if (found !== null) throw new DomainError('SUBSCRIPTION_ALREADY_ACTIVE');
+  }
+
+  /**
+   * ONE provider customer per buyer: the one their earlier records carry, else the one the
+   * provider already has for their account (our user id in its metadata), else a new one.
+   */
+  private async customerOf(accountId: string, buyer: CheckoutBuyer): Promise<string> {
+    const stored = await this.subscriptions.findCustomerIdOfBuyer(accountId);
+    if (stored !== null) return stored;
+    try {
+      const known = await this.gateway.findCustomerByUserId(accountId);
+      if (known !== null) return known;
+    } catch (error) {
+      // The search is a convenience (it lags behind writes); a new customer is the fallback.
+      this.logger.warn(`The customer search failed: ${logSafeError(error)}`);
+    }
+    return (
+      await this.gateway.createCustomer({
+        email: buyer.email,
+        name: buyer.name,
+        userId: accountId,
+        idempotencyKey: `customer:${accountId}`,
+      })
+    ).id;
   }
 
   private async promotionCodeOf(couponCode: string | undefined): Promise<string | null> {
@@ -467,29 +611,70 @@ export class SubscriptionsBillingService {
     }
   }
 
-  /** BR-012-29: the refund, then the cancel at once, then the sync (LAPSED, the grace starts). */
-  private async refundAndCancel(subscription: StoredSubscription, now: Date): Promise<void> {
+  /**
+   * BR-012-29: the refund of what the subscription paid, then the cancel at once, then the sync
+   * (LAPSED, the grace starts). Also what the reconcile job runs for a refund left half done.
+   *
+   *  - not claimed and the refund is recorded: only the cancel is missing (a crash between): finish;
+   *  - not claimed and nothing is recorded: another actor holds a live claim, CANCEL_IN_PROGRESS;
+   *  - claimed: refund every paid invoice (`refundPaidInvoices`); ANY failure before the refund is
+   *    confirmed, `markRefunded` included, gives the claim back (the retry re-reads the provider
+   *    and finds what is already refunded), and nothing is cancelled.
+   */
+  async completeRefund(subscription: StoredSubscription): Promise<void> {
     const subscriptionId = this.providerIdOf(subscription);
+    const now = this.clock.now();
     const claimed = await this.subscriptions.claimRefund(
       subscription.id,
       now,
       new Date(now.getTime() - REFUND_CLAIM_STALE_MS),
     );
     if (claimed) {
-      await this.gateway.refundLatestPayment({
-        subscriptionId,
-        idempotencyKey: `refund:${subscription.id}`,
-      });
-      await this.subscriptions.markRefunded(subscription.id, this.clock.now());
-      this.logger.log(`Subscription ${subscription.id} refunded in full (BR-012-29)`);
+      try {
+        await this.refundPaidInvoices(subscription.id, subscriptionId);
+        await this.subscriptions.markRefunded(subscription.id, this.clock.now());
+      } catch (error) {
+        await this.subscriptions.releaseRefundClaim(subscription.id, now);
+        throw error;
+      }
     } else {
-      // Someone else holds the claim, or the refund was made and only the cancel is missing (a
-      // crash between the two): finish the cancel in the second case, leave the first alone.
       const current = await this.subscriptions.findById(subscription.id);
-      if (current === null || current.refundedAt === null || !isInEffect(current.status)) return;
+      if (current === null || !isInEffect(current.status)) return; // it ended meanwhile
+      if (current.refundedAt === null) throw new DomainError('CANCEL_IN_PROGRESS');
     }
     await this.gateway.cancelSubscription(subscriptionId);
-    await this.sync.refresh(subscription.id);
+    await this.refreshed(subscription);
+  }
+
+  /**
+   * BR-012-29, DL-012-10: gives back everything the subscription was paid. The provider's own
+   * figures decide (paid and already refunded, per invoice): unpaid invoices are voided so they
+   * cannot be paid later, and every paid invoice is refunded what remains, each with its own
+   * stable key. A refund that returns less than the invoice paid is a failure, not a success.
+   */
+  private async refundPaidInvoices(ref: string, subscriptionId: string): Promise<void> {
+    const plan = planRefund(await this.gateway.listSubscriptionInvoices(subscriptionId));
+    for (const invoiceId of plan.voids) await this.gateway.voidInvoice(invoiceId);
+    for (const step of plan.refunds) {
+      const { refunded } = await this.gateway.refundInvoice({
+        invoiceId: step.invoiceId,
+        idempotencyKey: `refund:${ref}:${step.invoiceId}`,
+      });
+      if (refunded.lessThan(step.amount)) {
+        throw new Error('A refund returned less than the invoice paid');
+      }
+    }
+    this.logger.log(
+      `Subscription ${ref}: ${plan.refunds.length} invoices refunded, ${plan.voids.length} voided (BR-012-29)`,
+    );
+  }
+
+  /** Re-reads the provider after one of our actions; the cached invoice list is stale now. */
+  private async refreshed(subscription: StoredSubscription): Promise<StoredSubscription> {
+    if (subscription.stripeCustomerId !== null) {
+      this.invoiceCache.delete(subscription.stripeCustomerId);
+    }
+    return this.sync.refresh(subscription.id);
   }
 
   private async refundEligibleUntilOf(
@@ -497,6 +682,9 @@ export class SubscriptionsBillingService {
     now: Date,
   ): Promise<Date | null> {
     if (!isInEffect(subscription.status) || subscription.firstPaidAt === null) return null;
+    // The right of withdrawal is judged when the member FIRST asked: a retry after the window of a
+    // request made inside it completes (the claim was only released because something failed).
+    const asOf = subscription.refundRequestedAt ?? now;
     return refundEligibleUntil(
       {
         firstPaidAt: subscription.firstPaidAt,
@@ -507,7 +695,7 @@ export class SubscriptionsBillingService {
           subscription.firstPaidAt,
         ),
       },
-      now,
+      asOf,
       this.config.subscriptions.refundWindowDays,
     );
   }
@@ -577,11 +765,21 @@ export class SubscriptionsBillingService {
     };
   }
 
-  /** BR-012-11: the billing history, or null when the provider cannot be read just now. */
+  /**
+   * BR-012-11: the billing history, or null when the provider cannot be read just now. Reused for
+   * 30 s per customer (the plan page is reloaded often and every read is a provider call);
+   * any action of ours drops it.
+   */
   private async invoicesOf(subscription: StoredSubscription): Promise<ProviderInvoice[] | null> {
-    if (subscription.stripeCustomerId === null) return [];
+    const customerId = subscription.stripeCustomerId;
+    if (customerId === null) return [];
+    const now = this.clock.now().getTime();
+    const cached = this.invoiceCache.get(customerId);
+    if (cached && cached.until > now) return cached.invoices;
     try {
-      return await this.gateway.listInvoices(subscription.stripeCustomerId, BILLING_HISTORY_LIMIT);
+      const invoices = await this.gateway.listInvoices(customerId, BILLING_HISTORY_LIMIT);
+      this.invoiceCache.set(customerId, { until: now + INVOICE_CACHE_MS, invoices });
+      return invoices;
     } catch (error) {
       // The plan page works without the history; the interface says it is unavailable.
       this.logger.warn(`The billing history could not be read: ${logSafeError(error)}`);

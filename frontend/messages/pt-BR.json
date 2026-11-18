@@ -151,6 +151,8 @@
     "SUBSCRIPTION_NOT_CHANGEABLE": "O plano do escritório não pode ser alterado agora. Se o cancelamento está agendado, desfaça-o antes de reduzir o plano.",
     "CHECKOUT_IN_PROGRESS": "Já existe um pagamento em andamento. Conclua-o ou aguarde a confirmação antes de tentar de novo.",
     "OFFICE_CREATION_UNAVAILABLE": "A contratação de planos para novos escritórios ainda não está disponível. Nenhuma cobrança foi feita.",
+    "CHANGE_PLAN_FAILED": "Não foi possível alterar o plano agora. Nada foi cobrado nem alterado. Tente novamente em instantes.",
+    "CANCEL_IN_PROGRESS": "Outro membro já está cancelando este plano. Aguarde alguns instantes e confira o resultado.",
     "BILLING_PORTAL_FAILED": "Não foi possível abrir a página de pagamento. Tente novamente em instantes.",
     "JOURNEY_LIMIT_REACHED": "O escritório atingiu o limite de jornadas em andamento ({inProgress} de {limit}). Encerre uma jornada ou mude de plano para iniciar outra.",
     "SAVED_FILTER_LIMIT_REACHED": "Você atingiu o limite de {limit, plural, one {# filtro salvo} other {# filtros salvos}}. Remova um filtro para salvar outro.",

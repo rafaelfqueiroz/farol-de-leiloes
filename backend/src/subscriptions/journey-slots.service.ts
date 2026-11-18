@@ -13,7 +13,7 @@
 //
 // BR-012-27: the self-advised investor's limit of 3 is not a plan. It is SPEC-016's, enforced as
 // SPEC-011 defines, and never goes through here: asking for it is a programming error.
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { ClientSession } from 'mongoose';
 import type { AccessContext, ActingOwner } from '../access/access-context.js';
 import { type CountedOwner, OwnerCounterRepository } from '../access/owner-counter.repository.js';
@@ -42,6 +42,8 @@ function assertOfficeOwner(ownerType: string): void {
 
 @Injectable()
 export class JourneySlotsService {
+  private readonly logger = new Logger(JourneySlotsService.name);
+
   constructor(
     private readonly subscriptions: SubscriptionsRepository,
     private readonly counters: OwnerCounterRepository,
@@ -95,6 +97,42 @@ export class JourneySlotsService {
   async inProgress(ctx: AccessContext, options: { actingOwner: ActingOwner }): Promise<number> {
     assertOfficeOwner(options.actingOwner.owner.ownerType);
     return this.counters.readValue(ctx, ACTIVE_JOURNEYS_KEY, options);
+  }
+
+  /**
+   * BR-012-22: gives a slot back when a journey ends for a reason NO member of the office drives,
+   * or in an office that its members can no longer write to: a lost bid (D-13), an ending by a
+   * schedule or by the investor, and every ending in an office that is read-only or lapsed (a
+   * member's `release` is refused there with OFFICE_READ_ONLY, but the journey ended all the
+   * same, and its slot must free). The owner is the one the ended journey carries, never a request
+   * value (AR-12, `OwnerCounterRepository.releaseByJob`). Same once-per-journey rule as `release`.
+   */
+  async releaseForSystem(
+    owner: CountedOwner,
+    options: { session?: ClientSession } = {},
+  ): Promise<boolean> {
+    assertOfficeOwner(owner.ownerType);
+    return this.counters.releaseByJob(owner, ACTIVE_JOURNEYS_KEY, options);
+  }
+
+  /**
+   * BR-012-22, BR-012-24: repairs drift. SPEC-016's daily job counts the journeys really in
+   * progress per office and calls this with the count; if the counter says otherwise it is set to
+   * the truth (a crash between a journey's write and its slot, a manual correction). Logs the
+   * office id and the two counts only (SC-15). Answers whether it changed anything.
+   */
+  async reconcileCount(owner: CountedOwner, actualInProgress: number): Promise<boolean> {
+    assertOfficeOwner(owner.ownerType);
+    const replaced = await this.counters.setCountByJob(
+      owner,
+      ACTIVE_JOURNEYS_KEY,
+      actualInProgress,
+    );
+    if (replaced === null) return false;
+    this.logger.warn(
+      `Journey count of office ${String(owner.ownerId)} repaired: ${replaced} stored, ${actualInProgress} in progress`,
+    );
+    return true;
   }
 
   /** BR-012-21: the copy on the subscription in effect, 0 when there is none. Always read fresh. */

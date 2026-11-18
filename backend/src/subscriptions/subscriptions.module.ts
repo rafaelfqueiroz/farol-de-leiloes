@@ -61,6 +61,7 @@ import { SubscriptionsService } from './subscriptions.service.js';
     SubscriptionsService,
     // The billing module (same bounded context) and SPEC-016 (journey slots).
     SubscriptionsRepository,
+    PaymentEventsRepository, // the reconcile job's run lock
     JourneySlotsService,
     SubscriptionOfficePlanSource,
     OFFICE_PROVISIONER,

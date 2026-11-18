@@ -3,7 +3,7 @@
 // the subscription store, the plan catalog, the coupons, the journey counters and SPEC-011's
 // office provisioner. The real conditional updates these fakes imitate (the open-checkout key, the
 // refund claim) are proven against MongoDB in test/integration/subscriptions-billing.spec.ts.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccessContext } from '../access/access-context.js';
 import type { OwnerCounterRepository } from '../access/owner-counter.repository.js';
 import type { OfficePlanState } from '../access/sources/office-plan.source.js';
@@ -23,10 +23,12 @@ import { FakePaymentFailedNotifier } from '../../test/fakes/fake-payment-failed-
 import { FakePaymentGateway } from '../../test/fakes/fake-payment-gateway.js';
 import { FakeSubscriptionsRepository } from '../../test/fakes/fake-subscriptions-repository.js';
 import { InMemoryPlans } from '../../test/fakes/in-memory-plans.js';
+import { expectNoneLogged, spyOnLogger } from '../../test/support/logger-spy.js';
 import { testBusinessConfig, testConfigService } from '../../test/support/test-env.js';
 import { JourneySlotsService, ACTIVE_JOURNEYS_KEY } from './journey-slots.service.js';
 import type { PaymentEventsRepository } from './payment-events.repository.js';
 import {
+  INVOICE_CACHE_MS,
   REFUND_CLAIM_STALE_MS,
   SubscriptionsBillingService,
 } from './subscriptions-billing.service.js';
@@ -83,7 +85,7 @@ const PLAN_OLD = aPlan({
   status: 'WITHDRAWN',
 });
 
-function build() {
+function build(env: Record<string, string | undefined> = {}) {
   const clock = new FakeClock(FIRST_PAID);
   const gateway = new FakePaymentGateway();
   const subscriptions = new FakeSubscriptionsRepository(() => clock.now());
@@ -91,6 +93,8 @@ function build() {
   const provisioner = new FakeOfficeProvisioner();
   const counters = new FakeOwnerCounters();
   const coupons = new FakeCoupons();
+  // The provider sells every plan of the catalog (the change checks the price is still active).
+  for (const plan of [PLAN_5, PLAN_2, PLAN_10, PLAN_5_YEARLY, PLAN_OLD]) gateway.listsPlan(plan);
   const sync = new SubscriptionsService(
     subscriptions as unknown as SubscriptionsRepository,
     new FakePaymentEventsRepository() as unknown as PaymentEventsRepository,
@@ -118,6 +122,7 @@ function build() {
     testConfigService({
       FRONTEND_URL: 'https://app.example.test',
       STRIPE_BILLING_PORTAL_CONFIGURATION_ID: 'bpc_test_1',
+      ...env,
     }),
   );
 
@@ -152,7 +157,7 @@ function build() {
         priceId: plan.stripePriceId,
         currentPeriodStart: clock.now(),
         currentPeriodEnd: new Date(clock.now().getTime() + 30 * DAY),
-        latestInvoicePaidAt: clock.now(),
+        firstInvoicePaidAt: clock.now(),
         ...options.overrides,
       }),
     );
@@ -228,7 +233,7 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
         officeId: null,
       });
       expect(t.gateway.customers).toEqual([
-        { ...BUYER_INFO, userId: BUYER, idempotencyKey: `customer:${pending?.id}` },
+        { ...BUYER_INFO, userId: BUYER, idempotencyKey: `customer:${BUYER}` },
       ]);
       expect(checkout?.expiresAt.getTime()).toBe(FIRST_PAID.getTime() + 60 * MINUTE);
     });
@@ -747,17 +752,18 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       ).rejects.toMatchObject({ code: 'INVALID_PLAN' });
     });
 
-    it('BR-012-19: a plan that stops at the period end cannot be moved down, only up', async () => {
+    it('BR-012-19: a plan that stops at the period end cannot be moved at all: undo the cancellation first', async () => {
       await t.subscribeOffice(OFFICE);
       t.clock.advance(10 * DAY); // past the refund window: a cancel stops renewal only
       await t.billing.cancel(await t.memberOf());
 
-      await expect(
-        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code }),
-      ).rejects.toMatchObject({ code: 'SUBSCRIPTION_NOT_CHANGEABLE' });
-      await expect(
-        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code }),
-      ).resolves.toMatchObject({ status: 'CANCELING' });
+      for (const planCode of [PLAN_2.code, PLAN_10.code]) {
+        await expect(t.billing.changePlan(await t.memberOf(), { planCode })).rejects.toMatchObject({
+          code: 'SUBSCRIPTION_NOT_CHANGEABLE',
+        });
+      }
+      expect(t.gateway.priceChanges).toEqual([]);
+      expect(t.gateway.scheduledChanges).toEqual([]);
     });
 
     it('BR-012-16: nothing in effect, nothing to change', async () => {
@@ -778,7 +784,23 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
   });
 
   describe('BR-012-29: cancelling the first subscription inside the refund window', () => {
-    it('BR-012-29: on day 6 the full amount is refunded and the office is lapsed at once', async () => {
+    /** The refund key of an invoice of the subscription (stable, per invoice). */
+    const keyOf = (ref: string, invoiceId: string) => `refund:${ref}:${invoiceId}`;
+    const createOf = (providerId: string) => `in_create_${providerId}`;
+    const invoice = (
+      id: string,
+      reason: 'subscription_create' | 'subscription_update',
+      paid: string,
+      status: 'paid' | 'open' = 'paid',
+    ) => ({
+      id,
+      reason,
+      status,
+      amountPaid: new Decimal(paid),
+      amountRefunded: new Decimal(0),
+    });
+
+    it('BR-012-29: on day 6 the first payment is refunded in full and the office is lapsed at once', async () => {
       const { ref, providerId } = await t.subscribeOffice(OFFICE);
       t.clock.advance(6 * DAY);
 
@@ -786,8 +808,8 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
 
       expect(t.gateway.refunds).toEqual([
         {
-          subscriptionId: providerId,
-          idempotencyKey: `refund:${ref}`,
+          invoiceId: createOf(providerId),
+          idempotencyKey: keyOf(ref, createOf(providerId)),
           refunded: new Decimal('199.90'),
         },
       ]);
@@ -801,6 +823,43 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       expect(view.lapsedAt).toEqual(t.clock.now());
       expect(view.readOnlyAt?.toISOString()).toBe('2026-03-17T12:00:00.000Z');
       expect(t.subscriptions.get(ref).refundedAt).toEqual(t.clock.now());
+    });
+
+    it('DL-012-10: after an upgrade paid inside the window the cancel refunds the first payment AND the proration, never only the latest invoice', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE);
+      t.gateway.subscriptionInvoices.set(providerId, [
+        invoice('in_proration', 'subscription_update', '80.00'), // the latest invoice
+        invoice('in_create', 'subscription_create', '199.90'),
+      ]);
+      t.clock.advance(3 * DAY);
+
+      const view = await t.billing.cancel(await t.memberOf());
+
+      expect(
+        t.gateway.refunds.map((refund) => [refund.invoiceId, refund.refunded.toFixed()]),
+      ).toEqual([
+        ['in_proration', '80'],
+        ['in_create', '199.9'],
+      ]);
+      expect(t.gateway.refundRequests).toEqual([
+        keyOf(ref, 'in_proration'),
+        keyOf(ref, 'in_create'),
+      ]);
+      expect(view.status).toBe('LAPSED');
+    });
+
+    it('an upgrade proration still unpaid is voided so it cannot be paid after the end; the paid first payment is refunded', async () => {
+      const { providerId } = await t.subscribeOffice(OFFICE);
+      t.gateway.subscriptionInvoices.set(providerId, [
+        invoice('in_open', 'subscription_update', '0', 'open'),
+        invoice('in_create', 'subscription_create', '199.90'),
+      ]);
+
+      const view = await t.billing.cancel(await t.memberOf());
+
+      expect(t.gateway.voidedInvoices).toEqual(['in_open']);
+      expect(t.gateway.refunds.map((refund) => refund.invoiceId)).toEqual(['in_create']);
+      expect(view.status).toBe('LAPSED');
     });
 
     it('BR-012-29: on day 8 nothing is refunded; the plan stays in effect to the end of the paid period', async () => {
@@ -828,7 +887,7 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       expect(t.gateway.refundRequests).toEqual([]);
     });
 
-    it('BR-012-29: a second subscription after an earlier lapse is not eligible', async () => {
+    it('BR-012-29: a second subscription after an earlier PAID lapse is not eligible', async () => {
       const first = await t.subscribeOffice(OFFICE);
       t.gateway.setSubscription({ ...t.gateway.current(first.providerId), status: 'canceled' });
       await t.sync.refresh(first.ref);
@@ -842,6 +901,23 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       expect(view.status).toBe('CANCELING');
     });
 
+    it('BR-012-29: a first subscription that charged nothing (100% coupon) is NOT an earlier paid one: the later real subscription is eligible', async () => {
+      const first = await t.subscribeOffice(OFFICE, { overrides: { firstInvoiceFree: true } });
+      expect(t.subscriptions.get(first.ref).firstPaymentFree).toBe(true);
+      t.gateway.setSubscription({ ...t.gateway.current(first.providerId), status: 'canceled' });
+      await t.sync.refresh(first.ref);
+      t.clock.advance(20 * DAY);
+      const second = await t.subscribeOffice(OFFICE, { plan: PLAN_2 });
+      t.clock.advance(1 * DAY);
+
+      const view = await t.billing.cancel(await t.memberOf());
+
+      expect(t.gateway.refunds.map((refund) => refund.invoiceId)).toEqual([
+        createOf(second.providerId),
+      ]);
+      expect(view.status).toBe('LAPSED');
+    });
+
     it('BR-012-29: a 100% coupon refunds nothing and the subscription still ends', async () => {
       const { providerId } = await t.subscribeOffice(OFFICE);
       t.gateway.paidAmounts.set(providerId, new Decimal(0));
@@ -850,6 +926,83 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
 
       expect(t.gateway.refunds).toEqual([]);
       expect(view.status).toBe('LAPSED');
+    });
+
+    it('BR-012-29: renewal stopped on day 2 does not take the right of withdrawal away: on day 5 the cancel still refunds', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE, {
+        overrides: { cancelAtPeriodEnd: true },
+      });
+      expect(t.subscriptions.get(ref).status).toBe('CANCELING');
+      t.clock.advance(5 * DAY);
+
+      const view = await t.billing.cancel(await t.memberOf());
+
+      expect(t.gateway.refunds.map((refund) => refund.invoiceId)).toEqual([createOf(providerId)]);
+      expect(view.status).toBe('LAPSED');
+    });
+
+    it('BR-012-29: a refund that answers zero while the invoice paid money is a failure: nothing is recorded or cancelled, and the claim goes back', async () => {
+      const { ref } = await t.subscribeOffice(OFFICE);
+      t.gateway.refundAnswersZero = true;
+
+      await expect(t.billing.cancel(await t.memberOf())).rejects.toThrow(
+        'A refund returned less than the invoice paid',
+      );
+
+      expect(t.subscriptions.get(ref)).toMatchObject({
+        status: 'ACTIVE',
+        refundedAt: null,
+        refundClaimedAt: null,
+      });
+      expect(t.gateway.cancelledSubscriptions).toEqual([]);
+      // The retry, once the provider answers, completes it.
+      t.gateway.refundAnswersZero = false;
+      expect((await t.billing.cancel(await t.memberOf())).status).toBe('LAPSED');
+    });
+
+    it('F2: a refund that fails halfway gives the claim back; the retry refunds only what is left, with the same keys', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE);
+      t.gateway.subscriptionInvoices.set(providerId, [
+        invoice('in_proration', 'subscription_update', '80.00'),
+        invoice('in_create', 'subscription_create', '199.90'),
+      ]);
+      t.gateway.failRefundFor.add('in_create');
+
+      await expect(t.billing.cancel(await t.memberOf())).rejects.toThrow('provider unreachable');
+      expect(t.subscriptions.get(ref)).toMatchObject({
+        status: 'ACTIVE',
+        refundedAt: null,
+        refundClaimedAt: null,
+      });
+      t.gateway.failRefundFor.clear();
+
+      const view = await t.billing.cancel(await t.memberOf(SECOND_MEMBER));
+
+      expect(view.status).toBe('LAPSED');
+      // The proration was refunded once (the provider's own figures show it refunded the second time).
+      expect(t.gateway.refunds.map((refund) => refund.invoiceId)).toEqual([
+        'in_proration',
+        'in_create',
+      ]);
+    });
+
+    it('F2: a refund confirmed at the provider whose record failed is repaired by the retry, without a second refund', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE);
+      const markRefunded = t.subscriptions.markRefunded.bind(t.subscriptions);
+      t.subscriptions.markRefunded = () => Promise.reject(new Error('database unreachable'));
+      await expect(t.billing.cancel(await t.memberOf())).rejects.toThrow('database unreachable');
+      expect(t.subscriptions.get(ref)).toMatchObject({ refundedAt: null, refundClaimedAt: null });
+      t.subscriptions.markRefunded = markRefunded;
+      const requests = t.gateway.refundRequests.length;
+
+      const view = await t.billing.cancel(await t.memberOf());
+
+      expect(view.status).toBe('LAPSED');
+      // The provider shows the invoice refunded: no new refund request, the record is made.
+      expect(t.gateway.refundRequests).toHaveLength(requests);
+      expect(t.gateway.refunds).toHaveLength(1);
+      expect(t.subscriptions.get(ref).refundedAt).not.toBeNull();
+      expect(t.gateway.cancelledSubscriptions).toEqual([providerId]);
     });
 
     it('BR-012-29: a crash between the refund and the cancel is repaired by a retry, refunding once', async () => {
@@ -864,24 +1017,52 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       const view = await t.billing.cancel(await t.memberOf());
 
       expect(view.status).toBe('LAPSED');
-      expect(t.gateway.refundRequests).toEqual([`refund:${ref}`]);
+      expect(t.gateway.refundRequests).toEqual([keyOf(ref, createOf(providerId))]);
       expect(t.gateway.cancelledSubscriptions).toEqual([providerId]);
     });
 
-    it('BR-012-29: a claim whose holder died before it refunded is retaken after 5 minutes, with the same key', async () => {
+    it('F2: a legitimate in-window request completes when retried AFTER the window (judged at the request)', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE);
+      t.clock.advance(6 * DAY);
+      t.gateway.failRefundFor.add(createOf(providerId));
+      await expect(t.billing.cancel(await t.memberOf())).rejects.toThrow('provider unreachable');
+      expect(t.subscriptions.get(ref).refundRequestedAt).toEqual(t.clock.now());
+      t.gateway.failRefundFor.clear();
+      t.clock.advance(5 * DAY); // day 11: outside the window now
+
+      const view = await t.billing.cancel(await t.memberOf());
+
+      expect(view.status).toBe('LAPSED');
+      expect(t.gateway.refunds.map((refund) => refund.invoiceId)).toEqual([createOf(providerId)]);
+    });
+
+    it('F2: another member holding a LIVE claim is CANCEL_IN_PROGRESS, never a silent 200', async () => {
       const { ref } = await t.subscribeOffice(OFFICE);
+      const row = t.subscriptions.rows.get(ref);
+      if (!row) throw new Error('no row');
+      row.refundClaimedAt = t.clock.now();
+      row.refundRequestedAt = t.clock.now();
+
+      await expect(t.billing.cancel(await t.memberOf())).rejects.toMatchObject({
+        code: 'CANCEL_IN_PROGRESS',
+      });
+      expect(t.gateway.refundRequests).toEqual([]);
+    });
+
+    it('BR-012-29: a claim whose holder died before it refunded is retaken after 5 minutes, with the same key', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE);
       const row = t.subscriptions.rows.get(ref);
       if (!row) throw new Error('no row');
       row.refundClaimedAt = new Date(t.clock.now().getTime() - REFUND_CLAIM_STALE_MS);
 
       const view = await t.billing.cancel(await t.memberOf());
 
-      expect(t.gateway.refundRequests).toEqual([`refund:${ref}`]);
+      expect(t.gateway.refundRequests).toEqual([keyOf(ref, createOf(providerId))]);
       expect(view.status).toBe('LAPSED');
     });
 
-    it('BR-012-29: two members cancelling at once refund once', async () => {
-      const { ref } = await t.subscribeOffice(OFFICE);
+    it('BR-012-29: two members cancelling at once refund once: the second is told the cancel is in progress', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE);
       let release: () => void = () => undefined;
       const held = new Promise<void>((resolve) => {
         release = resolve;
@@ -890,13 +1071,14 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       t.gateway.onRefund = () => held;
 
       const first = t.billing.cancel(await t.memberOf(BUYER));
-      const second = await t.billing.cancel(await t.memberOf(SECOND_MEMBER));
-      expect(second.status).toBe('ACTIVE'); // not its to finish: the claim is the other cancel's
+      await expect(t.billing.cancel(await t.memberOf(SECOND_MEMBER))).rejects.toMatchObject({
+        code: 'CANCEL_IN_PROGRESS',
+      });
       release();
       const firstView = await first;
 
       expect(firstView.status).toBe('LAPSED');
-      expect(t.gateway.refundRequests).toEqual([`refund:${ref}`]);
+      expect(t.gateway.refundRequests).toEqual([keyOf(ref, createOf(providerId))]);
       expect(t.gateway.refunds).toHaveLength(1);
     });
   });
@@ -1029,6 +1211,394 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       await expect(t.billing.billingPortal(await t.memberOf())).rejects.toMatchObject({
         code: 'SUBSCRIPTION_NOT_FOUND',
       });
+    });
+  });
+
+  describe('F4: a payment confirmed between the guard and the insert', () => {
+    /** Runs `during` right after the checkout record is created, once (the webhook landing now). */
+    function landDuring(during: () => Promise<void>) {
+      const original = t.subscriptions.createPending.bind(t.subscriptions);
+      t.subscriptions.createPending = async (input) => {
+        t.subscriptions.createPending = original;
+        const created = await original(input);
+        await during();
+        return created;
+      };
+    }
+
+    it('BR-012-08: the office got a subscription in effect meanwhile: the record is deleted, nothing reaches the provider', async () => {
+      landDuring(async () => {
+        await t.subscribeOffice(OFFICE);
+      });
+
+      await expect(
+        t.billing.checkout(await t.memberOf(), BUYER_INFO, { planCode: PLAN_2.code }),
+      ).rejects.toMatchObject({ code: 'SUBSCRIPTION_ALREADY_ACTIVE' });
+
+      expect(t.gateway.checkouts).toEqual([]);
+      expect(t.gateway.customers).toEqual([]);
+      expect([...t.subscriptions.rows.values()].map((row) => row.status)).toEqual(['ACTIVE']);
+      expect(t.subscriptions.openKeys.size).toBe(0); // the deleted checkout released its key
+    });
+
+    it('BR-012-07: the buyer got a first subscription in effect (office not created yet) meanwhile: refused the same way', async () => {
+      landDuring(async () => {
+        const first = await t.subscriptions.createPending({
+          buyerUserId: BUYER,
+          planId: PLAN_5.id,
+          planCode: PLAN_5.code,
+          activeJourneyLimit: 5,
+        });
+        const row = t.subscriptions.rows.get(first.id);
+        if (row) row.status = 'ACTIVE';
+      });
+
+      await expect(
+        t.billing.checkout(await t.noOffice(), BUYER_INFO, { planCode: PLAN_5.code }),
+      ).rejects.toMatchObject({ code: 'SUBSCRIPTION_ALREADY_ACTIVE' });
+
+      expect(t.gateway.checkouts).toEqual([]);
+      expect(t.subscriptions.rows.size).toBe(1);
+    });
+
+    it('BR-012-07: a buyer whose first subscription is in effect and waits for its office cannot start another', async () => {
+      const first = await t.subscriptions.createPending({
+        buyerUserId: BUYER,
+        planId: PLAN_5.id,
+        planCode: PLAN_5.code,
+        activeJourneyLimit: 5,
+      });
+      const row = t.subscriptions.rows.get(first.id);
+      if (row) row.status = 'ACTIVE';
+
+      await expect(
+        t.billing.checkout(await t.noOffice(), BUYER_INFO, { planCode: PLAN_5.code }),
+      ).rejects.toMatchObject({ code: 'SUBSCRIPTION_ALREADY_ACTIVE' });
+      expect(t.subscriptions.rows.size).toBe(1);
+    });
+
+    it("BR-012-07: the buyer's open-checkout key lives until the office is attached, not until the payment", async () => {
+      await t.billing.checkout(await t.noOffice(), BUYER_INFO, { planCode: PLAN_5.code });
+      const [pending] = [...t.subscriptions.rows.values()];
+      const ref = pending?.id ?? '';
+      t.gateway.setSubscription(
+        aProviderSubscription({ id: 'sub_late', subscriptionRef: ref, priceId: 'price_5' }),
+      );
+      const event = {
+        id: 'evt_late',
+        type: 'checkout.completed' as const,
+        subscriptionId: 'sub_late',
+        subscriptionRef: ref,
+      };
+      t.provisioner.failNext = true; // SPEC-011 cannot create the office yet
+
+      await expect(t.sync.handleProviderEvent(event)).rejects.toThrow('office store unreachable');
+      expect(t.subscriptions.get(ref).status).toBe('ACTIVE');
+      expect(t.subscriptions.openKeys.has(ref)).toBe(true); // paid, no office: still holds the key
+      await expect(
+        t.billing.checkout(await t.noOffice(), BUYER_INFO, { planCode: PLAN_5.code }),
+      ).rejects.toMatchObject({ code: 'SUBSCRIPTION_ALREADY_ACTIVE' });
+
+      await t.sync.handleProviderEvent(event); // the retry: the office is created and attached
+      expect(t.subscriptions.get(ref).officeId).not.toBeNull();
+      expect(t.subscriptions.openKeys.has(ref)).toBe(false);
+    });
+  });
+
+  describe('F3: a checkout the buyer paid while the events never arrived', () => {
+    async function pendingWithSession() {
+      await t.billing.checkout(await t.noOffice(), BUYER_INFO, { planCode: PLAN_5.code });
+      const [record] = [...t.subscriptions.rows.values()];
+      if (!record) throw new Error('no record');
+      return record;
+    }
+    const paid = (ref: string) =>
+      t.gateway.setSubscription(
+        aProviderSubscription({ id: 'sub_paid', subscriptionRef: ref, priceId: 'price_5' }),
+      );
+
+    it('a session the provider shows complete is read through the normal sync: the office is created, no event needed', async () => {
+      const record = await pendingWithSession();
+      paid(record.id);
+      t.gateway.checkoutSessions.set('cs_fake_1', {
+        state: 'complete',
+        subscriptionId: 'sub_paid',
+      });
+
+      await expect(t.billing.recoverPendingCheckout(record)).resolves.toBe('recovered');
+
+      expect(t.subscriptions.get(record.id)).toMatchObject({
+        status: 'ACTIVE',
+        stripeSubscriptionId: 'sub_paid',
+      });
+      expect(t.subscriptions.get(record.id).officeId).not.toBeNull();
+    });
+
+    it('a session the provider shows expired leaves nothing; one still open and young is waited for', async () => {
+      const record = await pendingWithSession();
+
+      await expect(t.billing.recoverPendingCheckout(record)).resolves.toBe('waiting');
+      expect(t.subscriptions.rows.size).toBe(1);
+
+      t.gateway.checkoutSessions.set('cs_fake_1', { state: 'expired', subscriptionId: null });
+      await expect(t.billing.recoverPendingCheckout(record)).resolves.toBe('removed');
+      expect(t.subscriptions.rows.size).toBe(0);
+    });
+
+    it('a session still open after 24 hours is closed first, then removed', async () => {
+      const record = await pendingWithSession();
+      t.clock.advance(25 * 60 * MINUTE);
+
+      await expect(t.billing.recoverPendingCheckout(record)).resolves.toBe('removed');
+
+      expect(t.gateway.expiredSessions).toEqual(['cs_fake_1']);
+      expect(t.subscriptions.rows.size).toBe(0);
+    });
+
+    it('a record is NEVER removed on a provider error: it stays for the next look', async () => {
+      const record = await pendingWithSession();
+      t.gateway.failSessionLookup = true;
+
+      await expect(t.billing.recoverPendingCheckout(record)).rejects.toThrow(
+        'provider unreachable',
+      );
+
+      expect(t.subscriptions.rows.size).toBe(1);
+    });
+
+    it('a record with no session id is not this method’s to judge', async () => {
+      const orphan = await t.subscriptions.createPending({
+        buyerUserId: BUYER,
+        planId: PLAN_5.id,
+        planCode: PLAN_5.code,
+        activeJourneyLimit: 5,
+      });
+
+      await expect(t.billing.recoverPendingCheckout(orphan)).resolves.toBe('waiting');
+    });
+
+    it('BR-012-09: the success page asks the provider about an old unconfirmed checkout and shows CONFIRMED once it is recovered', async () => {
+      const ctx = await t.noOffice();
+      const record = await pendingWithSession();
+      paid(record.id);
+      t.gateway.checkoutSessions.set('cs_fake_1', {
+        state: 'complete',
+        subscriptionId: 'sub_paid',
+      });
+
+      // Young: the page does not ask the provider (the webhook is probably about to arrive).
+      expect(await t.billing.checkoutState(ctx, record.id)).toBe('PENDING');
+      t.clock.advance(11 * MINUTE);
+
+      expect(await t.billing.checkoutState(ctx, record.id)).toBe('CONFIRMED');
+    });
+
+    it('the success page answers PENDING, not an error, when the provider cannot be asked', async () => {
+      const ctx = await t.noOffice();
+      const record = await pendingWithSession();
+      t.clock.advance(11 * MINUTE);
+      t.gateway.failSessionLookup = true;
+
+      expect(await t.billing.checkoutState(ctx, record.id)).toBe('PENDING');
+    });
+
+    it('the success page of an expired session says PENDING and the record is gone (the buyer starts again)', async () => {
+      const ctx = await t.noOffice();
+      const record = await pendingWithSession();
+      t.gateway.checkoutSessions.set('cs_fake_1', { state: 'expired', subscriptionId: null });
+      t.clock.advance(11 * MINUTE);
+
+      expect(await t.billing.checkoutState(ctx, record.id)).toBe('PENDING');
+      expect(t.subscriptions.rows.size).toBe(0);
+    });
+  });
+
+  describe('F5: the billing portal fails closed in production without its restricted configuration', () => {
+    const productionWithout = () =>
+      build({ NODE_ENV: 'production', STRIPE_BILLING_PORTAL_CONFIGURATION_ID: undefined });
+
+    it('SC-16: production without STRIPE_BILLING_PORTAL_CONFIGURATION_ID: BILLING_PORTAL_FAILED, nothing opened, a warning names no data', async () => {
+      const prod = productionWithout();
+      await prod.subscribeOffice(OFFICE);
+      const logger = spyOnLogger();
+
+      await expect(prod.billing.billingPortal(await prod.memberOf())).rejects.toMatchObject({
+        code: 'BILLING_PORTAL_FAILED',
+      });
+
+      expect(prod.gateway.portalSessions).toEqual([]);
+      const logged = logger.loggedText();
+      expect(logged).toContain('STRIPE_BILLING_PORTAL_CONFIGURATION_ID');
+      expectNoneLogged(logged, ['cus_office_1', OFFICE]);
+      vi.restoreAllMocks();
+    });
+
+    it('production WITH the configuration opens the portal; outside production the default configuration is fine', async () => {
+      const prod = build({ NODE_ENV: 'production' });
+      await prod.subscribeOffice(OFFICE);
+      await prod.billing.billingPortal(await prod.memberOf());
+      expect(prod.gateway.portalSessions[0]?.configurationId).toBe('bpc_test_1');
+
+      const dev = build({
+        NODE_ENV: 'development',
+        STRIPE_BILLING_PORTAL_CONFIGURATION_ID: undefined,
+      });
+      await dev.subscribeOffice(OFFICE);
+      await dev.billing.billingPortal(await dev.memberOf());
+      expect(dev.gateway.portalSessions[0]).not.toHaveProperty('configurationId');
+    });
+  });
+
+  describe('F7: idempotency keys come from the facts that define the action', () => {
+    it('a retry of an upgrade after an unrelated webhook sync reuses the key; a later different action does not', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE);
+      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      // An unrelated event syncs the record meanwhile (lastSyncedAt moves).
+      t.clock.advance(2 * MINUTE);
+      await t.sync.refresh(ref);
+
+      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code }); // the retry
+      const [first, retry] = t.gateway.priceChanges;
+      expect(retry?.idempotencyKey).toBe(first?.idempotencyKey);
+
+      t.gateway.payPendingChange(providerId);
+      await t.sync.refresh(ref);
+      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code }); // another action
+      expect(t.gateway.scheduledChanges[0]?.idempotencyKey).not.toBe(first?.idempotencyKey);
+    });
+
+    it('the same upgrade from another plan, or in another period, is another key', async () => {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE, { plan: PLAN_2 });
+      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      t.gateway.payPendingChange(providerId);
+      await t.sync.refresh(ref);
+      t.gateway.setSubscription({
+        ...t.gateway.current(providerId),
+        priceId: 'price_2',
+        currentPeriodStart: new Date(t.clock.now().getTime() + 30 * DAY),
+      });
+      await t.sync.refresh(ref);
+
+      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+
+      const keys = t.gateway.priceChanges.map((change) => change.idempotencyKey);
+      expect(new Set(keys).size).toBe(2);
+    });
+  });
+
+  describe('F8, F14: changing the plan fails safe', () => {
+    it('BR-012-17: the price is changed FIRST; the downgrade scheduled before is released only after it succeeded', async () => {
+      await t.subscribeOffice(OFFICE);
+      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code });
+      t.gateway.callLog.length = 0;
+
+      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+
+      expect(t.gateway.callLog).toEqual(['price', 'release']);
+    });
+
+    it('a rejected upgrade is CHANGE_PLAN_FAILED (502), not a 500, and the scheduled downgrade is kept', async () => {
+      const { ref } = await t.subscribeOffice(OFFICE);
+      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code });
+      t.gateway.callLog.length = 0;
+      t.gateway.failChanges = true;
+      const logger = spyOnLogger();
+
+      await expect(
+        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code }),
+      ).rejects.toMatchObject({ code: 'CHANGE_PLAN_FAILED' });
+
+      expect(t.gateway.releasedSchedules).toEqual([]);
+      expect(t.subscriptions.get(ref).scheduledPlanId).toBe(PLAN_2.id);
+      expectNoneLogged(logger.loggedText(), ['rejected the change']);
+      vi.restoreAllMocks();
+    });
+
+    it('a rejected downgrade or release is CHANGE_PLAN_FAILED too', async () => {
+      await t.subscribeOffice(OFFICE);
+      t.gateway.failChanges = true;
+
+      await expect(
+        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code }),
+      ).rejects.toMatchObject({ code: 'CHANGE_PLAN_FAILED' });
+      t.gateway.failChanges = false;
+      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code });
+      t.gateway.failChanges = true;
+      await expect(
+        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_5.code }),
+      ).rejects.toMatchObject({ code: 'CHANGE_PLAN_FAILED' });
+    });
+
+    it('F14: a target price the provider archived (or no longer knows) is INVALID_PLAN, nothing is asked', async () => {
+      await t.subscribeOffice(OFFICE);
+      t.gateway.listsPlan(PLAN_10, { active: false });
+      await expect(
+        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code }),
+      ).rejects.toMatchObject({ code: 'INVALID_PLAN' });
+      t.gateway.prices.delete('price_2');
+      await expect(
+        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code }),
+      ).rejects.toMatchObject({ code: 'INVALID_PLAN' });
+
+      expect(t.gateway.priceChanges).toEqual([]);
+      expect(t.gateway.scheduledChanges).toEqual([]);
+    });
+
+    it('F14: a provider that cannot be asked about the price is CHANGE_PLAN_FAILED', async () => {
+      await t.subscribeOffice(OFFICE);
+      t.gateway.failPriceLookup = true;
+
+      await expect(
+        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code }),
+      ).rejects.toMatchObject({ code: 'CHANGE_PLAN_FAILED' });
+    });
+  });
+
+  describe('F9: one customer per buyer, and the invoice list is read once in a while', () => {
+    it('a buyer who already has a customer at the provider (found by our user id) gets no second one', async () => {
+      t.gateway.customersByUser.set(BUYER, 'cus_existing');
+
+      await t.billing.checkout(await t.noOffice(), BUYER_INFO, { planCode: PLAN_5.code });
+
+      expect(t.gateway.customers).toEqual([]);
+      expect(t.gateway.checkouts[0]?.customerId).toBe('cus_existing');
+    });
+
+    it('a buyer whose earlier record carries a customer reuses it, even for another office', async () => {
+      await t.subscribeOffice(OTHER_OFFICE); // BUYER bought it: its record carries cus_office_1
+      t.gateway.customers.length = 0;
+
+      await t.billing.checkout(await t.noOffice(), BUYER_INFO, { planCode: PLAN_5.code });
+
+      expect(t.gateway.customers).toEqual([]);
+      expect(t.gateway.checkouts[0]?.customerId).toBe('cus_office_1');
+    });
+
+    it('a failing customer search falls back to creating one, never to a failed checkout', async () => {
+      t.gateway.findCustomerByUserId = () => Promise.reject(new Error('search lags'));
+
+      await t.billing.checkout(await t.noOffice(), BUYER_INFO, { planCode: PLAN_5.code });
+
+      expect(t.gateway.customers).toHaveLength(1);
+    });
+
+    it('the invoice list is reused for 30 seconds and dropped by every action of ours', async () => {
+      const { ref } = await t.subscribeOffice(OFFICE);
+      const ctx = await t.memberOf();
+      await t.billing.view(ctx);
+      await t.billing.view(ctx);
+      expect(t.gateway.invoiceReads).toBe(1);
+
+      t.clock.advance(INVOICE_CACHE_MS);
+      await t.billing.view(ctx);
+      expect(t.gateway.invoiceReads).toBe(2);
+
+      // The cache is warm (the read just above). An action of ours refreshes the record and drops it:
+      // its own answer reads the list again.
+      const warm = t.gateway.invoiceReads;
+      await t.billing.changePlan(ctx, { planCode: PLAN_2.code });
+      expect(t.subscriptions.get(ref).scheduledPlanId).toBe(PLAN_2.id);
+      expect(t.gateway.invoiceReads).toBe(warm + 1);
     });
   });
 });

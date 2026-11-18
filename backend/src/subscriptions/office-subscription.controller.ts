@@ -16,6 +16,7 @@ import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { ConfirmedEmailGuard } from '../auth/guards/confirmed-email.guard.js';
 import type { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
+import { AccountThrottlerGuard } from './billing-throttler.module.js';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
 import {
   ChangePlanRequestDto,
@@ -41,7 +42,7 @@ import { SubscriptionsBillingService } from './subscriptions-billing.service.js'
 @ApiErrorResponses()
 @ApiJwtAuth()
 @ApiConfirmedEmail()
-@UseGuards(ConfirmedEmailGuard) // BR-001-04
+@UseGuards(ConfirmedEmailGuard, AccountThrottlerGuard) // BR-001-04, SC-04: per account
 @Controller('office/subscription')
 export class OfficeSubscriptionController {
   constructor(private readonly billing: SubscriptionsBillingService) {}

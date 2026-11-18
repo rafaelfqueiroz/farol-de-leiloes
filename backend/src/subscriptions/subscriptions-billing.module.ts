@@ -6,6 +6,7 @@ import schedulerConfig from '../config/scheduler.config.js';
 import { CouponsModule } from '../coupons/coupons.module.js';
 import { PaymentGatewayModule } from '../payments/payment-gateway.module.js';
 import { PlansModule } from '../plans/plans.module.js';
+import { AccountThrottlerGuard, BillingThrottlerModule } from './billing-throttler.module.js';
 import { CheckoutStatusController } from './checkout-status.controller.js';
 import { OfficeSubscriptionController } from './office-subscription.controller.js';
 import { SubscriptionsBillingService } from './subscriptions-billing.service.js';
@@ -31,8 +32,9 @@ import { SubscriptionsModule } from './subscriptions.module.js';
     PlansModule,
     CouponsModule,
     SubscriptionsModule,
+    BillingThrottlerModule, // SC-04: a per-account limit, every route can reach the provider
   ],
   controllers: [OfficeSubscriptionController, CheckoutStatusController],
-  providers: [SubscriptionsBillingService, SubscriptionsReconcileJob],
+  providers: [SubscriptionsBillingService, SubscriptionsReconcileJob, AccountThrottlerGuard],
 })
 export class SubscriptionsBillingModule {}
