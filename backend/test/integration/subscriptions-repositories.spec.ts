@@ -78,7 +78,7 @@ describe('subscription repositories (integration, SPEC-012)', () => {
   ) {
     const leased = await subscriptions.acquireSyncLease(id, token, NOW, LEASE_END);
     expect(leased).not.toBeNull();
-    return subscriptions.writeSync(id, token, patch(over));
+    return (await subscriptions.writeSync(id, token, patch(over))).outcome;
   }
 
   beforeAll(async () => {
@@ -193,9 +193,9 @@ describe('subscription repositories (integration, SPEC-012)', () => {
       const { id } = await pending(OFFICE);
       await subscriptions.acquireSyncLease(id, 'holder', NOW, LEASE_END);
 
-      expect(await subscriptions.writeSync(id, 'a-stale-sync', patch({ status: 'LAPSED' }))).toBe(
-        'lease_lost',
-      );
+      expect(
+        await subscriptions.writeSync(id, 'a-stale-sync', patch({ status: 'LAPSED' })),
+      ).toEqual({ outcome: 'lease_lost', dirty: false });
 
       expect(await raw(id)).toMatchObject({ status: 'PENDING', syncLeaseToken: 'holder' });
     });
@@ -223,7 +223,7 @@ describe('subscription repositories (integration, SPEC-012)', () => {
       const { id } = await pending(OFFICE);
       await sync(id, {}, 'once');
 
-      expect(await subscriptions.writeSync(id, 'once', patch({ status: 'LAPSED' }))).toBe(
+      expect((await subscriptions.writeSync(id, 'once', patch({ status: 'LAPSED' }))).outcome).toBe(
         'lease_lost',
       );
       expect((await raw(id))?.status).toBe('ACTIVE');
@@ -265,6 +265,87 @@ describe('subscription repositories (integration, SPEC-012)', () => {
         planCode: 'escritorio-9',
         activeJourneyLimit: 9,
       });
+    });
+  });
+
+  describe('BR-012-13: the re-sync request (dirty mark) is atomic with the lease', () => {
+    it('matches only while a lease is live: a free or expired lease takes no request', async () => {
+      const { id } = await pending(OFFICE);
+
+      expect(await subscriptions.markSyncRequested(id, NOW)).toBe(false); // never leased
+      await subscriptions.acquireSyncLease(id, 'holder', NOW, LEASE_END);
+      expect(await subscriptions.markSyncRequested(id, NOW)).toBe(true);
+      expect(await subscriptions.markSyncRequested(id, LEASE_END)).toBe(false); // expired
+      expect(await subscriptions.markSyncRequested('nope', NOW)).toBe(false);
+    });
+
+    it('a request that landed before the write is seen by it (dirty) and cleared with the release', async () => {
+      const { id } = await pending(OFFICE);
+      await subscriptions.acquireSyncLease(id, 'holder', NOW, LEASE_END);
+      await subscriptions.markSyncRequested(id, NOW);
+
+      const result = await subscriptions.writeSync(id, 'holder', patch());
+
+      expect(result).toEqual({ outcome: 'written', dirty: true });
+      const after = await raw(id);
+      expect(after).not.toHaveProperty('syncRequestedAt');
+      expect(after).not.toHaveProperty('syncLeaseToken');
+    });
+
+    it('a write nobody asked about is clean, and a request after the release matches nothing', async () => {
+      const { id } = await pending(OFFICE);
+      await subscriptions.acquireSyncLease(id, 'holder', NOW, LEASE_END);
+
+      expect(await subscriptions.writeSync(id, 'holder', patch())).toEqual({
+        outcome: 'written',
+        dirty: false,
+      });
+      expect(await subscriptions.markSyncRequested(id, NOW)).toBe(false);
+    });
+
+    it('a stale request left by a crashed holder is cleared when the lease is taken again', async () => {
+      const { id } = await pending(OFFICE);
+      await subscriptions.acquireSyncLease(id, 'crashed', NOW, LEASE_END);
+      await subscriptions.markSyncRequested(id, NOW);
+
+      await subscriptions.acquireSyncLease(
+        id,
+        'next',
+        LEASE_END,
+        new Date(LEASE_END.getTime() + 30_000),
+      );
+
+      expect(await raw(id)).not.toHaveProperty('syncRequestedAt');
+      expect(await subscriptions.writeSync(id, 'next', patch())).toMatchObject({ dirty: false });
+    });
+
+    it('TS-02: with the holder writing while 10 deliveries ask, each request either is seen by the write or matched nothing', async () => {
+      const { id } = await pending(OFFICE);
+      await subscriptions.acquireSyncLease(id, 'holder', NOW, LEASE_END);
+
+      const [write, ...requests] = await Promise.all([
+        subscriptions.writeSync(id, 'holder', patch()),
+        ...Array.from({ length: 10 }, () => subscriptions.markSyncRequested(id, NOW)),
+      ]);
+
+      const landed = requests.filter((matched) => matched === true).length;
+      // Either some request landed before the write (the write is dirty) or none did.
+      expect(write).toMatchObject({ outcome: 'written', dirty: landed > 0 });
+    });
+  });
+
+  describe('BR-012-08: the conflicting subscription of an office', () => {
+    it('finds the one in effect, other than the one asked about', async () => {
+      const inEffect = await pending(OFFICE);
+      await sync(inEffect.id);
+      const incoming = await pending(OFFICE);
+
+      expect((await subscriptions.findInEffectForOffice(OFFICE, incoming.id))?.id).toBe(
+        inEffect.id,
+      );
+      expect(await subscriptions.findInEffectForOffice(OFFICE, inEffect.id)).toBeNull();
+      expect(await subscriptions.findInEffectForOffice(OTHER_OFFICE, incoming.id)).toBeNull();
+      expect(await subscriptions.findInEffectForOffice('nope', incoming.id)).toBeNull();
     });
   });
 
@@ -392,23 +473,34 @@ describe('subscription repositories (integration, SPEC-012)', () => {
   });
 
   describe('an abandoned checkout leaves nothing', () => {
-    it('removes a pending subscription without a provider subscription, once', async () => {
-      const { id } = await pending();
+    const pendingWithSession = (checkoutSessionId: string) =>
+      subscriptions.createPending({
+        buyerUserId: BUYER,
+        planId: PLAN,
+        planCode: 'escritorio-5',
+        activeJourneyLimit: 5,
+        checkoutSessionId,
+      });
 
-      expect(await subscriptions.deleteAbandonedPending(id)).toBe(true);
-      expect(await subscriptions.deleteAbandonedPending(id)).toBe(false);
-      expect(await model.countDocuments()).toBe(0);
+    it('removes the pending subscription of that checkout session, once, and no other', async () => {
+      await pendingWithSession('cs_a');
+      const other = await pendingWithSession('cs_b');
+
+      expect(await subscriptions.deleteAbandonedPending('cs_a')).toBe(true);
+      expect(await subscriptions.deleteAbandonedPending('cs_a')).toBe(false);
+      expect((await model.find().lean().exec()).map((row) => String(row._id))).toEqual([other.id]);
     });
 
     it('never removes one the provider confirmed or one that has a provider subscription', async () => {
-      const confirmed = await pending(OFFICE);
+      const confirmed = await pendingWithSession('cs_confirmed');
       await sync(confirmed.id);
-      const withProvider = await pending(OTHER_OFFICE);
+      const withProvider = await pendingWithSession('cs_with_provider');
       await sync(withProvider.id, { status: 'PENDING', stripeSubscriptionId: 'sub_2' });
 
-      expect(await subscriptions.deleteAbandonedPending(confirmed.id)).toBe(false);
-      expect(await subscriptions.deleteAbandonedPending(withProvider.id)).toBe(false);
-      expect(await subscriptions.deleteAbandonedPending('not-an-id')).toBe(false);
+      expect(await subscriptions.deleteAbandonedPending('cs_confirmed')).toBe(false);
+      expect(await subscriptions.deleteAbandonedPending('cs_with_provider')).toBe(false);
+      expect(await subscriptions.deleteAbandonedPending('')).toBe(false);
+      expect(await subscriptions.deleteAbandonedPending('cs_none')).toBe(false);
       expect(await model.countDocuments()).toBe(2);
     });
   });

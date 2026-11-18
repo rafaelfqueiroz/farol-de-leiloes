@@ -4,7 +4,7 @@ import type {
   AttachOfficeOutcome,
   OfficeSubscriptionRow,
   SubscriptionsRepository,
-  SyncWriteOutcome,
+  SyncWriteResult,
 } from '../../src/subscriptions/subscriptions.repository.js';
 import type {
   NewPendingSubscription,
@@ -24,6 +24,8 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
  */
 export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository> {
   readonly rows = new Map<string, Mutable<StoredSubscription>>();
+  /** The ids a delivery asked to be read again (the dirty mark), cleared by the write. */
+  readonly requested = new Set<string>();
   private sequence = 0;
 
   /** The stored subscription, for assertions. */
@@ -108,7 +110,17 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
     if (row.syncLeaseUntil !== null && row.syncLeaseUntil.getTime() > now.getTime()) return null;
     row.syncLeaseToken = token;
     row.syncLeaseUntil = until;
+    this.requested.delete(id); // a stale mark: this holder reads the provider afresh
     return { ...row };
+  }
+
+  async markSyncRequested(id: string, now: Date): Promise<boolean> {
+    const row = this.rows.get(id);
+    if (!row || row.syncLeaseUntil === null || row.syncLeaseUntil.getTime() <= now.getTime()) {
+      return false;
+    }
+    this.requested.add(id);
+    return true;
   }
 
   async releaseSyncLease(id: string, token: string): Promise<void> {
@@ -119,10 +131,11 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
     }
   }
 
-  async writeSync(id: string, token: string, patch: SyncPatch): Promise<SyncWriteOutcome> {
+  async writeSync(id: string, token: string, patch: SyncPatch): Promise<SyncWriteResult> {
     const row = this.rows.get(id);
-    if (!row || row.syncLeaseToken !== token) return 'lease_lost';
-    if (this.wouldDuplicate(row, patch.status)) return 'duplicate_in_effect';
+    if (!row || row.syncLeaseToken !== token) return { outcome: 'lease_lost', dirty: false };
+    if (this.wouldDuplicate(row, patch.status))
+      return { outcome: 'duplicate_in_effect', dirty: false };
     row.status = patch.status;
     row.stripeSubscriptionId = patch.stripeSubscriptionId;
     row.stripeCustomerId = patch.stripeCustomerId;
@@ -142,7 +155,8 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
     }
     row.syncLeaseToken = null;
     row.syncLeaseUntil = null;
-    return 'written';
+    const dirty = this.requested.delete(id);
+    return { outcome: 'written', dirty };
   }
 
   async attachOffice(id: string, officeId: string, now: Date): Promise<AttachOfficeOutcome> {
@@ -158,11 +172,30 @@ export class FakeSubscriptionsRepository implements Port<SubscriptionsRepository
     return 'attached';
   }
 
-  async deleteAbandonedPending(id: string): Promise<boolean> {
-    const row = this.rows.get(id);
-    if (!row || row.status !== 'PENDING' || row.stripeSubscriptionId !== null) return false;
-    this.rows.delete(id);
-    return true;
+  async findInEffectForOffice(
+    officeId: string,
+    exceptId: string,
+  ): Promise<StoredSubscription | null> {
+    for (const row of this.rows.values()) {
+      if (row.id !== exceptId && row.officeId === officeId && isInEffect(row.status)) {
+        return { ...row };
+      }
+    }
+    return null;
+  }
+
+  async deleteAbandonedPending(checkoutSessionId: string): Promise<boolean> {
+    for (const row of this.rows.values()) {
+      if (
+        row.checkoutSessionId === checkoutSessionId &&
+        row.status === 'PENDING' &&
+        row.stripeSubscriptionId === null
+      ) {
+        this.rows.delete(row.id);
+        return true;
+      }
+    }
+    return false;
   }
 
   /** BR-012-08: the unique index on one in-effect subscription per office. */

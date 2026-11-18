@@ -24,7 +24,10 @@ export class FakePaymentGateway extends PaymentGateway {
   /** Every retrieveSubscription call, in order (BR-012-13: a sync always re-reads the provider). */
   readonly retrievals: string[] = [];
 
-  /** What parseWebhookEvent answers; an Error makes it throw, as a bad signature does. */
+  /**
+   * What parseWebhookEvent answers; an Error makes it throw (`new WebhookSignatureError()` is a
+   * bad signature, any other Error a fault of the mapping).
+   */
   nextWebhookEvent: PaymentEvent | Error = {
     id: 'evt_test',
     type: 'unhandled',
@@ -38,6 +41,12 @@ export class FakePaymentGateway extends PaymentGateway {
    * make it fail.
    */
   onRetrieve: ((subscriptionId: string) => Promise<void> | void) | undefined;
+  /**
+   * Runs after the snapshot was taken and before it is returned: a spec uses it to hold a read
+   * whose answer is already STALE (the provider changes while the reader waits), which is what a
+   * slow network does to a retrieve.
+   */
+  afterRetrieve: ((subscriptionId: string) => Promise<void> | void) | undefined;
 
   private readonly subscriptions = new Map<string, ProviderSubscription>();
 
@@ -64,6 +73,7 @@ export class FakePaymentGateway extends PaymentGateway {
     await this.onRetrieve?.(subscriptionId);
     const current = this.subscriptions.get(subscriptionId);
     if (!current) throw new Error('resource_missing');
+    await this.afterRetrieve?.(subscriptionId);
     return current;
   }
 

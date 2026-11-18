@@ -5,11 +5,12 @@
 //  - the webhook against real concurrency (parallel deliveries of one event, of two events);
 //  - the OFFICE_PLAN_SOURCE binding in AccessModule: the access context an account gets reflects
 //    its office's subscription, the grace period and read-only, on every request.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { AccessContextFactory } from '../../src/access/access-context.js';
 import { MEMBERSHIP_SOURCE } from '../../src/access/sources/membership.source.js';
+import { statusFromProvider } from '../../src/subscriptions/domain/provider-state.js';
 import { DomainError } from '../../src/common/errors/domain-error.js';
 import { PaymentGateway, type PaymentEvent } from '../../src/payments/payment-gateway.js';
 import { PlansService } from '../../src/plans/plans.service.js';
@@ -137,6 +138,8 @@ describe('office subscriptions over MongoDB (integration, SPEC-012)', () => {
     await subscriptionModel.collection.deleteMany({});
     await subscriptionModel.db.collection('paymentEvents').deleteMany({});
     provisioner.calls.length = 0;
+    gateway.retrievals.length = 0;
+    gateway.cancelledSubscriptions.length = 0;
     provisioner.offices.clear();
     notifier.notified.length = 0;
     harness.clock.set(AUTH_TEST_START);
@@ -170,6 +173,95 @@ describe('office subscriptions over MongoDB (integration, SPEC-012)', () => {
         officeId: provisioner.offices.get(pending.id),
         syncLeaseToken: null,
       });
+    });
+
+    it('a burst of events during a slow read is answered at once and ends in the provider LAST state: no 503, one office', async () => {
+      const pending = await startCheckout();
+      providerHas(pending.id); // active
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let holdOnce = true;
+      // The holder's FIRST read is slow and its answer is already stale when it returns.
+      gateway.afterRetrieve = async () => {
+        if (!holdOnce) return;
+        holdOnce = false;
+        await held;
+      };
+
+      const holder = service.handleProviderEvent(completed('evt_burst_0', pending.id));
+      await vi.waitFor(() => expect(gateway.retrievals).toContain('sub_1'));
+      // The provider moves on (renewal stopped: still in effect, so the office exists) and four
+      // more events about it arrive while the holder is still waiting.
+      providerHas(pending.id, { cancelAtPeriodEnd: true });
+      const others = await Promise.allSettled(
+        Array.from({ length: 4 }, (_, n) =>
+          service.handleProviderEvent(changed(`evt_burst_${n + 1}`)),
+        ),
+      );
+      release();
+      const holderResult = await Promise.allSettled([holder]);
+      gateway.afterRetrieve = undefined;
+
+      // No 503 anywhere in the burst: every delivery was acknowledged.
+      expect([...others, ...holderResult].map((result) => result.status)).toEqual(
+        Array(5).fill('fulfilled'),
+      );
+      const processed = await subscriptionModel.db
+        .collection('paymentEvents')
+        .countDocuments({ processedAt: { $exists: true } });
+      expect(processed).toBe(5);
+      // The stored state is what the provider says LAST (the holder's stale read was written, then
+      // read again because the others asked).
+      expect(await repository.findById(pending.id)).toMatchObject({
+        status: 'CANCELING',
+        cancelAtPeriodEnd: true,
+        syncLeaseToken: null,
+        officeId: provisioner.offices.get(pending.id),
+      });
+      expect(provisioner.offices.size).toBe(1);
+      expect(await subscriptionModel.countDocuments()).toBe(1);
+      expect(
+        await subscriptionModel.collection.findOne({ syncRequestedAt: { $exists: true } }),
+      ).toBeNull();
+    });
+
+    it('five parallel events while the provider keeps changing: none is refused, the final state is the provider last', async () => {
+      const pending = await startCheckout(OFFICE);
+      providerHas(pending.id);
+      await service.handleProviderEvent(completed('evt_p0', pending.id));
+      const states = [
+        { cancelAtPeriodEnd: true },
+        { cancelAtPeriodEnd: false, status: 'past_due' as const },
+        { cancelAtPeriodEnd: false, status: 'active' as const },
+        { cancelAtPeriodEnd: true },
+        {
+          cancelAtPeriodEnd: true,
+          status: 'canceled' as const,
+          endedAt: new Date('2099-01-14T00:00:00.000Z'),
+        },
+      ];
+      let reads = 0;
+      // Each read of the provider sees the next state: the provider keeps changing under the burst.
+      gateway.onRetrieve = () => {
+        providerHas(pending.id, states[Math.min(reads, states.length - 1)] ?? {});
+        reads += 1;
+      };
+
+      const results = await Promise.allSettled(
+        states.map((_, n) => service.handleProviderEvent(changed(`evt_p${n + 1}`))),
+      );
+      gateway.onRetrieve = undefined;
+
+      expect(results.filter((result) => result.status === 'rejected')).toEqual([]);
+      // Whatever the interleaving, the stored state is the last state any read saw, which is the
+      // provider's current one once the burst is over.
+      const current = await gateway.retrieveSubscription('sub_1');
+      expect((await repository.findById(pending.id))?.status).toBe(
+        statusFromProvider(current.status, current.cancelAtPeriodEnd),
+      );
+      expect(provisioner.offices.size).toBe(0); // the office was given at checkout: nothing to create
     });
 
     it('two different events for one subscription, in parallel, never lose the later provider state', async () => {

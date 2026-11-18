@@ -40,6 +40,7 @@ interface Row {
   refundedAt?: Date;
   syncLeaseToken?: string;
   syncLeaseUntil?: Date;
+  syncRequestedAt?: Date;
   lastSyncedAt?: Date;
 }
 
@@ -88,6 +89,17 @@ export interface OfficeSubscriptionRow {
  *    nothing was written.
  */
 export type SyncWriteOutcome = 'written' | 'lease_lost' | 'duplicate_in_effect';
+
+/**
+ * What a sync write did, and (for 'written') whether another delivery asked for a re-sync while
+ * the lease was held: `dirty` is read from the document as it was at the instant of the write, so
+ * a mark that landed before the write is seen here and one that lands after it finds the lease
+ * already released (BR-012-13, ADR-005).
+ */
+export interface SyncWriteResult {
+  readonly outcome: SyncWriteOutcome;
+  readonly dirty: boolean;
+}
 
 export type AttachOfficeOutcome = 'attached' | 'already_attached' | 'duplicate_in_effect';
 
@@ -195,12 +207,33 @@ export class SubscriptionsRepository {
           _id: { $eq: id },
           $or: [{ syncLeaseUntil: null }, { syncLeaseUntil: serverOperators({ $lte: now }) }],
         },
-        { $set: { syncLeaseToken: token, syncLeaseUntil: until } },
+        // A mark left by a holder that crashed is stale: this holder reads the provider afresh.
+        {
+          $set: { syncLeaseToken: token, syncLeaseUntil: until },
+          $unset: { syncRequestedAt: '' },
+        },
         { returnDocument: 'after' },
       )
       .lean<Row>()
       .exec();
     return row ? toStored(row) : null;
+  }
+
+  /**
+   * BR-012-13: a delivery that cannot take the lease asks the holder to read the provider once
+   * more AFTER this event, in ONE conditional update that matches only while a lease is live.
+   * True when the mark landed: the holder's next read covers the caller's event. False when the
+   * lease was just released or has expired: the caller must try to take it itself.
+   */
+  async markSyncRequested(id: string, now: Date): Promise<boolean> {
+    if (!isObjectIdString(id)) return false;
+    const result = await this.model
+      .updateOne(
+        { _id: { $eq: id }, syncLeaseUntil: serverOperators({ $gt: now }) },
+        { $set: { syncRequestedAt: now } },
+      )
+      .exec();
+    return result.matchedCount === 1;
   }
 
   /** Gives the lease back, only if it is still ours. Idempotent. */
@@ -217,9 +250,12 @@ export class SubscriptionsRepository {
   /**
    * BR-012-13: stores a sync under the lease and releases the lease in the same write. Conditional
    * on the token, so a sync whose lease expired and was taken by another writes nothing
-   * ('lease_lost'): a stale read can never overwrite a newer one.
+   * ('lease_lost'): a stale read can never overwrite a newer one. The write clears the re-sync
+   * mark and answers whether it was set (`dirty`): the update returns the document as it was just
+   * before, so a mark either landed before this write (seen here) or after the release (it then
+   * matched nothing and its sender took the lease itself).
    */
-  async writeSync(id: string, token: string, patch: SyncPatch): Promise<SyncWriteOutcome> {
+  async writeSync(id: string, token: string, patch: SyncPatch): Promise<SyncWriteResult> {
     const set: Record<string, unknown> = {
       status: patch.status,
       stripeSubscriptionId: patch.stripeSubscriptionId,
@@ -227,7 +263,11 @@ export class SubscriptionsRepository {
       cancelAtPeriodEnd: patch.cancelAtPeriodEnd,
       lastSyncedAt: patch.lastSyncedAt,
     };
-    const unset: Record<string, ''> = { syncLeaseToken: '', syncLeaseUntil: '' };
+    const unset: Record<string, ''> = {
+      syncLeaseToken: '',
+      syncLeaseUntil: '',
+      syncRequestedAt: '',
+    };
     const optional: Record<string, Date | Types.ObjectId | null> = {
       currentPeriodStart: patch.currentPeriodStart,
       currentPeriodEnd: patch.currentPeriodEnd,
@@ -249,16 +289,20 @@ export class SubscriptionsRepository {
       set.activeJourneyLimit = patch.plan.activeJourneyLimit;
     }
     try {
-      const result = await this.model
-        .updateOne(
+      const before = await this.model
+        .findOneAndUpdate(
           { _id: { $eq: id }, syncLeaseToken: { $eq: token } },
           { $set: set, $unset: unset },
+          { returnDocument: 'before' },
         )
+        .select('syncRequestedAt')
+        .lean<Pick<Row, '_id' | 'syncRequestedAt'>>()
         .exec();
-      return result.matchedCount === 1 ? 'written' : 'lease_lost';
+      if (before === null) return { outcome: 'lease_lost', dirty: false };
+      return { outcome: 'written', dirty: before.syncRequestedAt !== undefined };
     } catch (error) {
       // BR-012-08: the unique index on one in-effect subscription per office refused this status.
-      if (isInEffectDuplicate(error)) return 'duplicate_in_effect';
+      if (isInEffectDuplicate(error)) return { outcome: 'duplicate_in_effect', dirty: false };
       throw error;
     }
   }
@@ -283,13 +327,38 @@ export class SubscriptionsRepository {
   }
 
   /**
-   * An abandoned checkout leaves nothing (acceptance criteria): removes a subscription that is
-   * still PENDING and was never given a provider subscription. True when it was removed.
+   * BR-012-08: the subscription of this office that is in effect, other than `exceptId`. Read by
+   * the duplicate resolution to see what the incoming subscription collided with.
    */
-  async deleteAbandonedPending(id: string): Promise<boolean> {
-    if (!isObjectIdString(id)) return false;
+  async findInEffectForOffice(
+    officeId: string,
+    exceptId: string,
+  ): Promise<StoredSubscription | null> {
+    if (!isObjectIdString(officeId) || !isObjectIdString(exceptId)) return null;
+    const row = await this.model
+      .findOne({
+        officeId: { $eq: new Types.ObjectId(officeId) },
+        status: serverOperators({ $in: [...IN_EFFECT_STATUSES] }),
+        _id: serverOperators({ $ne: new Types.ObjectId(exceptId) }),
+      })
+      .lean<Row>()
+      .exec();
+    return row ? toStored(row) : null;
+  }
+
+  /**
+   * An abandoned checkout leaves nothing (acceptance criteria): removes the subscription of this
+   * checkout session when it is still PENDING and was never given a provider subscription. True
+   * when it was removed. Matched by the session id, which only that checkout carries.
+   */
+  async deleteAbandonedPending(checkoutSessionId: string): Promise<boolean> {
+    if (typeof checkoutSessionId !== 'string' || checkoutSessionId.length === 0) return false;
     const result = await this.model
-      .deleteOne({ _id: { $eq: id }, status: { $eq: 'PENDING' }, stripeSubscriptionId: null })
+      .deleteOne({
+        checkoutSessionId: { $eq: checkoutSessionId },
+        status: { $eq: 'PENDING' },
+        stripeSubscriptionId: null,
+      })
       .exec();
     return result.deletedCount === 1;
   }

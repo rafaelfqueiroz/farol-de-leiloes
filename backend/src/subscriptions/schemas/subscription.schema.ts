@@ -101,6 +101,13 @@ export class SubscriptionEntity {
   @Prop({ type: Date })
   syncLeaseUntil?: Date;
 
+  /**
+   * A delivery that could not take the lease sets this while the lease is live; the holder reads
+   * the provider again after its write and clears it (BR-012-13, ADR-005).
+   */
+  @Prop({ type: Date })
+  syncRequestedAt?: Date;
+
   @Prop({ type: Date })
   lastSyncedAt?: Date;
 }

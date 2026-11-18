@@ -87,16 +87,30 @@ export type PaymentEvent = { readonly id: string } & (
   | { type: 'subscription.changed'; subscriptionId: string }
   | { type: 'invoice.paid'; subscriptionId: string | null }
   | { type: 'invoice.payment_failed'; subscriptionId: string | null }
-  /** The customer never completed the checkout page. */
-  | { type: 'checkout.expired'; subscriptionRef: string | null }
+  /** The customer never completed the checkout page: the session id is what names the checkout. */
+  | { type: 'checkout.expired'; checkoutSessionId: string }
   | { type: 'unhandled'; providerType: string }
 );
+
+/**
+ * The signature (or the body it covers) did not verify (SC-11). Only this is an invalid request:
+ * any other failure of `parseWebhookEvent` is a fault of ours (a mapping bug), answered 5xx.
+ */
+export class WebhookSignatureError extends Error {
+  constructor() {
+    super('The webhook signature did not verify');
+    this.name = 'WebhookSignatureError';
+  }
+}
 
 /** An abstract class rather than an interface so it doubles as the Nest injection token. */
 export abstract class PaymentGateway {
   abstract createCustomer(input: CreateCustomerInput): Promise<{ id: string }>;
 
-  /** Cancels a subscription at once (a duplicate paid twice, BR-012-08). */
+  /**
+   * Cancels a subscription at once (a duplicate paid twice, BR-012-08). Idempotent: a
+   * subscription the provider already shows as canceled is a success.
+   */
   abstract cancelSubscription(subscriptionId: string): Promise<void>;
 
   /** The provider's current view of a subscription (BR-012-13). Throws when it cannot be read. */
@@ -109,7 +123,8 @@ export abstract class PaymentGateway {
 
   /**
    * Verifies the provider's signature over the exact bytes received (SC-11) and maps the event.
-   * Throws when the signature does not verify.
+   * Throws `WebhookSignatureError` when the signature does not verify; any other error is a fault.
+   * An event of the other mode than the configured key (test vs live) comes back `unhandled`.
    */
   abstract parseWebhookEvent(rawBody: Buffer, signature: string): PaymentEvent;
 }

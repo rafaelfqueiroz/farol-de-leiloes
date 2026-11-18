@@ -17,10 +17,18 @@ export interface OfficeProvisioner {
   /** False while no implementation is bound (SPEC-011): checkout must not start (PR2). */
   readonly available: boolean;
   /**
-   * Creates the office of a first payment. MUST be idempotent by `subscriptionRef` (SPEC-011 puts
-   * a unique index on it): two webhook deliveries can race, and the second must get the first's
-   * office back, never a second office (acceptance: "delivering the activation event twice yields
-   * exactly one office").
+   * Creates the office of a first payment. The contract SPEC-011 MUST honour:
+   *
+   *  - idempotent by `subscriptionRef` (a unique index on it): two webhook deliveries can race,
+   *    and the second gets the first's office back, never a second one (acceptance: "delivering
+   *    the activation event twice yields exactly one office");
+   *  - per buyer: if `accountId` already created or has an office for ANOTHER pending or paid
+   *    subscription ref of the same buyer, it returns THAT office. Two checkouts of one account
+   *    must not become two offices; the billing PR also allows one pending checkout per buyer, but
+   *    this contract is what holds when the guard is bypassed or raced.
+   *
+   * The service keeps the first office attached to a subscription; when the port answers a
+   * different one it logs a warning with ids (a broken contract, never silently two offices).
    */
   createForFirstPayment(input: FirstPaymentOffice): Promise<{ officeId: string }>;
 }

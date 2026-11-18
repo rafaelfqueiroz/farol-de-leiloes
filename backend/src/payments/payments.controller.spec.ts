@@ -57,7 +57,7 @@ describe('Stripe webhook over HTTP (raw body, Express 5)', () => {
   // Deliberately not canonical JSON (spacing, newline): re-serialising it would break the
   // signature, so only the raw bytes verify.
   const payload =
-    '{ "id": "evt_1", "object": "event", "type": "checkout.session.completed",\n' +
+    '{ "id": "evt_1", "object": "event", "type": "checkout.session.completed", "livemode": false,\n' +
     '  "data": { "object": { "object": "checkout.session", "subscription": "sub_1",' +
     ' "metadata": { "subscriptionRef": "64b7f0000000000000000099" } } } }';
 

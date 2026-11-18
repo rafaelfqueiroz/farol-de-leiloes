@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Logger } from '@nestjs/common';
 import { Decimal } from '../common/money/money.js';
 import { DomainError } from '../common/errors/domain-error.js';
-import type { PaymentEvent } from '../payments/payment-gateway.js';
+import { WebhookSignatureError, type PaymentEvent } from '../payments/payment-gateway.js';
 import type { PlansService } from '../plans/plans.service.js';
 import { aPlan } from '../../test/builders/plan.builder.js';
 import { aProviderSubscription } from '../../test/builders/provider-subscription.builder.js';
@@ -81,13 +81,13 @@ function build() {
   );
 
   /** A checkout started: the PENDING subscription (BR-012-09) on the 5-journey plan. */
-  const startCheckout = (officeId?: string) =>
+  const startCheckout = (officeId?: string, checkoutSessionId = 'cs_1') =>
     subscriptions.createPending({
       buyerUserId: BUYER,
       planId: PLAN_5.id,
       planCode: PLAN_5.code,
       activeJourneyLimit: PLAN_5.activeJourneyLimit,
-      checkoutSessionId: 'cs_1',
+      checkoutSessionId,
       ...(officeId === undefined ? {} : { officeId }),
     });
   /** The provider holds the subscription of this ref as it currently is. */
@@ -337,13 +337,21 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       expect(t.provisioner.offices.size).toBe(1);
     });
 
-    it('finds the record by the ref of the checkout event when the provider holds none', async () => {
+    it('BR-012-09: a provider subscription that does not carry the ref of the record is never activated (a fault, retried)', async () => {
       const pending = await t.startCheckout();
       t.providerHas(pending.id, { subscriptionRef: null });
 
-      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+      await expect(t.service.handleProviderEvent(completed('evt_1', pending.id))).rejects.toThrow(
+        'does not belong',
+      );
 
-      expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
+      expect(t.subscriptions.get(pending.id)).toMatchObject({
+        status: 'PENDING',
+        stripeSubscriptionId: null,
+        syncLeaseToken: null,
+      });
+      expect(t.provisioner.calls).toEqual([]);
+      expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
     });
 
     it('BR-012-20: a recovered payment returns a past_due subscription to active', async () => {
@@ -365,7 +373,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
   });
 
   describe('BR-012-13: the per-subscription sync lease', () => {
-    it('AC: concurrent syncs are serialised: the second gets WEBHOOK_BUSY while the first reads the provider', async () => {
+    it('AC: a delivery that finds the lease taken is covered by the holder, not delayed: the holder reads the provider again after it', async () => {
       const pending = await t.startCheckout(OFFICE);
       t.providerHas(pending.id);
       let release: () => void = () => undefined;
@@ -376,25 +384,91 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
 
       const first = t.service.handleProviderEvent(completed('evt_1', pending.id));
       await vi.waitFor(() => expect(t.gateway.retrievals).toContain('sub_1'));
-
-      // The first holds the lease and is inside its retrieve; the second cannot sync.
       t.gateway.onRetrieve = undefined;
-      await expect(t.service.handleProviderEvent(changed('evt_2'))).rejects.toEqual(
-        new DomainError('WEBHOOK_BUSY'),
-      );
-      // It is left unprocessed, so the provider delivers it again.
-      expect(t.ledger.ledger.get('evt_2')?.processedAt).toBeUndefined();
+      // While the holder is inside its first read, the provider moves on and a second event comes.
+      t.providerHas(pending.id, {
+        status: 'canceled',
+        endedAt: new Date('2026-02-28T00:00:00.000Z'),
+      });
+      await t.service.handleProviderEvent(changed('evt_2'));
+
+      // No 503: the second event is acknowledged at once, the holder has not written anything yet.
+      expect(t.ledger.ledger.get('evt_2')?.processedAt).toEqual(NOW);
+      expect(t.subscriptions.get(pending.id).status).toBe('PENDING');
+      expect(t.subscriptions.requested.has(pending.id)).toBe(true);
 
       release();
       await first;
-      expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
 
-      // The lease is free again: the redelivery succeeds.
-      await t.service.handleProviderEvent(changed('evt_2'));
-      expect(t.ledger.ledger.get('evt_2')?.processedAt).toEqual(NOW);
+      // The holder's first read (active) was written, then read again because of the mark: the
+      // stored state is the provider's LAST state, which the second event announced.
+      expect(t.gateway.retrievals.filter((id) => id === 'sub_1')).toHaveLength(3); // 1 for the second event's lookup
+      expect(t.subscriptions.get(pending.id)).toMatchObject({
+        status: 'LAPSED',
+        lapsedAt: new Date('2026-02-28T00:00:00.000Z'),
+        syncLeaseToken: null,
+      });
+      expect(t.subscriptions.requested.size).toBe(0);
     });
 
-    it('takes a lease that expired (a crashed holder cannot block a subscription forever)', async () => {
+    it('a request left on a lease that was just freed matches nothing: the delivery takes the lease itself', async () => {
+      const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id);
+      await t.subscriptions.acquireSyncLease(
+        pending.id,
+        'holder',
+        NOW,
+        new Date(NOW.getTime() + SYNC_LEASE_MS),
+      );
+      // The holder lets go between the failed acquire and the request.
+      const original = t.subscriptions.markSyncRequested.bind(t.subscriptions);
+      t.subscriptions.markSyncRequested = async (id, now) => {
+        await t.subscriptions.releaseSyncLease(id, 'holder');
+        return original(id, now);
+      };
+
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+
+      expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
+    });
+
+    it('answers WEBHOOK_BUSY only when the lease stays taken and no request can be left on it', async () => {
+      const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id);
+      await t.subscriptions.acquireSyncLease(
+        pending.id,
+        'holder',
+        NOW,
+        new Date(NOW.getTime() + SYNC_LEASE_MS),
+      );
+      const request = vi.fn().mockResolvedValue(false);
+      t.subscriptions.markSyncRequested = request;
+
+      await expect(t.service.handleProviderEvent(changed('evt_1'))).rejects.toEqual(
+        new DomainError('WEBHOOK_BUSY'),
+      );
+
+      expect(request).toHaveBeenCalledTimes(3); // bounded
+      expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
+    });
+
+    it('a holder that keeps being asked to read again gives up after three reads: WEBHOOK_BUSY, event unprocessed', async () => {
+      const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id);
+      // Every read of the provider is followed by a delivery asking for another one.
+      t.gateway.onRetrieve = async () => {
+        await t.subscriptions.markSyncRequested(pending.id, t.clock.now());
+      };
+
+      await expect(t.service.handleProviderEvent(completed('evt_1', pending.id))).rejects.toEqual(
+        new DomainError('WEBHOOK_BUSY'),
+      );
+
+      expect(t.gateway.retrievals).toHaveLength(3);
+      expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
+    });
+
+    it('a lease held by a crashed delivery covers the next event; once it expires a new event syncs', async () => {
       const pending = await t.startCheckout(OFFICE);
       t.providerHas(pending.id);
       await t.subscriptions.acquireSyncLease(
@@ -404,12 +478,12 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
         new Date(NOW.getTime() + SYNC_LEASE_MS),
       );
 
-      await expect(t.service.handleProviderEvent(changed('evt_1'))).rejects.toEqual(
-        new DomainError('WEBHOOK_BUSY'),
-      );
+      // The crashed holder's own event is the one the provider redelivers, so this one is covered.
+      await t.service.handleProviderEvent(changed('evt_1'));
+      expect(t.subscriptions.get(pending.id).status).toBe('PENDING');
 
       t.clock.advance(SYNC_LEASE_MS); // the lease ends at its `until`
-      await t.service.handleProviderEvent(changed('evt_1'));
+      await t.service.handleProviderEvent(changed('evt_2'));
       expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
     });
 
@@ -494,7 +568,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       expect(t.gateway.cancelledSubscriptions).toEqual(['sub_2']);
     });
 
-    it('stops (a fault, retried and reported) when the provider does not end the duplicate', async () => {
+    it('stops (a fault, retried and reported) when the provider never ends the duplicate', async () => {
       const first = await t.startCheckout(OFFICE);
       t.providerHas(first.id);
       await t.service.handleProviderEvent(completed('evt_1', first.id));
@@ -507,7 +581,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
 
       await expect(
         t.service.handleProviderEvent(completed('evt_2', second.id, 'sub_2')),
-      ).rejects.toThrow('could not be cancelled');
+      ).rejects.toThrow('nested too deeply');
       expect(t.subscriptions.get(first.id).status).toBe('ACTIVE');
       expect(t.subscriptions.get(second.id).syncLeaseToken).toBeNull();
     });
@@ -543,17 +617,145 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       await t.service.handleProviderEvent(completed('evt_1', pending.id));
 
       expect(t.subscriptions.get(pending.id).officeId).toBe(OFFICE);
+      // The port answered another office than the one kept: its contract (idempotent by ref, and
+      // one office per buyer) is broken, and the warning names ids only.
+      const message = warn.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+      expect(message).toContain(`Subscription ${pending.id} keeps office ${OFFICE}`);
+    });
+  });
+
+  describe('BR-012-08: the provider decides which duplicate stays', () => {
+    /** An office with a subscription in effect, activated at `paidAt`, under provider id `providerId`. */
+    async function inEffect(providerId: string, paidAt: string) {
+      const record = await t.startCheckout(OFFICE, `cs_${providerId}`);
+      t.gateway.setSubscription(
+        aProviderSubscription({
+          id: providerId,
+          subscriptionRef: record.id,
+          priceId: 'price_5',
+          latestInvoicePaidAt: new Date(paidAt),
+        }),
+      );
+      await t.service.handleProviderEvent(completed(`evt_${providerId}`, record.id, providerId));
+      return record;
+    }
+
+    it('a stale in-effect record is read again first: it lapses, and the incoming subscription takes the office with nothing cancelled', async () => {
+      const first = await inEffect('sub_1', '2026-01-10T00:00:00.000Z');
+      // The provider ended it, but its event never reached us: our record still says ACTIVE.
+      t.gateway.setSubscription(
+        aProviderSubscription({
+          id: 'sub_1',
+          subscriptionRef: first.id,
+          status: 'canceled',
+          endedAt: new Date('2026-02-20T00:00:00.000Z'),
+        }),
+      );
+      expect(t.subscriptions.get(first.id).status).toBe('ACTIVE');
+      const second = await t.startCheckout(OFFICE, 'cs_2');
+      t.gateway.setSubscription(
+        aProviderSubscription({ id: 'sub_2', subscriptionRef: second.id, priceId: 'price_5' }),
+      );
+
+      await t.service.handleProviderEvent(completed('evt_2', second.id, 'sub_2'));
+
+      expect(t.gateway.cancelledSubscriptions).toEqual([]);
+      expect(t.subscriptions.get(first.id).status).toBe('LAPSED');
+      expect(t.subscriptions.get(second.id).status).toBe('ACTIVE');
+    });
+
+    it('both in effect at the provider: the LATER one by first payment is cancelled, with a warning of ids', async () => {
+      const first = await inEffect('sub_1', '2026-01-10T00:00:00.000Z');
+      const second = await t.startCheckout(OFFICE, 'cs_2');
+      t.gateway.setSubscription(
+        aProviderSubscription({
+          id: 'sub_2',
+          subscriptionRef: second.id,
+          priceId: 'price_5',
+          latestInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
+        }),
+      );
+
+      await t.service.handleProviderEvent(completed('evt_2', second.id, 'sub_2'));
+
+      expect(t.gateway.cancelledSubscriptions).toEqual(['sub_2']);
+      expect(t.subscriptions.get(second.id).status).toBe('LAPSED');
+      expect(t.subscriptions.get(first.id).status).toBe('ACTIVE');
+      const message = warn.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+      expect(message).toContain(`Subscription ${second.id} duplicates ${first.id}`);
+    });
+
+    it('a late reactivation never takes the office from the older paid subscription, whoever lost the index race', async () => {
+      // The newer subscription (paid in February) was activated first and holds the index...
+      const newer = await inEffect('sub_new', '2026-02-01T00:00:00.000Z');
+      // ...and an older one (paid in January), lapsed earlier, is reactivated by a late payment.
+      const older = await t.startCheckout(OFFICE, 'cs_old');
+      t.gateway.setSubscription(
+        aProviderSubscription({
+          id: 'sub_old',
+          subscriptionRef: older.id,
+          priceId: 'price_5',
+          latestInvoicePaidAt: new Date('2026-01-05T00:00:00.000Z'),
+        }),
+      );
+
+      await t.service.handleProviderEvent(completed('evt_old', older.id, 'sub_old'));
+
+      // The index refused the older one, but the provider decision is "cancel the later one".
+      expect(t.gateway.cancelledSubscriptions).toEqual(['sub_new']);
+      expect(t.subscriptions.get(newer.id).status).toBe('LAPSED');
+      expect(t.subscriptions.get(older.id)).toMatchObject({ status: 'ACTIVE', officeId: OFFICE });
+    });
+
+    it('the cancel is idempotent: a replay that cancels an already cancelled subscription is a success', async () => {
+      const first = await inEffect('sub_1', '2026-01-10T00:00:00.000Z');
+      const second = await t.startCheckout(OFFICE, 'cs_2');
+      t.gateway.setSubscription(
+        aProviderSubscription({
+          id: 'sub_2',
+          subscriptionRef: second.id,
+          priceId: 'price_5',
+          latestInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
+        }),
+      );
+      await t.service.handleProviderEvent(completed('evt_2', second.id, 'sub_2'));
+      // Stripe delivers a second event for the same subscription; both cancel calls succeed.
+      await t.service.handleProviderEvent(changed('evt_3', 'sub_2'));
+
+      expect(t.subscriptions.get(second.id).status).toBe('LAPSED');
+      expect(t.subscriptions.get(first.id).status).toBe('ACTIVE');
+    });
+
+    it('cancels nothing while another delivery is reading the conflicting subscription (it may be stale): WEBHOOK_BUSY', async () => {
+      const first = await inEffect('sub_1', '2026-01-10T00:00:00.000Z');
+      await t.subscriptions.acquireSyncLease(
+        first.id,
+        'holder',
+        NOW,
+        new Date(NOW.getTime() + SYNC_LEASE_MS),
+      );
+      const second = await t.startCheckout(OFFICE, 'cs_2');
+      t.gateway.setSubscription(
+        aProviderSubscription({ id: 'sub_2', subscriptionRef: second.id, priceId: 'price_5' }),
+      );
+
+      await expect(
+        t.service.handleProviderEvent(completed('evt_2', second.id, 'sub_2')),
+      ).rejects.toEqual(new DomainError('WEBHOOK_BUSY'));
+
+      expect(t.gateway.cancelledSubscriptions).toEqual([]);
+      expect(t.subscriptions.get(first.id).status).toBe('ACTIVE');
     });
   });
 
   describe('AC: an abandoned checkout leaves nothing', () => {
     it('checkout.expired removes the pending subscription that never got a provider subscription', async () => {
-      const pending = await t.startCheckout();
+      await t.startCheckout();
 
       await t.service.handleProviderEvent({
         id: 'evt_1',
         type: 'checkout.expired',
-        subscriptionRef: pending.id,
+        checkoutSessionId: 'cs_1',
       });
 
       expect(t.subscriptions.rows.size).toBe(0);
@@ -562,17 +764,43 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
     });
 
     it('is safe to repeat and to receive for a record that is gone', async () => {
-      const pending = await t.startCheckout();
+      await t.startCheckout();
       const expired: PaymentEvent = {
         id: 'evt_1',
         type: 'checkout.expired',
-        subscriptionRef: pending.id,
+        checkoutSessionId: 'cs_1',
       };
 
       await t.service.handleProviderEvent(expired);
       await t.service.handleProviderEvent({ ...expired, id: 'evt_2' });
 
       expect(t.subscriptions.rows.size).toBe(0);
+    });
+
+    it('removes only the record of the expired checkout session, never another pending one', async () => {
+      const abandoned = await t.startCheckout(undefined, 'cs_abandoned');
+      const other = await t.startCheckout(undefined, 'cs_other');
+
+      await t.service.handleProviderEvent({
+        id: 'evt_1',
+        type: 'checkout.expired',
+        checkoutSessionId: 'cs_abandoned',
+      });
+
+      expect([...t.subscriptions.rows.keys()]).toEqual([other.id]);
+      expect(t.subscriptions.rows.has(abandoned.id)).toBe(false);
+    });
+
+    it('an expired session of no record of ours (a legacy checkout) removes nothing', async () => {
+      const pending = await t.startCheckout();
+
+      await t.service.handleProviderEvent({
+        id: 'evt_1',
+        type: 'checkout.expired',
+        checkoutSessionId: 'cs_unknown',
+      });
+
+      expect(t.subscriptions.rows.has(pending.id)).toBe(true);
     });
 
     it('never removes a subscription the provider confirmed', async () => {
@@ -583,7 +811,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       await t.service.handleProviderEvent({
         id: 'evt_2',
         type: 'checkout.expired',
-        subscriptionRef: pending.id,
+        checkoutSessionId: 'cs_1',
       });
 
       expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
@@ -616,16 +844,6 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('Legacy user-level'));
     });
 
-    it('an expired checkout without our ref is ignored', async () => {
-      await t.service.handleProviderEvent({
-        id: 'evt_1',
-        type: 'checkout.expired',
-        subscriptionRef: null,
-      });
-
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Legacy user-level'));
-    });
-
     it('a subscription event for a provider subscription none of our records owns is ignored', async () => {
       t.gateway.setSubscription(aProviderSubscription({ id: 'sub_legacy', subscriptionRef: null }));
 
@@ -636,14 +854,28 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       expect(t.ledger.ledger.get('evt_1')?.processedAt).toEqual(NOW);
     });
 
-    it('a provider ref that names no record of ours is ignored the same way', async () => {
+    it('a provider subscription that carries our ref but whose record is missing is a FAULT, never legacy', async () => {
       t.gateway.setSubscription(
         aProviderSubscription({ id: 'sub_x', subscriptionRef: '64b7f00000000000000000ff' }),
       );
 
-      await t.service.handleProviderEvent(changed('evt_1', 'sub_x'));
+      await expect(t.service.handleProviderEvent(changed('evt_1', 'sub_x'))).rejects.toThrow(
+        'names a record that does not exist',
+      );
 
-      expect(t.subscriptions.rows.size).toBe(0);
+      expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
+      const message = warn.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+      expect(message).toContain('sub_x');
+      expect(message).not.toContain('Legacy');
+    });
+
+    it('a checkout event whose ref names no record is a FAULT too', async () => {
+      t.providerHas('64b7f00000000000000000ff');
+
+      await expect(
+        t.service.handleProviderEvent(completed('evt_1', '64b7f00000000000000000ff')),
+      ).rejects.toThrow('does not exist');
+      expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
     });
 
     it('an invoice that belongs to no subscription says nothing', async () => {
@@ -664,23 +896,25 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
   });
 
   describe('a record only syncs with its own provider subscription', () => {
-    it('ignores a provider subscription whose ref names another record', async () => {
+    it('faults on a provider subscription whose ref names another record (nothing is written)', async () => {
       const pending = await t.startCheckout();
-      const other = await t.startCheckout();
+      const other = await t.startCheckout(undefined, 'cs_2');
       t.providerHas(other.id);
 
       // The event hints at `pending`, but the provider subscription belongs to `other`.
-      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+      await expect(t.service.handleProviderEvent(completed('evt_1', pending.id))).rejects.toThrow(
+        'does not belong',
+      );
 
       expect(t.subscriptions.get(pending.id)).toMatchObject({
         status: 'PENDING',
         stripeSubscriptionId: null,
+        syncLeaseToken: null,
       });
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('does not belong'));
-      expect(t.subscriptions.get(pending.id).syncLeaseToken).toBeNull();
     });
 
-    it('ignores a provider subscription other than the one the record already owns', async () => {
+    it('faults on a provider subscription other than the one the record already owns', async () => {
       const pending = await t.startCheckout(OFFICE);
       t.providerHas(pending.id);
       await t.service.handleProviderEvent(completed('evt_1', pending.id));
@@ -688,7 +922,9 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
         aProviderSubscription({ id: 'sub_other', subscriptionRef: pending.id, status: 'canceled' }),
       );
 
-      await t.service.handleProviderEvent(completed('evt_2', pending.id, 'sub_other'));
+      await expect(
+        t.service.handleProviderEvent(completed('evt_2', pending.id, 'sub_other')),
+      ).rejects.toThrow('does not belong');
 
       expect(t.subscriptions.get(pending.id)).toMatchObject({
         status: 'ACTIVE',
@@ -787,8 +1023,10 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       });
     });
 
-    it('a price no plan maps to changes neither the plan nor the limit, and says so by id', async () => {
+    it('a price no plan maps to changes neither the plan nor the limit of an active subscription, and says so by id', async () => {
       const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id);
+      await t.service.handleProviderEvent(completed('evt_0', pending.id));
       t.providerHas(pending.id, {
         priceId: 'price_unknown',
         scheduledPriceId: 'price_next',
@@ -806,6 +1044,21 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       const messages = warn.mock.calls.map((call: unknown[]) => String(call[0]));
       expect(messages.some((m: string) => m.includes('price_unknown'))).toBe(true);
       expect(messages.some((m: string) => m.includes('price_next'))).toBe(true);
+    });
+
+    it('the FIRST activation on a price no plan maps to is refused: no office is activated on a plan we cannot name', async () => {
+      const pending = await t.startCheckout();
+      t.providerHas(pending.id, { priceId: 'price_unknown' });
+
+      await expect(t.service.handleProviderEvent(completed('evt_1', pending.id))).rejects.toThrow(
+        'first activation is refused',
+      );
+
+      expect(t.subscriptions.get(pending.id)).toMatchObject({
+        status: 'PENDING',
+        stripeSubscriptionId: null,
+      });
+      expect(t.provisioner.calls).toEqual([]);
     });
 
     it('a record whose plan no longer exists takes the plan the provider bills', async () => {
@@ -950,6 +1203,24 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       expect(t.notifier.notified).toEqual([OFFICE]);
     });
 
+    it('a failed-payment event covered by a holder is retried, never acknowledged unread (the email decision needs its own read)', async () => {
+      const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id, { status: 'past_due' });
+      await t.subscriptions.acquireSyncLease(
+        pending.id,
+        'holder',
+        NOW,
+        new Date(NOW.getTime() + SYNC_LEASE_MS),
+      );
+
+      await expect(t.service.handleProviderEvent(failed('evt_1'))).rejects.toEqual(
+        new DomainError('WEBHOOK_BUSY'),
+      );
+
+      expect(t.notifier.notified).toEqual([]);
+      expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
+    });
+
     it('each failed attempt is its own event and is told', async () => {
       const pending = await t.startCheckout(OFFICE);
       t.providerHas(pending.id, { status: 'past_due' });
@@ -981,14 +1252,9 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
   });
 
   describe('SC-11: the webhook entry point', () => {
-    it('refuses a body whose signature does not verify, logging the cause by code only', async () => {
+    it('refuses a body whose signature does not verify, logging the class only', async () => {
       const error = vi.spyOn(Logger.prototype, 'error');
-      t.gateway.nextWebhookEvent = Object.assign(
-        new Error('No signatures found matching 4111-secret'),
-        {
-          code: 'signature_failed',
-        },
-      );
+      t.gateway.nextWebhookEvent = new WebhookSignatureError();
 
       await expect(t.service.handleWebhook(Buffer.from('{}'), 'sig')).rejects.toEqual(
         new DomainError('INVALID_WEBHOOK_SIGNATURE'),
@@ -996,11 +1262,20 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
 
       expect(t.ledger.ledger.size).toBe(0);
       expect(String(error.mock.calls[error.mock.calls.length - 1]?.[0])).toContain(
-        'signature_failed',
+        'WebhookSignatureError',
       );
-      expect(String(error.mock.calls[error.mock.calls.length - 1]?.[0])).not.toContain(
-        '4111-secret',
-      );
+    });
+
+    it('a verified event that cannot be mapped is a FAULT (5xx), not an invalid signature, logged by code only', async () => {
+      const error = vi.spyOn(Logger.prototype, 'error');
+      const fault = Object.assign(new Error('cannot map 4111-secret'), { code: 'mapping_failed' });
+      t.gateway.nextWebhookEvent = fault;
+
+      await expect(t.service.handleWebhook(Buffer.from('{}'), 'sig')).rejects.toBe(fault);
+
+      const logged = String(error.mock.calls[error.mock.calls.length - 1]?.[0]);
+      expect(logged).toContain('mapping_failed');
+      expect(logged).not.toContain('4111-secret');
     });
 
     it('handles the verified event', async () => {
