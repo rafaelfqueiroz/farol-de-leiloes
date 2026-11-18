@@ -11,7 +11,7 @@ describe('plans:upsert outcome', () => {
     expect(summaryOf(outcome)).toBe('plans:upsert: created 2, updated 1, unchanged 3');
   });
 
-  it.each(['refused_duplicate_price', 'refused_price_changed'] as const)(
+  it.each(['refused_duplicate_price', 'refused_price_changed', 'refused_price_mismatch'] as const)(
     'exits 1 for %s and says nothing was written',
     (result) => {
       const outcome = { result, conflicts: 2 } as const;
