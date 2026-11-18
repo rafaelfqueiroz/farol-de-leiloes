@@ -15,6 +15,89 @@ export interface CreateCustomerInput {
   name: string;
   /** Our user id, kept on the provider's customer so its events can be traced back. */
   userId: string;
+  /** The provider deduplicates a repeated call with the same key (a retried checkout). */
+  idempotencyKey?: string;
+}
+
+/** SPEC-012 BR-012-06, BR-012-10: a hosted checkout for a new office subscription. */
+export interface CreateOfficeCheckoutInput {
+  customerId: string;
+  /** The provider's price of the chosen plan. */
+  priceId: string;
+  /** A promotion code (SPEC-026), for a NEW subscription only (BR-026-08). */
+  promotionCodeId?: string;
+  /**
+   * Our subscription ref: set on the session AND on the subscription it creates, so a provider
+   * event can be traced back to our record whichever arrives first (ADR-005).
+   */
+  subscriptionRef: string;
+  successUrl: string;
+  cancelUrl: string;
+  /** The session stops accepting payment at this instant. */
+  expiresAt: Date;
+  idempotencyKey: string;
+}
+
+/** The hosted checkout page: where to send the buyer, and the session that names it. */
+export interface CheckoutSession {
+  readonly sessionId: string;
+  readonly url: string;
+}
+
+/** SPEC-012 BR-012-16/17: moves a subscription to another price. */
+export interface ChangePriceInput {
+  subscriptionId: string;
+  priceId: string;
+  idempotencyKey: string;
+}
+
+/** SPEC-012 BR-012-19: stops or resumes renewal. */
+export interface SetCancelAtPeriodEndInput {
+  subscriptionId: string;
+  cancel: boolean;
+  idempotencyKey: string;
+}
+
+/** SPEC-012 BR-012-29: the full refund of the latest paid invoice of a subscription. */
+export interface RefundLatestPaymentInput {
+  subscriptionId: string;
+  /** Stable per refund (`refund:<ref>`): a retry after a crash refunds once. */
+  idempotencyKey: string;
+}
+
+/** What a refund did: the amount returned, zero when nothing had been paid (a 100% coupon). */
+export interface RefundResult {
+  /** AR-17: reais. */
+  readonly refunded: Decimal;
+}
+
+/** SPEC-012 BR-012-11: one line of the billing history. */
+export interface ProviderInvoice {
+  readonly id: string;
+  readonly paidAt: Date | null;
+  /** AR-17: reais. What the invoice charged (after discounts). */
+  readonly amount: Decimal;
+  readonly status: 'draft' | 'open' | 'paid' | 'uncollectible' | 'void';
+  /** The provider's page for this invoice, if it has one. */
+  readonly hostedUrl: string | null;
+}
+
+export interface CreateBillingPortalSessionInput {
+  customerId: string;
+  returnUrl: string;
+  /** The portal configuration restricted to the payment method and invoices (BR-012-17). */
+  configurationId?: string;
+}
+
+/** SPEC-012 BR-012-02: a provider price, in our vocabulary. */
+export interface ProviderPrice {
+  readonly id: string;
+  readonly active: boolean;
+  /** AR-17: reais per interval. */
+  readonly amount: Decimal;
+  readonly interval: 'day' | 'week' | 'month' | 'year' | null;
+  /** Lower-case ISO 4217, as the provider names it ('brl'). */
+  readonly currency: string;
 }
 
 export interface CreateFixedDiscountInput {
@@ -106,6 +189,52 @@ export class WebhookSignatureError extends Error {
 /** An abstract class rather than an interface so it doubles as the Nest injection token. */
 export abstract class PaymentGateway {
   abstract createCustomer(input: CreateCustomerInput): Promise<{ id: string }>;
+
+  /** BR-012-10: the hosted Checkout of a new subscription; card data never touches us. */
+  abstract createOfficeCheckout(input: CreateOfficeCheckoutInput): Promise<CheckoutSession>;
+
+  /**
+   * Stops accepting payment on a checkout session. 'expired' when it is closed now (or already
+   * was), 'completed' when the buyer already paid it, so the session cannot be replaced.
+   */
+  abstract expireCheckoutSession(sessionId: string): Promise<'expired' | 'completed'>;
+
+  /**
+   * BR-012-16: an UPGRADE now. The provider invoices the prorated difference at once and changes
+   * the subscription's price only when that invoice is paid (pending update), so the plan and the
+   * limit follow the paid price (the sync reads it). Releases nothing: the caller releases a
+   * pending schedule first.
+   */
+  abstract changeSubscriptionPrice(input: ChangePriceInput): Promise<void>;
+
+  /**
+   * BR-012-17: a change that starts with the next billing period (a downgrade, or the same limit),
+   * as a subscription schedule. Replaces a schedule that already exists.
+   */
+  abstract scheduleSubscriptionPrice(input: ChangePriceInput): Promise<void>;
+
+  /** BR-012-17: drops a scheduled change; the subscription keeps its current price. Idempotent. */
+  abstract releaseScheduledChange(subscriptionId: string, idempotencyKey: string): Promise<void>;
+
+  /** BR-012-19: stop (`cancel: true`) or resume (`false`) renewal at the end of the paid period. */
+  abstract setCancelAtPeriodEnd(input: SetCancelAtPeriodEndInput): Promise<void>;
+
+  /**
+   * BR-012-29: refunds in full what the latest paid invoice charged. Idempotent by key, and a
+   * payment already refunded counts as done. Zero paid (a 100% coupon) refunds nothing.
+   */
+  abstract refundLatestPayment(input: RefundLatestPaymentInput): Promise<RefundResult>;
+
+  /** BR-012-11: the customer's invoices, newest first. */
+  abstract listInvoices(customerId: string, limit: number): Promise<ProviderInvoice[]>;
+
+  /** BR-012-10, BR-012-17: the provider's page to update the payment method and see invoices. */
+  abstract createBillingPortalSession(
+    input: CreateBillingPortalSessionInput,
+  ): Promise<{ url: string }>;
+
+  /** BR-012-02: the provider price, or null when it does not exist. */
+  abstract getPrice(priceId: string): Promise<ProviderPrice | null>;
 
   /**
    * Cancels a subscription at once (a duplicate paid twice, BR-012-08). Idempotent: a

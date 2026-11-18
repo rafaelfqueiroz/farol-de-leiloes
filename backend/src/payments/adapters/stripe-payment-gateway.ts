@@ -7,12 +7,21 @@ import Stripe from 'stripe';
 import type { Env } from '../../config/env.js';
 import { Decimal } from '../../common/money/money.js';
 import {
+  type ChangePriceInput,
+  type CheckoutSession,
+  type CreateBillingPortalSessionInput,
   type CreateCustomerInput,
   type CreateFixedDiscountInput,
+  type CreateOfficeCheckoutInput,
   type FixedDiscount,
   PaymentGateway,
   type PaymentEvent,
+  type ProviderInvoice,
+  type ProviderPrice,
   type ProviderSubscription,
+  type RefundLatestPaymentInput,
+  type RefundResult,
+  type SetCancelAtPeriodEndInput,
   WebhookSignatureError,
 } from '../payment-gateway.js';
 
@@ -72,6 +81,26 @@ function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
   return idOf(invoice.parent?.subscription_details?.subscription);
 }
 
+/** AR-20: centavos → reais, exactly (the inverse of `reaisToCentavos`). */
+export function centavosToReais(centavos: number): Decimal {
+  return new Decimal(centavos).dividedBy(100);
+}
+
+/** The provider's error code of a failed request, if it is one. */
+function stripeErrorCode(error: unknown): string | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+/** The one item of a single-item subscription (the only shape we sell). */
+function onlyItem(subscription: Stripe.Subscription): Stripe.SubscriptionItem {
+  const [item, ...others] = subscription.items.data;
+  if (!item || others.length > 0) {
+    throw new Error('The provider subscription does not have exactly one item');
+  }
+  return item;
+}
+
 /**
  * The price of the phase that starts when the current one ends: a downgrade scheduled for the next
  * period (BR-012-17), or null when the subscription has no schedule or none is ahead.
@@ -117,9 +146,221 @@ export class StripePaymentGateway extends PaymentGateway {
     this.webhookSecret = configService.get('STRIPE_WEBHOOK_SECRET', { infer: true });
   }
 
-  async createCustomer({ email, name, userId }: CreateCustomerInput): Promise<{ id: string }> {
-    const customer = await this.stripe.customers.create({ email, name, metadata: { userId } });
+  async createCustomer({
+    email,
+    name,
+    userId,
+    idempotencyKey,
+  }: CreateCustomerInput): Promise<{ id: string }> {
+    const customer = await this.stripe.customers.create(
+      { email, name, metadata: { userId } },
+      idempotencyKey === undefined ? undefined : { idempotencyKey },
+    );
     return { id: customer.id };
+  }
+
+  async createOfficeCheckout(input: CreateOfficeCheckoutInput): Promise<CheckoutSession> {
+    const metadata = { [SUBSCRIPTION_REF_KEY]: input.subscriptionRef };
+    const session = await this.stripe.checkout.sessions.create(
+      {
+        mode: 'subscription',
+        customer: input.customerId,
+        line_items: [{ price: input.priceId, quantity: 1 }],
+        ...(input.promotionCodeId === undefined
+          ? {}
+          : { discounts: [{ promotion_code: input.promotionCodeId }] }),
+        // ADR-005: the ref on BOTH objects, so whichever event arrives first finds our record.
+        metadata,
+        subscription_data: { metadata },
+        success_url: input.successUrl,
+        cancel_url: input.cancelUrl,
+        expires_at: toUnixSeconds(input.expiresAt),
+        locale: 'pt-BR',
+      },
+      { idempotencyKey: input.idempotencyKey },
+    );
+    if (!session.url) throw new Error('The provider answered a checkout session without a URL');
+    return { sessionId: session.id, url: session.url };
+  }
+
+  async expireCheckoutSession(sessionId: string): Promise<'expired' | 'completed'> {
+    try {
+      await this.stripe.checkout.sessions.expire(sessionId);
+      return 'expired';
+    } catch (error) {
+      // Only an open session can be expired: say what the session is, or let the fault surface.
+      const session = await this.stripe.checkout.sessions.retrieve(sessionId).catch(() => null);
+      if (session?.status === 'expired') return 'expired';
+      if (session?.status === 'complete') return 'completed';
+      throw error;
+    }
+  }
+
+  async changeSubscriptionPrice({
+    subscriptionId,
+    priceId,
+    idempotencyKey,
+  }: ChangePriceInput): Promise<void> {
+    const item = onlyItem(await this.stripe.subscriptions.retrieve(subscriptionId));
+    await this.stripe.subscriptions.update(
+      subscriptionId,
+      {
+        items: [{ id: item.id, price: priceId }],
+        // BR-012-16: the prorated difference is invoiced now, and the price changes only once it
+        // is paid (a pending update): the plan and the limit follow the paid price.
+        proration_behavior: 'always_invoice',
+        payment_behavior: 'pending_if_incomplete',
+      },
+      { idempotencyKey },
+    );
+  }
+
+  async scheduleSubscriptionPrice({
+    subscriptionId,
+    priceId,
+    idempotencyKey,
+  }: ChangePriceInput): Promise<void> {
+    const subscription = await this.stripe.subscriptions.retrieve(subscriptionId, {
+      expand: ['schedule'],
+    });
+    const item = onlyItem(subscription);
+    const price = await this.stripe.prices.retrieve(priceId);
+    const interval = price.recurring?.interval;
+    if (interval !== 'month' && interval !== 'year') {
+      throw new Error('A scheduled plan must be a monthly or yearly price');
+    }
+    const existing = expanded(subscription.schedule);
+    const schedule =
+      existing ??
+      (await this.stripe.subscriptionSchedules.create(
+        { from_subscription: subscriptionId },
+        { idempotencyKey: `${idempotencyKey}:schedule` },
+      ));
+    const phase = schedule.current_phase;
+    if (!phase) throw new Error('The provider schedule has no current phase');
+    await this.stripe.subscriptionSchedules.update(
+      schedule.id,
+      {
+        // BR-012-17: the current price until the period ends, then the new one; afterwards the
+        // schedule lets go and the subscription simply continues on the new price.
+        phases: [
+          {
+            items: [{ price: item.price.id, quantity: 1 }],
+            start_date: phase.start_date,
+            end_date: phase.end_date,
+          },
+          { items: [{ price: priceId, quantity: 1 }], duration: { interval, interval_count: 1 } },
+        ],
+        end_behavior: 'release',
+        proration_behavior: 'none',
+      },
+      { idempotencyKey },
+    );
+  }
+
+  async releaseScheduledChange(subscriptionId: string, idempotencyKey: string): Promise<void> {
+    const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+    const scheduleId = idOf(subscription.schedule);
+    if (scheduleId === null) return; // nothing scheduled: already as asked
+    try {
+      await this.stripe.subscriptionSchedules.release(scheduleId, undefined, { idempotencyKey });
+    } catch (error) {
+      // A schedule already released (a replay, or two members at once) is a success.
+      const current = await this.stripe.subscriptionSchedules
+        .retrieve(scheduleId)
+        .catch(() => null);
+      if (current?.status === 'released' || current?.status === 'canceled') return;
+      throw error;
+    }
+  }
+
+  async setCancelAtPeriodEnd({
+    subscriptionId,
+    cancel,
+    idempotencyKey,
+  }: SetCancelAtPeriodEndInput): Promise<void> {
+    await this.stripe.subscriptions.update(
+      subscriptionId,
+      { cancel_at_period_end: cancel },
+      { idempotencyKey },
+    );
+  }
+
+  async refundLatestPayment({
+    subscriptionId,
+    idempotencyKey,
+  }: RefundLatestPaymentInput): Promise<RefundResult> {
+    const subscription = await this.stripe.subscriptions.retrieve(subscriptionId, {
+      expand: ['latest_invoice'],
+    });
+    const invoice = expanded(subscription.latest_invoice);
+    if (invoice?.status !== 'paid') return { refunded: new Decimal(0) };
+    const paid = invoice.amount_paid;
+    if (paid <= 0) return { refunded: new Decimal(0) }; // a 100% coupon: nothing to give back
+    const payments = await this.stripe.invoicePayments.list({
+      invoice: invoice.id,
+      status: 'paid',
+      expand: ['data.payment.payment_intent'],
+    });
+    const paymentIntent = payments.data
+      .map((entry) => entry.payment)
+      .find((payment) => payment.type === 'payment_intent');
+    const intentId = idOf(paymentIntent?.payment_intent);
+    if (intentId === null) throw new Error('The paid invoice has no payment to refund');
+    try {
+      await this.stripe.refunds.create(
+        { payment_intent: intentId, amount: paid, reason: 'requested_by_customer' },
+        { idempotencyKey },
+      );
+    } catch (error) {
+      // The idempotency key outlives 24 h only in our ledger: a payment already refunded in full
+      // (an earlier run that crashed before it recorded it) is a success.
+      if (stripeErrorCode(error) !== 'charge_already_refunded') throw error;
+    }
+    return { refunded: centavosToReais(paid) };
+  }
+
+  async listInvoices(customerId: string, limit: number): Promise<ProviderInvoice[]> {
+    const invoices = await this.stripe.invoices.list({ customer: customerId, limit });
+    return invoices.data.map((invoice) => ({
+      id: invoice.id,
+      paidAt:
+        invoice.status === 'paid' ? fromUnixSeconds(invoice.status_transitions.paid_at) : null,
+      // The invoice's total after discounts; AR-20: centavos become reais here and nowhere else.
+      amount: centavosToReais(invoice.total),
+      status: invoice.status ?? 'draft',
+      hostedUrl: invoice.hosted_invoice_url ?? null,
+    }));
+  }
+
+  async createBillingPortalSession({
+    customerId,
+    returnUrl,
+    configurationId,
+  }: CreateBillingPortalSessionInput): Promise<{ url: string }> {
+    const session = await this.stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: returnUrl,
+      ...(configurationId === undefined ? {} : { configuration: configurationId }),
+    });
+    return { url: session.url };
+  }
+
+  async getPrice(priceId: string): Promise<ProviderPrice | null> {
+    try {
+      const price = await this.stripe.prices.retrieve(priceId);
+      return {
+        id: price.id,
+        active: price.active,
+        // A price without a fixed amount (metered, tiered) is not a plan price: 0 never matches.
+        amount: centavosToReais(price.unit_amount ?? 0),
+        interval: price.recurring?.interval ?? null,
+        currency: price.currency,
+      };
+    } catch (error) {
+      if (stripeErrorCode(error) === 'resource_missing') return null;
+      throw error;
+    }
   }
 
   async cancelSubscription(subscriptionId: string): Promise<void> {
