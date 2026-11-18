@@ -11,6 +11,7 @@ interface EmailPort {
   sendPasswordResetEmail(...args: Args<'sendPasswordResetEmail'>): Promise<void>;
   sendReminderEmail(...args: Args<'sendReminderEmail'>): Promise<void>;
   sendSupportEmail(...args: Args<'sendSupportEmail'>): Promise<void>;
+  sendPaymentFailedEmail(...args: Args<'sendPaymentFailedEmail'>): Promise<void>;
 }
 
 /**
@@ -22,6 +23,9 @@ export class FakeEmailSender implements EmailPort {
   readonly passwordResetEmails: Array<{ email: string; token: string; name: string }> = [];
   readonly reminderEmails: Array<{ email: string; payload: Args<'sendReminderEmail'>[1] }> = [];
   readonly supportEmails: Array<{ to: string; title: string }> = [];
+  readonly paymentFailedEmails: Array<{ email: string; name: string | undefined }> = [];
+  /** Makes the sends to these addresses fail, as an unreachable mail server would. */
+  readonly failFor = new Set<string>();
 
   async sendVerificationEmail(email: string, token: string, name: string): Promise<void> {
     this.verificationEmails.push({ email, token, name });
@@ -33,6 +37,11 @@ export class FakeEmailSender implements EmailPort {
 
   async sendReminderEmail(...[email, payload]: Args<'sendReminderEmail'>): Promise<void> {
     this.reminderEmails.push({ email, payload });
+  }
+
+  async sendPaymentFailedEmail(...[email, name]: Args<'sendPaymentFailedEmail'>): Promise<void> {
+    if (this.failFor.has(email)) throw new Error('mail server unreachable');
+    this.paymentFailedEmails.push({ email, name });
   }
 
   async sendSupportEmail(...[to, , , title]: Args<'sendSupportEmail'>): Promise<void> {

@@ -2,7 +2,11 @@ import type { EmailService } from '../../src/email/email.service.js';
 
 type EmailPort = Pick<
   EmailService,
-  'sendVerificationEmail' | 'sendPasswordResetEmail' | 'sendSupportEmail' | 'sendReminderEmail'
+  | 'sendVerificationEmail'
+  | 'sendPasswordResetEmail'
+  | 'sendSupportEmail'
+  | 'sendReminderEmail'
+  | 'sendPaymentFailedEmail'
 >;
 
 export type RecordedEmail = { kind: keyof EmailPort; to: string };
@@ -31,5 +35,9 @@ export class E2eEmailSender implements EmailPort {
 
   async sendReminderEmail(email: string): Promise<void> {
     this.sent.push({ kind: 'sendReminderEmail', to: email });
+  }
+
+  async sendPaymentFailedEmail(email: string): Promise<void> {
+    this.sent.push({ kind: 'sendPaymentFailedEmail', to: email });
   }
 }

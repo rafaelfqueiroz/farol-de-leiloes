@@ -38,6 +38,7 @@ async function sendAll(service: EmailService) {
   await service.sendPasswordResetEmail(EMAIL, TOKEN, NAME);
   await service.sendSupportEmail(SUPPORT, EMAIL, NAME, TITLE, TEXT);
   await service.sendReminderEmail(EMAIL, reminder);
+  await service.sendPaymentFailedEmail(EMAIL, NAME);
 }
 
 describe('EmailService logging', () => {
@@ -56,6 +57,7 @@ describe('EmailService logging', () => {
       ]);
       expect(logged).toContain('Verification email simulated (SMTP not configured)');
       expect(logged).toContain('Password reset email simulated (SMTP not configured)');
+      expect(logged).toContain('Payment failed email simulated (SMTP not configured)');
     },
   );
 
@@ -77,5 +79,22 @@ describe('EmailService logging', () => {
     };
     await expect(service.sendReminderEmail(EMAIL, reminder)).rejects.toThrow();
     expect(logger.loggedText()).not.toContain(EMAIL);
+  });
+
+  it('SPEC-012 BR-012-20: the payment-failed email links to the plan page, greets by name (escaped) and goes to the member', async () => {
+    const sendMail = vi.fn().mockResolvedValue({});
+    const service = new EmailService(testConfigService());
+    (service as unknown as { transporter: unknown }).transporter = { sendMail };
+
+    await service.sendPaymentFailedEmail(EMAIL, '<b>Fulana</b>');
+    await service.sendPaymentFailedEmail(EMAIL);
+
+    const [named, anonymous] = sendMail.mock.calls.map((call) => call[0] as Record<string, string>);
+    expect(named).toMatchObject({ to: EMAIL, subject: expect.stringContaining('pagamento') });
+    expect(named?.html).toContain('http://localhost:3001/office/plan');
+    expect(named?.html).toContain('&lt;b&gt;Fulana&lt;/b&gt;');
+    expect(named?.html).not.toContain('<b>Fulana</b>');
+    expect(anonymous?.html).toContain('Olá!');
+    expect(anonymous?.html).not.toContain('undefined');
   });
 });
