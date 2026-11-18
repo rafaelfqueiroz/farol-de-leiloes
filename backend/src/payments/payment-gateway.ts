@@ -8,6 +8,11 @@
 // SPEC-012 (ADR-005): the provider is the source of truth for a subscription. A webhook event only
 // says "something changed for this subscription"; the service re-reads it with
 // `retrieveSubscription` and stores what the provider says now (BR-012-13).
+//
+// BR-012-29 (DL-012-10): "a full refund of what it paid" is every paid invoice of the first
+// subscription minus what was refunded, read with `listSubscriptionInvoices` and given back with
+// `refundInvoice`, one key per invoice; the first payment is the `subscription_create` invoice,
+// never `latest_invoice`.
 import type { Decimal } from '../common/money/money.js';
 
 export interface CreateCustomerInput {
