@@ -87,6 +87,7 @@ services:
       IMPORT_ENABLED: 'false'
       SCRAPER_ENABLED: 'false'
       REMINDERS_ENABLED: 'false'
+      SUBSCRIPTIONS_RECONCILE_ENABLED: 'false'
       CLEANUP_ON_STARTUP: 'false'
     healthcheck:
       test:

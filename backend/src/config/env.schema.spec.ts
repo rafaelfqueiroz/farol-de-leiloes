@@ -89,6 +89,7 @@ describe('validateEnv', () => {
       SCRAPER_ENABLED: true,
       SCRAPER_ON_START_UP: false,
       REMINDERS_ENABLED: true,
+      SUBSCRIPTIONS_RECONCILE_ENABLED: true,
       CLEANUP_ON_STARTUP: false,
       NEIGHBORHOODS_CACHE_ENABLED: false,
       NEIGHBORHOODS_CACHE_TTL: 600_000,
@@ -260,8 +261,21 @@ describe('namespaced configs built from the validated environment', () => {
       scraper: { enabled: true, onStartup: true },
       cache: { neighborhoodsTtl: 5, neighborhoodsEnabled: false },
       reminders: { enabled: true },
+      subscriptionsReconcile: { enabled: true },
       cleanup: { onStartup: false },
     });
+    expect(
+      schedulerConfigFrom(testEnv({ SUBSCRIPTIONS_RECONCILE_ENABLED: 'false' }))
+        .subscriptionsReconcile,
+    ).toEqual({ enabled: false });
+  });
+
+  it('SPEC-012: the Billing Portal configuration id is optional and read as is', () => {
+    expect(testEnv().STRIPE_BILLING_PORTAL_CONFIGURATION_ID).toBeUndefined();
+    expect(
+      testEnv({ STRIPE_BILLING_PORTAL_CONFIGURATION_ID: 'bpc_test_1' })
+        .STRIPE_BILLING_PORTAL_CONFIGURATION_ID,
+    ).toBe('bpc_test_1');
   });
 
   it('maps the business settings (AR-43)', () => {
