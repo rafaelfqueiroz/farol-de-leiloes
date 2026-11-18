@@ -42,6 +42,12 @@ import { SubscriptionsRepository } from './subscriptions.repository.js';
 /** BR-012-13: how long a sync may hold a subscription's lease before another can take it. */
 export const SYNC_LEASE_MS = 30_000;
 
+/**
+ * SC-11: how long a delivery may hold the claim on its event id before another delivery of the
+ * same event may run the handler. Longer than the nested syncs the handler can make.
+ */
+export const EVENT_PROCESSING_MS = 120_000;
+
 /** A delivery that finds the lease taken tries to take it this many times (ADR-005). */
 const MAX_ACQUIRE_ATTEMPTS = 3;
 /** A holder reads the provider again, while deliveries keep asking, at most this many times. */
@@ -121,8 +127,40 @@ export class SubscriptionsService {
     const recording = await this.events.record(event.id, event.type, this.clock.now());
     if (recording === 'processed') return;
 
-    await this.handle(event);
+    // SC-11: the same event delivered twice AT THE SAME TIME runs the handler once. The loser is
+    // told to try again; the retry finds the event processed and acknowledges it.
+    const token = randomUUID();
+    const claimedAt = this.clock.now();
+    const claimed = await this.events.claimProcessing(
+      event.id,
+      token,
+      claimedAt,
+      new Date(claimedAt.getTime() + EVENT_PROCESSING_MS),
+    );
+    if (!claimed) throw new DomainError('WEBHOOK_BUSY');
+    try {
+      await this.handle(event);
+    } catch (error) {
+      // Give the claim back, so the provider's retry does not wait for it to expire.
+      await this.events.releaseProcessing(event.id, token);
+      throw error;
+    }
     await this.events.markProcessed(event.id, this.clock.now());
+  }
+
+  /**
+   * BR-012-13, BR-012-16: makes our record equal to the provider's NOW, through the same lease and
+   * dirty-mark path the webhook uses. The billing service calls it after it changed something at
+   * the provider (an upgrade, a cancel, a refund) and the reconcile job for every record it
+   * re-reads. Returns the record as stored afterwards. A record with no provider subscription yet
+   * (a checkout still open) is returned as it is.
+   */
+  async refresh(id: string): Promise<StoredSubscription> {
+    const record = await this.subscriptions.findById(id);
+    if (record === null) throw new DomainError('SUBSCRIPTION_NOT_FOUND');
+    if (record.stripeSubscriptionId === null) return record;
+    const result = await this.syncFromProvider(record.stripeSubscriptionId, record.id);
+    return result.kind === 'synced' ? result.record : this.reload(record.id);
   }
 
   private async handle(event: Exclude<PaymentEvent, { type: 'unhandled' }>): Promise<void> {

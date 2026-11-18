@@ -43,12 +43,47 @@ export class PaymentEventsRepository {
     return existing?.processedAt === undefined ? 'unprocessed' : 'processed';
   }
 
+  /**
+   * SC-11: marks the event as being handled by this delivery, in ONE conditional update, so two
+   * concurrent deliveries of the SAME event id do not both run the handler. Free means not yet
+   * processed and no live claim (or one that expired: its holder died). True for exactly one of
+   * any number of concurrent callers.
+   */
+  async claimProcessing(
+    stripeEventId: string,
+    token: string,
+    now: Date,
+    until: Date,
+  ): Promise<boolean> {
+    const result = await this.model
+      .updateOne(
+        {
+          stripeEventId: { $eq: stripeEventId },
+          processedAt: null,
+          $or: [{ processingUntil: null }, { processingUntil: serverOperators({ $lte: now }) }],
+        },
+        { $set: { processingToken: token, processingUntil: until } },
+      )
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /** A delivery that failed gives its claim back, so the provider's retry starts at once. */
+  async releaseProcessing(stripeEventId: string, token: string): Promise<void> {
+    await this.model
+      .updateOne(
+        { stripeEventId: { $eq: stripeEventId }, processingToken: { $eq: token } },
+        { $unset: { processingToken: '', processingUntil: '' } },
+      )
+      .exec();
+  }
+
   /** Marks the event handled, once. Called only after everything it needed succeeded. */
   async markProcessed(stripeEventId: string, processedAt: Date): Promise<void> {
     await this.model
       .updateOne(
         { stripeEventId: { $eq: stripeEventId }, processedAt: null },
-        { $set: { processedAt } },
+        { $set: { processedAt }, $unset: { processingToken: '', processingUntil: '' } },
       )
       .exec();
   }

@@ -21,7 +21,11 @@ import { InMemoryPlans } from '../../test/fakes/in-memory-plans.js';
 import { testBusinessConfig } from '../../test/support/test-env.js';
 import { effectiveJourneyLimit } from './domain/subscription-status.js';
 import type { PaymentEventsRepository } from './payment-events.repository.js';
-import { SYNC_LEASE_MS, SubscriptionsService } from './subscriptions.service.js';
+import {
+  EVENT_PROCESSING_MS,
+  SYNC_LEASE_MS,
+  SubscriptionsService,
+} from './subscriptions.service.js';
 import type { SubscriptionsRepository } from './subscriptions.repository.js';
 
 const NOW = new Date('2026-03-01T12:00:00.000Z');
@@ -270,6 +274,87 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
 
       expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
       expect(t.subscriptions.get(pending.id).syncLeaseToken).toBeNull(); // the lease is given back
+    });
+
+    it('SC-11: the SAME event delivered twice at the same moment runs the handler once; the loser is told to retry', async () => {
+      const pending = await t.startCheckout();
+      t.providerHas(pending.id);
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      // The first delivery is inside the handler (a slow read) when the second arrives.
+      t.gateway.onRetrieve = () => held;
+
+      const first = t.service.handleProviderEvent(completed('evt_1', pending.id));
+      await vi.waitFor(() => expect(t.gateway.retrievals).toHaveLength(1));
+      await expect(
+        t.service.handleProviderEvent(completed('evt_1', pending.id)),
+      ).rejects.toMatchObject({
+        code: 'WEBHOOK_BUSY',
+      });
+      release();
+      await first;
+
+      expect(t.gateway.retrievals).toEqual(['sub_1']);
+      expect(t.provisioner.calls).toHaveLength(1);
+      // The provider's retry finds it processed and acknowledges it.
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+      expect(t.gateway.retrievals).toEqual(['sub_1']);
+    });
+
+    it('SC-11: a delivery that fails gives its claim back, so the retry does not wait for it to expire', async () => {
+      const pending = await t.startCheckout();
+      t.providerHas(pending.id);
+      t.gateway.onRetrieve = () => {
+        throw new Error('provider unreachable');
+      };
+      await expect(t.service.handleProviderEvent(completed('evt_1', pending.id))).rejects.toThrow(
+        'provider unreachable',
+      );
+      t.gateway.onRetrieve = undefined;
+
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+
+      expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
+    });
+
+    it('SC-11: a claim whose holder died expires, and a later delivery handles the event', async () => {
+      const pending = await t.startCheckout();
+      t.providerHas(pending.id);
+      await t.ledger.record('evt_1', 'checkout.completed', NOW);
+      await t.ledger.claimProcessing(
+        'evt_1',
+        'dead-holder',
+        NOW,
+        new Date(NOW.getTime() + EVENT_PROCESSING_MS),
+      );
+
+      await expect(
+        t.service.handleProviderEvent(completed('evt_1', pending.id)),
+      ).rejects.toMatchObject({
+        code: 'WEBHOOK_BUSY',
+      });
+      t.clock.advance(EVENT_PROCESSING_MS);
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+
+      expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
+    });
+
+    it('BR-012-16: `refresh` reads the provider through the same sync, and a record with no provider subscription yet is returned as it is', async () => {
+      const pending = await t.startCheckout();
+      expect(await t.service.refresh(pending.id)).toEqual(pending);
+      expect(t.gateway.retrievals).toEqual([]);
+      t.providerHas(pending.id);
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+      t.providerHas(pending.id, { status: 'past_due' });
+
+      const refreshed = await t.service.refresh(pending.id);
+
+      expect(refreshed.status).toBe('PAST_DUE');
+      await expect(t.service.refresh('64b7f00000000000000fffff')).rejects.toMatchObject({
+        code: 'SUBSCRIPTION_NOT_FOUND',
+      });
     });
 
     it('acknowledges an event it does not act on without recording it', async () => {

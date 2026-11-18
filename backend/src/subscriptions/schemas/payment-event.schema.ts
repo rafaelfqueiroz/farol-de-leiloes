@@ -30,6 +30,16 @@ export class PaymentEventEntity {
    */
   @Prop({ type: Date })
   emailClaimedAt?: Date;
+
+  /**
+   * SC-11: a delivery of this event is being handled until `processingUntil` (a lease): another
+   * delivery of the SAME event id meanwhile is told to retry instead of running the handler too.
+   */
+  @Prop({ type: String })
+  processingToken?: string;
+
+  @Prop({ type: Date })
+  processingUntil?: Date;
 }
 
 export type PaymentEventDocument = HydratedDocument<PaymentEventEntity>;
