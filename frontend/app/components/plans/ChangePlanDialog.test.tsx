@@ -141,7 +141,9 @@ describe('ChangePlanDialog', () => {
       expect(onChanged).toHaveBeenCalledWith({
         subscription: answer,
         change: 'upgrade',
+        targetCode: 'avancado',
         targetName: 'Avançado',
+        targetLimit: 15,
       }),
     );
     expect(env.api).toHaveBeenCalledWith('/api/office/subscription/change', {

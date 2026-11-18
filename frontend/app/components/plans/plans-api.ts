@@ -46,6 +46,8 @@ export interface OfficeSubscription {
   nextChargeAmount: string | null;
   lapsedAt: string | null;
   readOnlyAt: string | null;
+  /** The office is read-only now (lapsed beyond the grace period), by the server's clock. */
+  readOnly: boolean;
   firstPaidAt: string | null;
   refundEligibleUntil: string | null;
   refundWindowDays: number;

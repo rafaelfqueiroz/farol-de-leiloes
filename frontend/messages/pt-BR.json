@@ -932,7 +932,8 @@
     "scheduled": {
       "title": "Mudança para o plano {name} em <date></date>",
       "text": "Até lá, o plano {current} e o limite de {limit, plural, one {# jornada} other {# jornadas}} continuam valendo.",
-      "belowCount": "Seu escritório tem {inProgress, plural, one {# jornada em andamento} other {# jornadas em andamento}}: elas seguem normalmente, mas novas jornadas só poderão ser iniciadas quando houver menos de {next} em andamento."
+      "belowCount": "Seu escritório tem {inProgress, plural, one {# jornada em andamento} other {# jornadas em andamento}}: elas seguem normalmente, mas novas jornadas só poderão ser iniciadas quando houver menos de {next} em andamento.",
+      "titleNoDate": "Mudança para o plano {name} agendada"
     },
     "upgrading": {
       "title": "Aguardando confirmação do pagamento do plano {name}",
@@ -941,7 +942,8 @@
     },
     "pastDue": {
       "title": "Não conseguimos cobrar a renovação de <date></date>",
-      "text": "O plano continua ativo enquanto o provedor tenta de novo. Atualize a forma de pagamento para evitar o encerramento do plano. Todos os membros receberam um e-mail com este aviso."
+      "text": "O plano continua ativo enquanto o provedor tenta de novo. Atualize a forma de pagamento para evitar o encerramento do plano. Todos os membros receberam um e-mail com este aviso.",
+      "titleNoDate": "Não conseguimos cobrar a renovação do plano"
     },
     "canceling": {
       "title": "Cancelamento agendado",
@@ -975,11 +977,14 @@
       "void": "Cancelada",
       "draft": "Rascunho",
       "viewInvoice": "Ver fatura",
-      "viewInvoiceOf": "Ver fatura de {date}",
+      "viewInvoiceOf": "Ver fatura de <date></date>",
       "more": "Ver mais cobranças",
       "moreBusy": "Carregando…",
       "empty": "Nenhuma cobrança ainda.",
-      "error": "Não foi possível carregar o histórico de cobranças."
+      "error": "Não foi possível carregar o histórico de cobranças.",
+      "viewInvoiceNoDate": "Ver fatura",
+      "noDate": "—",
+      "retry": "Tentar de novo"
     },
     "cancel": {
       "title": "Cancelar assinatura",
@@ -991,8 +996,7 @@
         "title": "Cancelar a assinatura do plano {name}?",
         "description": "A assinatura deixa de ser renovada. Você pode desfazer o cancelamento até <date></date>.",
         "descriptionNoDate": "A assinatura deixa de ser renovada. Você pode desfazer o cancelamento até o fim do período pago.",
-        "stays": "O plano continua valendo até <date></date>, com o limite de {limit, plural, one {# jornada} other {# jornadas}}.",
-        "staysNoDate": "O plano continua valendo até o fim do período pago, com o limite de {limit, plural, one {# jornada} other {# jornadas}}.",
+        "stays": "O plano continua valendo até o fim do período pago, com o limite de {limit, plural, one {# jornada} other {# jornadas}}.",
         "after": "Depois disso o escritório não pode iniciar novas jornadas. Por {days, plural, one {# dia} other {# dias}} o restante continua funcionando; passado esse prazo, o escritório fica somente leitura.",
         "kept": "Nada é apagado e os investidores continuam vendo suas jornadas.",
         "noRefund": "Não há reembolso do período já pago.",
@@ -1019,12 +1023,12 @@
       "title": "Não foi possível carregar o plano do escritório"
     },
     "toast": {
-      "changeScheduled": "Mudança para o plano {name} agendada",
       "changeUpgrade": "Mudança para o plano {name} solicitada",
       "changeUndone": "Mudança agendada desfeita",
       "cancelUndone": "Cancelamento desfeito",
       "canceled": "Assinatura cancelada",
-      "canceledRefund": "Assinatura cancelada e reembolso solicitado"
+      "canceledRefund": "Assinatura cancelada e reembolso solicitado",
+      "changeScheduled": "Mudança para o plano {name} agendada"
     },
     "actionError": {
       "title": "Não foi possível concluir a ação"
@@ -1033,7 +1037,8 @@
       "pastDue": {
         "title": "O pagamento do plano do escritório falhou",
         "text": "O plano continua valendo enquanto tentamos de novo. Atualize a forma de pagamento para evitar o encerramento.",
-        "action": "Atualizar forma de pagamento"
+        "action": "Atualizar forma de pagamento",
+        "opening": "Abrindo o portal…"
       },
       "grace": {
         "title": "Plano encerrado em <ended></ended>",

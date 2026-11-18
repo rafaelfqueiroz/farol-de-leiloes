@@ -32,7 +32,9 @@ import {
 export interface PlanChangeResult {
   subscription: OfficeSubscription;
   change: PlanChangeKind;
+  targetCode: string;
   targetName: string;
+  targetLimit: number;
 }
 
 export interface ChangePlanDialogProps {
@@ -172,7 +174,9 @@ export default function ChangePlanDialog({
       onChanged({
         subscription: view,
         change: ready?.change ?? 'upgrade',
+        targetCode: target.code,
         targetName: target.name,
+        targetLimit: target.activeJourneyLimit,
       });
     } catch (failure: unknown) {
       setError(apiErrorMessage(failure));

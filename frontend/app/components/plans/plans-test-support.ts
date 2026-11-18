@@ -48,6 +48,7 @@ export function aSubscription(overrides: Partial<OfficeSubscription> = {}): Offi
     nextChargeAmount: '449.90',
     lapsedAt: null,
     readOnlyAt: null,
+    readOnly: false,
     firstPaidAt: '2026-06-14T15:00:00.000Z',
     refundEligibleUntil: null,
     refundWindowDays: 7,

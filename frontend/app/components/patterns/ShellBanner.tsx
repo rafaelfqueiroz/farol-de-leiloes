@@ -8,7 +8,7 @@ export interface ShellBannerProps {
   /** `warning` for something to do, `info` once it is done, `error` when it failed. */
   severity: 'warning' | 'info' | 'error';
   /** A short statement above the message (the billing variant: "Plano encerrado em 12/11/2026"). */
-  title?: string;
+  title?: ReactNode;
   /** The message. */
   children?: ReactNode;
   /** The one action, usually a `Button`; the banner has no close button (DESIGN.md §6). */
