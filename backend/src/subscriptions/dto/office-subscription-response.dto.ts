@@ -173,6 +173,12 @@ export class OfficeSubscriptionResponseDto {
   @ApiProperty({ ...DATE_TIME, description: 'When the office turns read-only (BR-012-28)' })
   readOnlyAt: string | null;
 
+  @ApiProperty({
+    type: Boolean,
+    description: 'The office is read-only now: lapsed beyond the grace period (BR-012-28)',
+  })
+  readOnly: boolean;
+
   @ApiProperty({ ...DATE_TIME, description: 'The provider confirmation of the first payment' })
   firstPaidAt: string | null;
 
@@ -213,6 +219,7 @@ export class OfficeSubscriptionResponseDto {
       view.nextChargeAmount === null ? null : moneyToJson(view.nextChargeAmount);
     this.lapsedAt = iso(view.lapsedAt);
     this.readOnlyAt = iso(view.readOnlyAt);
+    this.readOnly = view.readOnly;
     this.firstPaidAt = iso(view.firstPaidAt);
     this.refundEligibleUntil = iso(view.refundEligibleUntil);
     this.refundWindowDays = view.refundWindowDays;

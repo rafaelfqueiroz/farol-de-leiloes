@@ -41,7 +41,7 @@ import {
   openCheckoutKey,
 } from './domain/checkout-guard.js';
 import { pickDisplayedSubscription } from './domain/displayed-subscription.js';
-import { readOnlyAtOf } from './domain/grace.js';
+import { isReadOnly, readOnlyAtOf } from './domain/grace.js';
 import { classifyPlanChange, type PlanChange } from './domain/plan-change.js';
 import { planRefund } from './domain/refund-plan.js';
 import { refundEligibleUntil } from './domain/refund-eligibility.js';
@@ -123,6 +123,8 @@ export interface OfficeSubscriptionView {
   readonly lapsedAt: Date | null;
   /** BR-012-28: when the office turns read-only, from the stored lapse and today's setting. */
   readonly readOnlyAt: Date | null;
+  /** BR-012-28: the office is read-only now (lapsed beyond the grace period), by the server's clock. */
+  readonly readOnly: boolean;
   readonly firstPaidAt: Date | null;
   /** BR-012-29: until when cancelling refunds in full; null when it does not. */
   readonly refundEligibleUntil: Date | null;
@@ -886,6 +888,10 @@ export class SubscriptionsBillingService {
         subscription.lapsedAt === null
           ? null
           : readOnlyAtOf(subscription.lapsedAt, this.config.subscriptions.graceDays),
+      readOnly:
+        subscription.status === 'LAPSED' &&
+        subscription.lapsedAt !== null &&
+        isReadOnly(subscription.lapsedAt, now, this.config.subscriptions.graceDays),
       firstPaidAt: subscription.firstPaidAt,
       refundEligibleUntil: eligibleUntil,
       refundWindowDays: this.config.subscriptions.refundWindowDays,

@@ -50,6 +50,7 @@ const VIEW: OfficeSubscriptionView = {
   graceDays: 10,
   lapsedAt: null,
   readOnlyAt: null,
+  readOnly: false,
   firstPaidAt: new Date('2026-03-01T12:00:00.000Z'),
   refundEligibleUntil: new Date('2026-03-08T12:00:00.000Z'),
 };
@@ -121,6 +122,7 @@ describe('OfficeSubscriptionController over HTTP', () => {
       graceDays: 10,
       lapsedAt: null,
       readOnlyAt: null,
+      readOnly: false,
       firstPaidAt: '2026-03-01T12:00:00.000Z',
       refundEligibleUntil: '2026-03-08T12:00:00.000Z',
     });

@@ -544,6 +544,7 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
         scheduledChange: null,
         lapsedAt: null,
         readOnlyAt: null,
+        readOnly: false,
         firstPaidAt: FIRST_PAID,
         canUndoScheduledChange: false,
         canUndoCancel: false,
@@ -707,6 +708,12 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       // 2026-04-10T12:00Z + 10 days of grace
       expect(view.readOnlyAt?.toISOString()).toBe('2026-04-20T12:00:00.000Z');
       expect(view.refundEligibleUntil).toBeNull();
+      // inside the grace period the office still works; from the instant it ends it is read-only
+      expect(view.readOnly).toBe(false);
+      t.clock.advance(10 * DAY);
+      expect((await t.billing.view(await t.memberOf(BUYER, OFFICE, READ_ONLY))).readOnly).toBe(
+        true,
+      );
     });
 
     it('BR-012-29: shows until when cancelling refunds in full, for the first subscription only', async () => {
