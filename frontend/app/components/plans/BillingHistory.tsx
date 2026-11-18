@@ -22,6 +22,7 @@ import Money from '@/app/components/patterns/Money';
 import StatusBadge, { type Status } from '@/app/components/patterns/StatusBadge';
 import { apiJson } from '@/lib/api-client';
 import { useApiErrorMessage } from '@/lib/api-error';
+import { httpsUrlOrNull } from '@/lib/safe-url';
 import { PLANS_API, type Invoice, type InvoiceStatus, type InvoicesPage } from './plans-api';
 
 /** BR-012-11, owner decision 12: the last six charges, then "Ver mais cobranças". */
@@ -146,11 +147,13 @@ export default function BillingHistory({ officeId, refreshKey }: BillingHistoryP
       return invoice.reason === 'other' ? t('other') : t('subscriptionNoPeriod');
     };
     const link = (invoice: Invoice): ReactNode => {
-      if (!invoice.hostedUrl) return null;
+      // the provider's page: only an https URL becomes a link
+      const href = httpsUrlOrNull(invoice.hostedUrl);
+      if (href === null) return null;
       const date = dateOf(invoice);
       return (
         <Link
-          href={invoice.hostedUrl}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           sx={{

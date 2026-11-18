@@ -90,6 +90,16 @@ export interface PlanChangePreview {
 
 export type CheckoutState = 'PENDING' | 'CONFIRMED';
 
+/**
+ * A checkout ref is the id of our subscription record: 24 hex characters (a Mongo ObjectId). It
+ * goes into a URL path, so nothing else is ever put there: no dots, no slashes, no encoding.
+ */
+const CHECKOUT_REF = /^[0-9a-f]{24}$/;
+
+export function isCheckoutRef(value: string): boolean {
+  return CHECKOUT_REF.test(value);
+}
+
 /** The paths of the BFF (app/api): one list, so a rename is one edit. */
 export const PLANS_API = {
   plans: '/api/plans',
@@ -101,15 +111,14 @@ export const PLANS_API = {
   cancel: '/api/office/subscription/cancel',
   undoCancel: '/api/office/subscription/undo-cancel',
   billingPortal: '/api/office/subscription/billing-portal',
-  checkoutStatus: (ref: string) => `/api/subscriptions/checkout/${encodeURIComponent(ref)}/status`,
+  /** The status route of one checkout; the ref must be a checkout ref (`isCheckoutRef`). */
+  checkoutStatus: (ref: string) => {
+    if (!isCheckoutRef(ref)) throw new RangeError('Not a checkout ref');
+    return `/api/subscriptions/checkout/${ref}/status`;
+  },
 } as const;
 
 /** BR-012-12: the states in which the subscription is in effect (the limit applies). */
 export function isInEffect(status: SubscriptionStatus): boolean {
   return status === 'ACTIVE' || status === 'PAST_DUE' || status === 'CANCELING';
-}
-
-/** The refund notice's `{days}` and the dialogs' `{days}`: whole days only. */
-export function wholeDays(days: number): number {
-  return Math.max(0, Math.round(days));
 }

@@ -310,6 +310,39 @@ describe('OfficePlanPage states', () => {
     },
   );
 
+  it.each(['javascript:alert(1)', 'http://billing.example.test/s', 'garbage'])(
+    'never follows a portal URL that is not https (%s)',
+    async (url) => {
+      const user = userEvent.setup();
+      serve({ 'POST /api/office/subscription/billing-portal': () => ({ url }) });
+      render(<OfficePlanPage />);
+
+      await user.click(await screen.findByRole('button', { name: t.actions.payment }));
+
+      expect(await screen.findByText(messages.errors.BILLING_PORTAL_FAILED)).toBeVisible();
+      expect(assign).not.toHaveBeenCalled();
+    },
+  );
+
+  it('an invoice page that is not https is no link at all', async () => {
+    serve({
+      'GET /api/office/subscription/invoices': () =>
+        page([
+          anInvoice(1, { hostedUrl: 'javascript:alert(1)' }),
+          anInvoice(2, { hostedUrl: 'http://invoice.example.test/in_2' }),
+          anInvoice(3),
+        ]),
+    });
+    render(<OfficePlanPage />);
+
+    await screen.findAllByRole('row');
+    const links = screen.getAllByRole('link', { name: /Ver fatura/ });
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      'https://invoice.example.test/in_3',
+      'https://invoice.example.test/in_3',
+    ]);
+  });
+
   it('a portal that cannot be opened is an error toast, and the button is free again', async () => {
     const user = userEvent.setup();
     serve({

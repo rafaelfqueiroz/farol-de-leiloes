@@ -491,3 +491,34 @@ describe('POST /api/auth/logout (BR-001-18, SC-02)', () => {
     expect(setCookies(response)).toEqual([]);
   });
 });
+
+// SPEC-012: the ref of the checkout status route goes into the backend path, so only the shape of a
+// real one (24 hex characters) is proxied; everything else is the backend's own NOT_FOUND, answered
+// here with no backend call.
+describe('GET /api/subscriptions/checkout/[ref]/status refuses a ref that is not a checkout ref', () => {
+  it.each([
+    ['..'],
+    ['.'],
+    ['%2e%2e'],
+    ['%2E%2E%2Fadmin'],
+    [''],
+    ['a'.repeat(65)],
+    ['64b7f0000000000000000a0'],
+    ['64b7f0000000000000000a011'],
+    ['a/b'],
+    ['64B7F0000000000000000A01'],
+    ['64b7f0000000000000000a0g'],
+    ['..%2f..%2fauth%2fme'],
+  ])('answers 404 NOT_FOUND for %j without calling the backend', async (ref) => {
+    const response = await checkoutStatus(
+      new NextRequest('http://localhost:3001/api/subscriptions/checkout/x/status', {
+        headers: signedIn,
+      }),
+      { params: Promise.resolve({ ref }) } as never,
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ code: 'NOT_FOUND', context: {} });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

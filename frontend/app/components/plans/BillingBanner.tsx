@@ -13,6 +13,7 @@ import { apiJson } from '@/lib/api-client';
 import { ApiError, useApiErrorMessage } from '@/lib/api-error';
 import { onBillingChanged } from '@/lib/billing-events';
 import { reportClientError } from '@/lib/report-client-error';
+import { httpsUrlOrNull } from '@/lib/safe-url';
 import { PLANS_API, type OfficeSubscription } from './plans-api';
 
 type Notice = 'pastDue' | 'grace' | 'readOnly';
@@ -83,7 +84,9 @@ export default function BillingBanner({ children }: BillingBannerProps) {
         method: 'POST',
         json: { officeId: subscription.officeId },
       });
-      window.location.assign(url);
+      const destination = httpsUrlOrNull(url);
+      if (destination === null) throw new ApiError('BILLING_PORTAL_FAILED');
+      window.location.assign(destination);
     } catch (error: unknown) {
       setOpening(false);
       setPortalError(apiErrorMessage(error));

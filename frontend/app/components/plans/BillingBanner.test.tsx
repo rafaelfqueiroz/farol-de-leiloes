@@ -91,6 +91,20 @@ describe('BillingBanner', () => {
     },
   );
 
+  it('never follows a portal URL that is not https, and says the portal could not be opened', async () => {
+    const user = userEvent.setup();
+    serve({
+      'GET /api/office/subscription': () => PAST_DUE,
+      'POST /api/office/subscription/billing-portal': () => ({ url: 'javascript:alert(1)' }),
+    });
+    render(<BillingBanner />);
+
+    await user.click(await screen.findByRole('button', { name: t.pastDue.action }));
+
+    expect(await screen.findByText(messages.errors.BILLING_PORTAL_FAILED)).toBeVisible();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
   it('a portal that cannot be opened says so in the banner and keeps its action', async () => {
     const user = userEvent.setup();
     serve({

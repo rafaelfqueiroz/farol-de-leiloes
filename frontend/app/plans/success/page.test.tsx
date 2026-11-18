@@ -183,6 +183,19 @@ describe('PlansSuccessPage failed (frame r5)', () => {
 });
 
 describe('PlansSuccessPage without a checkout ref', () => {
+  it.each(['../auth/me', '%2e%2e', 'abc', '64b7f0000000000000000a01/x'])(
+    'treats %j, which is not a checkout ref, as no ref: nothing is asked',
+    async (value) => {
+      window.history.pushState({}, '', `/plans/success?ref=${encodeURIComponent(value)}`);
+      render(<PlansSuccessPage />);
+
+      expect(
+        await screen.findByRole('heading', { level: 1, name: t.missingRef.title }),
+      ).toBeVisible();
+      expect(env.apiJson).not.toHaveBeenCalled();
+    },
+  );
+
   it('asks nothing and sends the visitor back to the plans', async () => {
     window.history.pushState({}, '', '/plans/success');
     render(<PlansSuccessPage />);

@@ -11,6 +11,7 @@ import {
   forwardBackendResponse,
   pageQuery,
   proxyToBackend,
+  routeLabelOf,
   unauthenticated,
 } from './backend';
 
@@ -302,6 +303,47 @@ describe('proxyToBackend', () => {
     expect(reportClientError).toHaveBeenCalledTimes(1);
     expect(reportClientError).toHaveBeenCalledWith(expect.any(TypeError), {
       where: 'api/auth/login POST',
+    });
+  });
+
+  describe('the failure label is fixed text, never an id (SC-15)', () => {
+    const REF = '64b7f0000000000000000a01';
+
+    it('uses the label a dynamic route passes, so the ref never reaches the tag', async () => {
+      fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+      await proxyToBackend(
+        requestTo(`/api/subscriptions/checkout/${REF}/status`, { headers: signedInSameSite }),
+        `/subscriptions/checkout/${REF}/status`,
+        { auth: true, label: 'api/subscriptions/checkout/:ref/status' },
+      );
+
+      expect(reportClientError).toHaveBeenCalledWith(expect.any(TypeError), {
+        where: 'api/subscriptions/checkout/:ref/status GET',
+      });
+      expect(JSON.stringify(vi.mocked(reportClientError).mock.calls)).not.toContain(REF);
+    });
+
+    it('without a label, strips every segment that holds a digit', async () => {
+      fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+      await proxyToBackend(
+        requestTo(`/api/reminders/${REF}`, { method: 'DELETE', headers: signedInSameSite }),
+        `/reminders/${REF}`,
+        { auth: true },
+      );
+
+      expect(reportClientError).toHaveBeenCalledWith(expect.any(TypeError), {
+        where: 'api/reminders/:id DELETE',
+      });
+      expect(JSON.stringify(vi.mocked(reportClientError).mock.calls)).not.toContain(REF);
+    });
+
+    it.each([
+      ['/auth/login', 'api/auth/login'],
+      ['/favorites/1444400000001', 'api/favorites/:id'],
+      ['/coupons/c1/invalidate', 'api/coupons/:id/invalidate'],
+      ['/office/subscription/change-preview', 'api/office/subscription/change-preview'],
+    ])('names %s as %s', (path, label) => {
+      expect(routeLabelOf(path)).toBe(label);
     });
   });
 

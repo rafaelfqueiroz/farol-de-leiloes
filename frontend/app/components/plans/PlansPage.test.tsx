@@ -164,6 +164,23 @@ describe('PlansPage signed in without an office (frame s2, s6, s7)', () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.example.test/cs_1'));
   });
 
+  it.each(['javascript:alert(1)', 'http://checkout.example.test/cs_1', 'garbage'])(
+    'never follows a checkout URL that is not https (%s): it is a failed checkout',
+    async (url) => {
+      const user = userEvent.setup();
+      serve({ 'POST /api/office/subscription/checkout': () => ({ url }) });
+      render(<PlansPage />);
+
+      await user.click(
+        (await screen.findAllByRole('button', { name: 'Assinar' }))[0] as HTMLElement,
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(t.checkoutError.failed);
+      expect(assign).not.toHaveBeenCalled();
+      expect(screen.getAllByRole('button', { name: 'Assinar' })[0]).toBeEnabled();
+    },
+  );
+
   it('frame s7: a failed checkout says so in an alert with no retry button, and frees the cards', async () => {
     const user = userEvent.setup();
     serve({

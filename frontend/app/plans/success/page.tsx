@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ResultScreen } from '@/app/components/patterns/PublicScreens';
 import {
   PLANS_API,
+  isCheckoutRef,
   type CheckoutState,
   type OfficeSubscription,
 } from '@/app/components/plans/plans-api';
@@ -97,7 +98,8 @@ export default function PlansSuccessPage() {
   useEffect(() => {
     // the query string is an external system, readable only after mount
     const value = new URLSearchParams(window.location.search).get('ref');
-    ref.current = value !== null && value !== '' ? value : null;
+    // the ref goes into a URL path: only the shape of a real one is used
+    ref.current = value !== null && isCheckoutRef(value) ? value : null;
     if (ref.current === null) {
       setPhase({ name: 'missingRef' });
       return;

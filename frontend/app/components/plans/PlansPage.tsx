@@ -29,6 +29,7 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import { apiJson } from '@/lib/api-client';
 import { ApiError, useApiErrorMessage } from '@/lib/api-error';
 import { notifyBillingChanged } from '@/lib/billing-events';
+import { httpsUrlOrNull } from '@/lib/safe-url';
 import ChangePlanDialog, { type PlanChangeResult } from './ChangePlanDialog';
 import PlanCard from './PlanCard';
 import {
@@ -112,9 +113,11 @@ export default function PlansPage() {
         method: 'POST',
         json: officeId === undefined ? { planCode } : { planCode, officeId },
       });
-      // the hosted page of the provider: the card is never typed here (BR-012-10). The button
-      // stays busy until the browser leaves.
-      window.location.assign(url);
+      // the hosted page of the provider: the card is never typed here (BR-012-10). Only an https
+      // URL is followed; the button stays busy until the browser leaves.
+      const destination = httpsUrlOrNull(url);
+      if (destination === null) throw new ApiError('CHECKOUT_SESSION_FAILED');
+      window.location.assign(destination);
     } catch (error: unknown) {
       setBusyCode(null);
       setCheckoutError({

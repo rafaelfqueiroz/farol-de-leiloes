@@ -39,6 +39,7 @@ import StatusBadge, { type Status } from '@/app/components/patterns/StatusBadge'
 import { apiJson } from '@/lib/api-client';
 import { ApiError, useApiErrorMessage } from '@/lib/api-error';
 import { notifyBillingChanged } from '@/lib/billing-events';
+import { httpsUrlOrNull } from '@/lib/safe-url';
 import BillingHistory from './BillingHistory';
 import ChangePlanDialog, { type PlanChangeResult } from './ChangePlanDialog';
 import JourneyLimitAlert from './JourneyLimitAlert';
@@ -169,7 +170,9 @@ export default function OfficePlanPage() {
         json: { officeId: subscription.officeId },
       });
       // the provider's page for the payment method; it returns here (BR-012-10). Busy until it leaves.
-      window.location.assign(url);
+      const destination = httpsUrlOrNull(url);
+      if (destination === null) throw new ApiError('BILLING_PORTAL_FAILED');
+      window.location.assign(destination);
     } catch (error: unknown) {
       setBusy(null);
       setNotice({ kind: 'error', message: apiErrorMessage(error) });
