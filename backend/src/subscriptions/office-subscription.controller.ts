@@ -117,7 +117,22 @@ export class OfficeSubscriptionController {
     @Access() access: AccessContext,
     @Body() body: ChangePlanRequestDto,
   ): Promise<OfficeSubscriptionResponseDto> {
-    return new OfficeSubscriptionResponseDto(await this.billing.changePlan(access, body));
+    return new OfficeSubscriptionResponseDto(
+      await this.billing.changePlan(access, {
+        planCode: body.planCode,
+        ...(body.officeId === undefined ? {} : { officeId: body.officeId }),
+        ...(body.quote === undefined
+          ? {}
+          : {
+              quote: {
+                planCode: body.quote.planCode,
+                prorationDate: body.quote.prorationDate,
+                amountDue: body.quote.amountDue,
+                nextChargeAt: body.quote.nextChargeDate ?? null,
+              },
+            }),
+      }),
+    );
   }
 
   @Post('change-preview')

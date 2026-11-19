@@ -258,6 +258,36 @@ export class PlanChangeLineResponseDto {
   }
 }
 
+/** BR-012-16: the quote of an upgrade: send it back with the change. */
+export class PlanQuoteResponseDto {
+  @ApiProperty({ type: String })
+  planCode: string;
+
+  @ApiProperty({ type: String, format: 'date-time', description: 'The pinned proration date' })
+  prorationDate: string;
+
+  @ApiProperty({ ...MONEY_API_PROPERTY, description: 'What the provider charges as of that date' })
+  amountDue: string;
+
+  @ApiProperty({ type: String, example: 'BRL' })
+  currency: string;
+
+  @ApiProperty(DATE_TIME)
+  nextChargeDate: string | null;
+
+  @ApiProperty({ type: String, format: 'date-time', description: 'After this, ask again' })
+  expiresAt: string;
+
+  constructor(quote: NonNullable<PlanChangePreviewView['quote']>) {
+    this.planCode = quote.planCode;
+    this.prorationDate = quote.prorationDate.toISOString();
+    this.amountDue = moneyToJson(quote.amountDue);
+    this.currency = quote.currency;
+    this.nextChargeDate = iso(quote.nextChargeAt);
+    this.expiresAt = quote.expiresAt.toISOString();
+  }
+}
+
 /** BR-012-16..BR-012-18: what choosing a plan would do, before confirming. Changes nothing. */
 export class PlanChangePreviewResponseDto {
   @ApiProperty({
@@ -290,6 +320,13 @@ export class PlanChangePreviewResponseDto {
   @ApiProperty({ ...MONEY_API_PROPERTY, description: 'The next charge after the change, in reais' })
   nextChargeAmount: string;
 
+  @ApiProperty({
+    type: () => PlanQuoteResponseDto,
+    nullable: true,
+    description: 'An upgrade only: the quote to send back with the change (BR-012-16)',
+  })
+  quote: PlanQuoteResponseDto | null;
+
   constructor(preview: PlanChangePreviewView) {
     this.change = preview.change;
     this.amountDue = moneyToJson(preview.amountDue);
@@ -298,5 +335,6 @@ export class PlanChangePreviewResponseDto {
     this.effectiveAt = iso(preview.effectiveAt);
     this.nextChargeAt = iso(preview.nextChargeAt);
     this.nextChargeAmount = moneyToJson(preview.nextChargeAmount);
+    this.quote = preview.quote === null ? null : new PlanQuoteResponseDto(preview.quote);
   }
 }

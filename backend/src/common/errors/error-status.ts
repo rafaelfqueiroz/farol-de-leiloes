@@ -75,6 +75,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   CHANGE_PLAN_FAILED: HttpStatus.BAD_GATEWAY,
   // The provider could not compute the prorated amount of an upgrade (nothing was changed): upstream.
   CHANGE_PREVIEW_FAILED: HttpStatus.BAD_GATEWAY,
+  // BR-012-16: the quote the member confirmed no longer holds (expired, or the amount or the period
+  // changed): nothing was charged; ask again and confirm the new amount.
+  QUOTE_STALE: HttpStatus.CONFLICT,
   // The provider could not list the invoices (BR-012-11): the plan page works without them.
   BILLING_HISTORY_UNAVAILABLE: HttpStatus.BAD_GATEWAY,
   // BR-012-29: another member's cancel is refunding this subscription right now; retry shortly.

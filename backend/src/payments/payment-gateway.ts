@@ -54,6 +54,8 @@ export interface ChangePriceInput {
   subscriptionId: string;
   priceId: string;
   idempotencyKey: string;
+  /** An upgrade: the proration date of the quote the member confirmed (BR-012-16). */
+  prorationDate?: Date;
 }
 
 /** SPEC-012 BR-012-19: stops or resumes renewal. */
@@ -122,6 +124,11 @@ export interface ProviderInvoice {
 export interface PreviewPlanChangeInput {
   subscriptionId: string;
   priceId: string;
+  /**
+   * The instant the proration is computed as of (whole seconds). The preview and the upgrade that
+   * follows pass the SAME date, so the amount previewed is the amount charged (owner review #173).
+   */
+  prorationDate: Date;
 }
 
 /** One line of a preview: a charge for the new price or a credit for the unused time (negative). */
@@ -135,6 +142,8 @@ export interface PlanChangePreviewLine {
  * now, with nothing changed at the provider (read only).
  */
 export interface PlanChangePreview {
+  /** The proration date the figure is as of: what the preview was asked for. */
+  readonly prorationDate: Date;
   /** AR-17: reais. What the provider would charge now (never negative: a credit is not paid out). */
   readonly amountDue: Decimal;
   /** Lower-case ISO 4217, as the provider names it ('brl'). */

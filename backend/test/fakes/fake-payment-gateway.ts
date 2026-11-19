@@ -101,7 +101,7 @@ export class FakePaymentGateway extends PaymentGateway {
   /** Invoices of one customer; a customer without an entry gets `invoices`. */
   readonly invoicesByCustomer = new Map<string, ProviderInvoice[]>();
   /** What `previewPlanChange` answers; a spec sets it (default: R$ 100 due now, no credit lines). */
-  preview: PlanChangePreview = {
+  preview: Omit<PlanChangePreview, 'prorationDate'> = {
     amountDue: new Decimal('100'),
     currency: 'brl',
     lines: [{ amount: new Decimal('100') }],
@@ -109,6 +109,9 @@ export class FakePaymentGateway extends PaymentGateway {
   };
   /** Every preview asked for: proves nothing else was called (read only, BR-012-16). */
   readonly previewRequests: PreviewPlanChangeInput[] = [];
+  /** Answers a preview from the request itself (a spec moves the figure with the date or the state). */
+  onPreview:
+    ((input: PreviewPlanChangeInput) => Omit<PlanChangePreview, 'prorationDate'>) | undefined;
   /** Makes previewPlanChange fail, as an unreachable provider would. */
   failPreview = false;
   /** The provider's prices by id (BR-012-02); an absent one does not exist. */
@@ -211,7 +214,9 @@ export class FakePaymentGateway extends PaymentGateway {
   async previewPlanChange(input: PreviewPlanChangeInput): Promise<PlanChangePreview> {
     if (this.failPreview) throw new Error('provider unreachable');
     this.previewRequests.push(input);
-    return this.preview;
+    const answer = this.onPreview?.(input) ?? this.preview;
+    // like the provider: the figure is as of the date it was asked for
+    return { ...answer, prorationDate: input.prorationDate };
   }
 
   async scheduleSubscriptionPrice(input: ChangePriceInput): Promise<void> {

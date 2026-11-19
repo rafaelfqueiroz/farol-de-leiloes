@@ -31,6 +31,7 @@ import type { PaymentEventsRepository } from './payment-events.repository.js';
 import {
   INVOICE_CACHE_MS,
   PREVIEW_CACHE_MS,
+  type PlanChangePreviewView,
   REFUND_CLAIM_STALE_MS,
   SubscriptionsBillingService,
 } from './subscriptions-billing.service.js';
@@ -201,6 +202,14 @@ type Harness = ReturnType<typeof build>;
 
 const BUYER_INFO = { email: 'ana.teste@example.test', name: 'Ana Teste' };
 
+/** What the member sends back to confirm the quote of a preview (BR-012-16). */
+const confirmed = (quote: NonNullable<PlanChangePreviewView['quote']>) => ({
+  planCode: quote.planCode,
+  prorationDate: quote.prorationDate,
+  amountDue: quote.amountDue,
+  nextChargeAt: quote.nextChargeAt,
+});
+
 const anInvoice = (id: string): ProviderInvoice => ({
   id,
   reason: 'subscription_cycle',
@@ -218,6 +227,13 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
   beforeEach(() => {
     t = build();
   });
+
+  /** An upgrade as the page makes it: preview, then confirm the quote it answered. */
+  const upgradeTo = async (ctx: AccessContext, planCode: string = PLAN_10.code) => {
+    const { quote } = await t.billing.previewChange(ctx, { planCode });
+    if (quote === null) throw new Error('not an upgrade');
+    return t.billing.changePlan(ctx, { planCode, quote: confirmed(quote) });
+  };
 
   describe('BR-012-09, BR-012-10: checkout', () => {
     it('BR-012-10: starts the hosted Checkout with our ref on the session AND the subscription, and stores the session id', async () => {
@@ -730,10 +746,14 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
     it('BR-012-16: asks the provider for the prorated upgrade and changes NOTHING locally until it is paid', async () => {
       const { ref, providerId } = await t.subscribeOffice(OFFICE);
 
-      const view = await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      const view = await upgradeTo(await t.memberOf());
 
       expect(t.gateway.priceChanges).toEqual([
-        expect.objectContaining({ subscriptionId: providerId, priceId: 'price_10' }),
+        expect.objectContaining({
+          subscriptionId: providerId,
+          priceId: 'price_10',
+          prorationDate: t.clock.now(),
+        }),
       ]);
       // The provider has not billed the new price yet: plan and limit are what they were.
       expect(view.plan.code).toBe('escritorio-5');
@@ -746,7 +766,7 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
 
     it('BR-012-16: the new limit applies from the moment the provider reports the new paid price', async () => {
       const { ref, providerId } = await t.subscribeOffice(OFFICE);
-      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      await upgradeTo(await t.memberOf());
 
       t.gateway.payPendingChange(providerId); // the prorated invoice was paid
       const refreshed = await t.sync.refresh(ref);
@@ -758,7 +778,7 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       await t.subscribeOffice(OFFICE);
       t.gateway.payUpgradesAtOnce = true;
 
-      const view = await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      const view = await upgradeTo(await t.memberOf());
 
       expect(view).toMatchObject({ activeJourneyLimit: 10, plan: { code: 'escritorio-10' } });
     });
@@ -767,7 +787,7 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       const { providerId } = await t.subscribeOffice(OFFICE);
       await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code });
 
-      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      await upgradeTo(await t.memberOf());
 
       expect(t.gateway.releasedSchedules).toEqual([providerId]);
       expect(t.gateway.priceChanges).toHaveLength(1);
@@ -795,8 +815,16 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       expect(preview.nextChargeAt?.toISOString()).toBe('2027-03-01T12:00:00.000Z');
       expect(preview.nextChargeAmount.toFixed(2)).toBe('349.90');
       expect(t.gateway.previewRequests).toEqual([
-        { subscriptionId: providerId, priceId: 'price_10' },
+        { subscriptionId: providerId, priceId: 'price_10', prorationDate: t.clock.now() },
       ]);
+      // the quote pins that instant and is good for two minutes
+      expect(preview.quote).toMatchObject({
+        planCode: PLAN_10.code,
+        prorationDate: t.clock.now(),
+        expiresAt: new Date(t.clock.now().getTime() + 2 * MINUTE),
+        currency: 'BRL',
+      });
+      expect(preview.quote?.amountDue.toFixed(2)).toBe('12600.09');
       // read only: no price change, no schedule, no write
       expect(t.gateway.callLog).toEqual([]);
       expect(t.subscriptions.get(ref)).toEqual(before);
@@ -902,6 +930,169 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
         code: 'CHANGE_PREVIEW_FAILED',
       });
       expectNoneLogged(logger.loggedText(), [BUYER]);
+    });
+  });
+
+  describe('BR-012-16: an upgrade is charged as it was quoted (owner review #173)', () => {
+    /** The preview a member confirms, and what the provider would charge now as of any date. */
+    async function quoted() {
+      const { ref, providerId } = await t.subscribeOffice(OFFICE);
+      const ctx = await t.memberOf();
+      const { quote } = await t.billing.previewChange(ctx, { planCode: PLAN_10.code });
+      if (quote === null) throw new Error('not an upgrade');
+      return { ref, providerId, ctx, quote };
+    }
+    const charges = () => t.gateway.priceChanges.length;
+
+    it('a confirmation in the same state charges as of the PINNED date, and the key carries it', async () => {
+      const { ctx, quote, providerId } = await quoted();
+      t.clock.advance(45_000); // the member takes a moment
+
+      await t.billing.changePlan(ctx, { planCode: PLAN_10.code, quote: confirmed(quote) });
+
+      expect(t.gateway.priceChanges).toEqual([
+        expect.objectContaining({
+          subscriptionId: providerId,
+          prorationDate: quote.prorationDate,
+          idempotencyKey: expect.stringContaining(`:${quote.prorationDate.getTime()}`),
+        }),
+      ]);
+      // the provider was asked again as of that same date, not as of the later "now"
+      expect(
+        t.gateway.previewRequests[t.gateway.previewRequests.length - 1]?.prorationDate,
+      ).toEqual(quote.prorationDate);
+    });
+
+    it('previewed shortly before the renewal, confirmed after it: QUOTE_STALE and no charge', async () => {
+      const { ref, providerId, ctx, quote } = await quoted();
+      // the subscription renews: a new period starts, and the provider's figure is another one
+      t.clock.advance(MINUTE);
+      const renewedAt = t.clock.now();
+      t.gateway.setSubscription({
+        ...t.gateway.current(providerId),
+        currentPeriodStart: renewedAt,
+        currentPeriodEnd: new Date(renewedAt.getTime() + 30 * DAY),
+      });
+      await t.sync.refresh(ref);
+      t.gateway.onPreview = () => ({
+        amountDue: new Decimal('349.90'),
+        currency: 'brl',
+        lines: [{ amount: new Decimal('349.90') }],
+        nextChargeAt: new Date(renewedAt.getTime() + 30 * DAY),
+      });
+
+      await expect(
+        t.billing.changePlan(ctx, { planCode: PLAN_10.code, quote: confirmed(quote) }),
+      ).rejects.toMatchObject({ code: 'QUOTE_STALE' });
+
+      expect(charges()).toBe(0);
+      // asking again gives the new quote, which can be confirmed
+      const fresh = await t.billing.previewChange(ctx, { planCode: PLAN_10.code });
+      expect(fresh.quote?.amountDue.toFixed(2)).toBe('349.90');
+      await t.billing.changePlan(ctx, {
+        planCode: PLAN_10.code,
+        quote: confirmed(fresh.quote as NonNullable<typeof fresh.quote>),
+      });
+      expect(charges()).toBe(1);
+    });
+
+    it('the provider figure moving inside the same period is QUOTE_STALE too (the amount is re-asked, never trusted)', async () => {
+      const { ctx, quote } = await quoted();
+      t.gateway.onPreview = () => ({ ...t.gateway.preview, amountDue: new Decimal('100.01') });
+
+      await expect(
+        t.billing.changePlan(ctx, { planCode: PLAN_10.code, quote: confirmed(quote) }),
+      ).rejects.toMatchObject({ code: 'QUOTE_STALE' });
+
+      expect(charges()).toBe(0);
+    });
+
+    it('a quote confirmed one millisecond before it expires is still good', async () => {
+      const { ctx, quote } = await quoted();
+      t.clock.advance(2 * MINUTE - 1);
+      const asked = t.gateway.previewRequests.length;
+      await t.billing.changePlan(ctx, { planCode: PLAN_10.code, quote: confirmed(quote) });
+      expect(charges()).toBe(1);
+      expect(t.gateway.previewRequests.length).toBe(asked + 1);
+    });
+
+    it('two minutes after the pinned instant the quote has expired', async () => {
+      const { ctx, quote } = await quoted();
+      t.clock.advance(2 * MINUTE);
+      const asked = t.gateway.previewRequests.length;
+
+      await expect(
+        t.billing.changePlan(ctx, { planCode: PLAN_10.code, quote: confirmed(quote) }),
+      ).rejects.toMatchObject({ code: 'QUOTE_STALE' });
+
+      expect(charges()).toBe(0);
+      expect(t.gateway.previewRequests.length).toBe(asked);
+    });
+
+    it('a tampered amount is never charged: it is not the provider figure, so QUOTE_STALE', async () => {
+      const { ctx, quote } = await quoted();
+
+      await expect(
+        t.billing.changePlan(ctx, {
+          planCode: PLAN_10.code,
+          quote: { ...confirmed(quote), amountDue: new Decimal('0.01') },
+        }),
+      ).rejects.toMatchObject({ code: 'QUOTE_STALE' });
+
+      expect(charges()).toBe(0);
+    });
+
+    it('a tampered pinned date cannot be used: an earlier one is expired, a later one never pinned, one before the period is another period', async () => {
+      const { ctx, quote } = await quoted();
+      t.clock.advance(MINUTE);
+      const move = (ms: number) => ({
+        ...confirmed(quote),
+        prorationDate: new Date(quote.prorationDate.getTime() + ms),
+      });
+
+      for (const ms of [-3 * MINUTE, 2 * MINUTE, -40 * DAY]) {
+        await expect(
+          t.billing.changePlan(ctx, { planCode: PLAN_10.code, quote: move(ms) }),
+        ).rejects.toMatchObject({ code: 'QUOTE_STALE' });
+      }
+      expect(charges()).toBe(0);
+    });
+
+    it('a quote of another plan, or no quote at all for an upgrade, is QUOTE_STALE', async () => {
+      const { ctx, quote } = await quoted();
+
+      await expect(
+        t.billing.changePlan(ctx, {
+          planCode: PLAN_10.code,
+          quote: { ...confirmed(quote), planCode: PLAN_2.code },
+        }),
+      ).rejects.toMatchObject({ code: 'QUOTE_STALE' });
+      await expect(t.billing.changePlan(ctx, { planCode: PLAN_10.code })).rejects.toMatchObject({
+        code: 'QUOTE_STALE',
+      });
+      expect(charges()).toBe(0);
+    });
+
+    it('a downgrade needs no quote and an upgrade preview carries one; other previews carry none', async () => {
+      await t.subscribeOffice(OFFICE);
+      const ctx = await t.memberOf();
+
+      expect((await t.billing.previewChange(ctx, { planCode: PLAN_2.code })).quote).toBeNull();
+      expect((await t.billing.previewChange(ctx, { planCode: PLAN_5.code })).quote).toBeNull();
+      await t.billing.changePlan(ctx, { planCode: PLAN_2.code });
+      expect(t.gateway.scheduledChanges).toHaveLength(1);
+    });
+
+    it('a different next charge date than the quote says is QUOTE_STALE', async () => {
+      const { ctx, quote } = await quoted();
+
+      await expect(
+        t.billing.changePlan(ctx, {
+          planCode: PLAN_10.code,
+          quote: { ...confirmed(quote), nextChargeAt: new Date('2030-01-01T00:00:00.000Z') },
+        }),
+      ).rejects.toMatchObject({ code: 'QUOTE_STALE' });
+      expect(charges()).toBe(0);
     });
   });
 
@@ -1687,14 +1878,20 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
   describe('F7: idempotency keys come from the facts that define the action', () => {
     it('a retry of an upgrade after an unrelated webhook sync reuses the key; a later different action does not', async () => {
       const { ref, providerId } = await t.subscribeOffice(OFFICE);
-      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      const ctx = await t.memberOf();
+      const { quote } = await t.billing.previewChange(ctx, { planCode: PLAN_10.code });
+      if (quote === null) throw new Error('not an upgrade');
+      await t.billing.changePlan(ctx, { planCode: PLAN_10.code, quote: confirmed(quote) });
       // An unrelated event syncs the record meanwhile (lastSyncedAt moves).
-      t.clock.advance(2 * MINUTE);
+      t.clock.advance(MINUTE);
       await t.sync.refresh(ref);
 
-      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code }); // the retry
+      // the retry of the same confirmed quote
+      await t.billing.changePlan(ctx, { planCode: PLAN_10.code, quote: confirmed(quote) });
       const [first, retry] = t.gateway.priceChanges;
       expect(retry?.idempotencyKey).toBe(first?.idempotencyKey);
+      // the proration date is part of it: a new quote is another charge
+      expect(first?.idempotencyKey).toContain(`:${quote.prorationDate.getTime()}`);
 
       t.gateway.payPendingChange(providerId);
       await t.sync.refresh(ref);
@@ -1704,17 +1901,19 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
 
     it('the same upgrade from another plan, or in another period, is another key', async () => {
       const { ref, providerId } = await t.subscribeOffice(OFFICE, { plan: PLAN_2 });
-      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      await upgradeTo(await t.memberOf());
       t.gateway.payPendingChange(providerId);
       await t.sync.refresh(ref);
+      t.clock.advance(31 * DAY);
       t.gateway.setSubscription({
         ...t.gateway.current(providerId),
         priceId: 'price_2',
-        currentPeriodStart: new Date(t.clock.now().getTime() + 30 * DAY),
+        currentPeriodStart: new Date(t.clock.now().getTime() - DAY),
+        currentPeriodEnd: new Date(t.clock.now().getTime() + 29 * DAY),
       });
       await t.sync.refresh(ref);
 
-      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      await upgradeTo(await t.memberOf());
 
       const keys = t.gateway.priceChanges.map((change) => change.idempotencyKey);
       expect(new Set(keys).size).toBe(2);
@@ -1727,7 +1926,7 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code });
       t.gateway.callLog.length = 0;
 
-      await t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code });
+      await upgradeTo(await t.memberOf());
 
       expect(t.gateway.callLog).toEqual(['price', 'release']);
     });
@@ -1739,9 +1938,9 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
       t.gateway.failChanges = true;
       const logger = spyOnLogger();
 
-      await expect(
-        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code }),
-      ).rejects.toMatchObject({ code: 'CHANGE_PLAN_FAILED' });
+      await expect(upgradeTo(await t.memberOf())).rejects.toMatchObject({
+        code: 'CHANGE_PLAN_FAILED',
+      });
 
       expect(t.gateway.releasedSchedules).toEqual([]);
       expect(t.subscriptions.get(ref).scheduledPlanId).toBe(PLAN_2.id);
@@ -1767,9 +1966,7 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
     it('F14: a target price the provider archived (or no longer knows) is INVALID_PLAN, nothing is asked', async () => {
       await t.subscribeOffice(OFFICE);
       t.gateway.listsPlan(PLAN_10, { active: false });
-      await expect(
-        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code }),
-      ).rejects.toMatchObject({ code: 'INVALID_PLAN' });
+      await expect(upgradeTo(await t.memberOf())).rejects.toMatchObject({ code: 'INVALID_PLAN' });
       t.gateway.prices.delete('price_2');
       await expect(
         t.billing.changePlan(await t.memberOf(), { planCode: PLAN_2.code }),
@@ -1781,10 +1978,13 @@ describe('SubscriptionsBillingService (SPEC-012 office billing)', () => {
 
     it('F14: a provider that cannot be asked about the price is CHANGE_PLAN_FAILED', async () => {
       await t.subscribeOffice(OFFICE);
+      const ctx = await t.memberOf();
+      const { quote } = await t.billing.previewChange(ctx, { planCode: PLAN_10.code });
+      if (quote === null) throw new Error('not an upgrade');
       t.gateway.failPriceLookup = true;
 
       await expect(
-        t.billing.changePlan(await t.memberOf(), { planCode: PLAN_10.code }),
+        t.billing.changePlan(ctx, { planCode: PLAN_10.code, quote: confirmed(quote) }),
       ).rejects.toMatchObject({ code: 'CHANGE_PLAN_FAILED' });
     });
   });

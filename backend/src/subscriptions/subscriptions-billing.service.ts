@@ -43,6 +43,7 @@ import {
 import { pickDisplayedSubscription } from './domain/displayed-subscription.js';
 import { isReadOnly, readOnlyAtOf } from './domain/grace.js';
 import { classifyPlanChange, type PlanChange } from './domain/plan-change.js';
+import { judgeQuoteDate, quoteExpiresAt } from './domain/plan-quote.js';
 import { planRefund } from './domain/refund-plan.js';
 import { refundEligibleUntil } from './domain/refund-eligibility.js';
 import { reconcileCutoffs } from './domain/reconcile-window.js';
@@ -139,6 +140,28 @@ export interface OfficeSubscriptionView {
 }
 
 /**
+ * BR-012-16: what the member is quoted for an upgrade. The proration date is pinned at preview time
+ * and the change must send the quote back: the server re-asks the provider as of THAT date and
+ * charges only if the amount is still the quoted one. Valid for QUOTE_TTL_MS from the pinned instant.
+ */
+export interface PlanChangeQuote {
+  readonly planCode: string;
+  readonly prorationDate: Date;
+  readonly amountDue: Decimal;
+  readonly currency: 'BRL';
+  readonly nextChargeAt: Date | null;
+  readonly expiresAt: Date;
+}
+
+/** What the member sends back to confirm a quote: only these facts are read, and none is trusted. */
+export interface ConfirmedQuote {
+  readonly planCode: string;
+  readonly prorationDate: Date;
+  readonly amountDue: Decimal;
+  readonly nextChargeAt: Date | null;
+}
+
+/**
  * BR-012-16..BR-012-18: what choosing a plan would do, before the member confirms. `amountDue` is
  * what the provider would charge NOW (zero for anything but an upgrade).
  */
@@ -152,6 +175,8 @@ export interface PlanChangePreviewView {
   readonly effectiveAt: Date | null;
   readonly nextChargeAt: Date | null;
   readonly nextChargeAmount: Decimal;
+  /** An upgrade's quote, to be sent back with the change; null for everything else. */
+  readonly quote: PlanChangeQuote | null;
 }
 
 /** The success page asks only this (BR-012-09): the redirect itself grants nothing. */
@@ -383,7 +408,7 @@ export class SubscriptionsBillingService {
    */
   async changePlan(
     ctx: AccessContext,
-    input: { planCode: string; officeId?: string },
+    input: { planCode: string; officeId?: string; quote?: ConfirmedQuote },
   ): Promise<OfficeSubscriptionView> {
     const { acting, subscription, target, change } = await this.resolveChange(ctx, input);
     if (change === 'keep') return this.viewOf(ctx, acting, subscription);
@@ -409,10 +434,13 @@ export class SubscriptionsBillingService {
         const price = await this.gateway.getPrice(target.stripePriceId);
         if (price === null || !price.active) throw new DomainError('INVALID_PLAN');
         if (change === 'upgrade') {
+          // BR-012-16: charged only as the member was quoted, as of the quoted instant
+          const prorationDate = await this.verifiedQuoteDate(subscription, target, input.quote);
           await this.gateway.changeSubscriptionPrice({
             subscriptionId,
             priceId: target.stripePriceId,
-            idempotencyKey: `upgrade:${key}`,
+            prorationDate,
+            idempotencyKey: `upgrade:${key}:${prorationDate.getTime()}`,
           });
           // Only now that the upgrade was accepted: a downgrade scheduled before it is moot.
           if (subscription.scheduledPlanId !== null) {
@@ -432,6 +460,44 @@ export class SubscriptionsBillingService {
       throw new DomainError('CHANGE_PLAN_FAILED');
     }
     return this.viewOf(ctx, acting, await this.refreshed(subscription));
+  }
+
+  /**
+   * The quote an upgrade is confirmed with, judged WITHOUT trusting what the client sent beyond
+   * the pinned instant and the amount it saw: no quote, a quote of another plan, an instant that is
+   * in the future, expired or outside the current period, or an amount (or next charge date) that
+   * the provider, asked as of the SAME instant for the CURRENT state, no longer gives, is
+   * QUOTE_STALE: nothing is charged and the member confirms the new quote. The client's own
+   * `expiresAt` is never read; the expiry comes from the pinned instant.
+   */
+  private async verifiedQuoteDate(
+    subscription: StoredSubscription,
+    target: Plan,
+    quote: ConfirmedQuote | undefined,
+  ): Promise<Date> {
+    const stale = () => new DomainError('QUOTE_STALE');
+    if (quote === undefined || quote.planCode !== target.code) throw stale();
+    const verdict = judgeQuoteDate({
+      prorationDate: quote.prorationDate,
+      now: this.clock.now(),
+      periodStart: subscription.currentPeriodStart,
+      periodEnd: subscription.currentPeriodEnd,
+    });
+    if (verdict !== 'ok') throw stale();
+    const current = await this.gateway.previewPlanChange({
+      subscriptionId: this.providerIdOf(subscription),
+      priceId: target.stripePriceId,
+      prorationDate: quote.prorationDate,
+    });
+    const nextCharge = current.nextChargeAt ?? subscription.currentPeriodEnd;
+    if (
+      !current.amountDue.equals(quote.amountDue) ||
+      (nextCharge?.getTime() ?? null) !== (quote.nextChargeAt?.getTime() ?? null)
+    ) {
+      this.previewCache.deleteByPrefix(`${subscription.id}:`);
+      throw stale();
+    }
+    return quote.prorationDate;
   }
 
   /**
@@ -459,6 +525,7 @@ export class SubscriptionsBillingService {
         effectiveAt: null,
         nextChargeAt: periodEnd,
         nextChargeAmount: current.price,
+        quote: null,
       };
     }
     if (subscription.cancelAtPeriodEnd) throw new DomainError('SUBSCRIPTION_NOT_CHANGEABLE');
@@ -471,6 +538,7 @@ export class SubscriptionsBillingService {
         effectiveAt: periodEnd,
         nextChargeAt: periodEnd,
         nextChargeAmount: target.price,
+        quote: null,
       };
     }
     const cacheKey = `${subscription.id}:${target.code}`;
@@ -480,18 +548,30 @@ export class SubscriptionsBillingService {
     try {
       const price = await this.gateway.getPrice(target.stripePriceId);
       if (price === null || !price.active) throw new DomainError('INVALID_PLAN');
+      // pinned to whole seconds now: the change is confirmed with this instant (the quote)
+      const prorationDate = new Date(Math.floor(now / 1000) * 1000);
       const preview = await this.gateway.previewPlanChange({
         subscriptionId: this.providerIdOf(subscription),
         priceId: target.stripePriceId,
+        prorationDate,
       });
+      const nextChargeAt = preview.nextChargeAt ?? periodEnd;
       const view: PlanChangePreviewView = {
         change,
         amountDue: preview.amountDue,
         currency: 'BRL',
         lines: preview.lines,
         effectiveAt: null,
-        nextChargeAt: preview.nextChargeAt ?? periodEnd,
+        nextChargeAt,
         nextChargeAmount: target.price,
+        quote: {
+          planCode: target.code,
+          prorationDate: preview.prorationDate,
+          amountDue: preview.amountDue,
+          currency: 'BRL',
+          nextChargeAt,
+          expiresAt: quoteExpiresAt(preview.prorationDate),
+        },
       };
       this.previewCache.set(cacheKey, view, now, PREVIEW_CACHE_MS);
       return view;

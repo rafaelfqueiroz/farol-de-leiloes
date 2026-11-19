@@ -185,6 +185,24 @@ describe('StripePaymentGateway billing operations', () => {
       );
     });
 
+    it('owner review #173: an upgrade is made as of the proration date of the quote the member confirmed', async () => {
+      const { gateway, stripe } = build();
+      stripe.subscriptions.retrieve.mockResolvedValue({ items: { data: [ITEM] } });
+
+      await gateway.changeSubscriptionPrice({
+        subscriptionId: 'sub_1',
+        priceId: 'price_10',
+        idempotencyKey: 'upgrade:k:1773144000000',
+        prorationDate: new Date('2026-03-10T12:00:00.000Z'),
+      });
+
+      expect(stripe.subscriptions.update).toHaveBeenCalledWith(
+        'sub_1',
+        expect.objectContaining({ proration_date: 1773144000 }),
+        { idempotencyKey: 'upgrade:k:1773144000000' },
+      );
+    });
+
     it('refuses a subscription that is not single-item: never a guess of which item to change', async () => {
       const { gateway, stripe } = build();
       stripe.subscriptions.retrieve.mockResolvedValue({ items: { data: [ITEM, ITEM] } });
@@ -685,9 +703,11 @@ describe('StripePaymentGateway billing operations', () => {
         },
       });
 
+      const prorationDate = new Date('2026-03-10T12:00:00.000Z');
       const preview = await gateway.previewPlanChange({
         subscriptionId: 'sub_1',
         priceId: 'price_9',
+        prorationDate,
       });
 
       expect(stripe.invoices.createPreview).toHaveBeenCalledWith({
@@ -695,8 +715,11 @@ describe('StripePaymentGateway billing operations', () => {
         subscription_details: {
           items: [{ id: 'si_1', price: 'price_9' }],
           proration_behavior: 'always_invoice',
+          // pinned: the upgrade that follows is made as of the same instant
+          proration_date: 1773144000,
         },
       });
+      expect(preview.prorationDate).toEqual(prorationDate);
       expect(preview.amountDue.toFixed(2)).toBe('12600.09');
       expect(preview.currency).toBe('brl');
       expect(preview.lines.map((line) => line.amount.toFixed(2))).toEqual(['12990.00', '-389.91']);
@@ -714,7 +737,11 @@ describe('StripePaymentGateway billing operations', () => {
         lines: { data: [{ amount: -500, period: { start: 1, end: 2 } }] },
       });
 
-      const preview = await gateway.previewPlanChange({ subscriptionId: 'sub_1', priceId: 'p' });
+      const preview = await gateway.previewPlanChange({
+        subscriptionId: 'sub_1',
+        priceId: 'p',
+        prorationDate: new Date(0),
+      });
 
       expect(preview.amountDue.isZero()).toBe(true);
       expect(preview.nextChargeAt).toBeNull();
