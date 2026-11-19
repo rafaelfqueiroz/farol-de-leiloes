@@ -31,6 +31,14 @@ export class FakePlansRepository implements Port<PlansRepository> {
     return this.rows.find((plan) => plan.stripePriceId === stripePriceId) ?? null;
   }
 
+  async upsertMany(definitions: readonly PlanDefinition[]): Promise<{ created: number }> {
+    let created = 0;
+    for (const definition of definitions) {
+      if ((await this.upsertByCode(definition)) === 'created') created += 1;
+    }
+    return { created };
+  }
+
   async upsertByCode(definition: PlanDefinition): Promise<'created' | 'updated'> {
     this.upserts.push(definition);
     const index = this.rows.findIndex((plan) => plan.code === definition.code);

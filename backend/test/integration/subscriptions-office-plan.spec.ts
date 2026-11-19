@@ -115,18 +115,18 @@ describe('office subscriptions over MongoDB (integration, SPEC-012)', () => {
     const planModel = harness.moduleRef.get<Model<PlanDocument>>(getModelToken(PlanEntity.name));
     await planModel.syncIndexes();
     const plans = get(PlansService);
-    await plans.upsertCatalog([
-      {
-        code: 'escritorio-5',
-        name: 'Escritório 5',
-        price: new Decimal('199.90'),
-        interval: 'month',
-        activeJourneyLimit: 5,
-        stripePriceId: 'price_5',
-        status: 'OFFERED',
-        sortOrder: 10,
-      },
-    ]);
+    const catalog = {
+      code: 'escritorio-5',
+      name: 'Escritório 5',
+      price: new Decimal('199.90'),
+      interval: 'month' as const,
+      activeJourneyLimit: 5,
+      stripePriceId: 'price_5',
+      status: 'OFFERED' as const,
+      sortOrder: 10,
+    };
+    gateway.listsPlan(catalog); // the catalog script checks the price at the provider
+    await plans.upsertCatalog([catalog]);
     planId = (await plans.findByCode('escritorio-5'))?.id ?? '';
   });
 
@@ -198,9 +198,11 @@ describe('office subscriptions over MongoDB (integration, SPEC-012)', () => {
       const aOutcome = Promise.allSettled([a]);
       await vi.waitFor(() => expect(reads).toBe(1));
 
-      // B: the same event, delivered again while A runs. It is covered and acknowledged, and must
-      // leave the ledger row unprocessed.
-      await service.handleProviderEvent(completed('evt_same', pending.id));
+      // B: the same event, delivered again while A runs. The ledger claim refuses it
+      // (WEBHOOK_BUSY) and it must leave the ledger row unprocessed.
+      await expect(
+        service.handleProviderEvent(completed('evt_same', pending.id)),
+      ).rejects.toMatchObject({ code: 'WEBHOOK_BUSY' });
       expect((await ledger())?.processedAt ?? null).toBeNull();
 
       release();

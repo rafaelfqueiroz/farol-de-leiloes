@@ -42,6 +42,18 @@ import { SubscriptionsRepository } from './subscriptions.repository.js';
 /** BR-012-13: how long a sync may hold a subscription's lease before another can take it. */
 export const SYNC_LEASE_MS = 30_000;
 
+/**
+ * SC-11: how long a delivery may hold the claim on its event id before another delivery of the
+ * same event may run the handler. Longer than the nested syncs the handler can make.
+ */
+export const EVENT_PROCESSING_MS = 120_000;
+
+/**
+ * BR-012-20: how long a claim on the payment-failed email lasts. A sender that dies between the
+ * claim and the send loses it at expiry, and the retried event sends the email.
+ */
+export const EMAIL_CLAIM_MS = 10 * 60 * 1000;
+
 /** A delivery that finds the lease taken tries to take it this many times (ADR-005). */
 const MAX_ACQUIRE_ATTEMPTS = 3;
 /** A holder reads the provider again, while deliveries keep asking, at most this many times. */
@@ -121,13 +133,57 @@ export class SubscriptionsService {
     const recording = await this.events.record(event.id, event.type, this.clock.now());
     if (recording === 'processed') return;
 
-    const handledHere = await this.handle(event);
+    // SC-11: the same event delivered twice AT THE SAME TIME runs the handler once. The loser is
+    // told to try again; the retry finds the event processed and acknowledges it.
+    const token = randomUUID();
+    const claimedAt = this.clock.now();
+    const claimed = await this.events.claimProcessing(
+      event.id,
+      token,
+      claimedAt,
+      new Date(claimedAt.getTime() + EVENT_PROCESSING_MS),
+    );
+    if (!claimed) throw new DomainError('WEBHOOK_BUSY');
+    let handledHere: boolean;
+    try {
+      handledHere = await this.handle(event);
+    } catch (error) {
+      // Give the claim back, so the provider's retry does not wait for it to expire.
+      await this.events.releaseProcessing(event.id, token);
+      throw error;
+    }
     // SPEC-012 BR-012-13 / SC-11: only a delivery that did the work itself completes the event. A
     // delivery COVERED by another sync (a lease holder asked to read again) has not read anything:
     // if the holder then fails, the provider redelivers the holder's event, and a row this
-    // delivery had stamped would make that retry stop at 'processed' and never sync. Leaving the
-    // row unprocessed lets the redelivery handle it; the holder stamps it when its sync succeeds.
+    // delivery had stamped would make that retry stop at 'processed' and never sync. A covered
+    // delivery gives its claim back and leaves the row unprocessed; the redelivery handles it.
     if (handledHere) await this.events.markProcessed(event.id, this.clock.now());
+    else await this.events.releaseProcessing(event.id, token);
+  }
+
+  /**
+   * ADR-005: a checkout whose payment the provider confirms (its session is complete) but whose
+   * events never reached us: reads the subscription it created through the same sync, naming our
+   * record by ref. Returns the record as stored afterwards.
+   */
+  async recoverCheckout(ref: string, providerSubscriptionId: string): Promise<StoredSubscription> {
+    const result = await this.syncFromProvider(providerSubscriptionId, ref);
+    return result.kind === 'synced' ? result.record : this.reload(ref);
+  }
+
+  /**
+   * BR-012-13, BR-012-16: makes our record equal to the provider's NOW, through the same lease and
+   * dirty-mark path the webhook uses. The billing service calls it after it changed something at
+   * the provider (an upgrade, a cancel, a refund) and the reconcile job for every record it
+   * re-reads. Returns the record as stored afterwards. A record with no provider subscription yet
+   * (a checkout still open) is returned as it is.
+   */
+  async refresh(id: string): Promise<StoredSubscription> {
+    const record = await this.subscriptions.findById(id);
+    if (record === null) throw new DomainError('SUBSCRIPTION_NOT_FOUND');
+    if (record.stripeSubscriptionId === null) return record;
+    const result = await this.syncFromProvider(record.stripeSubscriptionId, record.id);
+    return result.kind === 'synced' ? result.record : this.reload(record.id);
   }
 
   /** Resolves true when this delivery did the work, false when another sync covers it. */
@@ -503,12 +559,18 @@ export class SubscriptionsService {
   private async notifyPaymentFailed(eventId: string, record: StoredSubscription): Promise<void> {
     // A first payment that fails never reaches PAST_DUE (it stays pending): no office, no one.
     if (record.officeId === null) return;
-    if (!(await this.events.claimEmail(eventId, this.clock.now()))) return;
+    const claimedAt = this.clock.now();
+    const until = new Date(claimedAt.getTime() + EMAIL_CLAIM_MS);
+    if (!(await this.events.claimEmail(eventId, claimedAt, until))) return;
+    let told: number;
     try {
-      await this.notifier.notifyPaymentFailed(record.officeId);
+      told = await this.notifier.notifyPaymentFailed(record.officeId);
     } catch (error) {
       await this.events.releaseEmailClaim(eventId);
       throw error;
     }
+    // Nobody was told (no member known yet): the claim goes back so a retry can tell them.
+    if (told === 0) await this.events.releaseEmailClaim(eventId);
+    else await this.events.markEmailSent(eventId, this.clock.now());
   }
 }

@@ -10,6 +10,10 @@ interface Ledger {
   receivedAt: Date;
   processedAt?: Date;
   emailClaimedAt?: Date;
+  emailClaimedUntil?: Date;
+  emailSentAt?: Date;
+  processingToken?: string;
+  processingUntil?: Date;
 }
 
 /**
@@ -29,20 +33,65 @@ export class FakePaymentEventsRepository implements Port<PaymentEventsRepository
     return existing.processedAt === undefined ? 'unprocessed' : 'processed';
   }
 
-  async markProcessed(stripeEventId: string, processedAt: Date): Promise<void> {
+  async claimProcessing(
+    stripeEventId: string,
+    token: string,
+    now: Date,
+    until: Date,
+  ): Promise<boolean> {
     const existing = this.ledger.get(stripeEventId);
-    if (existing && existing.processedAt === undefined) existing.processedAt = processedAt;
+    if (!existing || existing.processedAt !== undefined) return false;
+    if (
+      existing.processingUntil !== undefined &&
+      existing.processingUntil.getTime() > now.getTime()
+    ) {
+      return false;
+    }
+    existing.processingToken = token;
+    existing.processingUntil = until;
+    return true;
   }
 
-  async claimEmail(stripeEventId: string, claimedAt: Date): Promise<boolean> {
+  async releaseProcessing(stripeEventId: string, token: string): Promise<void> {
     const existing = this.ledger.get(stripeEventId);
-    if (!existing || existing.emailClaimedAt !== undefined) return false;
+    if (existing?.processingToken === token) {
+      delete existing.processingToken;
+      delete existing.processingUntil;
+    }
+  }
+
+  async markProcessed(stripeEventId: string, processedAt: Date): Promise<void> {
+    const existing = this.ledger.get(stripeEventId);
+    if (existing && existing.processedAt === undefined) {
+      existing.processedAt = processedAt;
+      delete existing.processingToken;
+      delete existing.processingUntil;
+    }
+  }
+
+  async claimEmail(stripeEventId: string, claimedAt: Date, until: Date): Promise<boolean> {
+    const existing = this.ledger.get(stripeEventId);
+    if (!existing || existing.emailSentAt !== undefined) return false;
+    const live =
+      existing.emailClaimedAt !== undefined &&
+      (existing.emailClaimedUntil === undefined ||
+        existing.emailClaimedUntil.getTime() > claimedAt.getTime());
+    if (live) return false;
     existing.emailClaimedAt = claimedAt;
+    existing.emailClaimedUntil = until;
     return true;
+  }
+
+  async markEmailSent(stripeEventId: string, sentAt: Date): Promise<void> {
+    const existing = this.ledger.get(stripeEventId);
+    if (existing && existing.emailSentAt === undefined) existing.emailSentAt = sentAt;
   }
 
   async releaseEmailClaim(stripeEventId: string): Promise<void> {
     const existing = this.ledger.get(stripeEventId);
-    if (existing) delete existing.emailClaimedAt;
+    if (existing && existing.emailSentAt === undefined) {
+      delete existing.emailClaimedAt;
+      delete existing.emailClaimedUntil;
+    }
   }
 }

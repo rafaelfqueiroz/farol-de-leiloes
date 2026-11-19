@@ -20,7 +20,12 @@ const PERIOD_END = new Date('2026-03-01T09:00:00.000Z');
 const PLAN_5: PlanFacts = { id: 'plan-5', code: 'escritorio-5', activeJourneyLimit: 5 };
 const PLAN_2: PlanFacts = { id: 'plan-2', code: 'escritorio-2', activeJourneyLimit: 2 };
 
-const FRESH: StoredFacts = { status: 'PENDING', lapsedAt: null, firstPaidAt: null };
+const FRESH: StoredFacts = {
+  status: 'PENDING',
+  lapsedAt: null,
+  firstPaidAt: null,
+  firstPaymentFree: false,
+};
 
 function snapshot(overrides: Partial<ProviderSnapshot> = {}): ProviderSnapshot {
   return {
@@ -31,7 +36,8 @@ function snapshot(overrides: Partial<ProviderSnapshot> = {}): ProviderSnapshot {
     currentPeriodStart: PERIOD_START,
     currentPeriodEnd: PERIOD_END,
     scheduledChangeAt: null,
-    latestInvoicePaidAt: PAID_AT,
+    firstInvoicePaidAt: PAID_AT,
+    firstInvoiceFree: false,
     endedAt: null,
     ...overrides,
   };
@@ -95,7 +101,14 @@ describe('reconcile: what the provider says is what is stored (BR-012-13)', () =
   it('is the same for the same snapshot whatever the stored state was (order independence)', () => {
     const fromPending = reconcile(input({ current: FRESH }));
     const fromActive = reconcile(
-      input({ current: { status: 'ACTIVE', lapsedAt: null, firstPaidAt: PAID_AT } }),
+      input({
+        current: {
+          status: 'ACTIVE',
+          lapsedAt: null,
+          firstPaidAt: PAID_AT,
+          firstPaymentFree: false,
+        },
+      }),
     );
 
     expect(fromPending.status).toBe(fromActive.status);
@@ -105,10 +118,41 @@ describe('reconcile: what the provider says is what is stored (BR-012-13)', () =
 
   it('BR-012-09: an incomplete payment stays PENDING and records no payment', () => {
     const patch = reconcile(
-      input({ provider: snapshot({ status: 'incomplete', latestInvoicePaidAt: null }) }),
+      input({ provider: snapshot({ status: 'incomplete', firstInvoicePaidAt: null }) }),
     );
 
     expect(patch).toMatchObject({ status: 'PENDING', firstPaidAt: null, lapsedAt: null });
+  });
+});
+
+describe('BR-012-29: a free first payment is remembered, once', () => {
+  it('stores that the first payment charged nothing (a 100% coupon) with the first payment instant', () => {
+    const patch = reconcile(input({ provider: snapshot({ firstInvoiceFree: true }) }));
+
+    expect(patch).toMatchObject({ firstPaidAt: PAID_AT, firstPaymentFree: true });
+  });
+
+  it('keeps what was stored: a later snapshot never changes whether the first payment was free', () => {
+    const free = reconcile(
+      input({
+        current: { status: 'ACTIVE', lapsedAt: null, firstPaidAt: PAID_AT, firstPaymentFree: true },
+        provider: snapshot({ firstInvoiceFree: false }),
+      }),
+    );
+    const paid = reconcile(
+      input({
+        current: {
+          status: 'ACTIVE',
+          lapsedAt: null,
+          firstPaidAt: PAID_AT,
+          firstPaymentFree: false,
+        },
+        provider: snapshot({ firstInvoiceFree: true }),
+      }),
+    );
+
+    expect(free.firstPaymentFree).toBe(true);
+    expect(paid.firstPaymentFree).toBe(false);
   });
 });
 
@@ -119,14 +163,16 @@ describe('BR-012-29: firstPaidAt is the provider-confirmed first payment, stored
 
   it('takes now when the provider gave no paid time but the subscription is in effect', () => {
     expect(
-      reconcile(input({ provider: snapshot({ latestInvoicePaidAt: null }) })).firstPaidAt,
+      reconcile(input({ provider: snapshot({ firstInvoicePaidAt: null }) })).firstPaidAt,
     ).toEqual(NOW);
   });
 
   it('never moves once set, even if a later invoice was paid later', () => {
     const first = new Date('2026-01-01T00:00:00.000Z');
     const patch = reconcile(
-      input({ current: { status: 'ACTIVE', lapsedAt: null, firstPaidAt: first } }),
+      input({
+        current: { status: 'ACTIVE', lapsedAt: null, firstPaidAt: first, firstPaymentFree: false },
+      }),
     );
 
     expect(patch.firstPaidAt).toEqual(first);
@@ -144,7 +190,7 @@ describe('BR-012-29: firstPaidAt is the provider-confirmed first payment, stored
 
   it('is not recorded for one that ended without ever being paid (incomplete_expired)', () => {
     const patch = reconcile(
-      input({ provider: snapshot({ status: 'incomplete_expired', latestInvoicePaidAt: null }) }),
+      input({ provider: snapshot({ status: 'incomplete_expired', firstInvoicePaidAt: null }) }),
     );
 
     expect(patch.firstPaidAt).toBeNull();
@@ -158,7 +204,12 @@ describe('BR-012-21: lapsedAt is set on entering LAPSED, kept while lapsed, clea
     const endedAt = new Date('2026-02-27T09:00:00.000Z');
     const patch = reconcile(
       input({
-        current: { status: 'CANCELING', lapsedAt: null, firstPaidAt: PAID_AT },
+        current: {
+          status: 'CANCELING',
+          lapsedAt: null,
+          firstPaidAt: PAID_AT,
+          firstPaymentFree: false,
+        },
         provider: snapshot({ status: 'canceled', endedAt }),
       }),
     );
@@ -171,7 +222,12 @@ describe('BR-012-21: lapsedAt is set on entering LAPSED, kept while lapsed, clea
   it('uses now when the provider gave no end (unpaid)', () => {
     const patch = reconcile(
       input({
-        current: { status: 'PAST_DUE', lapsedAt: null, firstPaidAt: PAID_AT },
+        current: {
+          status: 'PAST_DUE',
+          lapsedAt: null,
+          firstPaidAt: PAID_AT,
+          firstPaymentFree: false,
+        },
         provider: snapshot({ status: 'unpaid' }),
       }),
     );
@@ -195,7 +251,7 @@ describe('BR-012-21: lapsedAt is set on entering LAPSED, kept while lapsed, clea
     const lapsedAt = new Date('2026-02-20T00:00:00.000Z');
     const patch = reconcile(
       input({
-        current: { status: 'LAPSED', lapsedAt, firstPaidAt: PAID_AT },
+        current: { status: 'LAPSED', lapsedAt, firstPaidAt: PAID_AT, firstPaymentFree: false },
         provider: lapsedProvider,
       }),
     );
@@ -208,7 +264,12 @@ describe('BR-012-21: lapsedAt is set on entering LAPSED, kept while lapsed, clea
   it('stamps it when a stored LAPSED has no instant (data from before the field)', () => {
     const patch = reconcile(
       input({
-        current: { status: 'LAPSED', lapsedAt: null, firstPaidAt: PAID_AT },
+        current: {
+          status: 'LAPSED',
+          lapsedAt: null,
+          firstPaidAt: PAID_AT,
+          firstPaymentFree: false,
+        },
         provider: lapsedProvider,
       }),
     );
@@ -223,6 +284,7 @@ describe('BR-012-21: lapsedAt is set on entering LAPSED, kept while lapsed, clea
           status: 'LAPSED',
           lapsedAt: new Date('2026-02-20T00:00:00.000Z'),
           firstPaidAt: PAID_AT,
+          firstPaymentFree: false,
         },
         provider: snapshot({ status: 'active' }),
       }),

@@ -28,6 +28,7 @@ import { DAY } from '../fakes/fake-clock.js';
 import { useTestDatabase } from '../support/test-database.js';
 
 const NOW = new Date('2099-03-01T12:00:00.000Z');
+const EMAIL_UNTIL = new Date(NOW.getTime() + 10 * 60_000);
 const LEASE_END = new Date(NOW.getTime() + 30_000);
 const BUYER = '64b7f0000000000000000b01';
 const PLAN = '64b7f0000000000000000a05';
@@ -46,6 +47,7 @@ function patch(overrides: Partial<SyncPatch> = {}): SyncPatch {
     scheduledPlanId: null,
     scheduledChangeAt: null,
     firstPaidAt: new Date('2099-02-01T00:00:05.000Z'),
+    firstPaymentFree: false,
     lapsedAt: null,
     readOnlyAt: null,
     lastSyncedAt: NOW,
@@ -572,22 +574,38 @@ describe('subscription repositories (integration, SPEC-012)', () => {
       await events.record('evt_3', 'invoice.payment_failed', NOW);
 
       const claims = await Promise.all(
-        Array.from({ length: 10 }, () => events.claimEmail('evt_3', NOW)),
+        Array.from({ length: 10 }, () => events.claimEmail('evt_3', NOW, EMAIL_UNTIL)),
       );
       expect(claims.filter(Boolean)).toHaveLength(1);
 
       await events.releaseEmailClaim('evt_3');
-      expect(await events.claimEmail('evt_3', NOW)).toBe(true);
-      expect(await events.claimEmail('evt_3', NOW)).toBe(false);
+      expect(await events.claimEmail('evt_3', NOW, EMAIL_UNTIL)).toBe(true);
+      expect(await events.claimEmail('evt_3', NOW, EMAIL_UNTIL)).toBe(false);
+    });
+
+    it('BR-012-20: a claim whose sender died expires and can be taken again; once somebody was told it never can', async () => {
+      await events.record('evt_5', 'invoice.payment_failed', NOW);
+      expect(await events.claimEmail('evt_5', NOW, EMAIL_UNTIL)).toBe(true);
+
+      expect(
+        await events.claimEmail('evt_5', new Date(EMAIL_UNTIL.getTime() - 1), EMAIL_UNTIL),
+      ).toBe(false);
+      expect(await events.claimEmail('evt_5', EMAIL_UNTIL, EMAIL_UNTIL)).toBe(true);
+
+      await events.markEmailSent('evt_5', EMAIL_UNTIL);
+      await events.releaseEmailClaim('evt_5'); // too late: it was sent
+      expect(
+        await events.claimEmail('evt_5', new Date(EMAIL_UNTIL.getTime() + DAY), EMAIL_UNTIL),
+      ).toBe(false);
     });
 
     it('claims nothing for an event that was never recorded', async () => {
-      expect(await events.claimEmail('evt_unknown', NOW)).toBe(false);
+      expect(await events.claimEmail('evt_unknown', NOW, EMAIL_UNTIL)).toBe(false);
     });
 
     it('SC-15: the ledger holds ids and instants only', async () => {
       await events.record('evt_4', 'invoice.payment_failed', NOW);
-      await events.claimEmail('evt_4', NOW);
+      await events.claimEmail('evt_4', NOW, EMAIL_UNTIL);
       await events.markProcessed('evt_4', NOW);
 
       const stored = await model.db.collection('paymentEvents').findOne({ stripeEventId: 'evt_4' });
@@ -597,6 +615,7 @@ describe('subscription repositories (integration, SPEC-012)', () => {
         '_id',
         'createdAt',
         'emailClaimedAt',
+        'emailClaimedUntil',
         'processedAt',
         'receivedAt',
         'stripeEventId',

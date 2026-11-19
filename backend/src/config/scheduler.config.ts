@@ -10,10 +10,15 @@ export interface SchedulerConfig {
   scraper: SchedulerScraperConfig;
   cache: CacheConfig;
   reminders: SchedulerRemindersConfig;
+  subscriptionsReconcile: SchedulerSubscriptionsReconcileConfig;
   cleanup: SchedulerCleanupConfig;
 }
 
 export interface SchedulerRemindersConfig {
+  enabled: boolean;
+}
+
+export interface SchedulerSubscriptionsReconcileConfig {
   enabled: boolean;
 }
 
@@ -44,6 +49,7 @@ export function schedulerConfigFrom(env: Env): SchedulerConfig {
       neighborhoodsEnabled: env.NEIGHBORHOODS_CACHE_ENABLED,
     },
     reminders: { enabled: env.REMINDERS_ENABLED },
+    subscriptionsReconcile: { enabled: env.SUBSCRIPTIONS_RECONCILE_ENABLED },
     cleanup: { onStartup: env.CLEANUP_ON_STARTUP },
   };
 }

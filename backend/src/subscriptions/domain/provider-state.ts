@@ -25,7 +25,8 @@ export interface ProviderSnapshot {
   readonly currentPeriodStart: Date | null;
   readonly currentPeriodEnd: Date | null;
   readonly scheduledChangeAt: Date | null;
-  readonly latestInvoicePaidAt: Date | null;
+  readonly firstInvoicePaidAt: Date | null;
+  readonly firstInvoiceFree: boolean;
   readonly endedAt: Date | null;
 }
 
@@ -70,6 +71,8 @@ export interface StoredFacts {
   readonly status: SubscriptionStatus;
   readonly lapsedAt: Date | null;
   readonly firstPaidAt: Date | null;
+  /** The first payment charged nothing (BR-012-29: a free first subscription is not "earlier paid"). */
+  readonly firstPaymentFree: boolean;
 }
 
 /** A plan a subscription can be on, reduced to what is copied onto it (BR-012-04). */
@@ -107,6 +110,8 @@ export interface SyncPatch {
   readonly scheduledPlanId: string | null;
   readonly scheduledChangeAt: Date | null;
   readonly firstPaidAt: Date | null;
+  /** Set together with `firstPaidAt`, once. */
+  readonly firstPaymentFree: boolean;
   readonly lapsedAt: Date | null;
   readonly readOnlyAt: Date | null;
   readonly lastSyncedAt: Date;
@@ -128,12 +133,13 @@ function lapsedAtOf(input: ReconcileInput, next: SubscriptionStatus): Date | nul
 
 /**
  * The first confirmed payment (BR-012-29: it starts the refund window), stored once: the
- * provider's paid time of the latest invoice, or now when the provider gave none. A subscription
+ * provider's paid time of the invoice that CREATED the subscription (never the latest one: an
+ * upgrade's proration or a renewal is another payment), or now when the provider gave none. A subscription
  * that went from pending straight to ended is still a paid one when its invoice was paid.
  */
 function firstPaidAtOf(input: ReconcileInput, next: SubscriptionStatus): Date | null {
   if (input.current.firstPaidAt !== null) return input.current.firstPaidAt;
-  const paid = input.provider.latestInvoicePaidAt;
+  const paid = input.provider.firstInvoicePaidAt;
   if (isInEffect(next)) return paid ?? input.now;
   return next === 'LAPSED' ? paid : null;
 }
@@ -156,6 +162,11 @@ export function reconcile(input: ReconcileInput): SyncPatch {
     scheduledPlanId: scheduled ? scheduledPlan.id : null,
     scheduledChangeAt: scheduled ? scheduledChangeAt : null,
     firstPaidAt: firstPaidAtOf(input, status),
+    // Stored with the first payment's instant and never changed after it (BR-012-29).
+    firstPaymentFree:
+      input.current.firstPaidAt !== null
+        ? input.current.firstPaymentFree
+        : input.provider.firstInvoiceFree,
     lapsedAt,
     readOnlyAt: lapsedAt === null ? null : readOnlyAtOf(lapsedAt, graceDays),
     lastSyncedAt: now,

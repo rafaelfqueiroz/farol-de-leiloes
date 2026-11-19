@@ -4,7 +4,6 @@ import { Logger } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { NoOfficeMembersSource } from './office-members.source.js';
 import { UnavailableOfficeProvisioner } from './office-provisioner.js';
-import { NoPaymentFailedNotifier } from './payment-failed.notifier.js';
 
 describe('default SPEC-012 ports', () => {
   it('BR-012-07: no office can be created before SPEC-011: unavailable, and a fault if asked', async () => {
@@ -23,9 +22,5 @@ describe('default SPEC-012 ports', () => {
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('0 member contacts'));
     warn.mockRestore();
-  });
-
-  it('BR-012-20: nobody is told before the billing PR binds the notifier', async () => {
-    await expect(new NoPaymentFailedNotifier().notifyPaymentFailed()).resolves.toBeUndefined();
   });
 });

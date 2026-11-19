@@ -21,7 +21,12 @@ import { InMemoryPlans } from '../../test/fakes/in-memory-plans.js';
 import { testBusinessConfig } from '../../test/support/test-env.js';
 import { effectiveJourneyLimit } from './domain/subscription-status.js';
 import type { PaymentEventsRepository } from './payment-events.repository.js';
-import { SYNC_LEASE_MS, SubscriptionsService } from './subscriptions.service.js';
+import {
+  EMAIL_CLAIM_MS,
+  EVENT_PROCESSING_MS,
+  SYNC_LEASE_MS,
+  SubscriptionsService,
+} from './subscriptions.service.js';
 import type { SubscriptionsRepository } from './subscriptions.repository.js';
 
 const NOW = new Date('2026-03-01T12:00:00.000Z');
@@ -278,6 +283,87 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       expect(t.subscriptions.get(pending.id).syncLeaseToken).toBeNull(); // the lease is given back
     });
 
+    it('SC-11: the SAME event delivered twice at the same moment runs the handler once; the loser is told to retry', async () => {
+      const pending = await t.startCheckout();
+      t.providerHas(pending.id);
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      // The first delivery is inside the handler (a slow read) when the second arrives.
+      t.gateway.onRetrieve = () => held;
+
+      const first = t.service.handleProviderEvent(completed('evt_1', pending.id));
+      await vi.waitFor(() => expect(t.gateway.retrievals).toHaveLength(1));
+      await expect(
+        t.service.handleProviderEvent(completed('evt_1', pending.id)),
+      ).rejects.toMatchObject({
+        code: 'WEBHOOK_BUSY',
+      });
+      release();
+      await first;
+
+      expect(t.gateway.retrievals).toEqual(['sub_1']);
+      expect(t.provisioner.calls).toHaveLength(1);
+      // The provider's retry finds it processed and acknowledges it.
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+      expect(t.gateway.retrievals).toEqual(['sub_1']);
+    });
+
+    it('SC-11: a delivery that fails gives its claim back, so the retry does not wait for it to expire', async () => {
+      const pending = await t.startCheckout();
+      t.providerHas(pending.id);
+      t.gateway.onRetrieve = () => {
+        throw new Error('provider unreachable');
+      };
+      await expect(t.service.handleProviderEvent(completed('evt_1', pending.id))).rejects.toThrow(
+        'provider unreachable',
+      );
+      t.gateway.onRetrieve = undefined;
+
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+
+      expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
+    });
+
+    it('SC-11: a claim whose holder died expires, and a later delivery handles the event', async () => {
+      const pending = await t.startCheckout();
+      t.providerHas(pending.id);
+      await t.ledger.record('evt_1', 'checkout.completed', NOW);
+      await t.ledger.claimProcessing(
+        'evt_1',
+        'dead-holder',
+        NOW,
+        new Date(NOW.getTime() + EVENT_PROCESSING_MS),
+      );
+
+      await expect(
+        t.service.handleProviderEvent(completed('evt_1', pending.id)),
+      ).rejects.toMatchObject({
+        code: 'WEBHOOK_BUSY',
+      });
+      t.clock.advance(EVENT_PROCESSING_MS);
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+
+      expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
+    });
+
+    it('BR-012-16: `refresh` reads the provider through the same sync, and a record with no provider subscription yet is returned as it is', async () => {
+      const pending = await t.startCheckout();
+      expect(await t.service.refresh(pending.id)).toEqual(pending);
+      expect(t.gateway.retrievals).toEqual([]);
+      t.providerHas(pending.id);
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+      t.providerHas(pending.id, { status: 'past_due' });
+
+      const refreshed = await t.service.refresh(pending.id);
+
+      expect(refreshed.status).toBe('PAST_DUE');
+      await expect(t.service.refresh('64b7f00000000000000fffff')).rejects.toMatchObject({
+        code: 'SUBSCRIPTION_NOT_FOUND',
+      });
+    });
+
     it('acknowledges an event it does not act on without recording it', async () => {
       await t.service.handleProviderEvent({
         id: 'evt_9',
@@ -442,9 +528,13 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       );
       await vi.waitFor(() => expect(readsSeen).toBe(1));
 
-      // B: the SAME event delivered again while A is in flight. It is covered (acknowledged at
-      // once) but must not stamp the ledger row A is still processing.
-      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+      // B: the SAME event delivered again while A is in flight. The ledger claim refuses it
+      // (WEBHOOK_BUSY, the provider retries it later) and it must not stamp the row A is still
+      // processing; on a base without the claim it would be covered and acknowledged, which must
+      // not stamp the row either.
+      await expect(
+        t.service.handleProviderEvent(completed('evt_1', pending.id)),
+      ).rejects.toMatchObject({ code: 'WEBHOOK_BUSY' });
       expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
 
       // A's read fails: the delivery answers 5xx and nothing was synced.
@@ -681,7 +771,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           id: providerId,
           subscriptionRef: record.id,
           priceId: 'price_5',
-          latestInvoicePaidAt: new Date(paidAt),
+          firstInvoicePaidAt: new Date(paidAt),
         }),
       );
       await t.service.handleProviderEvent(completed(`evt_${providerId}`, record.id, providerId));
@@ -720,7 +810,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           id: 'sub_2',
           subscriptionRef: second.id,
           priceId: 'price_5',
-          latestInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
+          firstInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
         }),
       );
 
@@ -743,7 +833,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           id: 'sub_old',
           subscriptionRef: older.id,
           priceId: 'price_5',
-          latestInvoicePaidAt: new Date('2026-01-05T00:00:00.000Z'),
+          firstInvoicePaidAt: new Date('2026-01-05T00:00:00.000Z'),
         }),
       );
 
@@ -763,7 +853,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           id: 'sub_2',
           subscriptionRef: second.id,
           priceId: 'price_5',
-          latestInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
+          firstInvoicePaidAt: new Date('2026-02-01T00:00:00.000Z'),
         }),
       );
       await t.service.handleProviderEvent(completed('evt_2', second.id, 'sub_2'));
@@ -1006,6 +1096,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
           scheduledPlanId: null,
           scheduledChangeAt: null,
           firstPaidAt: NOW,
+          firstPaymentFree: false,
           lapsedAt: null,
           readOnlyAt: null,
           lastSyncedAt: NOW,
@@ -1230,7 +1321,7 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       const pending = await t.startCheckout(OFFICE);
       t.providerHas(pending.id, { status: 'past_due' });
       await t.ledger.record('evt_1', 'invoice.payment_failed', NOW);
-      await t.ledger.claimEmail('evt_1', NOW); // it claimed, then died
+      await t.ledger.claimEmail('evt_1', NOW, new Date(NOW.getTime() + EMAIL_CLAIM_MS)); // it claimed, then died
 
       await t.service.handleProviderEvent(failed('evt_1'));
 
@@ -1249,6 +1340,34 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
 
       await t.service.handleProviderEvent(failed('evt_1'));
       expect(t.notifier.notified).toEqual([OFFICE]);
+    });
+
+    it('BR-012-20: a sender that died between the claim and the send loses the claim at its expiry; the retried event sends the email', async () => {
+      const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id, { status: 'past_due' });
+      await t.ledger.record('evt_1', 'invoice.payment_failed', NOW);
+      await t.ledger.claimEmail('evt_1', NOW, new Date(NOW.getTime() + EMAIL_CLAIM_MS));
+      t.clock.advance(EMAIL_CLAIM_MS); // the claim is past its end
+
+      await t.service.handleProviderEvent(failed('evt_1'));
+
+      expect(t.notifier.notified).toEqual([OFFICE]);
+    });
+
+    it('BR-012-20: when nobody could be told (no member known yet) the claim is given back, so a retry tells them', async () => {
+      const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id, { status: 'past_due' });
+      t.notifier.told = 0;
+      await t.service.handleProviderEvent(failed('evt_1'));
+      expect(t.ledger.ledger.get('evt_1')?.emailClaimedAt).toBeUndefined();
+      expect(t.ledger.ledger.get('evt_1')?.emailSentAt).toBeUndefined();
+
+      t.notifier.told = 2;
+      await t.ledger.markProcessed('evt_1', NOW); // processed: the retry is a NEW delivery of another event
+      await t.service.handleProviderEvent(failed('evt_2'));
+
+      expect(t.notifier.notified).toEqual([OFFICE, OFFICE]);
+      expect(t.ledger.ledger.get('evt_2')?.emailSentAt).toEqual(NOW);
     });
 
     it('a failed-payment event covered by a holder is retried, never acknowledged unread (the email decision needs its own read)', async () => {

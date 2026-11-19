@@ -6,11 +6,15 @@ export class FakePaymentFailedNotifier implements PaymentFailedNotifier {
   /** Makes the next call fail, as an unreachable mail server would. */
   failNext = false;
 
-  async notifyPaymentFailed(officeId: string): Promise<void> {
+  /** How many members the next call reaches (0: nobody to tell). */
+  told = 1;
+
+  async notifyPaymentFailed(officeId: string): Promise<number> {
     if (this.failNext) {
       this.failNext = false;
       throw new Error('mail server unreachable');
     }
     this.notified.push(officeId);
+    return this.told;
   }
 }

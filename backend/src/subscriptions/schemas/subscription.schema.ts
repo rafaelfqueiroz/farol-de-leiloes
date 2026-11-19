@@ -87,9 +87,24 @@ export class SubscriptionEntity {
   @Prop({ type: Date })
   provisionedAt?: Date;
 
-  /** The refund claim (BR-012-29, PR2): re-claimable after 5 minutes. */
+  /** The refund lease (BR-012-29): unset on failure, re-claimable after 5 minutes. */
   @Prop({ type: Date })
   refundClaimedAt?: Date;
+
+  /**
+   * When the first in-window cancel was accepted (set once, `$min`): the right of withdrawal is
+   * judged at THIS instant, so a retry after the window completes a legitimate request.
+   */
+  @Prop({ type: Date })
+  refundRequestedAt?: Date;
+
+  /** The first payment charged nothing (a 100% coupon), stored with `firstPaidAt` (BR-012-29). */
+  @Prop({ type: Boolean })
+  firstPaymentFree?: boolean;
+
+  /** The last time the reconcile job could not read this record: failures sort last (ADR-005). */
+  @Prop({ type: Date })
+  lastReconcileFailedAt?: Date;
 
   @Prop({ type: Date })
   refundedAt?: Date;
@@ -110,6 +125,17 @@ export class SubscriptionEntity {
 
   @Prop({ type: Date })
   lastSyncedAt?: Date;
+
+  /**
+   * One open checkout per office, or per buyer while the buyer has no office (BR-012-07,
+   * BR-012-08, ADR-005): unique among the records that carry it. Set when the checkout starts and
+   * removed by the sync as soon as the provider moves the subscription out of PENDING.
+   */
+  @Prop({ type: String })
+  openCheckoutKey?: string;
+
+  /** Set by `timestamps: true`; the checkout guard and the purge of abandoned checkouts read it. */
+  createdAt!: Date;
 }
 
 export type SubscriptionDocument = HydratedDocument<SubscriptionEntity>;
@@ -137,6 +163,21 @@ SubscriptionSchema.index(
 );
 // AR-27: the office's history (OfficePlanSource reads its in-effect and lapsed ones in one $in).
 SubscriptionSchema.index({ officeId: 1, createdAt: -1 });
+// Built by migration 0007-billing-indexes (AR-29), whose unit spec holds it equal to these.
+// BR-012-07, BR-012-08: never two open checkouts for one office, or for one buyer without an
+// office, whatever races. Partial on the key existing: a record that moved on carries none.
+SubscriptionSchema.index(
+  { openCheckoutKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { openCheckoutKey: { $exists: true } },
+    name: 'one_open_checkout_per_key',
+  },
+);
+// AR-27: the reconcile job reads the records last synced before a cutoff, oldest first.
+SubscriptionSchema.index({ status: 1, lastSyncedAt: 1 });
+// AR-27: the purge of abandoned checkouts reads PENDING records older than a cutoff.
+SubscriptionSchema.index({ status: 1, createdAt: 1 });
 
 // AR-16: keyed by the office and the provider ids, never listed per owner through a client API
 // (BR-012-11's billing view is a service call that resolves the office from the caller's own

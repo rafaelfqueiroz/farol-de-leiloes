@@ -20,17 +20,26 @@ export interface StoredSubscription {
   readonly scheduledPlanId: string | null;
   readonly scheduledChangeAt: Date | null;
   readonly firstPaidAt: Date | null;
+  /** The first payment charged nothing (a 100% coupon): not an "earlier paid" subscription. */
+  readonly firstPaymentFree: boolean;
   readonly lapsedAt: Date | null;
   readonly readOnlyAt: Date | null;
   readonly provisionedAt: Date | null;
+  /** The lease on the refund (BR-012-29): released on failure, retakeable after 5 minutes. */
   readonly refundClaimedAt: Date | null;
+  /**
+   * The instant a member's in-window cancel was FIRST accepted: the right of withdrawal is judged
+   * at it, so a retry after the window still completes. Set by the first successful claim.
+   */
+  readonly refundRequestedAt: Date | null;
   readonly refundedAt: Date | null;
   readonly syncLeaseToken: string | null;
   readonly syncLeaseUntil: Date | null;
   readonly lastSyncedAt: Date | null;
+  readonly createdAt: Date;
 }
 
-/** What starting a checkout stores (PR2 calls it; the sync specs seed with it). */
+/** What starting a checkout stores (billing calls it; the sync specs seed with it). */
 export interface NewPendingSubscription {
   readonly buyerUserId: string;
   readonly planId: string;
@@ -39,4 +48,10 @@ export interface NewPendingSubscription {
   /** Absent for a first subscription: the office does not exist yet (BR-012-07). */
   readonly officeId?: string;
   readonly checkoutSessionId?: string;
+  /**
+   * SPEC-012 BR-012-07, BR-012-08: unique among open checkouts (`openCheckoutKey()`), so two
+   * checkouts of one office, or of one buyer without an office, cannot both exist. Held only while
+   * the record is PENDING: the sync releases it when the provider moves the subscription on.
+   */
+  readonly openCheckoutKey?: string;
 }

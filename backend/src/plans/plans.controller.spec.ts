@@ -3,11 +3,14 @@
 // service stubbed (TESTING §2).
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import request from 'supertest';
 import { Decimal } from '../common/money/money.js';
 import { aPlan } from '../../test/builders/plan.builder.js';
 import { createHttpApp } from '../../test/support/http-app.js';
+import { testEnv } from '../../test/support/test-env.js';
 import { PlansController } from './plans.controller.js';
+import { PlansThrottlerModule } from './plans-throttler.module.js';
 import { PlansService } from './plans.service.js';
 
 describe('PlansController over HTTP', () => {
@@ -16,6 +19,10 @@ describe('PlansController over HTTP', () => {
 
   beforeAll(async () => {
     app = await createHttpApp({
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: () => testEnv() }),
+        PlansThrottlerModule,
+      ],
       controllers: [PlansController],
       providers: [{ provide: PlansService, useValue: plans }],
     });
@@ -46,6 +53,14 @@ describe('PlansController over HTTP', () => {
         { code: 'b', name: 'B', price: '1234.50', interval: 'year', activeJourneyLimit: 9 },
       ],
     });
+  });
+
+  it('BR-012-05: the public catalog is cached for 30 seconds by browsers and proxies', async () => {
+    plans.listOffered.mockResolvedValue([]);
+
+    const response = await request(app.getHttpServer()).get('/api/plans').expect(200);
+
+    expect(response.headers['cache-control']).toBe('public, max-age=30');
   });
 
   it('answers an empty envelope when nothing is offered (AR-35: an object, never a bare array)', async () => {

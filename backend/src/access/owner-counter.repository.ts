@@ -70,6 +70,30 @@ export class OwnerCounterRepository extends OwnerScopedRepository<OwnerCounterEn
   }
 
   /**
+   * The current value of `key` for the acting owner, 0 when its counter does not exist yet
+   * (SPEC-012 BR-012-26, "4 of 5 journeys in progress"). A READ: it works for an office that is
+   * read-only too (D-47), unlike `tryAcquire`. The owner is the request's acting owner
+   * (BR-002-11), never an id from the caller.
+   */
+  async readValue(
+    ctx: AccessContext,
+    key: string,
+    options: { actingOwner?: ActingOwner } = {},
+  ): Promise<number> {
+    const acting = options.actingOwner ?? ctx.resolveActingOwner();
+    if (acting.context !== ctx) {
+      throw new Error('The acting owner was resolved for another request (BR-002-11)');
+    }
+    if (!ctx.canReadOwner(acting.owner)) throw new DomainError('NOT_FOUND');
+    const counter = await this.counters
+      .findOne(this.identity(acting.owner, key))
+      .select('value')
+      .lean<{ value: number }>()
+      .exec();
+    return counter?.value ?? 0;
+  }
+
+  /**
    * Takes one slot of `key` for the acting owner when fewer than `limit` are taken, atomically
    * (BR-002-13). Answers whether it did; at the limit nothing changes. With `session`, the counter
    * must already exist (`ensureCounter` before `startTransaction`); a missing one throws.
@@ -137,6 +161,56 @@ export class OwnerCounterRepository extends OwnerScopedRepository<OwnerCounterEn
       )
       .exec();
     return result.modifiedCount > 0;
+  }
+
+  /**
+   * Gives back one slot of `key` for `owner` WITHOUT an AccessContext (AR-12: the separately named
+   * unscoped method, reviewed as such). For the endings no member of the owner drives, and for an
+   * owner that may no longer be written to by its members: a bid lost (D-13), a journey ended by a
+   * schedule or by its investor, an office that is read-only or lapsed (BR-012-28: nothing may stop
+   * a journey that ended from freeing its slot). The owner is the one the ended record carries,
+   * never an id from a request. Never below zero. The caller closes the thing with a conditional
+   * write in the same transaction and releases only when that write matched (see `release`).
+   */
+  async releaseByJob(
+    owner: CountedOwner,
+    key: string,
+    options: CounterOptions = {},
+  ): Promise<boolean> {
+    const normalised: Owner = { ownerType: owner.ownerType, ownerId: String(owner.ownerId) };
+    const result = await this.counters
+      .updateOne(
+        { ...this.identity(normalised, key), value: serverOperators({ $gt: 0 }) },
+        { $inc: { value: -1 } },
+        { session: options.session },
+      )
+      .exec();
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * Repairs a counter that drifted from the truth (AR-12: named, unscoped, for a daily job): sets
+   * `key` for `owner` to `actual`, creating the counter if it is missing, in ONE conditional
+   * update that matches only while the stored value differs. Answers the value it replaced, or
+   * null when it already equalled `actual`. The caller counts what is really in progress; a job
+   * that counts while starts are happening must expect to be a little behind and re-run.
+   */
+  async setCountByJob(owner: CountedOwner, key: string, actual: number): Promise<number | null> {
+    if (!Number.isInteger(actual) || actual < 0) {
+      throw new Error('A count is a whole number, zero or more (AR-15)');
+    }
+    const normalised: Owner = { ownerType: owner.ownerType, ownerId: String(owner.ownerId) };
+    const counter = this.identity(normalised, key);
+    await this.createIfMissing(counter);
+    const before = await this.counters
+      .findOneAndUpdate(
+        { ...counter, value: serverOperators({ $ne: actual }) },
+        { $set: { value: actual } },
+        { returnDocument: 'before' },
+      )
+      .lean()
+      .exec();
+    return before === null ? null : before.value;
   }
 
   /** The acting owner of this request (BR-002-11), refused when it may not be written (BR-002-30). */

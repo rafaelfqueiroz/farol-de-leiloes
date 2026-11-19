@@ -65,6 +65,10 @@ export const envSchema = z
     // Payments
     STRIPE_SECRET_KEY: required,
     STRIPE_WEBHOOK_SECRET: required,
+    // SPEC-012 BR-012-17/19/29: the Stripe Billing Portal configuration (`bpc_...`) restricted to
+    // the payment method and invoices, so plan changes and cancellations go through our own
+    // endpoints. Optional: without it Stripe uses the account's default portal configuration.
+    STRIPE_BILLING_PORTAL_CONFIGURATION_ID: required.optional(),
 
     // Email
     EMAIL_FROM: required,
@@ -108,6 +112,8 @@ export const envSchema = z
     SCRAPER_ENABLED: flag.default(true),
     SCRAPER_ON_START_UP: flag.default(false),
     REMINDERS_ENABLED: flag.default(true),
+    // SPEC-012 (ADR-005): the daily job that re-reads subscriptions from the payment provider.
+    SUBSCRIPTIONS_RECONCILE_ENABLED: flag.default(true),
     CLEANUP_ON_STARTUP: flag.default(false),
     NEIGHBORHOODS_CACHE_ENABLED: flag.default(false),
     // Milliseconds; 600000 = 10 minutes.

@@ -6,6 +6,7 @@ import {
   getVerificationEmailTemplate,
   getPasswordResetEmailTemplate,
 } from './templates/verification.template.js';
+import { getPaymentFailedEmailTemplate } from './templates/payment-failed.template.js';
 import {
   getAuctionReminderEmailTemplate,
   ReminderEmailPayload,
@@ -144,5 +145,28 @@ export class EmailService {
     });
 
     this.logger.log('Reminder email sent');
+  }
+
+  /**
+   * SPEC-012 BR-012-20: tells a member of an office that a renewal payment failed, with the link
+   * to update the payment method. SC-15: no address and no name is logged.
+   */
+  async sendPaymentFailedEmail(email: string, name?: string): Promise<void> {
+    if (!this.transporter) {
+      this.logSimulatedEmail('Payment failed email');
+      return;
+    }
+
+    const frontendUrl = this.configService.get('FRONTEND_URL', { infer: true });
+    const emailFrom = this.configService.get('EMAIL_FROM', { infer: true });
+
+    await this.transporter.sendMail({
+      from: emailFrom,
+      to: email,
+      subject: 'Falha no pagamento do plano - Farol dos Leilões',
+      html: getPaymentFailedEmailTemplate(name, `${frontendUrl}/office/plan`),
+    });
+
+    this.logger.log('Payment failed email sent');
   }
 }

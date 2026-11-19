@@ -3,9 +3,11 @@
 //
 // Marker strings are seeded through the real API into every place client or personal text lives
 // today — an account's name and email, a profile change, a support request's title and
-// description, a saved filter's name, a reminder's note, an owned (probe) record's name — and the
-// flows run end to end: success paths, refusals, a read under a support grant, a fault (the admin
-// access log refusing its insert, BR-002-27) and the reminders scheduler once (FakeClock). No
+// description, a saved filter's name, a reminder's note, an owned (probe) record's name, the name and
+// address of an office member who gets the payment-failed email and the name of a buyer whose
+// customer the payment provider is told about (SPEC-012) — and the flows run end to end: success
+// paths, refusals, a read under a support grant, a fault (the admin access log refusing its
+// insert, BR-002-27), the reminders scheduler once and the subscriptions reconcile job (FakeClock). No
 // marker may appear in any of three captures:
 //   - every Nest Logger call (instance and static, every level, its arguments) and everything
 //     written to stdout/stderr (captureAllLogOutput);
@@ -27,12 +29,24 @@ import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
 import type { OfficePlanState } from '../../src/access/sources/office-plan.source.js';
 import { AuctionEntity } from '../../src/auctions/schemas/auction.schema.js';
 import { AuctionsModule } from '../../src/auctions/auctions.module.js';
+import { Decimal } from '../../src/common/money/money.js';
 import { loggerParams } from '../../src/common/observability/logger-options.js';
+import { PaymentGateway } from '../../src/payments/payment-gateway.js';
+import { PlansService } from '../../src/plans/plans.service.js';
 import { RemindersModule } from '../../src/reminders/reminders.module.js';
 import { RemindersScheduler } from '../../src/reminders/reminders.scheduler.js';
 import { SavedFiltersModule } from '../../src/saved-filters/saved-filters.module.js';
+import { OFFICE_MEMBERS_SOURCE } from '../../src/subscriptions/ports/office-members.source.js';
+import { OFFICE_PROVISIONER } from '../../src/subscriptions/ports/office-provisioner.js';
+import { SubscriptionsBillingModule } from '../../src/subscriptions/subscriptions-billing.module.js';
+import { SubscriptionsReconcileJob } from '../../src/subscriptions/subscriptions-reconcile.job.js';
+import { SubscriptionsRepository } from '../../src/subscriptions/subscriptions.repository.js';
+import { SubscriptionsService } from '../../src/subscriptions/subscriptions.service.js';
 import { SupportModule } from '../../src/support/support.module.js';
+import { aProviderSubscription } from '../builders/provider-subscription.builder.js';
 import { DAY } from '../fakes/fake-clock.js';
+import { FakeOfficeProvisioner } from '../fakes/fake-office-provisioner.js';
+import { FakePaymentGateway } from '../fakes/fake-payment-gateway.js';
 import { captureAllLogOutput } from '../support/logger-spy.js';
 import { useTestDatabase } from '../support/test-database.js';
 import {
@@ -66,7 +80,14 @@ const MARKERS = {
   filterName: 'MKR-FILTER-NAME-QX7',
   reminderNote: 'MKR-REMINDER-NOTE-QX7',
   probeName: 'MKR-PROBE-NAME-QX7',
+  memberContactName: 'MKR-MEMBER-CONTACT-NAME-QX7',
+  buyerName: 'MKR-BUYER-NAME-QX7',
 } as const;
+/** SPEC-012 BR-012-20: an office member the payment-failed email is addressed to. */
+const MEMBER_CONTACT = {
+  email: 'mkr-member-contact-qx7@example.test',
+  name: MARKERS.memberContactName,
+};
 
 describe('BR-002-28 / SC-15: no client or personal data in logs or error answers', () => {
   const db = useTestDatabase();
@@ -81,7 +102,8 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
     },
   });
   const errorBodies: unknown[] = [];
-  const emails: string[] = [];
+  const emails: string[] = [MEMBER_CONTACT.email];
+  const gateway = new FakePaymentGateway();
 
   /** Runs a request; keeps its body when it is an error answer. */
   async function call(test: Parameters<typeof answerOf>[0]) {
@@ -103,10 +125,20 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
         AuctionsModule,
         RemindersModule,
         SupportModule,
+        SubscriptionsBillingModule,
       ],
       { REMINDERS_ENABLED: 'true' }, // the scheduler runs only when this spec calls it
       // As main.ts does: every Nest Logger line goes through pino from here on.
       (nest) => nest.useLogger(nest.get(PinoLogger)),
+      (builder) =>
+        builder
+          .overrideProvider(PaymentGateway)
+          .useValue(gateway)
+          .overrideProvider(OFFICE_PROVISIONER)
+          .useValue(new FakeOfficeProvisioner())
+          // SPEC-011's source: the member contacts the payment-failed email goes to.
+          .overrideProvider(OFFICE_MEMBERS_SOURCE)
+          .useValue({ memberContacts: () => Promise.resolve([MEMBER_CONTACT]) }),
     );
     const { moduleRef, clock } = app.harness;
     const auctions = moduleRef.get<Model<unknown>>(getModelToken(AuctionEntity.name));
@@ -193,6 +225,71 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
       await call(app.as(admin).get(`/api/probe-admin/grants/${grantId}/probes/${probeId}`));
       await connection.db?.command({ collMod: 'adminAccessLogs', validator: {} });
 
+      // SPEC-012: the office plan's flows, refusals included, then a failed renewal that emails the
+      // member contact, then the reconcile job (all through the fake provider).
+      const plans = moduleRef.get(PlansService);
+      const catalog = [
+        { code: 'mkr-5', limit: 5, price: '199.90', priceId: 'price_mkr_5' },
+        { code: 'mkr-10', limit: 10, price: '349.90', priceId: 'price_mkr_10' },
+      ].map((plan) => ({
+        code: plan.code,
+        name: plan.code,
+        price: new Decimal(plan.price),
+        interval: 'month' as const,
+        activeJourneyLimit: plan.limit,
+        stripePriceId: plan.priceId,
+        status: 'OFFERED' as const,
+        sortOrder: plan.limit,
+      }));
+      for (const plan of catalog) {
+        gateway.listsPlan(plan);
+      }
+      await plans.upsertCatalog(catalog);
+      const subscriptions = moduleRef.get(SubscriptionsRepository);
+      const sync = moduleRef.get(SubscriptionsService);
+      const planFive = await plans.findByCode('mkr-5');
+      const pending = await subscriptions.createPending({
+        buyerUserId: member.id,
+        planId: planFive?.id ?? '',
+        planCode: 'mkr-5',
+        activeJourneyLimit: 5,
+        officeId: OFFICE_A,
+        checkoutSessionId: 'cs_mkr',
+      });
+      gateway.setSubscription(
+        aProviderSubscription({
+          id: 'sub_mkr',
+          subscriptionRef: pending.id,
+          priceId: 'price_mkr_5',
+          currentPeriodStart: new Date('2099-01-10T12:00:00.000Z'),
+          currentPeriodEnd: new Date('2099-02-10T12:00:00.000Z'),
+          firstInvoicePaidAt: new Date('2099-01-10T12:00:05.000Z'),
+        }),
+      );
+      await sync.handleProviderEvent({
+        id: 'evt_mkr_1',
+        type: 'checkout.completed',
+        subscriptionId: 'sub_mkr',
+        subscriptionRef: pending.id,
+      });
+      await call(as.get('/api/office/subscription'));
+      await call(as.post('/api/office/subscription/checkout').send({ planCode: 'mkr-5' })); // already active
+      await call(as.post('/api/office/subscription/checkout').send({ planCode: 'no-such-plan' }));
+      await call(as.post('/api/office/subscription/change').send({ planCode: 'mkr-10' }));
+      const buyer = await app.signUp('marker-buyer', MARKERS.buyerName);
+      emails.push(buyer.email);
+      await call(
+        app.as(buyer).post('/api/office/subscription/checkout').send({ planCode: 'mkr-5' }),
+      );
+      gateway.setSubscription({ ...gateway.current('sub_mkr'), status: 'past_due' });
+      await sync.handleProviderEvent({
+        id: 'evt_mkr_2',
+        type: 'invoice.payment_failed',
+        subscriptionId: 'sub_mkr',
+      });
+      await call(as.post('/api/office/subscription/cancel').send({}));
+      await moduleRef.get(SubscriptionsReconcileJob).run();
+
       // The reminders job once, past the reminder's time (BR-002-29 delivers it to its account).
       clock.advance(6 * DAY);
       await moduleRef.get(RemindersScheduler).processReminders();
@@ -242,6 +339,13 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
     expect(logged).toContain('BR-002-27: admin access log not written');
     expect(logged).toContain('Unhandled AdminAccessLogUnavailableError');
     expect(app.harness.mailbox.reminderEmails).toHaveLength(1);
+    // SPEC-012: the failed renewal reached the member contact, and the job ran.
+    expect(app.harness.mailbox.paymentFailedEmails).toEqual([
+      { email: MEMBER_CONTACT.email, name: MEMBER_CONTACT.name },
+    ]);
+    expect(logged).toContain('Payment failed email sent to 1 of 1 members');
+    expect(logged).toContain('Subscriptions reconciled');
+    expect(gateway.customers).toHaveLength(1); // the provider was told the buyer, not the log
     expect(errorBodies.length).toBeGreaterThanOrEqual(6);
   });
 

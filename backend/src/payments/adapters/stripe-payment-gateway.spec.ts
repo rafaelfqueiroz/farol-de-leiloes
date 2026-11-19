@@ -160,7 +160,12 @@ describe('StripePaymentGateway', () => {
       canceled_at: null,
       ended_at: null,
       metadata: { subscriptionRef: 'ref_1' },
-      latest_invoice: { status: 'paid', status_transitions: { paid_at: 1_768_046_405 } },
+      latest_invoice: {
+        status: 'paid',
+        billing_reason: 'subscription_create',
+        amount_paid: 19990,
+        status_transitions: { paid_at: 1_768_046_405 },
+      },
       schedule: null,
       items: {
         data: [
@@ -174,11 +179,12 @@ describe('StripePaymentGateway', () => {
       ...overrides,
     });
 
-    function build(subscription: Record<string, unknown>) {
+    function build(subscription: Record<string, unknown>, invoices: unknown[] = []) {
       const gateway = new StripePaymentGateway(testConfigService());
       const retrieve = vi.fn().mockResolvedValue(subscription);
-      Object.assign(gateway, { stripe: { subscriptions: { retrieve } } });
-      return { gateway, retrieve };
+      const list = vi.fn().mockResolvedValue({ data: invoices });
+      Object.assign(gateway, { stripe: { subscriptions: { retrieve }, invoices: { list } } });
+      return { gateway, retrieve, list };
     }
 
     it('reads the subscription with its latest invoice and schedule, as instants', async () => {
@@ -194,7 +200,8 @@ describe('StripePaymentGateway', () => {
         priceId: 'price_5',
         scheduledPriceId: null,
         scheduledChangeAt: null,
-        latestInvoicePaidAt: new Date('2026-01-10T12:00:05.000Z'),
+        firstInvoicePaidAt: new Date('2026-01-10T12:00:05.000Z'),
+        firstInvoiceFree: false,
         subscriptionRef: 'ref_1',
         canceledAt: null,
         endedAt: null,
@@ -258,14 +265,20 @@ describe('StripePaymentGateway', () => {
           cancel_at_period_end: true,
           canceled_at: 1_768_046_400,
           ended_at: 1_770_724_800,
-          latest_invoice: { status: 'open', status_transitions: { paid_at: null } },
+          latest_invoice: {
+            status: 'open',
+            billing_reason: 'subscription_create',
+            amount_paid: 0,
+            status_transitions: { paid_at: null },
+          },
         }),
       );
 
       await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
         status: 'canceled',
         cancelAtPeriodEnd: true,
-        latestInvoicePaidAt: null,
+        firstInvoicePaidAt: null,
+        firstInvoiceFree: false,
         canceledAt: new Date('2026-01-10T12:00:00.000Z'),
         endedAt: new Date('2026-02-10T12:00:00.000Z'),
       });
@@ -279,7 +292,66 @@ describe('StripePaymentGateway', () => {
       await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
         subscriptionRef: null,
         customerId: 'cus_2',
-        latestInvoicePaidAt: null,
+        firstInvoicePaidAt: null,
+      });
+    });
+
+    describe('BR-012-29, DL-012-10: the first payment is the invoice that CREATED the subscription', () => {
+      const created = {
+        id: 'in_create',
+        status: 'paid',
+        billing_reason: 'subscription_create',
+        amount_paid: 19990,
+        status_transitions: { paid_at: 1_768_046_405 },
+      };
+      const proration = {
+        id: 'in_proration',
+        status: 'paid',
+        billing_reason: 'subscription_update',
+        amount_paid: 8000,
+        status_transitions: { paid_at: 1_768_999_999 },
+      };
+
+      it('after an upgrade the latest invoice is the proration: the first payment is found among the invoices', async () => {
+        const { gateway, list } = build(stripeSubscription({ latest_invoice: proration }), [
+          proration,
+          created,
+        ]);
+
+        await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
+          firstInvoicePaidAt: new Date('2026-01-10T12:00:05.000Z'),
+          firstInvoiceFree: false,
+        });
+        expect(list).toHaveBeenCalledWith({ subscription: 'sub_1', limit: 100 });
+      });
+
+      it('an unpaid proration as the latest invoice does not hide the paid first payment', async () => {
+        const open = { ...proration, status: 'open', amount_paid: 0 };
+        const { gateway } = build(stripeSubscription({ latest_invoice: open }), [open, created]);
+
+        await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
+          firstInvoicePaidAt: new Date('2026-01-10T12:00:05.000Z'),
+        });
+      });
+
+      it('a 100% coupon first invoice is paid and free', async () => {
+        const free = { ...created, amount_paid: 0 };
+        const { gateway, list } = build(stripeSubscription({ latest_invoice: free }));
+
+        await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
+          firstInvoicePaidAt: new Date('2026-01-10T12:00:05.000Z'),
+          firstInvoiceFree: true,
+        });
+        expect(list).not.toHaveBeenCalled(); // the latest invoice IS the create invoice
+      });
+
+      it('no create invoice at all (an odd history): no first payment, not free', async () => {
+        const { gateway } = build(stripeSubscription({ latest_invoice: proration }), [proration]);
+
+        await expect(gateway.retrieveSubscription('sub_1')).resolves.toMatchObject({
+          firstInvoicePaidAt: null,
+          firstInvoiceFree: false,
+        });
       });
     });
 

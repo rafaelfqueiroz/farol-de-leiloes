@@ -102,4 +102,34 @@ export class PlansRepository {
       .exec();
     return result.upsertedCount === 1 ? 'created' : 'updated';
   }
+
+  /**
+   * BR-012-02: writes a whole catalog as ONE command (a single `bulkWrite`, in order), so the
+   * script either reaches the database once or fails before writing. MongoDB without a replica
+   * set (local, Compose) has no multi-document transaction (AR-15), so a failure in the middle of
+   * the command can still leave a prefix written: every write is an idempotent upsert, and the
+   * operator re-runs the same file, which completes it. Returns how many plans were created.
+   */
+  async upsertMany(plans: readonly PlanDefinition[]): Promise<{ created: number }> {
+    if (plans.length === 0) return { created: 0 };
+    const result = await this.plans.bulkWrite(
+      plans.map(({ code, ...fields }) => ({
+        updateOne: {
+          filter: { code: { $eq: code } },
+          update: {
+            $set: {
+              ...fields,
+              // AR-17: a Decimal128 on its way in; the schema never sees a number.
+              price: toDecimal128(fields.price),
+              audience: 'ADVISOR_OFFICE' as const,
+            },
+            $setOnInsert: { code },
+          },
+          upsert: true,
+        },
+      })),
+      { ordered: true },
+    );
+    return { created: result.upsertedCount };
+  }
 }
