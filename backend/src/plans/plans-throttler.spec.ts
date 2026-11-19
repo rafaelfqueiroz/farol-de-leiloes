@@ -5,7 +5,8 @@ import { ConfigModule } from '@nestjs/config';
 import { afterEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createHttpApp } from '../../test/support/http-app.js';
-import { testEnv } from '../../test/support/test-env.js';
+import { testBusinessConfig, testEnv } from '../../test/support/test-env.js';
+import businessConfig from '../config/business.config.js';
 import { PlansController } from './plans.controller.js';
 import { PLANS_RATE_LIMIT, PlansThrottlerModule } from './plans-throttler.module.js';
 import { PlansService } from './plans.service.js';
@@ -29,7 +30,10 @@ async function boot(nodeEnv: string) {
         PlansThrottlerModule,
       ],
       controllers: [PlansController],
-      providers: [{ provide: PlansService, useValue: { listOffered: () => Promise.resolve([]) } }],
+      providers: [
+        { provide: PlansService, useValue: { listOffered: () => Promise.resolve([]) } },
+        { provide: businessConfig.KEY, useValue: testBusinessConfig() },
+      ],
     },
     { env: { NODE_ENV: nodeEnv } },
   );

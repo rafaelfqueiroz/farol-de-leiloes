@@ -24,9 +24,15 @@ import { POST as validateCoupon } from './coupons/validate/route';
 import { DELETE as deleteFavorite } from './favorites/[code]/route';
 import { GET as favoriteCodes } from './favorites/codes/route';
 import { POST as addFavorite } from './favorites/route';
-import { POST as cancelSubscription } from './payments/cancel-subscription/route';
-import { POST as createCheckoutSession } from './payments/create-checkout-session/route';
-import { GET as subscriptionStatus } from './payments/subscription-status/route';
+import { GET as officeSubscription } from './office/subscription/route';
+import { POST as billingPortal } from './office/subscription/billing-portal/route';
+import { POST as cancelSubscription } from './office/subscription/cancel/route';
+import { POST as changePlan } from './office/subscription/change/route';
+import { POST as changePreview } from './office/subscription/change-preview/route';
+import { POST as startCheckout } from './office/subscription/checkout/route';
+import { POST as undoCancel } from './office/subscription/undo-cancel/route';
+import { GET as plans } from './plans/route';
+import { GET as checkoutStatus } from './subscriptions/checkout/[ref]/status/route';
 import { DELETE as deleteReminder, PATCH as updateReminder } from './reminders/[id]/route';
 import { POST as createReminder } from './reminders/route';
 import { DELETE as deleteSavedFilter } from './saved-filters/[id]/route';
@@ -127,9 +133,23 @@ const routes: RouteCase[] = [
   signedInRoute('DELETE', '/api/favorites/1444400000001', deleteFavorite, {
     code: '1444400000001',
   }),
-  signedInRoute('POST', '/api/payments/create-checkout-session', createCheckoutSession),
-  signedInRoute('POST', '/api/payments/cancel-subscription', cancelSubscription),
-  signedInRoute('GET', '/api/payments/subscription-status', subscriptionStatus),
+  // SPEC-012: the plans are public; everything about an office's plan needs a session
+  publicRoute('GET', '/api/plans', plans),
+  signedInRoute('GET', '/api/office/subscription', officeSubscription),
+  signedInRoute('POST', '/api/office/subscription/checkout', startCheckout),
+  signedInRoute('POST', '/api/office/subscription/change', changePlan),
+  signedInRoute('POST', '/api/office/subscription/change-preview', changePreview),
+  signedInRoute('POST', '/api/office/subscription/cancel', cancelSubscription),
+  signedInRoute('POST', '/api/office/subscription/undo-cancel', undoCancel),
+  signedInRoute('POST', '/api/office/subscription/billing-portal', billingPortal),
+  signedInRoute(
+    'GET',
+    '/api/subscriptions/checkout/64b7f0000000000000000a01/status',
+    checkoutStatus,
+    {
+      ref: '64b7f0000000000000000a01',
+    },
+  ),
   signedInRoute('POST', '/api/reminders', createReminder),
   signedInRoute('PATCH', '/api/reminders/r1', updateReminder, { id: 'r1' }),
   signedInRoute('DELETE', '/api/reminders/r1', deleteReminder, { id: 'r1' }),
@@ -469,5 +489,36 @@ describe('POST /api/auth/logout (BR-001-18, SC-02)', () => {
     expect(await response.json()).toEqual({ code: 'FORBIDDEN', context: {} });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(setCookies(response)).toEqual([]);
+  });
+});
+
+// SPEC-012: the ref of the checkout status route goes into the backend path, so only the shape of a
+// real one (24 hex characters) is proxied; everything else is the backend's own NOT_FOUND, answered
+// here with no backend call.
+describe('GET /api/subscriptions/checkout/[ref]/status refuses a ref that is not a checkout ref', () => {
+  it.each([
+    ['..'],
+    ['.'],
+    ['%2e%2e'],
+    ['%2E%2E%2Fadmin'],
+    [''],
+    ['a'.repeat(65)],
+    ['64b7f0000000000000000a0'],
+    ['64b7f0000000000000000a011'],
+    ['a/b'],
+    ['64B7F0000000000000000A01'],
+    ['64b7f0000000000000000a0g'],
+    ['..%2f..%2fauth%2fme'],
+  ])('answers 404 NOT_FOUND for %j without calling the backend', async (ref) => {
+    const response = await checkoutStatus(
+      new NextRequest('http://localhost:3001/api/subscriptions/checkout/x/status', {
+        headers: signedIn,
+      }),
+      { params: Promise.resolve({ ref }) } as never,
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ code: 'NOT_FOUND', context: {} });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

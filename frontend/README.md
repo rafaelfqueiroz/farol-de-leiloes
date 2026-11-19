@@ -128,24 +128,25 @@ AI search: `app/api/chat/route.ts` calls the backend's `/ai/extract-params`, the
 
 ## Project structure
 
-| Path                           | Purpose                                                                                                         |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `app/`                         | App Router pages and layouts; `app/layout.tsx` is the root layout                                               |
-| `app/(shell)/`                 | Pages inside the app shell (`layout.tsx`), including `auction/[code]/`                                          |
-| `app/(shell)/(authenticated)/` | Signed-in pages (search, reminders, plans, admin, profile, support); the layout applies `RequireAuthentication` |
-| `app/api/`                     | BFF route handlers, one folder per backend resource                                                             |
-| `app/components/`              | Feature components and their tests                                                                              |
-| `app/components/patterns/`     | Shared UI patterns (`AppShell`, `PageHeader`, `EmptyState`, `Money`, and others)                                |
-| `app/contexts/`                | React contexts: auth, favorites, reminders, saved filters                                                       |
-| `app/theme/`                   | MUI theme, colour tokens, fonts and the colour-scheme control                                                   |
-| `lib/`                         | Server and shared helpers: `env.ts`, `backend.ts`, `session-cookie.ts`, `api-client.ts`, money and dates        |
-| `i18n/`                        | next-intl configuration and request setup (pt-BR only)                                                          |
-| `messages/`                    | `pt-BR.json`, the only message catalogue                                                                        |
-| `public/brand/`                | Logo and brand SVGs                                                                                             |
-| `test/`                        | Test setup, render helpers and `structural/` checks on the repository                                           |
-| `proxy.ts`                     | Per-request CSP nonce for dynamic HTML                                                                          |
-| `next.config.ts`               | next-intl plugin, standalone output and security headers                                                        |
-| `Dockerfile`                   | Production image (build and runtime stages)                                                                     |
+| Path                           | Purpose                                                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `app/`                         | App Router pages and layouts; `app/layout.tsx` is the root layout                                                        |
+| `app/(shell)/`                 | Pages inside the app shell (`layout.tsx`), including `auction/[code]/`                                                   |
+| `app/(shell)/(authenticated)/` | Signed-in pages (search, reminders, office plan, admin, profile, support); the layout applies `RequireAuthentication`    |
+| `app/(shell)/plans/`           | The public plans page (SPEC-012): inside the shell, outside the guard; moving it into `(authenticated)` makes it private |
+| `app/api/`                     | BFF route handlers, one folder per backend resource                                                                      |
+| `app/components/`              | Feature components and their tests                                                                                       |
+| `app/components/patterns/`     | Shared UI patterns (`AppShell`, `PageHeader`, `EmptyState`, `Money`, and others)                                         |
+| `app/contexts/`                | React contexts: auth, favorites, reminders, saved filters                                                                |
+| `app/theme/`                   | MUI theme, colour tokens, fonts and the colour-scheme control                                                            |
+| `lib/`                         | Server and shared helpers: `env.ts`, `backend.ts`, `session-cookie.ts`, `api-client.ts`, money and dates                 |
+| `i18n/`                        | next-intl configuration and request setup (pt-BR only)                                                                   |
+| `messages/`                    | `pt-BR.json`, the only message catalogue                                                                                 |
+| `public/brand/`                | Logo and brand SVGs                                                                                                      |
+| `test/`                        | Test setup, render helpers and `structural/` checks on the repository                                                    |
+| `proxy.ts`                     | Per-request CSP nonce for dynamic HTML                                                                                   |
+| `next.config.ts`               | next-intl plugin, standalone output and security headers                                                                 |
+| `Dockerfile`                   | Production image (build and runtime stages)                                                                              |
 
 ## Testing
 

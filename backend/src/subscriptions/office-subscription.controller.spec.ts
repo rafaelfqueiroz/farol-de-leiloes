@@ -39,21 +39,20 @@ const VIEW: OfficeSubscriptionView = {
     planCode: 'escritorio-2',
     planName: 'Escritório 2',
     activeJourneyLimit: 2,
+    price: new Decimal('99.9'),
+    interval: 'month',
     at: new Date('2026-03-31T12:00:00.000Z'),
   },
+  canUndoScheduledChange: true,
+  canUndoCancel: true,
+  nextChargeAmount: null,
+  refundWindowDays: 7,
+  graceDays: 10,
   lapsedAt: null,
   readOnlyAt: null,
+  readOnly: false,
   firstPaidAt: new Date('2026-03-01T12:00:00.000Z'),
   refundEligibleUntil: new Date('2026-03-08T12:00:00.000Z'),
-  invoices: [
-    {
-      id: 'in_1',
-      paidAt: new Date('2026-03-01T12:00:00.000Z'),
-      amount: new Decimal('199.9'),
-      status: 'paid',
-      hostedUrl: 'https://invoice.example.test/in_1',
-    },
-  ],
 };
 
 describe('OfficeSubscriptionController over HTTP', () => {
@@ -61,6 +60,8 @@ describe('OfficeSubscriptionController over HTTP', () => {
     view: vi.fn(),
     checkout: vi.fn(),
     changePlan: vi.fn(),
+    previewChange: vi.fn(),
+    invoices: vi.fn(),
     cancel: vi.fn(),
     undoCancel: vi.fn(),
     billingPortal: vi.fn(),
@@ -110,30 +111,144 @@ describe('OfficeSubscriptionController over HTTP', () => {
         planCode: 'escritorio-2',
         planName: 'Escritório 2',
         activeJourneyLimit: 2,
+        price: '99.90',
+        interval: 'month',
         at: '2026-03-31T12:00:00.000Z',
       },
+      canUndoScheduledChange: true,
+      canUndoCancel: true,
+      nextChargeAmount: null,
+      refundWindowDays: 7,
+      graceDays: 10,
       lapsedAt: null,
       readOnlyAt: null,
+      readOnly: false,
       firstPaidAt: '2026-03-01T12:00:00.000Z',
       refundEligibleUntil: '2026-03-08T12:00:00.000Z',
-      invoices: [
+    });
+  });
+
+  it('BR-012-11: the plan page carries no invoices: the billing history has its own route', async () => {
+    billing.view.mockResolvedValue({ ...VIEW, scheduledChange: null });
+
+    const response = await request(server()).get('/api/office/subscription').expect(200);
+
+    expect(response.body).not.toHaveProperty('invoices');
+    expect(response.body).toMatchObject({ scheduledChange: null });
+  });
+
+  it('BR-012-11, AR-35: the billing history is a page of invoices, six by default, in the envelope', async () => {
+    billing.invoices.mockResolvedValue({
+      items: [
         {
           id: 'in_1',
+          reason: 'subscription_update',
+          periodStart: new Date('2026-03-01T12:00:00.000Z'),
+          periodEnd: new Date('2026-03-31T12:00:00.000Z'),
+          paidAt: new Date('2026-03-01T12:00:00.000Z'),
+          amount: new Decimal('199.9'),
+          status: 'paid',
+          hostedUrl: 'https://invoice.example.test/in_1',
+        },
+      ],
+      total: 7,
+      page: 2,
+      pageSize: 6,
+    });
+
+    const response = await request(server())
+      .get(`/api/office/subscription/invoices?page=2&officeId=${OFFICE}`)
+      .expect(200);
+
+    expect(response.body).toEqual({
+      items: [
+        {
+          id: 'in_1',
+          reason: 'subscription_update',
+          periodStart: '2026-03-01T12:00:00.000Z',
+          periodEnd: '2026-03-31T12:00:00.000Z',
           paidAt: '2026-03-01T12:00:00.000Z',
           amount: '199.90',
           status: 'paid',
           hostedUrl: 'https://invoice.example.test/in_1',
         },
       ],
+      total: 7,
+      page: 2,
+      pageSize: 6,
+    });
+    expect(billing.invoices).toHaveBeenCalledWith(expect.any(AccessContext), OFFICE, {
+      page: 2,
+      pageSize: 6,
     });
   });
 
-  it('BR-012-15: a billing history the provider could not give is null, not an empty list', async () => {
-    billing.view.mockResolvedValue({ ...VIEW, invoices: null, scheduledChange: null });
+  it('AR-35: a page size over 100, a page below 1 or an unknown parameter is refused', async () => {
+    for (const query of ['pageSize=101', 'pageSize=0', 'page=0', 'sort=asc']) {
+      await request(server()).get(`/api/office/subscription/invoices?${query}`).expect(400);
+    }
+    expect(billing.invoices).not.toHaveBeenCalled();
+  });
 
-    const response = await request(server()).get('/api/office/subscription').expect(200);
+  it('BILLING_HISTORY_UNAVAILABLE is a 502 with the shared shape', async () => {
+    billing.invoices.mockRejectedValue(new DomainError('BILLING_HISTORY_UNAVAILABLE'));
 
-    expect(response.body).toMatchObject({ invoices: null, scheduledChange: null });
+    const response = await request(server()).get('/api/office/subscription/invoices').expect(502);
+
+    expect(response.body).toEqual({ code: 'BILLING_HISTORY_UNAVAILABLE', context: {} });
+  });
+
+  it('BR-012-16: change-preview hands the plan code to the service and answers the amounts as strings', async () => {
+    billing.previewChange.mockResolvedValue({
+      change: 'upgrade',
+      amountDue: new Decimal('12600.09'),
+      currency: 'BRL',
+      lines: [{ amount: new Decimal('12990') }, { amount: new Decimal('-389.91') }],
+      effectiveAt: null,
+      nextChargeAt: new Date('2027-03-01T12:00:00.000Z'),
+      nextChargeAmount: new Decimal('12990'),
+      quote: {
+        planCode: 'escritorio-10',
+        prorationDate: new Date('2026-11-18T15:00:00.000Z'),
+        amountDue: new Decimal('12600.09'),
+        currency: 'BRL',
+        nextChargeAt: new Date('2027-03-01T12:00:00.000Z'),
+        expiresAt: new Date('2026-11-18T15:02:00.000Z'),
+      },
+    });
+
+    const response = await request(server())
+      .post('/api/office/subscription/change-preview')
+      .send({ planCode: 'escritorio-10', officeId: OFFICE })
+      .expect(200);
+
+    expect(response.body).toEqual({
+      change: 'upgrade',
+      amountDue: '12600.09',
+      currency: 'BRL',
+      lines: [{ amount: '12990.00' }, { amount: '-389.91' }],
+      effectiveAt: null,
+      nextChargeAt: '2027-03-01T12:00:00.000Z',
+      nextChargeAmount: '12990.00',
+      // BR-012-16: the quote the change must send back
+      quote: {
+        planCode: 'escritorio-10',
+        prorationDate: '2026-11-18T15:00:00.000Z',
+        amountDue: '12600.09',
+        currency: 'BRL',
+        nextChargeDate: '2027-03-01T12:00:00.000Z',
+        expiresAt: '2026-11-18T15:02:00.000Z',
+      },
+    });
+    expect(billing.previewChange).toHaveBeenCalledWith(expect.any(AccessContext), {
+      planCode: 'escritorio-10',
+      officeId: OFFICE,
+    });
+  });
+
+  it('AR-34: a change-preview without a plan code is refused', async () => {
+    await request(server()).post('/api/office/subscription/change-preview').send({}).expect(400);
+    expect(billing.previewChange).not.toHaveBeenCalled();
   });
 
   it('BR-002-11, AR-13: the service gets the caller own AccessContext; the office id is only a choice among its offices', async () => {
@@ -228,6 +343,69 @@ describe('OfficeSubscriptionController over HTTP', () => {
     });
   });
 
+  it('BR-012-16: change takes the quote back, validated, as the pinned date, the amount and the next charge only', async () => {
+    billing.changePlan.mockResolvedValue(VIEW);
+
+    await request(server())
+      .post('/api/office/subscription/change')
+      .send({
+        planCode: 'escritorio-10',
+        quote: {
+          planCode: 'escritorio-10',
+          prorationDate: '2026-11-18T15:00:00.000Z',
+          amountDue: '12600.09',
+          currency: 'BRL',
+          nextChargeDate: '2027-03-01T12:00:00.000Z',
+          expiresAt: '2099-01-01T00:00:00.000Z', // accepted and never read
+        },
+      })
+      .expect(200);
+
+    const [, input] = billing.changePlan.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(input).toEqual({
+      planCode: 'escritorio-10',
+      quote: {
+        planCode: 'escritorio-10',
+        prorationDate: new Date('2026-11-18T15:00:00.000Z'),
+        amountDue: new Decimal('12600.09'),
+        nextChargeAt: new Date('2027-03-01T12:00:00.000Z'),
+      },
+    });
+  });
+
+  it.each([
+    ['a date that is not one', { prorationDate: 'yesterday' }],
+    ['an amount that is a number', { amountDue: 12600.09 }],
+    ['no amount', { amountDue: undefined }],
+    ['no pinned date', { prorationDate: undefined }],
+    ['an unknown field', { amountPaid: '1.00' }],
+  ])('AR-34: a quote with %s is refused', async (_name, patch) => {
+    await request(server())
+      .post('/api/office/subscription/change')
+      .send({
+        planCode: 'escritorio-10',
+        quote: {
+          planCode: 'escritorio-10',
+          prorationDate: '2026-11-18T15:00:00.000Z',
+          amountDue: '12600.09',
+          ...patch,
+        },
+      })
+      .expect(400);
+    expect(billing.changePlan).not.toHaveBeenCalled();
+  });
+
+  it('QUOTE_STALE is a 409 with the shared shape', async () => {
+    billing.changePlan.mockRejectedValue(new DomainError('QUOTE_STALE'));
+
+    const response = await request(server())
+      .post('/api/office/subscription/change')
+      .send({ planCode: 'escritorio-10' })
+      .expect(409);
+
+    expect(response.body).toEqual({ code: 'QUOTE_STALE', context: {} });
+  });
+
   it.each([
     ['cancel', 'cancel'],
     ['undo-cancel', 'undoCancel'],
@@ -279,6 +457,8 @@ describe('OfficeSubscriptionController over HTTP', () => {
     ['OFFICE_CREATION_UNAVAILABLE', 503],
     ['BILLING_PORTAL_FAILED', 502],
     ['CHANGE_PLAN_FAILED', 502],
+    ['CHANGE_PREVIEW_FAILED', 502],
+    ['BILLING_HISTORY_UNAVAILABLE', 502],
     ['CANCEL_IN_PROGRESS', 409],
     ['CHECKOUT_SESSION_FAILED', 502],
     ['INVALID_PLAN', 400],

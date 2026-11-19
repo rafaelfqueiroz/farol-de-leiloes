@@ -59,13 +59,23 @@ export const ROUTES: readonly AppRoute[] = [
     heading: 'Entrar',
     landsOn: '/login',
   },
-  // Sends the visitor to /search after 5 s, so its timers are frozen until it has loaded.
+  // SPEC-012 BR-012-09: returning from the checkout grants nothing and the page never leaves by
+  // itself. Without a `ref` it says it cannot find the payment; with a ref no account owns, the
+  // status call is the shared 404 and the page says it could not verify (its error state). The
+  // waiting and confirmed states need a checkout the provider confirmed, which the stack's fake
+  // gateway never produces: they are the component tests' (page.test.tsx).
   {
-    name: 'plans success',
+    name: 'plans success without a ref',
     path: '/plans/success',
     as: 'public',
-    heading: 'Assinatura realizada com sucesso!',
-    pauseClock: true,
+    heading: 'Não encontramos este pagamento',
+  },
+  {
+    name: 'plans success with a ref nobody owns',
+    path: '/plans/success?ref=64b7f0000000000000000fff',
+    as: 'investor',
+    heading: 'Não foi possível verificar o pagamento',
+    landsOn: '/plans/success',
   },
   { name: 'plans cancel', path: '/plans/cancel', as: 'public', heading: 'Pagamento cancelado' },
   {
@@ -88,7 +98,20 @@ export const ROUTES: readonly AppRoute[] = [
   },
   // /search is signed-in only today; SPEC-005 (#5) opens it to the public.
   { name: 'search', path: '/search', as: 'investor', heading: 'Busca de imóveis' },
-  { name: 'plans', path: '/plans', as: 'investor', heading: 'Planos' },
+  // SPEC-012 owner decision 11: the plans page is public (a visitor sees the catalogue, seeded in
+  // the stack) and the same page serves a signed-in account without an office.
+  { name: 'plans (visitor)', path: '/plans', as: 'public', heading: 'Planos' },
+  { name: 'plans (signed in)', path: '/plans', as: 'investor', heading: 'Planos' },
+  // The office plan needs an account that is an office member, and offices exist only once SPEC-011
+  // lands (nothing in the stack may invent one). The seeded investor has none, so the route is
+  // checked in its empty state ("Você ainda não tem um escritório", the API's FORBIDDEN); every
+  // state with a plan is covered by the component tests (OfficePlanPage.test.tsx).
+  {
+    name: 'office plan (no office)',
+    path: '/office/plan',
+    as: 'investor',
+    heading: 'Plano do escritório',
+  },
   { name: 'profile', path: '/profile', as: 'investor', heading: 'Meu perfil' },
   { name: 'reminders', path: '/reminders', as: 'investor', heading: 'Meus Lembretes' },
   { name: 'support', path: '/support', as: 'investor', heading: 'Suporte' },

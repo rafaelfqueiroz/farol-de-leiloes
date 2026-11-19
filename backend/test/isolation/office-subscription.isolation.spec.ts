@@ -159,10 +159,28 @@ describe('office subscription isolation through the API (SPEC-012 BR-012-11, TS-
     await seed(OFFICE_A, 'escritorio-5', 'sub_A', 'cus_A');
     refB = await seed(OFFICE_B, 'escritorio-2', 'sub_B', 'cus_B');
     gateway.invoicesByCustomer.set('cus_A', [
-      { id: 'in_A', paidAt: null, amount: new Decimal('199.9'), status: 'open', hostedUrl: null },
+      {
+        id: 'in_A',
+        reason: 'subscription_cycle',
+        periodStart: null,
+        periodEnd: null,
+        paidAt: null,
+        amount: new Decimal('199.9'),
+        status: 'open',
+        hostedUrl: null,
+      },
     ]);
     gateway.invoicesByCustomer.set('cus_B', [
-      { id: 'in_B', paidAt: null, amount: new Decimal('99.9'), status: 'open', hostedUrl: null },
+      {
+        id: 'in_B',
+        reason: 'subscription_cycle',
+        periodStart: null,
+        periodEnd: null,
+        paidAt: null,
+        amount: new Decimal('99.9'),
+        status: 'open',
+        hostedUrl: null,
+      },
     ]);
 
     counters = moduleRef.get<Model<OwnerCounterEntity>>(getModelToken(OwnerCounterEntity.name));
@@ -192,9 +210,11 @@ describe('office subscription isolation through the API (SPEC-012 BR-012-11, TS-
       status: 'ACTIVE',
       activeJourneyLimit: 5,
       inProgress: 4,
-      invoices: [{ id: 'in_A' }],
     });
     expect(leaksB(response.body)).toEqual([]);
+    const history = await app.as(memberA).get('/api/office/subscription/invoices').expect(200);
+    expect(history.body).toMatchObject({ items: [{ id: 'in_A' }], total: 1 });
+    expect(JSON.stringify(history.body)).not.toContain('in_B');
   });
 
   it('TS-16: B sees B, with its own count and invoices', async () => {
@@ -205,9 +225,11 @@ describe('office subscription isolation through the API (SPEC-012 BR-012-11, TS-
       plan: { code: 'escritorio-2' },
       activeJourneyLimit: 2,
       inProgress: 1,
-      invoices: [{ id: 'in_B' }],
     });
     expect(JSON.stringify(response.body)).not.toContain('in_A');
+    const history = await app.as(memberB).get('/api/office/subscription/invoices').expect(200);
+    expect(history.body).toMatchObject({ items: [{ id: 'in_B' }], total: 1 });
+    expect(JSON.stringify(history.body)).not.toContain('in_A');
   });
 
   it('BR-012-11: any member of A, not only the one who paid, sees the same plan', async () => {
@@ -227,6 +249,36 @@ describe('office subscription isolation through the API (SPEC-012 BR-012-11, TS-
 
     expect(foreign).toEqual(missing);
     expect(foreign).toEqual({ status: 404, body: { code: 'NOT_FOUND', context: {} } });
+  });
+
+  it('TS-17: the billing history and a change preview naming B are the same 404 as an id that does not exist, and nothing is asked of the provider', async () => {
+    const reads = gateway.invoiceReads;
+    const previews = gateway.previewRequests.length;
+    const missingHistory = await answerOf(
+      app.as(memberA).get(`/api/office/subscription/invoices?officeId=${RANDOM_ID}`),
+    );
+    const foreignHistory = await answerOf(
+      app.as(memberA).get(`/api/office/subscription/invoices?officeId=${OFFICE_B}`),
+    );
+    const missingPreview = await answerOf(
+      app
+        .as(memberA)
+        .post('/api/office/subscription/change-preview')
+        .send({ planCode: 'escritorio-2', officeId: RANDOM_ID }),
+    );
+    const foreignPreview = await answerOf(
+      app
+        .as(memberA)
+        .post('/api/office/subscription/change-preview')
+        .send({ planCode: 'escritorio-2', officeId: OFFICE_B }),
+    );
+
+    expect(foreignHistory).toEqual(missingHistory);
+    expect(foreignPreview).toEqual(missingPreview);
+    expect(foreignHistory).toEqual({ status: 404, body: { code: 'NOT_FOUND', context: {} } });
+    expect(foreignPreview.status).toBe(404);
+    expect(gateway.invoiceReads).toBe(reads);
+    expect(gateway.previewRequests).toHaveLength(previews);
   });
 
   it('TS-17: change, cancel, undo-cancel, portal and checkout naming B are the same 404, and B is untouched', async () => {

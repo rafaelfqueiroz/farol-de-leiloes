@@ -1,4 +1,6 @@
 import type { SvgIconComponent } from '@mui/icons-material';
+import Apartment from '@mui/icons-material/Apartment';
+import ApartmentOutlined from '@mui/icons-material/ApartmentOutlined';
 import ConfirmationNumber from '@mui/icons-material/ConfirmationNumber';
 import ConfirmationNumberOutlined from '@mui/icons-material/ConfirmationNumberOutlined';
 import Favorite from '@mui/icons-material/Favorite';
@@ -42,10 +44,16 @@ export interface NavItem {
   /** DS-25: filled only for the current item. */
   CurrentIcon: SvgIconComponent;
   /**
-   * Who sees the item: a plan tier and above, or the admin capability alone (SPEC-002 BR-002-23:
-   * an admin is no plan, and a plan is no admin). UX only; the server checks (AR-51).
+   * Who sees the item: a plan tier and above, the admin capability alone (SPEC-002 BR-002-23: an
+   * admin is no plan, and a plan is no admin), or a persona (`advisor`: a member of an office,
+   * SPEC-002 BR-002-14). UX only; the server checks (AR-51).
    */
-  requires: { plan: PlanTier } | { admin: true };
+  requires: { plan: PlanTier } | { admin: true } | { persona: 'advisor' };
+  /**
+   * Where the item goes for an office member instead of `href` (SPEC-012 owner decision 2:
+   * "Assinatura" opens the office's plan for its members and the catalogue for everyone else).
+   */
+  advisorHref?: string;
   count?: CountSource;
   match: NavMatch;
 }
@@ -103,8 +111,22 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       },
     ],
   },
-  // Reserved: Investidores and Equipe join when their specs ship. Empty, so it never renders.
-  { id: 'office', labelKey: 'office', items: [] },
+  // Investidores and Equipe join when their specs ship. The group renders only for an office member.
+  {
+    id: 'office',
+    labelKey: 'office',
+    items: [
+      {
+        id: 'officePlan',
+        labelKey: 'officePlan',
+        href: '/office/plan',
+        Icon: ApartmentOutlined,
+        CurrentIcon: Apartment,
+        requires: { persona: 'advisor' },
+        match: { paths: ['/office/plan'] },
+      },
+    ],
+  },
   {
     id: 'account',
     labelKey: 'account',
@@ -122,6 +144,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         id: 'subscription',
         labelKey: 'subscription',
         href: '/plans',
+        advisorHref: '/office/plan',
         Icon: WorkspacePremiumOutlined,
         CurrentIcon: WorkspacePremium,
         requires: { plan: 'free' },
@@ -155,14 +178,27 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   },
 ];
 
-/** What /api/auth/me says the account may see: its plan tier and the admin capability. */
+/** What /api/auth/me says the account may see: its plan tier, the admin capability and its personas. */
 export interface NavCapabilities {
   role: string;
   isAdmin: boolean;
+  personas?: readonly string[];
 }
 
-function canSee(item: NavItem, { role, isAdmin }: NavCapabilities): boolean {
-  return 'plan' in item.requires ? hasMinimumPlan(role, item.requires.plan) : isAdmin;
+function canSee(item: NavItem, { role, isAdmin, personas = [] }: NavCapabilities): boolean {
+  if ('plan' in item.requires) return hasMinimumPlan(role, item.requires.plan);
+  if ('persona' in item.requires) return personas.includes(item.requires.persona);
+  return isAdmin;
+}
+
+/** Whether the account is a member of an office (the `advisor` persona, SPEC-002 BR-002-14). */
+export function isOfficeMember({ personas = [] }: NavCapabilities): boolean {
+  return personas.includes('advisor');
+}
+
+/** "Assinatura": the office's plan for its members, the catalogue for everyone else (SPEC-012). */
+export function subscriptionHref(capabilities: NavCapabilities): string {
+  return isOfficeMember(capabilities) ? '/office/plan' : '/plans';
 }
 
 /** The groups an account can use, in the fixed order; a group left with no item is dropped. */
@@ -173,7 +209,13 @@ export function visibleGroups(
   return groups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canSee(item, capabilities)),
+      items: group.items
+        .filter((item) => canSee(item, capabilities))
+        .map((item) =>
+          item.advisorHref !== undefined && isOfficeMember(capabilities)
+            ? { ...item, href: item.advisorHref }
+            : item,
+        ),
     }))
     .filter((group) => group.items.length > 0);
 }

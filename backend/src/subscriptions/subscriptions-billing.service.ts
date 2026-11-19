@@ -22,11 +22,16 @@ import type { AccessContext, ActingOwner } from '../access/access-context.js';
 import { Clock } from '../common/clock/clock.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { logSafeError } from '../common/errors/log-safe-error.js';
-import type { Decimal } from '../common/money/money.js';
+import { Decimal } from '../common/money/money.js';
 import businessConfig from '../config/business.config.js';
 import type { Env } from '../config/env.js';
 import { CouponsService } from '../coupons/coupons.service.js';
-import { PaymentGateway, type ProviderInvoice } from '../payments/payment-gateway.js';
+import { type PageRequest, type Paginated, pageOfList } from '../common/pagination/paginated.js';
+import {
+  type PlanChangePreviewLine,
+  PaymentGateway,
+  type ProviderInvoice,
+} from '../payments/payment-gateway.js';
 import type { Plan, PlanInterval } from '../plans/plan.js';
 import { PlansService } from '../plans/plans.service.js';
 import { decideCancel, decideUndoCancel } from './domain/cancellation.js';
@@ -36,8 +41,9 @@ import {
   openCheckoutKey,
 } from './domain/checkout-guard.js';
 import { pickDisplayedSubscription } from './domain/displayed-subscription.js';
-import { readOnlyAtOf } from './domain/grace.js';
-import { classifyPlanChange } from './domain/plan-change.js';
+import { isReadOnly, readOnlyAtOf } from './domain/grace.js';
+import { classifyPlanChange, type PlanChange } from './domain/plan-change.js';
+import { judgeQuoteDate, quoteExpiresAt } from './domain/plan-quote.js';
 import { planRefund } from './domain/refund-plan.js';
 import { refundEligibleUntil } from './domain/refund-eligibility.js';
 import { reconcileCutoffs } from './domain/reconcile-window.js';
@@ -51,16 +57,25 @@ import { OFFICE_PROVISIONER, type OfficeProvisioner } from './ports/office-provi
 import type { StoredSubscription } from './stored-subscription.js';
 import { OpenCheckoutExistsError, SubscriptionsRepository } from './subscriptions.repository.js';
 import { SubscriptionsService } from './subscriptions.service.js';
+import { TtlCache } from './ttl-cache.js';
 
 /** A refund claim older than this is a caller that died before it refunded: it can be retaken. */
 export const REFUND_CLAIM_STALE_MS = 5 * 60 * 1000;
-/** BR-012-11: how many invoices the plan page lists. */
-export const BILLING_HISTORY_LIMIT = 24;
+/**
+ * BR-012-11: how many of the newest invoices the billing history can page through. The provider
+ * lists by cursor, so page numbers are cut from ONE bounded read (its maximum, 100) kept for
+ * INVOICE_CACHE_MS: older invoices stay on the provider's own portal.
+ */
+export const BILLING_HISTORY_LIMIT = 100;
 /** How many of an office's latest subscriptions the plan page chooses from. */
 const RECENT_SUBSCRIPTIONS = 20;
 const MINUTE_MS = 60 * 1000;
 /** How long an office's invoice list is reused (invalidated by every action of ours). */
 export const INVOICE_CACHE_MS = 30 * 1000;
+/** How long an upgrade's preview is reused (the figure is the provider's, read a moment ago). */
+export const PREVIEW_CACHE_MS = 10 * 1000;
+/** Each in-memory provider cache holds at most this many entries (oldest dropped first). */
+export const MAX_CACHED_ENTRIES = 500;
 
 /** The account that starts a checkout, as the provider's customer is named (SC-15: sent, not logged). */
 export interface CheckoutBuyer {
@@ -97,16 +112,71 @@ export interface OfficeSubscriptionView {
     readonly planCode: string;
     readonly planName: string;
     readonly activeJourneyLimit: number;
+    readonly price: Decimal;
+    readonly interval: PlanInterval;
     readonly at: Date | null;
   } | null;
+  /** BR-012-17: choosing the plan in effect releases the scheduled change ("undo"). */
+  readonly canUndoScheduledChange: boolean;
+  /** BR-012-19: renewal was stopped and the paid period has not ended, so it can be undone. */
+  readonly canUndoCancel: boolean;
+  /**
+   * What the next charge is, in reais: the scheduled plan's price when one is scheduled, else the
+   * plan's own; null when nothing renews (cancelling, lapsed). Catalog prices: a coupon's discount
+   * is not applied here.
+   */
+  readonly nextChargeAmount: Decimal | null;
   readonly lapsedAt: Date | null;
   /** BR-012-28: when the office turns read-only, from the stored lapse and today's setting. */
   readonly readOnlyAt: Date | null;
+  /** BR-012-28: the office is read-only now (lapsed beyond the grace period), by the server's clock. */
+  readonly readOnly: boolean;
   readonly firstPaidAt: Date | null;
   /** BR-012-29: until when cancelling refunds in full; null when it does not. */
   readonly refundEligibleUntil: Date | null;
-  /** BR-012-11: the billing history; null when the provider could not be read just now. */
-  readonly invoices: readonly ProviderInvoice[] | null;
+  /** AR-43: the settings the page words (the refund window and the grace period, in days). */
+  readonly refundWindowDays: number;
+  readonly graceDays: number;
+}
+
+/**
+ * BR-012-16: what the member is quoted for an upgrade. The proration date is pinned at preview time
+ * and the change must send the quote back: the server re-asks the provider as of THAT date and
+ * charges only if the amount is still the quoted one. Valid for QUOTE_TTL_MS from the pinned instant.
+ */
+export interface PlanChangeQuote {
+  readonly planCode: string;
+  readonly prorationDate: Date;
+  readonly amountDue: Decimal;
+  readonly currency: 'BRL';
+  readonly nextChargeAt: Date | null;
+  readonly expiresAt: Date;
+}
+
+/** What the member sends back to confirm a quote: only these facts are read, and none is trusted. */
+export interface ConfirmedQuote {
+  readonly planCode: string;
+  readonly prorationDate: Date;
+  readonly amountDue: Decimal;
+  readonly nextChargeAt: Date | null;
+}
+
+/**
+ * BR-012-16..BR-012-18: what choosing a plan would do, before the member confirms. `amountDue` is
+ * what the provider would charge NOW (zero for anything but an upgrade).
+ */
+export interface PlanChangePreviewView {
+  readonly change: PlanChange;
+  readonly amountDue: Decimal;
+  readonly currency: 'BRL';
+  /** Signed reais: the new price charged and the credit for the unused time of the old one. */
+  readonly lines: readonly PlanChangePreviewLine[];
+  /** When a scheduled change starts; null for an upgrade (it starts once paid) and for no change. */
+  readonly effectiveAt: Date | null;
+  readonly nextChargeAt: Date | null;
+  readonly nextChargeAmount: Decimal;
+  /** An upgrade's quote, to be sent back with the change; null for everything else. */
+  readonly quote: PlanChangeQuote | null;
 }
 
 /** The success page asks only this (BR-012-09): the redirect itself grants nothing. */
@@ -119,7 +189,12 @@ export type CheckoutRecovery = 'recovered' | 'removed' | 'waiting';
 export class SubscriptionsBillingService {
   private readonly logger = new Logger(SubscriptionsBillingService.name);
   /** The invoice list per provider customer, reused for INVOICE_CACHE_MS (one read per office). */
-  private readonly invoiceCache = new Map<string, { until: number; invoices: ProviderInvoice[] }>();
+  private readonly invoiceCache = new TtlCache<ProviderInvoice[]>(MAX_CACHED_ENTRIES);
+  /**
+   * An upgrade's preview per subscription and plan, reused for PREVIEW_CACHE_MS: choosing a plan in
+   * the dialog back and forth must not ask the provider each time. Dropped by every action of ours.
+   */
+  private readonly previewCache = new TtlCache<PlanChangePreviewView>(MAX_CACHED_ENTRIES);
 
   constructor(
     private readonly subscriptions: SubscriptionsRepository,
@@ -174,6 +249,23 @@ export class SubscriptionsBillingService {
     return record !== null && isInEffect(record.status) && record.officeId !== null
       ? 'CONFIRMED'
       : 'PENDING';
+  }
+
+  /**
+   * BR-012-11: a page of the billing history, newest first, for any current member. The provider
+   * lists by cursor, so the pages are cut from one bounded read (the newest BILLING_HISTORY_LIMIT)
+   * reused for INVOICE_CACHE_MS; `total` counts that read. An office that never paid has none.
+   * The provider being unreachable is BILLING_HISTORY_UNAVAILABLE: the plan page works without it.
+   */
+  async invoices(
+    ctx: AccessContext,
+    requestedOfficeId: string | undefined,
+    page: PageRequest,
+  ): Promise<Paginated<ProviderInvoice>> {
+    const acting = this.officeOf(ctx, requestedOfficeId);
+    const customerId = await this.subscriptions.findCustomerIdOfOffice(acting.owner.ownerId);
+    if (customerId === null) return pageOfList<ProviderInvoice>([], page);
+    return pageOfList(await this.invoiceListOf(customerId), page);
   }
 
   /**
@@ -316,20 +408,9 @@ export class SubscriptionsBillingService {
    */
   async changePlan(
     ctx: AccessContext,
-    input: { planCode: string; officeId?: string },
+    input: { planCode: string; officeId?: string; quote?: ConfirmedQuote },
   ): Promise<OfficeSubscriptionView> {
-    this.assertOwnContext(ctx);
-    const acting = this.officeOf(ctx, input.officeId);
-    const subscription = await this.subscriptions.findInEffectByOffice(acting.owner.ownerId);
-    if (subscription === null) throw new DomainError('SUBSCRIPTION_NOT_CHANGEABLE');
-
-    const target = await this.plans.findByCode(input.planCode);
-    if (target === null) throw new DomainError('INVALID_PLAN');
-    if (target.id !== subscription.planId && target.status !== 'OFFERED') {
-      throw new DomainError('INVALID_PLAN');
-    }
-
-    const change = classifyPlanChange(subscription, target);
+    const { acting, subscription, target, change } = await this.resolveChange(ctx, input);
     if (change === 'keep') return this.viewOf(ctx, acting, subscription);
     // A subscription that stops at the period end has nothing to move to afterwards, and an
     // upgrade would be billed for a period that is ending: undo the cancellation first.
@@ -353,10 +434,13 @@ export class SubscriptionsBillingService {
         const price = await this.gateway.getPrice(target.stripePriceId);
         if (price === null || !price.active) throw new DomainError('INVALID_PLAN');
         if (change === 'upgrade') {
+          // BR-012-16: charged only as the member was quoted, as of the quoted instant
+          const prorationDate = await this.verifiedQuoteDate(subscription, target, input.quote);
           await this.gateway.changeSubscriptionPrice({
             subscriptionId,
             priceId: target.stripePriceId,
-            idempotencyKey: `upgrade:${key}`,
+            prorationDate,
+            idempotencyKey: `upgrade:${key}:${prorationDate.getTime()}`,
           });
           // Only now that the upgrade was accepted: a downgrade scheduled before it is moot.
           if (subscription.scheduledPlanId !== null) {
@@ -376,6 +460,141 @@ export class SubscriptionsBillingService {
       throw new DomainError('CHANGE_PLAN_FAILED');
     }
     return this.viewOf(ctx, acting, await this.refreshed(subscription));
+  }
+
+  /**
+   * The quote an upgrade is confirmed with, judged WITHOUT trusting what the client sent beyond
+   * the pinned instant and the amount it saw: no quote, a quote of another plan, an instant that is
+   * in the future, expired or outside the current period, or an amount (or next charge date) that
+   * the provider, asked as of the SAME instant for the CURRENT state, no longer gives, is
+   * QUOTE_STALE: nothing is charged and the member confirms the new quote. The client's own
+   * `expiresAt` is never read; the expiry comes from the pinned instant.
+   */
+  private async verifiedQuoteDate(
+    subscription: StoredSubscription,
+    target: Plan,
+    quote: ConfirmedQuote | undefined,
+  ): Promise<Date> {
+    const stale = () => new DomainError('QUOTE_STALE');
+    if (quote === undefined || quote.planCode !== target.code) throw stale();
+    const verdict = judgeQuoteDate({
+      prorationDate: quote.prorationDate,
+      now: this.clock.now(),
+      periodStart: subscription.currentPeriodStart,
+      periodEnd: subscription.currentPeriodEnd,
+    });
+    if (verdict !== 'ok') throw stale();
+    const current = await this.gateway.previewPlanChange({
+      subscriptionId: this.providerIdOf(subscription),
+      priceId: target.stripePriceId,
+      prorationDate: quote.prorationDate,
+    });
+    const nextCharge = current.nextChargeAt ?? subscription.currentPeriodEnd;
+    if (
+      !current.amountDue.equals(quote.amountDue) ||
+      (nextCharge?.getTime() ?? null) !== (quote.nextChargeAt?.getTime() ?? null)
+    ) {
+      this.previewCache.deleteByPrefix(`${subscription.id}:`);
+      throw stale();
+    }
+    return quote.prorationDate;
+  }
+
+  /**
+   * BR-012-16..BR-012-18: what choosing a plan would do, asked before confirming; read only, nothing
+   * is created or changed here or at the provider. An UPGRADE shows the provider's own prorated
+   * amount (its upcoming invoice, the same proration the change uses), so the figure is the one it
+   * charges, give or take the seconds between the preview and the confirmation; a scheduled change
+   * charges nothing now and names its date; choosing the plan in effect or the one already
+   * scheduled changes nothing. The same refusals as `changePlan`.
+   */
+  async previewChange(
+    ctx: AccessContext,
+    input: { planCode: string; officeId?: string },
+  ): Promise<PlanChangePreviewView> {
+    const { subscription, target, change } = await this.resolveChange(ctx, input);
+    const periodEnd = subscription.currentPeriodEnd;
+    const none = new Decimal(0);
+    if (change === 'keep' || change === 'release_schedule') {
+      const current = await this.planOf(subscription.planId);
+      return {
+        change,
+        amountDue: none,
+        currency: 'BRL',
+        lines: [],
+        effectiveAt: null,
+        nextChargeAt: periodEnd,
+        nextChargeAmount: current.price,
+        quote: null,
+      };
+    }
+    if (subscription.cancelAtPeriodEnd) throw new DomainError('SUBSCRIPTION_NOT_CHANGEABLE');
+    if (change === 'schedule') {
+      return {
+        change,
+        amountDue: none,
+        currency: 'BRL',
+        lines: [],
+        effectiveAt: periodEnd,
+        nextChargeAt: periodEnd,
+        nextChargeAmount: target.price,
+        quote: null,
+      };
+    }
+    const cacheKey = `${subscription.id}:${target.code}`;
+    const now = this.clock.now().getTime();
+    const cached = this.previewCache.get(cacheKey, now);
+    if (cached !== undefined) return cached;
+    try {
+      const price = await this.gateway.getPrice(target.stripePriceId);
+      if (price === null || !price.active) throw new DomainError('INVALID_PLAN');
+      // pinned to whole seconds now: the change is confirmed with this instant (the quote)
+      const prorationDate = new Date(Math.floor(now / 1000) * 1000);
+      const preview = await this.gateway.previewPlanChange({
+        subscriptionId: this.providerIdOf(subscription),
+        priceId: target.stripePriceId,
+        prorationDate,
+      });
+      const nextChargeAt = preview.nextChargeAt ?? periodEnd;
+      const view: PlanChangePreviewView = {
+        change,
+        amountDue: preview.amountDue,
+        currency: 'BRL',
+        lines: preview.lines,
+        effectiveAt: null,
+        nextChargeAt,
+        nextChargeAmount: target.price,
+        quote: {
+          planCode: target.code,
+          prorationDate: preview.prorationDate,
+          amountDue: preview.amountDue,
+          currency: 'BRL',
+          nextChargeAt,
+          expiresAt: quoteExpiresAt(preview.prorationDate),
+        },
+      };
+      this.previewCache.set(cacheKey, view, now, PREVIEW_CACHE_MS);
+      return view;
+    } catch (error) {
+      if (error instanceof DomainError) throw error;
+      this.logger.warn(`Plan change preview of ${subscription.id} failed: ${logSafeError(error)}`);
+      throw new DomainError('CHANGE_PREVIEW_FAILED');
+    }
+  }
+
+  /** The checks `changePlan` and `previewChange` share: the office's subscription, the target, the kind of change. */
+  private async resolveChange(ctx: AccessContext, input: { planCode: string; officeId?: string }) {
+    this.assertOwnContext(ctx);
+    const acting = this.officeOf(ctx, input.officeId);
+    const subscription = await this.subscriptions.findInEffectByOffice(acting.owner.ownerId);
+    if (subscription === null) throw new DomainError('SUBSCRIPTION_NOT_CHANGEABLE');
+
+    const target = await this.plans.findByCode(input.planCode);
+    if (target === null) throw new DomainError('INVALID_PLAN');
+    if (target.id !== subscription.planId && target.status !== 'OFFERED') {
+      throw new DomainError('INVALID_PLAN');
+    }
+    return { acting, subscription, target, change: classifyPlanChange(subscription, target) };
   }
 
   // ---- Cancelling -----------------------------------------------------------------------------
@@ -674,6 +893,8 @@ export class SubscriptionsBillingService {
     if (subscription.stripeCustomerId !== null) {
       this.invoiceCache.delete(subscription.stripeCustomerId);
     }
+    // what a change would charge moves with every action of ours (the period, the plan, the schedule)
+    this.previewCache.deleteByPrefix(`${subscription.id}:`);
     return this.sync.refresh(subscription.id);
   }
 
@@ -729,13 +950,13 @@ export class SubscriptionsBillingService {
     subscription: StoredSubscription,
   ): Promise<OfficeSubscriptionView> {
     const now = this.clock.now();
-    const [plan, scheduled, inProgress, eligibleUntil, invoices] = await Promise.all([
+    const [plan, scheduled, inProgress, eligibleUntil] = await Promise.all([
       this.planOf(subscription.planId),
       subscription.scheduledPlanId === null ? null : this.planOf(subscription.scheduledPlanId),
       this.slots.inProgress(ctx, { actingOwner: acting }),
       this.refundEligibleUntilOf(subscription, now),
-      this.invoicesOf(subscription),
     ]);
+    const inEffect = isInEffect(subscription.status);
     return {
       officeId: acting.owner.ownerId,
       plan: { code: plan.code, name: plan.name, price: plan.price, interval: plan.interval },
@@ -752,38 +973,45 @@ export class SubscriptionsBillingService {
               planCode: scheduled.code,
               planName: scheduled.name,
               activeJourneyLimit: scheduled.activeJourneyLimit,
+              price: scheduled.price,
+              interval: scheduled.interval,
               at: subscription.scheduledChangeAt,
             },
+      canUndoScheduledChange: inEffect && scheduled !== null,
+      canUndoCancel: decideUndoCancel(subscription, now) === 'undo',
+      nextChargeAmount:
+        !inEffect || subscription.cancelAtPeriodEnd ? null : (scheduled ?? plan).price,
       lapsedAt: subscription.lapsedAt,
       readOnlyAt:
         subscription.lapsedAt === null
           ? null
           : readOnlyAtOf(subscription.lapsedAt, this.config.subscriptions.graceDays),
+      readOnly:
+        subscription.status === 'LAPSED' &&
+        subscription.lapsedAt !== null &&
+        isReadOnly(subscription.lapsedAt, now, this.config.subscriptions.graceDays),
       firstPaidAt: subscription.firstPaidAt,
       refundEligibleUntil: eligibleUntil,
-      invoices,
+      refundWindowDays: this.config.subscriptions.refundWindowDays,
+      graceDays: this.config.subscriptions.graceDays,
     };
   }
 
   /**
-   * BR-012-11: the billing history, or null when the provider cannot be read just now. Reused for
-   * 30 s per customer (the plan page is reloaded often and every read is a provider call);
-   * any action of ours drops it.
+   * BR-012-11: the newest invoices of a customer, reused for INVOICE_CACHE_MS (the plan page is
+   * reloaded often and every read is a provider call); any action of ours drops it.
    */
-  private async invoicesOf(subscription: StoredSubscription): Promise<ProviderInvoice[] | null> {
-    const customerId = subscription.stripeCustomerId;
-    if (customerId === null) return [];
+  private async invoiceListOf(customerId: string): Promise<ProviderInvoice[]> {
     const now = this.clock.now().getTime();
-    const cached = this.invoiceCache.get(customerId);
-    if (cached && cached.until > now) return cached.invoices;
+    const cached = this.invoiceCache.get(customerId, now);
+    if (cached !== undefined) return cached;
     try {
       const invoices = await this.gateway.listInvoices(customerId, BILLING_HISTORY_LIMIT);
-      this.invoiceCache.set(customerId, { until: now + INVOICE_CACHE_MS, invoices });
+      this.invoiceCache.set(customerId, invoices, now, INVOICE_CACHE_MS);
       return invoices;
     } catch (error) {
-      // The plan page works without the history; the interface says it is unavailable.
       this.logger.warn(`The billing history could not be read: ${logSafeError(error)}`);
-      return null;
+      throw new DomainError('BILLING_HISTORY_UNAVAILABLE');
     }
   }
 }

@@ -3,12 +3,22 @@
 // customer, lease or refund bookkeeping leaves the API.
 import { ApiProperty } from '@nestjs/swagger';
 import { MONEY_API_PROPERTY, moneyToJson } from '../../common/money/money-dto.js';
-import type { ProviderInvoice } from '../../payments/payment-gateway.js';
+import type { InvoiceReason, ProviderInvoice } from '../../payments/payment-gateway.js';
 import { PLAN_INTERVALS } from '../../plans/plan.js';
 import { SUBSCRIPTION_STATUSES } from '../domain/subscription-status.js';
-import type { CheckoutState, OfficeSubscriptionView } from '../subscriptions-billing.service.js';
+import type {
+  CheckoutState,
+  OfficeSubscriptionView,
+  PlanChangePreviewView,
+} from '../subscriptions-billing.service.js';
 
 const INVOICE_STATUSES = ['draft', 'open', 'paid', 'uncollectible', 'void'] as const;
+const INVOICE_REASONS = [
+  'subscription_create',
+  'subscription_cycle',
+  'subscription_update',
+  'other',
+] as const;
 const DATE_TIME = { type: String, format: 'date-time', nullable: true } as const;
 
 const iso = (date: Date | null): string | null => (date === null ? null : date.toISOString());
@@ -16,6 +26,19 @@ const iso = (date: Date | null): string | null => (date === null ? null : date.t
 export class InvoiceResponseDto {
   @ApiProperty({ type: String })
   id: string;
+
+  @ApiProperty({
+    enum: INVOICE_REASONS,
+    enumName: 'InvoiceReason',
+    description: 'A period charge, or the proration of a plan change (subscription_update)',
+  })
+  reason: InvoiceReason;
+
+  @ApiProperty({ ...DATE_TIME, description: 'Start of the service period it charges' })
+  periodStart: string | null;
+
+  @ApiProperty({ ...DATE_TIME, description: 'End of the service period it charges' })
+  periodEnd: string | null;
 
   @ApiProperty(DATE_TIME)
   paidAt: string | null;
@@ -31,6 +54,9 @@ export class InvoiceResponseDto {
 
   constructor(invoice: ProviderInvoice) {
     this.id = invoice.id;
+    this.reason = invoice.reason;
+    this.periodStart = iso(invoice.periodStart);
+    this.periodEnd = iso(invoice.periodEnd);
     this.paidAt = iso(invoice.paidAt);
     this.amount = moneyToJson(invoice.amount);
     this.status = invoice.status;
@@ -69,6 +95,12 @@ export class ScheduledChangeResponseDto {
   @ApiProperty({ type: Number, minimum: 1 })
   activeJourneyLimit: number;
 
+  @ApiProperty({ ...MONEY_API_PROPERTY, description: 'Price per interval of the plan it moves to' })
+  price: string;
+
+  @ApiProperty({ enum: PLAN_INTERVALS, enumName: 'PlanInterval' })
+  interval: string;
+
   @ApiProperty({ ...DATE_TIME, description: 'When the change takes effect (BR-012-17)' })
   at: string | null;
 
@@ -76,6 +108,8 @@ export class ScheduledChangeResponseDto {
     this.planCode = change.planCode;
     this.planName = change.planName;
     this.activeJourneyLimit = change.activeJourneyLimit;
+    this.price = moneyToJson(change.price);
+    this.interval = change.interval;
     this.at = iso(change.at);
   }
 }
@@ -113,11 +147,37 @@ export class OfficeSubscriptionResponseDto {
   @ApiProperty({ type: () => ScheduledChangeResponseDto, nullable: true })
   scheduledChange: ScheduledChangeResponseDto | null;
 
+  @ApiProperty({
+    type: Boolean,
+    description: 'Choosing the plan in effect releases the scheduled change (BR-012-17)',
+  })
+  canUndoScheduledChange: boolean;
+
+  @ApiProperty({
+    type: Boolean,
+    description: 'Renewal was stopped and the paid period has not ended (BR-012-19)',
+  })
+  canUndoCancel: boolean;
+
+  @ApiProperty({
+    ...MONEY_API_PROPERTY,
+    nullable: true,
+    description:
+      'What the next charge is; null when nothing renews. Catalog prices, before coupons',
+  })
+  nextChargeAmount: string | null;
+
   @ApiProperty({ ...DATE_TIME, description: 'When the subscription lapsed (BR-012-21)' })
   lapsedAt: string | null;
 
   @ApiProperty({ ...DATE_TIME, description: 'When the office turns read-only (BR-012-28)' })
   readOnlyAt: string | null;
+
+  @ApiProperty({
+    type: Boolean,
+    description: 'The office is read-only now: lapsed beyond the grace period (BR-012-28)',
+  })
+  readOnly: boolean;
 
   @ApiProperty({ ...DATE_TIME, description: 'The provider confirmation of the first payment' })
   firstPaidAt: string | null;
@@ -129,11 +189,18 @@ export class OfficeSubscriptionResponseDto {
   refundEligibleUntil: string | null;
 
   @ApiProperty({
-    type: () => [InvoiceResponseDto],
-    nullable: true,
-    description: 'Billing history, newest first; null when the provider could not be read',
+    type: Number,
+    minimum: 1,
+    description: 'Days after the first payment with a full refund (BR-012-29)',
   })
-  invoices: InvoiceResponseDto[] | null;
+  refundWindowDays: number;
+
+  @ApiProperty({
+    type: Number,
+    minimum: 0,
+    description: 'Days a lapsed office keeps working before it turns read-only (BR-012-28)',
+  })
+  graceDays: number;
 
   constructor(view: OfficeSubscriptionView) {
     this.officeId = view.officeId;
@@ -146,14 +213,17 @@ export class OfficeSubscriptionResponseDto {
     this.cancelAtPeriodEnd = view.cancelAtPeriodEnd;
     this.scheduledChange =
       view.scheduledChange === null ? null : new ScheduledChangeResponseDto(view.scheduledChange);
+    this.canUndoScheduledChange = view.canUndoScheduledChange;
+    this.canUndoCancel = view.canUndoCancel;
+    this.nextChargeAmount =
+      view.nextChargeAmount === null ? null : moneyToJson(view.nextChargeAmount);
     this.lapsedAt = iso(view.lapsedAt);
     this.readOnlyAt = iso(view.readOnlyAt);
+    this.readOnly = view.readOnly;
     this.firstPaidAt = iso(view.firstPaidAt);
     this.refundEligibleUntil = iso(view.refundEligibleUntil);
-    this.invoices =
-      view.invoices === null
-        ? null
-        : view.invoices.map((invoice) => new InvoiceResponseDto(invoice));
+    this.refundWindowDays = view.refundWindowDays;
+    this.graceDays = view.graceDays;
   }
 }
 
@@ -173,5 +243,98 @@ export class CheckoutStatusResponseDto {
 
   constructor(state: CheckoutState) {
     this.state = state;
+  }
+}
+
+export class PlanChangeLineResponseDto {
+  @ApiProperty({
+    ...MONEY_API_PROPERTY,
+    description: 'Signed reais: a charge is positive, the credit for the unused time negative',
+  })
+  amount: string;
+
+  constructor(amount: PlanChangePreviewView['lines'][number]) {
+    this.amount = moneyToJson(amount.amount);
+  }
+}
+
+/** BR-012-16: the quote of an upgrade: send it back with the change. */
+export class PlanQuoteResponseDto {
+  @ApiProperty({ type: String })
+  planCode: string;
+
+  @ApiProperty({ type: String, format: 'date-time', description: 'The pinned proration date' })
+  prorationDate: string;
+
+  @ApiProperty({ ...MONEY_API_PROPERTY, description: 'What the provider charges as of that date' })
+  amountDue: string;
+
+  @ApiProperty({ type: String, example: 'BRL' })
+  currency: string;
+
+  @ApiProperty(DATE_TIME)
+  nextChargeDate: string | null;
+
+  @ApiProperty({ type: String, format: 'date-time', description: 'After this, ask again' })
+  expiresAt: string;
+
+  constructor(quote: NonNullable<PlanChangePreviewView['quote']>) {
+    this.planCode = quote.planCode;
+    this.prorationDate = quote.prorationDate.toISOString();
+    this.amountDue = moneyToJson(quote.amountDue);
+    this.currency = quote.currency;
+    this.nextChargeDate = iso(quote.nextChargeAt);
+    this.expiresAt = quote.expiresAt.toISOString();
+  }
+}
+
+/** BR-012-16..BR-012-18: what choosing a plan would do, before confirming. Changes nothing. */
+export class PlanChangePreviewResponseDto {
+  @ApiProperty({
+    enum: ['keep', 'release_schedule', 'upgrade', 'schedule'],
+    enumName: 'PlanChangeKind',
+    description:
+      'upgrade: now, once the prorated amount is paid; schedule: next period; release_schedule: ' +
+      'drops the scheduled change; keep: nothing changes',
+  })
+  change: string;
+
+  @ApiProperty({
+    ...MONEY_API_PROPERTY,
+    description: 'What the provider would charge now, in reais',
+  })
+  amountDue: string;
+
+  @ApiProperty({ type: String, example: 'BRL' })
+  currency: string;
+
+  @ApiProperty({ type: () => [PlanChangeLineResponseDto] })
+  lines: PlanChangeLineResponseDto[];
+
+  @ApiProperty({ ...DATE_TIME, description: 'When a scheduled change starts; null otherwise' })
+  effectiveAt: string | null;
+
+  @ApiProperty({ ...DATE_TIME })
+  nextChargeAt: string | null;
+
+  @ApiProperty({ ...MONEY_API_PROPERTY, description: 'The next charge after the change, in reais' })
+  nextChargeAmount: string;
+
+  @ApiProperty({
+    type: () => PlanQuoteResponseDto,
+    nullable: true,
+    description: 'An upgrade only: the quote to send back with the change (BR-012-16)',
+  })
+  quote: PlanQuoteResponseDto | null;
+
+  constructor(preview: PlanChangePreviewView) {
+    this.change = preview.change;
+    this.amountDue = moneyToJson(preview.amountDue);
+    this.currency = preview.currency;
+    this.lines = preview.lines.map((line) => new PlanChangeLineResponseDto(line));
+    this.effectiveAt = iso(preview.effectiveAt);
+    this.nextChargeAt = iso(preview.nextChargeAt);
+    this.nextChargeAmount = moneyToJson(preview.nextChargeAmount);
+    this.quote = preview.quote === null ? null : new PlanQuoteResponseDto(preview.quote);
   }
 }

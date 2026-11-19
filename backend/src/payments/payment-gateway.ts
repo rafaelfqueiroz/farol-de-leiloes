@@ -54,6 +54,8 @@ export interface ChangePriceInput {
   subscriptionId: string;
   priceId: string;
   idempotencyKey: string;
+  /** An upgrade: the proration date of the quote the member confirmed (BR-012-16). */
+  prorationDate?: Date;
 }
 
 /** SPEC-012 BR-012-19: stops or resumes renewal. */
@@ -105,12 +107,50 @@ export interface ProviderCheckoutSession {
 /** SPEC-012 BR-012-11: one line of the billing history. */
 export interface ProviderInvoice {
   readonly id: string;
+  /** Why it was issued: a period's charge or a plan change's proration (the page words each). */
+  readonly reason: InvoiceReason;
+  /** The service period the invoice charges (its first line), when the provider says. */
+  readonly periodStart: Date | null;
+  readonly periodEnd: Date | null;
   readonly paidAt: Date | null;
   /** AR-17: reais. What the invoice charged (after discounts). */
   readonly amount: Decimal;
   readonly status: 'draft' | 'open' | 'paid' | 'uncollectible' | 'void';
   /** The provider's page for this invoice, if it has one. */
   readonly hostedUrl: string | null;
+}
+
+/** SPEC-012 BR-012-16: what moving a subscription to another price would charge, as the provider computes it. */
+export interface PreviewPlanChangeInput {
+  subscriptionId: string;
+  priceId: string;
+  /**
+   * The instant the proration is computed as of (whole seconds). The preview and the upgrade that
+   * follows pass the SAME date, so the amount previewed is the amount charged (owner review #173).
+   */
+  prorationDate: Date;
+}
+
+/** One line of a preview: a charge for the new price or a credit for the unused time (negative). */
+export interface PlanChangePreviewLine {
+  /** AR-17: reais, signed. A credit for what was paid and not used is negative. */
+  readonly amount: Decimal;
+}
+
+/**
+ * The provider's own upcoming-invoice computation for an upgrade: what the member would be charged
+ * now, with nothing changed at the provider (read only).
+ */
+export interface PlanChangePreview {
+  /** The proration date the figure is as of: what the preview was asked for. */
+  readonly prorationDate: Date;
+  /** AR-17: reais. What the provider would charge now (never negative: a credit is not paid out). */
+  readonly amountDue: Decimal;
+  /** Lower-case ISO 4217, as the provider names it ('brl'). */
+  readonly currency: string;
+  readonly lines: readonly PlanChangePreviewLine[];
+  /** When the next period is charged after the change; null when the provider does not say. */
+  readonly nextChargeAt: Date | null;
 }
 
 export interface CreateBillingPortalSessionInput {
@@ -255,6 +295,12 @@ export abstract class PaymentGateway {
    * as a subscription schedule. Replaces a schedule that already exists.
    */
   abstract scheduleSubscriptionPrice(input: ChangePriceInput): Promise<void>;
+
+  /**
+   * BR-012-16: what an upgrade to this price would charge now (the provider's upcoming invoice with
+   * the same proration the upgrade uses). Read only: nothing is created or changed at the provider.
+   */
+  abstract previewPlanChange(input: PreviewPlanChangeInput): Promise<PlanChangePreview>;
 
   /** BR-012-17: drops a scheduled change; the subscription keeps its current price. Idempotent. */
   abstract releaseScheduledChange(subscriptionId: string, idempotencyKey: string): Promise<void>;

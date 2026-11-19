@@ -117,11 +117,42 @@ export function pageQuery(request: NextRequest): string {
   return params.toString();
 }
 
+/**
+ * The query of a request that takes only these parameters (SPEC-012: `officeId`, `page`,
+ * `pageSize`): each is forwarded as sent, anything else is dropped, and the backend alone
+ * validates them. The office is only a CHOICE among the caller's own offices (BR-002-11); the
+ * backend answers a stranger's id exactly as a missing one.
+ */
+export function pickQuery(request: NextRequest, names: readonly string[]): string {
+  const { searchParams } = request.nextUrl;
+  const params = new URLSearchParams();
+  for (const name of names) {
+    const value = searchParams.get(name);
+    if (value) params.set(name, value);
+  }
+  return params.toString();
+}
+
+/** `/reminders/64b7f0…/x` → `api/reminders/:id/x`: the path without anything that identifies a record. */
+export function routeLabelOf(path: string): string {
+  const fixed = path
+    .split('/')
+    .map((segment) => (/\d/.test(segment) ? ':id' : segment))
+    .join('/');
+  return `api${fixed}`;
+}
+
 interface ProxyOptions {
   /** The route needs a signed-in caller: answer 401 UNAUTHENTICATED here when there is no cookie. */
   auth?: boolean;
   /** Query string for the backend call, without the leading `?`. */
   query?: string;
+  /**
+   * The fixed name the route reports its failures under (Sentry `where`, SC-15). A route with a
+   * dynamic segment passes one with the segment as `:name`, so an id never becomes a tag. Without it
+   * the label is the path with every segment that holds a digit replaced by `:id`.
+   */
+  label?: string;
   /**
    * The route signs the caller in (login, register, the Google exchange and complete): an `accessToken` in the
    * backend's answer becomes the session cookie and is removed from the body (SC-02).
@@ -168,7 +199,7 @@ async function startSession(res: Response): Promise<NextResponse> {
 export async function proxyToBackend(
   request: NextRequest,
   path: string,
-  { auth = false, query, startsSession = false }: ProxyOptions = {},
+  { auth = false, query, startsSession = false, label }: ProxyOptions = {},
 ): Promise<NextResponse> {
   const refused = refuseForeignOrigin(request);
   if (refused) return refused;
@@ -191,7 +222,7 @@ export async function proxyToBackend(
       ...(body !== '' ? { body } : {}),
     });
   } catch (error: unknown) {
-    reportClientError(error, { where: `api${path} ${request.method}` });
+    reportClientError(error, { where: `${label ?? routeLabelOf(path)} ${request.method}` });
     return backendUnavailable();
   }
 

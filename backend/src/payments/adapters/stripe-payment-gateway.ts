@@ -17,6 +17,8 @@ import {
   PaymentGateway,
   type PaymentEvent,
   type InvoiceReason,
+  type PlanChangePreview,
+  type PreviewPlanChangeInput,
   type ProviderCheckoutSession,
   type ProviderInvoice,
   type ProviderPrice,
@@ -55,6 +57,19 @@ function toUnixSeconds(instant: Date): number {
 /** Stripe's whole seconds since the epoch → an instant; an absent value stays absent. */
 function fromUnixSeconds(seconds: number | null | undefined): Date | null {
   return typeof seconds === 'number' ? new Date(seconds * 1000) : null;
+}
+
+/**
+ * The provider's page for an invoice becomes a link in our interface, so only an https URL is
+ * passed on: anything else (a malformed value, `javascript:`, `http:`) is no link at all.
+ */
+function httpsUrlOrNull(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  try {
+    return new URL(value).protocol === 'https:' ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 /** A Stripe reference that may be expanded into an object or left as its id. */
@@ -212,6 +227,7 @@ export class StripePaymentGateway extends PaymentGateway {
     subscriptionId,
     priceId,
     idempotencyKey,
+    prorationDate,
   }: ChangePriceInput): Promise<void> {
     const item = onlyItem(await this.stripe.subscriptions.retrieve(subscriptionId));
     await this.stripe.subscriptions.update(
@@ -222,9 +238,43 @@ export class StripePaymentGateway extends PaymentGateway {
         // is paid (a pending update): the plan and the limit follow the paid price.
         proration_behavior: 'always_invoice',
         payment_behavior: 'pending_if_incomplete',
+        // the date of the quote the member confirmed, so the charge equals what was shown
+        ...(prorationDate === undefined ? {} : { proration_date: toUnixSeconds(prorationDate) }),
       },
       { idempotencyKey },
     );
+  }
+
+  async previewPlanChange({
+    subscriptionId,
+    priceId,
+    prorationDate,
+  }: PreviewPlanChangeInput): Promise<PlanChangePreview> {
+    const item = onlyItem(await this.stripe.subscriptions.retrieve(subscriptionId));
+    // The provider's upcoming invoice with the SAME proration the upgrade uses (BR-012-16), so the
+    // figure shown is the one it would charge. Read only: no invoice, item or schedule is created.
+    const invoice = await this.stripe.invoices.createPreview({
+      subscription: subscriptionId,
+      subscription_details: {
+        items: [{ id: item.id, price: priceId }],
+        proration_behavior: 'always_invoice',
+        // pinned: the upgrade that follows uses the same date, whenever it is confirmed
+        proration_date: toUnixSeconds(prorationDate),
+      },
+    });
+    const lines = invoice.lines.data;
+    const periodEnds = lines
+      .filter((line) => line.amount > 0)
+      .map((line) => line.period.end)
+      .sort((a, b) => b - a);
+    return {
+      prorationDate: new Date(toUnixSeconds(prorationDate) * 1000),
+      // AR-20: centavos become reais here and nowhere else. A credit is never paid out.
+      amountDue: centavosToReais(Math.max(invoice.amount_due, 0)),
+      currency: invoice.currency,
+      lines: lines.map((line) => ({ amount: centavosToReais(line.amount) })),
+      nextChargeAt: fromUnixSeconds(periodEnds[0]),
+    };
   }
 
   async scheduleSubscriptionPrice({
@@ -402,12 +452,16 @@ export class StripePaymentGateway extends PaymentGateway {
     const invoices = await this.stripe.invoices.list({ customer: customerId, limit });
     return invoices.data.map((invoice) => ({
       id: invoice.id,
+      reason: invoiceReasonOf(invoice.billing_reason),
+      // The service period is the first line's; the invoice's own period fields are another thing.
+      periodStart: fromUnixSeconds(invoice.lines?.data[0]?.period.start),
+      periodEnd: fromUnixSeconds(invoice.lines?.data[0]?.period.end),
       paidAt:
         invoice.status === 'paid' ? fromUnixSeconds(invoice.status_transitions.paid_at) : null,
       // The invoice's total after discounts; AR-20: centavos become reais here and nowhere else.
       amount: centavosToReais(invoice.total),
       status: invoice.status ?? 'draft',
-      hostedUrl: invoice.hosted_invoice_url ?? null,
+      hostedUrl: httpsUrlOrNull(invoice.hosted_invoice_url),
     }));
   }
 

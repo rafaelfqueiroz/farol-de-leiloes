@@ -9,6 +9,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiPaginatedResponse } from '../common/pagination/api-paginated-response.decorator.js';
+import { mapPage } from '../common/pagination/paginated.js';
 import type { AccessContext } from '../access/access-context.js';
 import { Access } from '../access/decorators/access.decorator.js';
 import { ApiConfirmedEmail } from '../auth/decorators/api-confirmed-email.decorator.js';
@@ -21,10 +23,13 @@ import { ApiErrorResponses } from '../common/errors/api-error-responses.decorato
 import {
   ChangePlanRequestDto,
   CheckoutRequestDto,
+  InvoicesQueryDto,
   OfficeSelectorDto,
 } from './dto/office-subscription-request.dto.js';
 import {
+  InvoiceResponseDto,
   OfficeSubscriptionResponseDto,
+  PlanChangePreviewResponseDto,
   RedirectUrlResponseDto,
 } from './dto/office-subscription-response.dto.js';
 import { SubscriptionsBillingService } from './subscriptions-billing.service.js';
@@ -49,7 +54,7 @@ export class OfficeSubscriptionController {
 
   @Get()
   @ApiOperation({
-    summary: 'The office plan: status, limit, journeys in progress, dates and billing history',
+    summary: 'The office plan: status, limit, journeys in progress and dates',
     description: 'SUBSCRIPTION_NOT_FOUND (404) when the office has never had a paid plan.',
   })
   @ApiOkResponse({ type: OfficeSubscriptionResponseDto })
@@ -58,6 +63,22 @@ export class OfficeSubscriptionController {
     @Query() query: OfficeSelectorDto,
   ): Promise<OfficeSubscriptionResponseDto> {
     return new OfficeSubscriptionResponseDto(await this.billing.view(access, query.officeId));
+  }
+
+  @Get('invoices')
+  @ApiOperation({
+    summary: 'The billing history, newest first, paginated (six a page by default)',
+    description:
+      'BR-012-11. Cut from the newest 100 invoices of the provider, so `total` is at most 100. ' +
+      'BILLING_HISTORY_UNAVAILABLE (502) when the provider cannot be read.',
+  })
+  @ApiPaginatedResponse(InvoiceResponseDto)
+  async invoices(@Access() access: AccessContext, @Query() query: InvoicesQueryDto) {
+    const page = await this.billing.invoices(access, query.officeId, {
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+    return mapPage(page, (invoice) => new InvoiceResponseDto(invoice));
   }
 
   @Post('checkout')
@@ -96,7 +117,39 @@ export class OfficeSubscriptionController {
     @Access() access: AccessContext,
     @Body() body: ChangePlanRequestDto,
   ): Promise<OfficeSubscriptionResponseDto> {
-    return new OfficeSubscriptionResponseDto(await this.billing.changePlan(access, body));
+    return new OfficeSubscriptionResponseDto(
+      await this.billing.changePlan(access, {
+        planCode: body.planCode,
+        ...(body.officeId === undefined ? {} : { officeId: body.officeId }),
+        ...(body.quote === undefined
+          ? {}
+          : {
+              quote: {
+                planCode: body.quote.planCode,
+                prorationDate: body.quote.prorationDate,
+                amountDue: body.quote.amountDue,
+                nextChargeAt: body.quote.nextChargeDate ?? null,
+              },
+            }),
+      }),
+    );
+  }
+
+  @Post('change-preview')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'What choosing a plan would do and charge now (read only)',
+    description:
+      'An upgrade answers the provider own prorated amount; a downgrade is scheduled for the next ' +
+      'period and charges nothing now (BR-012-16, BR-012-17). Changes nothing. The refusals of ' +
+      '`change`, and CHANGE_PREVIEW_FAILED (502) when the provider cannot compute it.',
+  })
+  @ApiOkResponse({ type: PlanChangePreviewResponseDto })
+  async changePreview(
+    @Access() access: AccessContext,
+    @Body() body: ChangePlanRequestDto,
+  ): Promise<PlanChangePreviewResponseDto> {
+    return new PlanChangePreviewResponseDto(await this.billing.previewChange(access, body));
   }
 
   @Post('cancel')

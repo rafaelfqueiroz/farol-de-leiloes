@@ -5,12 +5,14 @@
 // Idempotent: auctions are upserted by code and the seeded accounts by email, so a second run
 // leaves the same data (a stack reused for the performance run can be re-seeded safely).
 import * as bcrypt from 'bcrypt';
-import { createConnection, type Model } from 'mongoose';
+import { createConnection, type Model, Types } from 'mongoose';
 import { Logger } from '@nestjs/common';
 import { AuctionEntity, AuctionSchema } from '../../src/auctions/schemas/auction.schema.js';
+import { PlanEntity, PlanSchema } from '../../src/plans/schemas/plan.schema.js';
 import { UserEntity, UserSchema } from '../../src/users/schemas/user.schema.js';
 import { SEED_ACCOUNTS } from './accounts.js';
 import { referenceCatalog, type SeededAuction } from './catalog.js';
+import { SEED_PLANS } from './plans.js';
 import { SeedConfigError, seedTargetProblem } from './target.js';
 
 export interface SeedOptions {
@@ -29,6 +31,7 @@ export interface SeedOptions {
 export interface SeedResult {
   auctions: number;
   accounts: number;
+  plans: number;
 }
 
 /** Upserts per bulkWrite: big enough to be fast, small enough to stay under the 16 MB batch. */
@@ -48,13 +51,15 @@ export async function seedReferenceWorkload(options: SeedOptions): Promise<SeedR
   try {
     const auctions = connection.model<AuctionEntity>(AuctionEntity.name, AuctionSchema);
     const users = connection.model<UserEntity>(UserEntity.name, UserSchema);
+    const plans = connection.model<PlanEntity>(PlanEntity.name, PlanSchema);
     // The schemas' indexes, before the data, as production has them.
-    await Promise.all([auctions.init(), users.init()]);
+    await Promise.all([auctions.init(), users.init(), plans.init()]);
 
     const auctionCount = await upsertCatalog(auctions, options);
     const accountCount = await upsertAccounts(users);
+    const planCount = await upsertPlans(plans);
     // SC-15: counts only.
-    logger.log(`Seeded ${auctionCount} auctions and ${accountCount} accounts`);
+    logger.log(`Seeded ${auctionCount} auctions, ${accountCount} accounts and ${planCount} plans`);
 
     // Extension point (BR-003-08): the journey part of the reference workload — an office with
     // 100 in-progress and 500 closed journeys, and an investor with 20 journeys across 3 offices
@@ -62,7 +67,7 @@ export async function seedReferenceWorkload(options: SeedOptions): Promise<SeedR
     // SPEC-016 (#16) and SPEC-021 (#21). Each lands its own seeding step, through its own
     // schemas, after the catalog.
 
-    return { auctions: auctionCount, accounts: accountCount };
+    return { auctions: auctionCount, accounts: accountCount, plans: planCount };
   } finally {
     await connection.close();
   }
@@ -121,4 +126,25 @@ async function upsertAccounts(model: Model<UserEntity>): Promise<number> {
     );
   }
   return accounts.length;
+}
+
+/** SPEC-012: the offered plans of the stack, upserted by code (AR-17: the price is a Decimal128). */
+async function upsertPlans(model: Model<PlanEntity>): Promise<number> {
+  await model.bulkWrite(
+    SEED_PLANS.map((plan) => ({
+      updateOne: {
+        filter: { code: plan.code },
+        update: {
+          $set: {
+            ...plan,
+            price: Types.Decimal128.fromString(plan.price),
+            audience: 'ADVISOR_OFFICE',
+            status: 'OFFERED',
+          },
+        },
+        upsert: true,
+      },
+    })),
+  );
+  return SEED_PLANS.length;
 }

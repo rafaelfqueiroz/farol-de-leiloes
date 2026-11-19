@@ -1,4 +1,6 @@
-import { screen } from '@testing-library/react';
+import EventOutlined from '@mui/icons-material/EventOutlined';
+import InventoryOutlined from '@mui/icons-material/Inventory2Outlined';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { axe, renderWithProviders } from '@/test/render';
@@ -115,5 +117,74 @@ describe('ConfirmDialog', () => {
     expect(screen.getByRole('button', { name: 'Cancelar jornada' }).className).toContain(
       'colorPrimary',
     );
+  });
+
+  it.each(['light', 'dark'] as const)(
+    'carries a richer body: more paragraphs and a list of consequences, all in its description (%s)',
+    async (scheme) => {
+      renderWithProviders(
+        <ConfirmDialog
+          open
+          title="Cancelar a assinatura do plano Profissional?"
+          description="A assinatura deixa de ser renovada."
+          consequences={[
+            { icon: EventOutlined, text: 'O plano continua valendo até 14/12/2026.' },
+            { icon: InventoryOutlined, text: 'Nada é apagado.' },
+          ]}
+          confirmLabel="Cancelar assinatura"
+          cancelLabel="Manter plano"
+          onConfirm={() => undefined}
+          onClose={() => undefined}
+        >
+          <p>Você pode desfazer o cancelamento até 14/12/2026.</p>
+        </ConfirmDialog>,
+        { scheme },
+      );
+
+      const dialog = screen.getByRole('alertdialog', {
+        name: 'Cancelar a assinatura do plano Profissional?',
+      });
+      expect(dialog).toHaveAccessibleDescription(
+        'A assinatura deixa de ser renovada. Você pode desfazer o cancelamento até 14/12/2026. O plano continua valendo até 14/12/2026. Nada é apagado.',
+      );
+      expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'O plano continua valendo até 14/12/2026.',
+        'Nada é apagado.',
+      ]);
+      expect(await axe(dialog)).toHaveNoViolations();
+    },
+  );
+
+  it('while the confirmed action runs the confirm button is busy and the dialog cannot be dismissed', async () => {
+    const user = userEvent.setup();
+    const { onConfirm, onClose } = renderDialog({ busy: true, busyLabel: 'Cancelando…' });
+
+    const confirm = screen.getByRole('button', { name: 'Cancelando…' });
+    expect(confirm).toHaveAttribute('aria-busy', 'true');
+    await user.click(confirm);
+    await user.keyboard('{Escape}');
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('owner review #173: the safe action cannot dismiss the dialog while the confirmed action runs', async () => {
+    const { onClose, onConfirm } = renderDialog({ busy: true, busyLabel: 'Cancelando…' });
+
+    const keep = screen.getByRole('button', { name: 'Manter jornada' });
+    expect(keep).toBeDisabled();
+    fireEvent.click(keep); // a click that reaches it anyway does nothing
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByRole('alertdialog')).toBeVisible();
+  });
+
+  it('shows the error of a failed action inside the dialog as an alert, and keeps the dialog open', async () => {
+    renderDialog({ error: 'Não foi possível cancelar.' });
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Não foi possível cancelar.');
+    expect(await axe(dialog)).toHaveNoViolations();
   });
 });
