@@ -78,6 +78,19 @@ export interface InvoicesPage {
 
 export type PlanChangeKind = 'keep' | 'release_schedule' | 'upgrade' | 'schedule';
 
+/**
+ * BR-012-16: what the member is quoted for an upgrade. The proration date is pinned by the server;
+ * the change sends the quote back and the server charges only if it still holds (QUOTE_STALE).
+ */
+export interface PlanChangeQuote {
+  planCode: string;
+  prorationDate: string;
+  amountDue: string;
+  currency: string;
+  nextChargeDate: string | null;
+  expiresAt: string;
+}
+
 export interface PlanChangePreview {
   change: PlanChangeKind;
   amountDue: string;
@@ -86,6 +99,8 @@ export interface PlanChangePreview {
   effectiveAt: string | null;
   nextChargeAt: string | null;
   nextChargeAmount: string;
+  /** An upgrade only. */
+  quote: PlanChangeQuote | null;
 }
 
 export type CheckoutState = 'PENDING' | 'CONFIRMED';

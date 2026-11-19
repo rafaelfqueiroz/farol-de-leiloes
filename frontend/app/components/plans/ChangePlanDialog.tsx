@@ -19,7 +19,7 @@ import Money from '@/app/components/patterns/Money';
 import RadioOptionCard from '@/app/components/patterns/RadioOptionCard';
 import StatusBadge from '@/app/components/patterns/StatusBadge';
 import { apiJson } from '@/lib/api-client';
-import { useApiErrorMessage } from '@/lib/api-error';
+import { ApiError, useApiErrorMessage } from '@/lib/api-error';
 import { absMoney, isPositiveMoney, sumMoney } from '@/lib/money';
 import {
   PLANS_API,
@@ -47,6 +47,9 @@ export interface ChangePlanDialogProps {
   initialPlanCode?: string | null;
   onChanged: (result: PlanChangeResult) => void;
 }
+
+/** Never asked again sooner than this, whatever the quote says: a broken date must not loop. */
+const MIN_QUOTE_LIFETIME_MS = 10_000;
 
 type PreviewState =
   | { name: 'idle' }
@@ -76,12 +79,16 @@ export default function ChangePlanDialog({
   const [preview, setPreview] = useState<PreviewState>({ name: 'idle' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // why the amount shown was asked for again (it expired, or it changed): said above the options
+  const [refreshed, setRefreshed] = useState<'expired' | 'changed' | null>(null);
   // the newest preview request: an older answer that arrives late is ignored
   const requests = useRef(0);
 
-  const choose = (code: string) => {
+  const choose = (code: string, again: 'expired' | 'changed' | null = null) => {
     setSelected(code);
-    setError(null);
+    // a plan chosen by the member starts clean; a re-preview keeps the reason it was made
+    if (again === null) setError(null);
+    setRefreshed(again);
     const request = ++requests.current;
     setPreview({ name: 'loading', code });
     apiJson<PlanChangePreview>(PLANS_API.changePreview, {
@@ -162,6 +169,21 @@ export default function ChangePlanDialog({
   const belowCount =
     ready?.change === 'schedule' && target && target.activeJourneyLimit <= subscription.inProgress;
 
+  // BR-012-16: a quote is good for a short time. When it runs out the amount is asked for again and
+  // the member confirms the new one; the old one can no longer be confirmed from the screen.
+  const quote = ready?.quote ?? null;
+  useEffect(() => {
+    if (!open || quote === null || saving) return;
+    const lifetime = Date.parse(quote.expiresAt) - Date.parse(quote.prorationDate);
+    const timer = setTimeout(
+      () => choose(quote.planCode, 'expired'),
+      Math.max(lifetime, MIN_QUOTE_LIFETIME_MS),
+    );
+    return () => clearTimeout(timer);
+    // the quote decides; `choose` closes over fresh state on purpose
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, quote, saving]);
+
   const confirm = async () => {
     if (!target) return;
     setSaving(true);
@@ -169,7 +191,21 @@ export default function ChangePlanDialog({
     try {
       const view = await apiJson<OfficeSubscription>(PLANS_API.change, {
         method: 'POST',
-        json: { planCode: target.code, officeId: subscription.officeId },
+        json: {
+          planCode: target.code,
+          officeId: subscription.officeId,
+          // an upgrade is confirmed with the quote it was shown; the server judges it again
+          ...(quote === null
+            ? {}
+            : {
+                quote: {
+                  planCode: quote.planCode,
+                  prorationDate: quote.prorationDate,
+                  amountDue: quote.amountDue,
+                  nextChargeDate: quote.nextChargeDate,
+                },
+              }),
+        },
       });
       onChanged({
         subscription: view,
@@ -180,6 +216,10 @@ export default function ChangePlanDialog({
       });
     } catch (failure: unknown) {
       setError(apiErrorMessage(failure));
+      // QUOTE_STALE: nothing was charged; the new amount is asked for and confirmed again
+      if (failure instanceof ApiError && failure.code === 'QUOTE_STALE') {
+        choose(target.code, 'changed');
+      }
     } finally {
       setSaving(false);
     }
@@ -244,6 +284,11 @@ export default function ChangePlanDialog({
                 inProgress: subscription.inProgress,
                 limit: target.activeJourneyLimit,
               })}
+            </InlineAlert>
+          ) : null}
+          {refreshed === 'expired' ? (
+            <InlineAlert severity="info" role="status">
+              {t('quoteExpired')}
             </InlineAlert>
           ) : null}
           {error ? (

@@ -154,6 +154,7 @@
     "OFFICE_CREATION_UNAVAILABLE": "A criação do escritório não está disponível agora. Nenhuma cobrança foi feita. Tente novamente mais tarde.",
     "CHANGE_PLAN_FAILED": "Não foi possível alterar o plano agora. Nada foi cobrado nem alterado. Tente novamente em instantes.",
     "CHANGE_PREVIEW_FAILED": "Não foi possível calcular o valor da mudança agora. Nada foi cobrado nem alterado. Tente novamente em instantes.",
+    "QUOTE_STALE": "O valor mudou. Confira o novo valor e confirme de novo.",
     "BILLING_HISTORY_UNAVAILABLE": "Não foi possível carregar o histórico de cobranças agora. Tente novamente em instantes.",
     "CANCEL_IN_PROGRESS": "Outro membro já está cancelando este plano. Aguarde alguns instantes e confira o resultado.",
     "BILLING_PORTAL_FAILED": "Não foi possível abrir a página de pagamento. Tente novamente em instantes.",
@@ -772,7 +773,8 @@
       "effectDowngrade": "Vale a partir do próximo período (<date></date>). Até lá, o plano atual continua.",
       "effectDowngradeNoDate": "Vale a partir do próximo período. Até lá, o plano atual continua.",
       "effectRelease": "A mudança agendada é desfeita e o plano atual continua.",
-      "effectKeep": "Esta mudança já está agendada."
+      "effectKeep": "Esta mudança já está agendada.",
+      "quoteExpired": "Passou algum tempo, então o valor foi calculado de novo. Confira e confirme de novo."
     },
     "toast": {
       "upgrade": "Mudança para o plano {name} solicitada",
