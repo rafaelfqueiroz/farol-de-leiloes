@@ -485,7 +485,9 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
       await t.service.handleProviderEvent(changed('evt_2'));
 
       // No 503: the second event is acknowledged at once, the holder has not written anything yet.
-      expect(t.ledger.ledger.get('evt_2')?.processedAt).toEqual(NOW);
+      // It is NOT stamped processed: it did not read the provider, so only a sync that succeeds
+      // may complete an event (SC-11); the holder's own event is stamped when the holder is done.
+      expect(t.ledger.ledger.get('evt_2')?.processedAt).toBeUndefined();
       expect(t.subscriptions.get(pending.id).status).toBe('PENDING');
       expect(t.subscriptions.requested.has(pending.id)).toBe(true);
 
@@ -501,6 +503,50 @@ describe('SubscriptionsService (SPEC-012 webhook)', () => {
         syncLeaseToken: null,
       });
       expect(t.subscriptions.requested.size).toBe(0);
+    });
+
+    it("BR-012-13, SC-11: a covered duplicate of the SAME event never completes it before the covering sync succeeds: the holder's failure and redelivery still activate the subscription", async () => {
+      const pending = await t.startCheckout(OFFICE);
+      t.providerHas(pending.id);
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      // A: the first delivery of evt_1 holds the lease inside its provider read, which will fail.
+      let readsSeen = 0;
+      t.gateway.onRetrieve = async () => {
+        readsSeen += 1;
+        if (readsSeen === 1) {
+          await held;
+          throw new Error('provider temporarily unavailable');
+        }
+      };
+      const a = t.service.handleProviderEvent(completed('evt_1', pending.id));
+      const aResult = a.then(
+        () => 'fulfilled',
+        () => 'rejected',
+      );
+      await vi.waitFor(() => expect(readsSeen).toBe(1));
+
+      // B: the SAME event delivered again while A is in flight. The ledger claim refuses it
+      // (WEBHOOK_BUSY, the provider retries it later) and it must not stamp the row A is still
+      // processing; on a base without the claim it would be covered and acknowledged, which must
+      // not stamp the row either.
+      await expect(
+        t.service.handleProviderEvent(completed('evt_1', pending.id)),
+      ).rejects.toMatchObject({ code: 'WEBHOOK_BUSY' });
+      expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
+
+      // A's read fails: the delivery answers 5xx and nothing was synced.
+      release();
+      expect(await aResult).toBe('rejected');
+      expect(t.subscriptions.get(pending.id).status).toBe('PENDING');
+      expect(t.ledger.ledger.get('evt_1')?.processedAt).toBeUndefined();
+
+      // The provider redelivers the event: it is handled in full this time.
+      await t.service.handleProviderEvent(completed('evt_1', pending.id));
+      expect(t.subscriptions.get(pending.id).status).toBe('ACTIVE');
+      expect(t.ledger.ledger.get('evt_1')?.processedAt).toEqual(NOW);
     });
 
     it('a request left on a lease that was just freed matches nothing: the delivery takes the lease itself', async () => {
