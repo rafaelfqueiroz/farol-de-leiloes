@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import type { CheerioAPI } from 'cheerio';
 // SC-24: plain puppeteer, undisguised — no stealth plugin, no user-agent spoofing, no evasion
 // flags. Puppeteer 25 is ESM-only, imported natively (#63).
 import puppeteer from 'puppeteer';
@@ -54,14 +55,11 @@ export function scrapeAuctionDetails(html: string): ScrapedDetails {
 
     // Extract description
     // Format: <p style="margin-bottom: 0.5em;"><strong>Descrição:</strong><br>...</p>
-    const description = relatedBoxHtml.match(
-      /<strong>Descrição:<\/strong><br\s*\/?>([\s\S]*?)<\/p>/i,
-    )?.[1];
+    // SC-19: read as text from the parsed DOM. Stripping tags with a regex leaves markup behind
+    // when the input nests one tag inside another (CodeQL js/incomplete-multi-character-sanitization).
+    const description = extractDescription($, relatedBox);
     if (description !== undefined) {
-      details.description = description
-        .replace(/&nbsp;/g, ' ')
-        .replace(/<[^>]*>/g, '')
-        .trim();
+      details.description = description;
     }
 
     // Extract payment methods, expense rules, and phase dates
@@ -81,6 +79,32 @@ export function scrapeAuctionDetails(html: string): ScrapedDetails {
   }
 
   return details;
+}
+
+/**
+ * Extracts the "Descrição:" paragraph of the related-box as plain text, or undefined when the
+ * page has none. The text is what the browser would show: tags are never matched by pattern.
+ */
+function extractDescription($: CheerioAPI, relatedBox: ReturnType<CheerioAPI>): string | undefined {
+  const label = relatedBox
+    .find('strong')
+    .filter((_, el) => $(el).text().trim() === 'Descrição:')
+    .first();
+  const paragraph = label.parent('p').clone();
+  if (paragraph.length === 0) return undefined;
+
+  // The description is what follows the label and the <br> right after it.
+  paragraph.find('strong').first().remove();
+  paragraph.find('br').first().remove();
+  // Kept entity-encoded as before (&, < and > stay "&amp;", "&lt;", "&gt;"), so text that only
+  // looks like a tag after parsing is stored inert.
+  return paragraph
+    .text()
+    .replace(/\u00a0/g, ' ')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .trim();
 }
 
 /**
@@ -252,6 +276,42 @@ function extractPhaseDetails(relatedBoxHtml: string, fullHtml: string): ScrapedP
   };
 }
 
+// Host of the Radware bot-protection CDN. Compared exactly, never as a substring (SC-19).
+const RADWARE_CDN_HOST = 'cdn.perfdrive.com';
+
+/** True when a URL-valued attribute points at the Radware CDN over http(s). */
+function loadsFromRadwareCdn(rawUrl: string): boolean {
+  try {
+    // The base makes a protocol-relative URL ("//host/x") parse; a relative one lands on Caixa.
+    const url = new URL(rawUrl.trim(), 'https://venda-imoveis.caixa.gov.br');
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') && url.hostname === RADWARE_CDN_HOST
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Recognises the Radware / ShieldSquare challenge page served in place of the auction page.
+ * SC-19 / CodeQL js/incomplete-url-substring-sanitization: the CDN is recognised by the parsed
+ * host of a resource the page loads, so a look-alike host or the name in a query string or in
+ * text does not count.
+ */
+function isBotProtectionPage(html: string): boolean {
+  if (html.includes('Radware Bot Manager') || html.includes('ShieldSquare')) return true;
+
+  const $ = cheerio.load(html);
+  return $('[src], [href]')
+    .toArray()
+    .some((el) => {
+      const node = $(el);
+      return [node.attr('src'), node.attr('href')].some(
+        (value) => value !== undefined && loadsFromRadwareCdn(value),
+      );
+    });
+}
+
 /**
  * Fetches the HTML content of an auction details page from Caixa website
  */
@@ -273,11 +333,7 @@ async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
     }
     const html = await page.content();
 
-    if (
-      html.includes('Radware Bot Manager') ||
-      html.includes('cdn.perfdrive.com') ||
-      html.includes('ShieldSquare')
-    ) {
+    if (isBotProtectionPage(html)) {
       throw new Error('Bot protection page detected instead of auction content');
     }
 
