@@ -102,7 +102,6 @@ jobs:
           GOOGLE_CALLBACK_URL: ${{ vars.GOOGLE_CALLBACK_URL }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          STRIPE_STANDARD_PRICE_ID: ${{ vars.STRIPE_STANDARD_PRICE_ID }}
           EMAIL_FROM: ${{ vars.EMAIL_FROM }}
           SMTP_HOST: ${{ vars.SMTP_HOST }}
           SMTP_PORT: ${{ vars.SMTP_PORT }}
@@ -138,6 +137,8 @@ jobs:
           NEIGHBORHOODS_CACHE_TTL: ${{ vars.NEIGHBORHOODS_CACHE_TTL }}
           SAVED_FILTERS_MAX_PER_USER: ${{ vars.SAVED_FILTERS_MAX_PER_USER }}
           UNAVAILABLE_AUCTION_RETENTION_DAYS: ${{ vars.UNAVAILABLE_AUCTION_RETENTION_DAYS }}
+          SUBSCRIPTION_GRACE_DAYS: ${{ vars.SUBSCRIPTION_GRACE_DAYS }}
+          REFUND_WINDOW_DAYS: ${{ vars.REFUND_WINDOW_DAYS }}
           LOG_LEVEL: ${{ vars.LOG_LEVEL }}
           LOG_HASH_SECRET: ${{ secrets.LOG_HASH_SECRET }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}

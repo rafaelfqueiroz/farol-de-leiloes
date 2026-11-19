@@ -65,7 +65,6 @@ export const envSchema = z
     // Payments
     STRIPE_SECRET_KEY: required,
     STRIPE_WEBHOOK_SECRET: required,
-    STRIPE_STANDARD_PRICE_ID: required,
 
     // Email
     EMAIL_FROM: required,
@@ -120,6 +119,12 @@ export const envSchema = z
     SAVED_FILTERS_MAX_PER_USER: positiveInt.default(10),
     // Days an unavailable auction is kept before the cleanup job removes it and its files.
     UNAVAILABLE_AUCTION_RETENTION_DAYS: positiveInt.default(14),
+    // SPEC-012 BR-012-28 (D-47): days an office stays fully working after its subscription lapsed,
+    // before it becomes read-only until it pays again.
+    SUBSCRIPTION_GRACE_DAYS: positiveInt.default(10),
+    // SPEC-012 BR-012-29 (D-48, Q-21): days after the first payment's confirmation in which
+    // cancelling the first subscription refunds it in full (CDC art. 49).
+    REFUND_WINDOW_DAYS: positiveInt.default(7),
 
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),

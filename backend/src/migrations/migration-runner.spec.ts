@@ -163,6 +163,7 @@ describe('assertMigrationOrder', () => {
       '0003-account-tokens',
       '0004-admin-capability',
       '0005-admin-access-indexes',
+      '0006-subscription-indexes',
     ]);
   });
 });

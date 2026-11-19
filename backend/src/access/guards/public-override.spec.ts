@@ -27,6 +27,8 @@ import { JwtStrategy } from '../../auth/strategies/jwt.strategy.js';
 import { UsersService } from '../../users/users.service.js';
 import { testConfigService } from '../../../test/support/test-env.js';
 import { AccessModule } from '../access.module.js';
+import { SubscriptionsModule } from '../../subscriptions/subscriptions.module.js';
+import { StubSubscriptionsModule } from '../../../test/support/stub-subscriptions-module.js';
 import {
   AdminOnly,
   RequiresEntitlement,
@@ -136,6 +138,10 @@ describe('SC-07: an access requirement overrides @Public() (SPEC-002)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [OverrideTestModule] })
+      // SPEC-012: AccessModule imports the subscriptions module (database, payment gateway); this
+      // spec runs the guards only, with the sources overridden below.
+      .overrideModule(SubscriptionsModule)
+      .useModule(StubSubscriptionsModule)
       .overrideProvider(MEMBERSHIP_SOURCE)
       .useValue({
         activeMemberships: (id: string) =>

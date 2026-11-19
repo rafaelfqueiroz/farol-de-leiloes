@@ -14,6 +14,12 @@ export interface BusinessConfig {
     /** Days an unavailable auction is kept before the cleanup job removes it and its files. */
     unavailableAuctionDays: number;
   };
+  subscriptions: {
+    /** SPEC-012 BR-012-28: days a lapsed office keeps working before it turns read-only. */
+    graceDays: number;
+    /** SPEC-012 BR-012-29: days after the first confirmed payment with a full refund. */
+    refundWindowDays: number;
+  };
 }
 
 export const KEY = 'BusinessConfig';
@@ -23,6 +29,10 @@ export function businessConfigFrom(env: Env): BusinessConfig {
   return {
     savedFilters: { maxPerUser: env.SAVED_FILTERS_MAX_PER_USER },
     retention: { unavailableAuctionDays: env.UNAVAILABLE_AUCTION_RETENTION_DAYS },
+    subscriptions: {
+      graceDays: env.SUBSCRIPTION_GRACE_DAYS,
+      refundWindowDays: env.REFUND_WINDOW_DAYS,
+    },
   };
 }
 

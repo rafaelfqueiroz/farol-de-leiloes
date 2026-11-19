@@ -378,7 +378,7 @@ describe('SC-10: Mongo operator injection (integration)', () => {
   });
 
   describe('UsersService', () => {
-    it('findByEmail, findByGoogleId and findByStripeCustomerId never match an operator object', async () => {
+    it('findByEmail and findByGoogleId never match an operator object', async () => {
       await users.createLocalAccount({
         email: 'ana.teste@example.test',
         name: 'Ana Teste',
@@ -386,7 +386,6 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       });
 
       await expect(users.findByGoogleId(NE_NULL)).resolves.toBeNull();
-      await expect(users.findByStripeCustomerId(NE_NULL)).resolves.toBeNull();
       await expect(users.findByEmail('ana.teste@example.test')).resolves.toMatchObject({
         name: 'Ana Teste',
       });
@@ -422,11 +421,10 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       expect(updated.phone).toBeUndefined();
     });
 
-    it('update clears the status with an explicit null, and password changes go through changePassword', async () => {
+    it('password changes go through changePassword, not update', async () => {
       const user = await users.findByEmail('ana.teste@example.test');
       const id = user?._id.toString() ?? '';
 
-      await users.update(id, { subscriptionStatus: null });
       await users.changePassword(id, 'outra-senha-de-teste', credentialVersionOf(user ?? {}));
 
       await expect(

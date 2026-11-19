@@ -94,19 +94,23 @@ describe('validateEnv', () => {
       NEIGHBORHOODS_CACHE_TTL: 600_000,
       SAVED_FILTERS_MAX_PER_USER: 10,
       UNAVAILABLE_AUCTION_RETENTION_DAYS: 14,
+      SUBSCRIPTION_GRACE_DAYS: 10,
+      REFUND_WINDOW_DAYS: 7,
     });
   });
 
   describe('business settings (AR-43)', () => {
-    it.each(['SAVED_FILTERS_MAX_PER_USER', 'UNAVAILABLE_AUCTION_RETENTION_DAYS'])(
-      '%s is a positive integer',
-      (key) => {
-        expect(testEnv({ [key]: '25' })[key as 'SAVED_FILTERS_MAX_PER_USER']).toBe(25);
-        for (const bad of ['0', '-1', '1.5', 'many']) {
-          expect(errorOf({ ...TEST_ENV, [key]: bad })).toContain(`${key}:`);
-        }
-      },
-    );
+    it.each([
+      'SAVED_FILTERS_MAX_PER_USER',
+      'UNAVAILABLE_AUCTION_RETENTION_DAYS',
+      'SUBSCRIPTION_GRACE_DAYS',
+      'REFUND_WINDOW_DAYS',
+    ])('%s is a positive integer', (key) => {
+      expect(testEnv({ [key]: '25' })[key as 'SAVED_FILTERS_MAX_PER_USER']).toBe(25);
+      for (const bad of ['0', '-1', '1.5', 'many']) {
+        expect(errorOf({ ...TEST_ENV, [key]: bad })).toContain(`${key}:`);
+      }
+    });
 
     it('treats an empty value as unset and takes the default', () => {
       expect(testEnv({ SAVED_FILTERS_MAX_PER_USER: '' }).SAVED_FILTERS_MAX_PER_USER).toBe(10);
@@ -264,12 +268,22 @@ describe('namespaced configs built from the validated environment', () => {
     expect(businessConfigFrom(testEnv())).toEqual({
       savedFilters: { maxPerUser: 10 },
       retention: { unavailableAuctionDays: 14 },
+      subscriptions: { graceDays: 10, refundWindowDays: 7 },
     });
     expect(
       businessConfigFrom(
-        testEnv({ SAVED_FILTERS_MAX_PER_USER: '3', UNAVAILABLE_AUCTION_RETENTION_DAYS: '60' }),
+        testEnv({
+          SAVED_FILTERS_MAX_PER_USER: '3',
+          UNAVAILABLE_AUCTION_RETENTION_DAYS: '60',
+          SUBSCRIPTION_GRACE_DAYS: '5',
+          REFUND_WINDOW_DAYS: '14',
+        }),
       ),
-    ).toEqual({ savedFilters: { maxPerUser: 3 }, retention: { unavailableAuctionDays: 60 } });
+    ).toEqual({
+      savedFilters: { maxPerUser: 3 },
+      retention: { unavailableAuctionDays: 60 },
+      subscriptions: { graceDays: 5, refundWindowDays: 14 },
+    });
   });
 
   it('maps the R2 settings', () => {

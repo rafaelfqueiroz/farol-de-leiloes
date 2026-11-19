@@ -14,7 +14,9 @@ import { decideGoogleLink } from './domain/google-link.js';
 // through the fenced, version-bumping methods (setPassword, changePassword, linkGoogleIdentity),
 // so no write of a credential can skip the credential version (DL-001-02, BR-001-31).
 // SPEC-002 BR-002-21: `isAdmin` is never here either; only setAdminCapability writes it.
-const TEXT_FIELDS = ['name', 'role', 'stripeCustomerId', 'stripeSubscriptionId', 'phone'] as const;
+// SPEC-012 BR-012-14: `role`, `subscriptionStatus` and the Stripe ids are not here: the plan is the
+// office's and changes only through the provider-confirmed sync.
+const TEXT_FIELDS = ['name', 'phone'] as const;
 
 // SC-01: bcrypt, cost >= 10. The one place a password is hashed.
 const BCRYPT_COST = 10;
@@ -96,11 +98,6 @@ export class UsersService {
     // SC-10: an id is text; an operator object is nobody's.
     if (typeof googleId !== 'string') return null;
     return this.userRepository.findOne({ googleId: { $eq: googleId } }).exec();
-  }
-
-  async findByStripeCustomerId(stripeCustomerId: string): Promise<UserDocument | null> {
-    if (typeof stripeCustomerId !== 'string') return null;
-    return this.userRepository.findOne({ stripeCustomerId: { $eq: stripeCustomerId } }).exec();
   }
 
   async findByIdFull(id: string): Promise<UserDocument | null> {
@@ -332,11 +329,11 @@ export class UsersService {
   }
 
   /**
-   * Internal writes by named server flows (payments: Stripe ids and subscription status). It is
-   * never reached from a request body: the profile goes through `updateProfile` (BR-001-29,
-   * BR-001-31). The email is not here at all: it cannot be changed (BR-001-26, D-63). Neither are
-   * the legacy cpf, dateOfBirth, sex and address: stored, unused and written by nothing until
-   * SPEC-010 decides their fate (BR-010-06).
+   * Internal writes by named server flows. It is never reached from a request body: the profile
+   * goes through `updateProfile` (BR-001-29, BR-001-31). The email is not here at all: it cannot
+   * be changed (BR-001-26, D-63). Neither are the legacy cpf, dateOfBirth, sex and address: stored,
+   * unused and written by nothing until SPEC-010 decides their fate (BR-010-06). And no plan or
+   * subscription field: those are an office's and follow the provider (SPEC-012 BR-012-14).
    */
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserDocument> {
     // SC-10: the update is built field by field from a whitelist, never the DTO object itself, so
@@ -409,10 +406,6 @@ export class UsersService {
       const value: unknown = dto[key];
       if (typeof value === 'string') fields[key] = value;
     }
-
-    // Stripe's status is cleared with an explicit null, which is a value here, not "absent".
-    const status: unknown = dto.subscriptionStatus;
-    if (typeof status === 'string' || status === null) fields.subscriptionStatus = status;
 
     return fields;
   }

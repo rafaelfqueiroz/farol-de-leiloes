@@ -6,6 +6,11 @@ import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import request from 'supertest';
 import { UserEntity, type UserDocument } from '../../src/users/schemas/user.schema.js';
+import {
+  SubscriptionEntity,
+  type SubscriptionDocument,
+} from '../../src/subscriptions/schemas/subscription.schema.js';
+import { PaymentsModule } from '../../src/payments/payments.module.js';
 import { createAuthTestApp, type AuthTestApp } from '../support/auth-test-app.js';
 import { useTestDatabase } from '../support/test-database.js';
 
@@ -15,6 +20,7 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
   const db = useTestDatabase();
   let harness: AuthTestApp;
   let users: Model<UserDocument>;
+  let subscriptions: Model<SubscriptionDocument>;
   let counter = 0;
 
   const server = () => harness.app.getHttpServer() as Parameters<typeof request>[0];
@@ -39,8 +45,10 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
   const stored = (email: string) => users.collection.findOne({ email });
 
   beforeAll(async () => {
-    harness = await createAuthTestApp(db);
+    // The payments module is loaded too: its removed user routes must really be gone.
+    harness = await createAuthTestApp(db, [PaymentsModule]);
     users = harness.moduleRef.get(getModelToken(UserEntity.name));
+    subscriptions = harness.moduleRef.get(getModelToken(SubscriptionEntity.name));
   });
 
   afterAll(async () => {
@@ -75,6 +83,21 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
     ['admin', true],
     ['isAdmin', true], // SPEC-002 BR-002-21: only the grant-admin script sets it
     ['personas', ['advisor']], // SPEC-002 BR-002-14: derived, never stored
+    // SPEC-012 BR-012-14: a plan, a subscription state and a limit belong to an office and follow
+    // the provider; no profile request can set any of them.
+    ['planCode', 'escritorio-5'],
+    ['subscription', { status: 'ACTIVE', activeJourneyLimit: 99 }],
+    ['subscriptionId', '64b7f0000000000000000dd1'],
+    ['activeJourneyLimit', 99],
+    ['journeyLimit', 99],
+    ['advisorPlanActive', true],
+    ['readOnly', false],
+    ['readOnlyAt', '2099-01-01T00:00:00.000Z'],
+    ['lapsedAt', '2099-01-01T00:00:00.000Z'],
+    ['entitlements', ['advisor']],
+    ['officeId', '64b7f0000000000000000c01'],
+    ['stripePriceId', 'price_hostile'],
+    ['cancelAtPeriodEnd', false],
   ])(
     'BR-001-29: a body with %s is refused as a whole; the stored account is identical',
     async (field, value) => {
@@ -267,5 +290,106 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
     for (const secret of ['password', 'status', 'pendingEmail', 'googleId', 'stripeCustomerId']) {
       expect(response.body).not.toHaveProperty(secret);
     }
+  });
+
+  // SPEC-012 BR-012-14, acceptance: "a request to any account or profile endpoint that tries to
+  // set plan, subscription state or limit is rejected, and the stored values are unchanged". The
+  // other account endpoints take closed DTOs too (whitelist + forbidNonWhitelisted, AR-34).
+  describe('SPEC-012 BR-012-14: no account endpoint sets a plan, a subscription or a limit', () => {
+    const HOSTILE_PLAN_FIELDS = {
+      role: 'premium',
+      subscriptionStatus: 'active',
+      planCode: 'escritorio-5',
+      activeJourneyLimit: 99,
+      stripeSubscriptionId: 'sub_hostile',
+    };
+
+    /** A subscription the provider sync owns, to prove no request touches it. */
+    async function seededSubscription() {
+      return subscriptions.collection.insertOne({
+        buyerUserId: new subscriptions.base.Types.ObjectId(),
+        planId: new subscriptions.base.Types.ObjectId(),
+        planCode: 'escritorio-2',
+        activeJourneyLimit: 2,
+        status: 'ACTIVE',
+        cancelAtPeriodEnd: false,
+      });
+    }
+
+    it('registration refuses plan fields and creates no account', async () => {
+      const email = 'hostile-register@example.test';
+
+      const response = await request(server())
+        .post('/api/auth/register')
+        .send({ email, password: PASSWORD, name: 'Ana', acceptTerms: true, ...HOSTILE_PLAN_FIELDS })
+        .expect(400);
+
+      expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+      expect(await stored(email)).toBeNull();
+    });
+
+    it.each([
+      ['change-password', { currentPassword: PASSWORD, newPassword: 'a brand new password' }],
+      ['set-password', { newPassword: 'a brand new password' }],
+    ])(
+      '%s refuses plan fields; the account and every subscription are unchanged',
+      async (route, body) => {
+        const { email, token } = await account();
+        const before = await stored(email);
+        const subscription = await seededSubscription();
+        const subscriptionBefore = await subscriptions.collection.findOne({
+          _id: subscription.insertedId,
+        });
+        const countBefore = await subscriptions.countDocuments();
+
+        const response = await request(server())
+          .post(`/api/auth/${route}`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ ...body, ...HOSTILE_PLAN_FIELDS })
+          .expect(400);
+
+        expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+        expect(await stored(email)).toEqual(before);
+        expect(await subscriptions.countDocuments()).toBe(countBefore);
+        expect(await subscriptions.collection.findOne({ _id: subscription.insertedId })).toEqual(
+          subscriptionBefore,
+        );
+      },
+    );
+
+    it('a profile request that carries plan fields leaves the account and every subscription untouched', async () => {
+      const { email, token } = await account();
+      const before = await stored(email);
+      const subscription = await seededSubscription();
+      const subscriptionBefore = await subscriptions.collection.findOne({
+        _id: subscription.insertedId,
+      });
+
+      await patch(token, { name: 'Ana Renomeada', ...HOSTILE_PLAN_FIELDS }).expect(400);
+
+      expect(await stored(email)).toEqual(before);
+      expect(await subscriptions.collection.findOne({ _id: subscription.insertedId })).toEqual(
+        subscriptionBefore,
+      );
+      expect(before).toMatchObject({ role: 'free', subscriptionStatus: null });
+    });
+
+    it('no plan route exists on /api/auth or /api/payments for a user: the webhook is the only way', async () => {
+      const { token } = await account();
+
+      for (const [method, path] of [
+        ['post', '/api/payments/create-checkout-session'],
+        ['get', '/api/payments/subscription-status'],
+        ['post', '/api/payments/cancel-subscription'],
+        ['post', '/api/auth/subscription'],
+        ['patch', '/api/auth/plan'],
+      ] as const) {
+        const agent = request(server());
+        await agent[method](path)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ planId: 'standard', role: 'premium' })
+          .expect(404);
+      }
+    });
   });
 });

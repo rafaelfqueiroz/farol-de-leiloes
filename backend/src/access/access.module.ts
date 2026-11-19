@@ -1,4 +1,6 @@
 import { Global, Module } from '@nestjs/common';
+import { SubscriptionOfficePlanSource } from '../subscriptions/subscription-office-plan.source.js';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
 import { AccessContextFactory } from './access-context.js';
 import { AccessContextGuard } from './guards/access-context.guard.js';
 import { AdminGuard } from './guards/admin.guard.js';
@@ -6,7 +8,7 @@ import { EntitlementGuard } from './guards/entitlement.guard.js';
 import { PersonaGuard } from './guards/persona.guard.js';
 import { CLIENT_LINK_SOURCE, NoClientLinkSource } from './sources/client-link.source.js';
 import { MEMBERSHIP_SOURCE, NoMembershipSource } from './sources/membership.source.js';
-import { NoOfficePlanSource, OFFICE_PLAN_SOURCE } from './sources/office-plan.source.js';
+import { OFFICE_PLAN_SOURCE } from './sources/office-plan.source.js';
 import { NoSelfAdvisedSource, SELF_ADVISED_SOURCE } from './sources/self-advised.source.js';
 import {
   NoSupportRequestSource,
@@ -22,7 +24,8 @@ import {
  *   MEMBERSHIP_SOURCE    SPEC-011 current office memberships
  *   CLIENT_LINK_SOURCE   SPEC-011 active/ended client links; SPEC-016 journeys as investor
  *   SELF_ADVISED_SOURCE  SPEC-011 self-advised status
- *   OFFICE_PLAN_SOURCE   SPEC-012 advisor plan, read-only state and entitlements
+ *   OFFICE_PLAN_SOURCE   SPEC-012 advisor plan, read-only state and entitlements (BOUND below, to
+ *                        the subscriptions module's SubscriptionOfficePlanSource)
  *   SUPPORT_REQUEST_SOURCE  SPEC-009 support requests a support access grant hangs on (BR-002-24)
  *
  * BINDINGS (BR-002-21): a spec plugs its implementation in HERE, by replacing the default line below
@@ -37,6 +40,10 @@ import {
  */
 @Global()
 @Module({
+  // SPEC-012: the office plan comes from the subscriptions module. SubscriptionsModule imports
+  // nothing of auth or access, so this adds no cycle with AuthModule; AccessModule is also what
+  // `npm run grant-admin` imports, so both read the same plan source.
+  imports: [SubscriptionsModule],
   providers: [
     AccessContextFactory,
     AccessContextGuard,
@@ -46,7 +53,7 @@ import {
     { provide: MEMBERSHIP_SOURCE, useClass: NoMembershipSource },
     { provide: CLIENT_LINK_SOURCE, useClass: NoClientLinkSource },
     { provide: SELF_ADVISED_SOURCE, useClass: NoSelfAdvisedSource },
-    { provide: OFFICE_PLAN_SOURCE, useClass: NoOfficePlanSource },
+    { provide: OFFICE_PLAN_SOURCE, useExisting: SubscriptionOfficePlanSource },
     { provide: SUPPORT_REQUEST_SOURCE, useClass: NoSupportRequestSource },
   ],
   exports: [

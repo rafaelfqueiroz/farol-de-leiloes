@@ -5,6 +5,7 @@
 // that the grant write itself is conditional (TOCTOU), and that a revoke resets the legacy
 // `role: 'admin'` so a re-run of migration 0004 cannot re-grant it.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ConfigModule } from '@nestjs/config';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Model } from 'mongoose';
@@ -15,6 +16,7 @@ import { copyAdminRoleToFlag } from '../../src/migrations/0004-admin-capability.
 import { UserEntity, UserSchema, type UserDocument } from '../../src/users/schemas/user.schema.js';
 import { UsersService } from '../../src/users/users.service.js';
 import { useTestDatabase } from '../support/test-database.js';
+import { testEnv } from '../support/test-env.js';
 
 describe('grant-admin (integration, SPEC-002 DL-002-05)', () => {
   const db = useTestDatabase();
@@ -43,6 +45,11 @@ describe('grant-admin (integration, SPEC-002 DL-002-05)', () => {
     applyMongooseDefaults();
     moduleRef = await Test.createTestingModule({
       imports: [
+        // The shape of GrantAdminModule (src/access/grant-admin/grant-admin.module.ts): the
+        // validated configuration and the connection, UsersModule's models and AccessModule. Since
+        // SPEC-012 AccessModule loads the subscriptions module (the real OFFICE_PLAN_SOURCE),
+        // which needs both, so this also proves it resolves in the script's context.
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: () => testEnv() }),
         MongooseModule.forRoot(db.uri),
         MongooseModule.forFeature([{ name: UserEntity.name, schema: UserSchema }]),
         AccessModule,
