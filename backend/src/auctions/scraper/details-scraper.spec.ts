@@ -107,4 +107,50 @@ describe('Details Scraper', () => {
       expect(details.description?.length).toBeGreaterThan(0);
     });
   });
+  // SC-19 / CodeQL js/incomplete-multi-character-sanitization: the description is plain text, so
+  // nothing a crafted page nests inside a tag may survive as markup.
+  describe('description markup stripping', () => {
+    const pageWithDescription = (description: string) =>
+      `<html><body><div class="related-box"><p><strong>Descrição:</strong><br>${description}</p></div></body></html>`;
+
+    it('keeps the text and drops the tags of an ordinary description', () => {
+      const details = scrapeAuctionDetails(
+        pageWithDescription('2 Quartos,&nbsp;<b>Sala</b><br>Cozinha  '),
+      );
+
+      expect(details.description).toBe('2 Quartos, SalaCozinha');
+    });
+
+    // What is left is what a browser would show as text, so no tag name can be rebuilt from it.
+    it.each([
+      '<scr<script>ipt>alert(1)</scr</script>ipt>',
+      '<<b>script>alert(1)<</b>/script>',
+      '<img src=x onerror=alert(1)//<b>>',
+      '<scr<scr<script>ipt>ipt>alert(1)',
+    ])('leaves no tag behind for the nested input %s', (input) => {
+      const description = scrapeAuctionDetails(pageWithDescription(input)).description ?? '';
+
+      expect(description).not.toMatch(/[<>]/);
+    });
+
+    it('keeps text that only looks like a tag after parsing inert', () => {
+      const details = scrapeAuctionDetails(pageWithDescription('<<b>script>alert(1)<</b>/script>'));
+
+      expect(details.description).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
+    });
+
+    it('keeps an ampersand entity-encoded as before', () => {
+      const details = scrapeAuctionDetails(pageWithDescription('Sala &amp; Cozinha'));
+
+      expect(details.description).toBe('Sala &amp; Cozinha');
+    });
+
+    it('drops the markup a nested tag would have left behind', () => {
+      const details = scrapeAuctionDetails(
+        pageWithDescription('<scr<script>ipt>alert(1)</scr</script>ipt>'),
+      );
+
+      expect(details.description).toBe('ipt&gt;alert(1)ipt&gt;');
+    });
+  });
 });

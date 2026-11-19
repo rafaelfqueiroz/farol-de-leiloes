@@ -75,5 +75,45 @@ describe('fetchAndCheckAvailability', () => {
       );
       expect(close).toHaveBeenCalled();
     });
+
+    // SC-19 / CodeQL js/incomplete-url-substring-sanitization: the Radware CDN is recognised by the
+    // exact host of a loaded resource, never by the host name appearing anywhere in the markup.
+    describe('Radware CDN detection', () => {
+      const page = (body: string) => `<html><body>${body}</body></html>`;
+      const BOT = 'Bot protection page detected instead of auction content';
+
+      it.each([
+        ['an https script', '<script src="https://cdn.perfdrive.com/aperture/a.js"></script>'],
+        ['a protocol-relative script', '<script src="//cdn.perfdrive.com/a.js"></script>'],
+        ['an upper-case host', '<script src="https://CDN.PERFDRIVE.COM/a.js"></script>'],
+        ['a stylesheet', '<link rel="stylesheet" href="https://cdn.perfdrive.com/a.css">'],
+        ['an iframe', '<iframe src="http://cdn.perfdrive.com/c"></iframe>'],
+      ])('rejects a page loading %s from the CDN', async (_name, body) => {
+        mockBrowser(OK, page(body));
+
+        await expect(fetchAndCheckAvailability(URL)).rejects.toThrow(BOT);
+      });
+
+      it.each([
+        ['a look-alike sub-domain', 'https://cdn.perfdrive.com.evil.com/a.js'],
+        ['the host in the query string', 'https://evil.com/?x=cdn.perfdrive.com'],
+        ['the host in the path', 'https://evil.com/cdn.perfdrive.com/a.js'],
+        ['the host as user info', 'https://cdn.perfdrive.com@evil.com/a.js'],
+        ['a prefixed host', 'https://evilcdn.perfdrive.com/a.js'],
+        ['a javascript: URL', 'javascript:void("cdn.perfdrive.com")'],
+        ['a data: URL', 'data:text/javascript,//cdn.perfdrive.com'],
+        ['an ftp: URL', 'ftp://cdn.perfdrive.com/a.js'],
+      ])('does not take %s for the CDN', async (_name, src) => {
+        mockBrowser(OK, page(`<script src="${src}"></script>`));
+
+        await expect(fetchAndCheckAvailability(URL)).resolves.toBe(true);
+      });
+
+      it('does not take the host name in page text for the CDN', async () => {
+        mockBrowser(OK, page('<p>Veja https://evil.com/?x=cdn.perfdrive.com</p>'));
+
+        await expect(fetchAndCheckAvailability(URL)).resolves.toBe(true);
+      });
+    });
   });
 });
