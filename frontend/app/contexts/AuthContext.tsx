@@ -122,6 +122,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void loadUser();
   }, [loadUser]);
 
+  // The sign-in and registration answers carry the profile only: no `personas`, which the server
+  // derives on each GET /api/auth/me (SPEC-002 BR-002-14). The pages decide what to offer from them
+  // (an office member's plan, the navigation, the billing notice), so they are read BEFORE the
+  // sign-in resolves and the caller navigates; a failed read leaves the profile as the answer had it.
+  // It does not start a new session lookup (no generation bump, no loading): it asks /me once and
+  // merges the two capability fields, and only if the session it was asked under is still current.
+  const readCapabilities = async (profile: User) => {
+    const generation = currentAuthGeneration();
+    try {
+      const response = await apiFetch('/api/auth/me');
+      if (!response.ok) return;
+      const me: { isAdmin?: boolean; personas?: string[] } = await response.json();
+      if (currentAuthGeneration() !== generation) return;
+      setUser((current) =>
+        current?._id === profile._id
+          ? {
+              ...current,
+              ...(Array.isArray(me.personas) ? { personas: me.personas } : {}),
+              ...(typeof me.isAdmin === 'boolean' ? { isAdmin: me.isAdmin } : {}),
+            }
+          : current,
+      );
+    } catch (error) {
+      reportClientError(error, { where: 'AuthContext.readCapabilities' });
+    }
+  };
+
   // The BFF has set the cookie from the backend's token; the answer carries the user only.
   const login = async (email: string, password: string) => {
     const data = await apiJson<{ user: User }>('/api/auth/login', {
@@ -130,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     bumpAuthGeneration(); // BR-001-18: calls started before this sign-in are stale now
     setUser(data.user);
+    await readCapabilities(data.user);
   };
 
   const register = async (email: string, password: string, name: string) => {
@@ -140,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     bumpAuthGeneration(); // BR-001-18: calls started before this registration are stale now
     setUser(data.user);
+    await readCapabilities(data.user);
   };
 
   const logout = async () => {

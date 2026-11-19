@@ -1,6 +1,6 @@
 import EventOutlined from '@mui/icons-material/EventOutlined';
 import InventoryOutlined from '@mui/icons-material/Inventory2Outlined';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { axe, renderWithProviders } from '@/test/render';
@@ -166,5 +166,25 @@ describe('ConfirmDialog', () => {
 
     expect(onConfirm).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('owner review #173: the safe action cannot dismiss the dialog while the confirmed action runs', async () => {
+    const { onClose, onConfirm } = renderDialog({ busy: true, busyLabel: 'Cancelando…' });
+
+    const keep = screen.getByRole('button', { name: 'Manter jornada' });
+    expect(keep).toBeDisabled();
+    fireEvent.click(keep); // a click that reaches it anyway does nothing
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByRole('alertdialog')).toBeVisible();
+  });
+
+  it('shows the error of a failed action inside the dialog as an alert, and keeps the dialog open', async () => {
+    renderDialog({ error: 'Não foi possível cancelar.' });
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Não foi possível cancelar.');
+    expect(await axe(dialog)).toHaveNoViolations();
   });
 });

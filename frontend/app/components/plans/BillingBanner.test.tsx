@@ -6,6 +6,7 @@ import { notifyBillingChanged } from '@/lib/billing-events';
 import messages from '@/messages/pt-BR.json';
 import { axe, renderWithProviders as render } from '@/test/render';
 import BillingBanner, { billingNoticeOf } from './BillingBanner';
+import type { OfficeSubscription } from './plans-api';
 import { aSubscription, routedApi, type Handler } from './plans-test-support';
 
 // SPEC-012 owner decision 1 (frame o18): the billing notices of an office in the shell's banner.
@@ -188,6 +189,52 @@ describe('BillingBanner', () => {
     act(() => notifyBillingChanged());
 
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
+  it('owner review #173: an older read that resolves after a newer one never brings the notice back', async () => {
+    const answers: Array<(value: OfficeSubscription) => void> = [];
+    env.api = vi.fn(
+      () =>
+        new Promise<OfficeSubscription>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    render(<BillingBanner>{FALLBACK}</BillingBanner>);
+    await waitFor(() => expect(answers).toHaveLength(1));
+    // the refresh an action triggered overtakes the initial read
+    act(() => notifyBillingChanged());
+    await waitFor(() => expect(answers).toHaveLength(2));
+
+    await act(async () => {
+      answers[1]?.(aSubscription()); // the newer read: ACTIVE
+    });
+    await act(async () => {
+      answers[0]?.(PAST_DUE); // the older read, late: PAST_DUE
+    });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Confirme seu e-mail')).toBeVisible();
+  });
+
+  it('an answer made for the previous member is dropped when the member changes', async () => {
+    let answer: (value: OfficeSubscription) => void = () => undefined;
+    env.api = vi.fn(
+      () =>
+        new Promise<OfficeSubscription>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { rerender } = render(<BillingBanner>{FALLBACK}</BillingBanner>);
+    await waitFor(() => expect(env.api).toHaveBeenCalledTimes(1));
+    const late = answer;
+
+    env.auth = { isAuthenticated: true, user: { _id: 'u2' }, personas: ['searcher'] };
+    rerender(<BillingBanner>{FALLBACK}</BillingBanner>);
+    await act(async () => {
+      late(PAST_DUE);
+    });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('a plan that cannot be read says nothing in the shell; only an unexpected failure is reported', async () => {

@@ -15,6 +15,7 @@ import ListItemText from '@mui/material/ListItemText';
 import { useTranslations } from 'next-intl';
 import { useId, type ReactNode } from 'react';
 import BusyButton from './BusyButton';
+import InlineAlert from './InlineAlert';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -39,6 +40,11 @@ export interface ConfirmDialogProps {
   destructive?: boolean;
   /** The confirmed action is running: the confirm button is busy and the dialog cannot be dismissed. */
   busy?: boolean;
+  /**
+   * Why the confirmed action failed, shown inside the dialog as an `alert` so it is announced where
+   * focus is (the dialog traps it); the dialog stays open for another try or for the safe action.
+   */
+  error?: string | null;
   /** What the confirm button says while busy ("Cancelando…"); required with `busy`. */
   busyLabel?: string;
 }
@@ -57,6 +63,7 @@ export default function ConfirmDialog({
   destructive = true,
   busy = false,
   busyLabel,
+  error = null,
 }: ConfirmDialogProps) {
   const t = useTranslations('patterns.confirmDialog');
   const titleId = useId();
@@ -93,10 +100,17 @@ export default function ConfirmDialog({
             </List>
           ) : null}
         </Box>
+        {error ? (
+          <Box sx={{ mt: 2 }}>
+            <InlineAlert severity="error" role="alert">
+              {error}
+            </InlineAlert>
+          </Box>
+        ) : null}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         {/* eslint-disable-next-line jsx-a11y/no-autofocus -- an alertdialog opens on its safe action, never the destructive one (DS-21) */}
-        <Button variant="outlined" onClick={onClose} autoFocus>
+        <Button variant="outlined" onClick={onClose} disabled={busy} autoFocus>
           {cancelLabel ?? t('cancel')}
         </Button>
         <BusyButton

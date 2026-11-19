@@ -1011,7 +1011,8 @@
         "grace": "Por {days, plural, one {# dia} other {# dias}}, as jornadas em andamento e os cadastros continuam funcionando. Depois, o escritório fica somente leitura.",
         "confirm": "Cancelar e receber reembolso",
         "confirming": "Cancelando…"
-      }
+      },
+      "changed": "As condições do cancelamento mudaram. Confira o texto e confirme de novo."
     },
     "empty": {
       "title": "Você ainda não tem um escritório",

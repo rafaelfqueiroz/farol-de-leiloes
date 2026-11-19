@@ -110,6 +110,8 @@ export default function OfficePlanPage() {
   const [busy, setBusy] = useState<'cancel' | 'undoCancel' | 'undoChange' | 'portal' | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // the cancellation's own error and notice live in its dialog, where focus is (an alert inside it)
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingUpgrade | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
 
@@ -130,7 +132,7 @@ export default function OfficePlanPage() {
     }
     const timer = setInterval(() => {
       if (Date.now() - pending.startedAt >= UPGRADE_MAX_WAIT_MS) setPending(null);
-      else office.reload({ quiet: true });
+      else void office.reload({ quiet: true });
     }, UPGRADE_POLL_INTERVAL_MS);
     return () => clearInterval(timer);
     // `pending` and `planCode` are what decide; `office.reload` is stable for the path
@@ -150,11 +152,48 @@ export default function OfficePlanPage() {
       if (success) setNotice({ kind: 'success', message: success });
       setHistoryKey((key) => key + 1);
       notifyBillingChanged();
-      office.reload({ quiet: true });
+      void office.reload({ quiet: true });
       return true;
     } catch (error: unknown) {
       setActionError(apiErrorMessage(error));
       return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * BR-012-29: what cancelling does depends on the moment (the right of withdrawal runs out), and
+   * the server decides it again at the request. So (1) the plan is read again first: if what the
+   * dialog promised (a refund, or none) is no longer true, nothing is sent: the dialog shows the
+   * new text and asks to confirm again; (2) the message that follows comes from what the server
+   * ANSWERED (the plan ended now with the refund, or ends with the period), never from the
+   * eligibility the page was holding.
+   */
+  const cancel = async (promisedRefund: boolean) => {
+    setBusy('cancel');
+    setCancelError(null);
+    try {
+      const fresh = await office.reload({ quiet: true });
+      if (fresh?.name === 'ready' && (fresh.data.refundEligibleUntil !== null) !== promisedRefund) {
+        setCancelError(t('cancel.changed'));
+        return;
+      }
+      const answer = await apiJson<OfficeSubscription>(PLANS_API.cancel, {
+        method: 'POST',
+        json: { officeId: s.officeId },
+      });
+      // LAPSED straight after a cancel is the refund path (the plan ended at once)
+      setNotice({
+        kind: 'success',
+        message: t(answer.status === 'LAPSED' ? 'toast.canceledRefund' : 'toast.canceled'),
+      });
+      setCancelOpen(false);
+      setHistoryKey((key) => key + 1);
+      notifyBillingChanged();
+      void office.reload({ quiet: true });
+    } catch (error: unknown) {
+      setCancelError(apiErrorMessage(error));
     } finally {
       setBusy(null);
     }
@@ -199,7 +238,7 @@ export default function OfficePlanPage() {
     if (change === 'upgrade' && view.plan.code !== targetCode) {
       setPending({ code: targetCode, name: targetName, limit: targetLimit, startedAt: Date.now() });
     }
-    office.reload({ quiet: true });
+    void office.reload({ quiet: true });
   };
 
   // ---- the states of the data ------------------------------------------------------------------
@@ -230,7 +269,7 @@ export default function OfficePlanPage() {
           title={t('error.title')}
           message={apiErrorMessage(office.state.error)}
           code={office.state.error instanceof ApiError ? office.state.error.code : undefined}
-          onRetry={() => office.reload()}
+          onRetry={() => void office.reload()}
         />
       </PageShell>
     );
@@ -643,7 +682,14 @@ export default function OfficePlanPage() {
                       : t('cancel.textNoDate')}
                 </Typography>
               </Box>
-              <Button variant="outlined" color="destructive" onClick={() => setCancelOpen(true)}>
+              <Button
+                variant="outlined"
+                color="destructive"
+                onClick={() => {
+                  setCancelError(null);
+                  setCancelOpen(true);
+                }}
+              >
                 {t('cancel.action')}
               </Button>
             </Box>
@@ -700,17 +746,12 @@ export default function OfficePlanPage() {
         }
         confirmLabel={refundNow ? t('cancel.refund.confirm') : t('cancel.dialog.confirm')}
         cancelLabel={t('cancel.dialog.keep')}
-        onClose={() => setCancelOpen(false)}
-        onConfirm={() =>
-          void act(
-            'cancel',
-            PLANS_API.cancel,
-            { officeId: s.officeId },
-            t(refundNow ? 'toast.canceledRefund' : 'toast.canceled'),
-          ).then((done) => {
-            if (done) setCancelOpen(false);
-          })
-        }
+        onClose={() => {
+          setCancelError(null);
+          setCancelOpen(false);
+        }}
+        error={cancelError}
+        onConfirm={() => void cancel(refundNow)}
       />
 
       <Snackbar open={notice !== null} autoHideDuration={6000} onClose={() => setNotice(null)}>

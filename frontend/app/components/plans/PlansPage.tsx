@@ -101,8 +101,8 @@ export default function PlansPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   const retry = () => {
-    catalogue.reload();
-    office.reload();
+    void catalogue.reload();
+    void office.reload();
   };
 
   const subscribe = async (planCode: string, officeId?: string) => {
@@ -131,7 +131,7 @@ export default function PlansPage() {
     setChangeFor(null);
     setToast(t(change === 'upgrade' ? 'toast.upgrade' : 'toast.scheduled', { name: targetName }));
     notifyBillingChanged();
-    office.reload({ quiet: true });
+    void office.reload({ quiet: true });
   };
 
   // ---- what to show while the data is not there --------------------------------------------

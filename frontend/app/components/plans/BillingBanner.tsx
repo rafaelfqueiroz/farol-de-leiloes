@@ -4,7 +4,7 @@ import Button from '@mui/material/Button';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import BusyButton from '@/app/components/patterns/BusyButton';
 import DateText from '@/app/components/patterns/DateText';
 import ShellBanner from '@/app/components/patterns/ShellBanner';
@@ -50,10 +50,17 @@ export default function BillingBanner({ children }: BillingBannerProps) {
   const [portalError, setPortalError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
 
+  // The newest read wins: an older answer that arrives late (an initial read overtaken by the
+  // refresh an action triggered, or one made for the previous account) is dropped.
+  const reads = useRef(0);
+
   const read = useCallback(async () => {
+    const mine = ++reads.current;
     try {
-      setSubscription(await apiJson<OfficeSubscription>(PLANS_API.subscription));
+      const answer = await apiJson<OfficeSubscription>(PLANS_API.subscription);
+      if (reads.current === mine) setSubscription(answer);
     } catch (error: unknown) {
+      if (reads.current !== mine) return;
       setSubscription(null);
       // an office with no plan yet, or no office: nothing to say. Anything else is worth a report.
       const quiet =
@@ -65,12 +72,18 @@ export default function BillingBanner({ children }: BillingBannerProps) {
 
   useEffect(() => {
     if (!isMember) {
+      reads.current += 1; // nothing in flight may bring a notice back
       // eslint-disable-next-line react-hooks/set-state-in-effect -- a person who is no longer a member has no notice
       setSubscription(null);
       return;
     }
     void read();
-    return onBillingChanged(() => void read());
+    const stop = onBillingChanged(() => void read());
+    return () => {
+      stop();
+      // a different member, or leaving: what is still in flight is for someone else
+      reads.current += 1;
+    };
   }, [isMember, userId, read]);
 
   const notice = subscription && pathname !== '/office/plan' ? billingNoticeOf(subscription) : null;

@@ -18,7 +18,8 @@ export type Resource<T> =
  */
 export function useApiResource<T>(path: string | null): {
   state: Resource<T>;
-  reload: (options?: { quiet?: boolean }) => void;
+  /** Reads again; resolves with what was read, or null when a newer read superseded it. */
+  reload: (options?: { quiet?: boolean }) => Promise<Resource<T> | null>;
 } {
   const [state, setState] = useState<Resource<T>>(
     path === null ? { name: 'idle' } : { name: 'loading' },
@@ -26,28 +27,30 @@ export function useApiResource<T>(path: string | null): {
   const reads = useRef(0);
 
   const load = useCallback(
-    (quiet: boolean) => {
+    async (quiet: boolean): Promise<Resource<T> | null> => {
       const read = ++reads.current;
       if (path === null) {
         setState({ name: 'idle' });
-        return;
+        return { name: 'idle' };
       }
       if (!quiet) setState({ name: 'loading' });
-      apiJson<T>(path).then(
-        (data) => {
-          if (reads.current === read) setState({ name: 'ready', data });
-        },
-        (error: unknown) => {
-          if (reads.current === read) setState({ name: 'error', error });
-        },
-      );
+      try {
+        const data = await apiJson<T>(path);
+        if (reads.current !== read) return null;
+        setState({ name: 'ready', data });
+        return { name: 'ready', data };
+      } catch (error: unknown) {
+        if (reads.current !== read) return null;
+        setState({ name: 'error', error });
+        return { name: 'error', error };
+      }
     },
     [path],
   );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reading a BFF path starts in an effect
-    load(false);
+    void load(false);
     return () => {
       // an answer to a path that is no longer wanted is dropped
       reads.current += 1;

@@ -42,6 +42,18 @@ function stubApi(routes: Record<string, () => Response | Promise<Response>>) {
   return fetchMock;
 }
 
+/**
+ * A route whose first answer is `first` and every later one `then()`: the sign-in now asks
+ * /api/auth/me once for the capabilities, and that call is not the one the test holds.
+ */
+function firstThen(first: () => Response | Promise<Response>, then: () => Response) {
+  let calls = 0;
+  return () => {
+    calls += 1;
+    return calls === 1 ? first() : then();
+  };
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('AuthProvider and answers that arrive late', () => {
@@ -106,7 +118,10 @@ describe('AuthProvider and answers that arrive late', () => {
   it('keeps the user who signed in while the first /api/auth/me was still in flight', async () => {
     const firstVisit = held();
     stubApi({
-      '/api/auth/me': () => firstVisit.answer,
+      '/api/auth/me': firstThen(
+        () => firstVisit.answer,
+        () => json(meBody('u2')),
+      ),
       '/api/auth/login': () => json({ user: { _id: 'u2', email: 'u2@b.com' } }, 201),
     });
     const { result } = renderHook(() => useAuth(), { wrapper });
@@ -126,7 +141,10 @@ describe('AuthProvider and answers that arrive late', () => {
   it('does not let the first /api/auth/me replace the user who signed in meanwhile', async () => {
     const firstVisit = held();
     stubApi({
-      '/api/auth/me': () => firstVisit.answer,
+      '/api/auth/me': firstThen(
+        () => firstVisit.answer,
+        () => json(meBody('u2')),
+      ),
       '/api/auth/login': () => json({ user: { _id: 'u2', email: 'u2@b.com' } }, 201),
     });
     const { result } = renderHook(() => useAuth(), { wrapper });
@@ -144,7 +162,7 @@ describe('AuthProvider and answers that arrive late', () => {
   it('keeps the new user when a request started before a registration is answered 401 late', async () => {
     const slow = held();
     stubApi({
-      '/api/auth/me': () => unauthenticated(),
+      '/api/auth/me': firstThen(unauthenticated, () => json(meBody('u3'))),
       '/api/auth/verification-status': () => slow.answer,
       '/api/auth/register': () => json({ user: { _id: 'u3', email: 'u3@b.com' } }, 201),
     });
@@ -168,8 +186,11 @@ describe('AuthProvider and answers that arrive late', () => {
     const body = held();
     stubApi({
       // the headers came before the sign-in, the body after it
-      '/api/auth/me': () =>
-        ({ ok: true, status: 200, json: () => body.answer.then((r) => r.json()) }) as Response,
+      '/api/auth/me': firstThen(
+        () =>
+          ({ ok: true, status: 200, json: () => body.answer.then((r) => r.json()) }) as Response,
+        () => json(meBody('u2')),
+      ),
       '/api/auth/login': () => json({ user: { _id: 'u2', email: 'u2@b.com' } }, 201),
     });
     const { result } = renderHook(() => useAuth(), { wrapper });

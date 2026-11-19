@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api-error';
@@ -708,5 +708,112 @@ describe('OfficePlanPage cancelling (frames o15, o16)', () => {
 
     expect(await screen.findByText(messages.errors.CANCEL_IN_PROGRESS)).toBeVisible();
     expect(screen.getByRole('alertdialog')).toBeVisible();
+  });
+});
+
+describe('OfficePlanPage cancelling: owner review #173', () => {
+  const eligible = () =>
+    aSubscription({
+      firstPaidAt: '2026-11-12T15:00:00.000Z',
+      refundEligibleUntil: '2026-11-19T15:00:00.000Z',
+    });
+
+  it('finding 2: a dialog opened under a refund that has since run out is not confirmed silently: it reloads, shows the new text and asks again', async () => {
+    const user = userEvent.setup();
+    subscription = eligible();
+    serve({
+      'POST /api/office/subscription/cancel': () =>
+        aSubscription({ status: 'CANCELING', cancelAtPeriodEnd: true }),
+    });
+    render(<OfficePlanPage />);
+    await user.click(await screen.findByRole('button', { name: t.cancel.action }));
+    const dialog = await screen.findByRole('alertdialog', { name: t.cancel.refund.title });
+
+    // the window ran out while the page was open: the server now judges it as an ordinary cancel
+    subscription = aSubscription();
+    await user.click(within(dialog).getByRole('button', { name: t.cancel.refund.confirm }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(t.cancel.changed);
+    const again = await screen.findByRole('alertdialog', {
+      name: 'Cancelar a assinatura do plano Profissional?',
+    });
+    expect(again).toHaveTextContent('Não há reembolso do período já pago.');
+    expect(posted('/api/office/subscription/cancel')).toBeUndefined();
+    expect(screen.queryByText(t.toast.canceledRefund)).not.toBeInTheDocument();
+
+    // confirming the new text cancels at the end of the period and says exactly that
+    await user.click(within(again).getByRole('button', { name: t.cancel.dialog.confirm }));
+    expect(await screen.findByText(t.toast.canceled)).toBeVisible();
+    expect(screen.queryByText(t.toast.canceledRefund)).not.toBeInTheDocument();
+  });
+
+  it('finding 2: the message follows what the server answered, not the eligibility the page held', async () => {
+    const user = userEvent.setup();
+    subscription = eligible();
+    // the read just before confirming still says eligible; the server judges at the request and
+    // schedules the end of the period (no refund)
+    serve({
+      'POST /api/office/subscription/cancel': () =>
+        aSubscription({ status: 'CANCELING', cancelAtPeriodEnd: true }),
+    });
+    render(<OfficePlanPage />);
+    await user.click(await screen.findByRole('button', { name: t.cancel.action }));
+    const dialog = await screen.findByRole('alertdialog', { name: t.cancel.refund.title });
+
+    await user.click(within(dialog).getByRole('button', { name: t.cancel.refund.confirm }));
+
+    expect(await screen.findByText(t.toast.canceled)).toBeVisible();
+    expect(screen.queryByText(t.toast.canceledRefund)).not.toBeInTheDocument();
+  });
+
+  it('finding 4: "Manter plano" cannot dismiss the dialog while the cancellation is in flight', async () => {
+    const user = userEvent.setup();
+    let release: (value: OfficeSubscription) => void = () => undefined;
+    serve({
+      'POST /api/office/subscription/cancel': () =>
+        new Promise<OfficeSubscription>((resolve) => {
+          release = resolve;
+        }),
+    });
+    render(<OfficePlanPage />);
+    await user.click(await screen.findByRole('button', { name: t.cancel.action }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: t.cancel.dialog.confirm }));
+
+    const keep = await within(dialog).findByRole('button', { name: t.cancel.dialog.keep });
+    expect(keep).toBeDisabled();
+    fireEvent.click(keep); // a click that reaches it anyway does nothing
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('alertdialog')).toBeVisible();
+
+    await act(async () => {
+      release(aSubscription({ status: 'CANCELING', cancelAtPeriodEnd: true }));
+    });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(await screen.findByText(t.toast.canceled)).toBeVisible();
+  });
+
+  it('finding 6: a failed cancellation is an accessible alert inside the open dialog', async () => {
+    const user = userEvent.setup();
+    serve({
+      'POST /api/office/subscription/cancel': () => {
+        throw new ApiError('CANCEL_IN_PROGRESS', {}, 409);
+      },
+    });
+    render(<OfficePlanPage />);
+    await user.click(await screen.findByRole('button', { name: t.cancel.action }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: t.cancel.dialog.confirm }));
+
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent(messages.errors.CANCEL_IN_PROGRESS);
+    expect(dialog).toContainElement(alert);
+    // the page behind the modal is not where the error is
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    // closing and opening again starts clean
+    await user.click(within(dialog).getByRole('button', { name: t.cancel.dialog.keep }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: t.cancel.action }));
+    expect(within(await screen.findByRole('alertdialog')).queryByRole('alert')).toBeNull();
   });
 });
