@@ -175,6 +175,53 @@ describe('office subscriptions over MongoDB (integration, SPEC-012)', () => {
       });
     });
 
+    it('BR-012-13, SC-11: a covered duplicate of the same event does not complete it; the holder fails, the redelivery activates the subscription (real ledger and lease)', async () => {
+      const pending = await startCheckout();
+      providerHas(pending.id); // active, paid
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let reads = 0;
+      // A holds the lease inside its provider read, then the read fails (a temporary error).
+      gateway.onRetrieve = async () => {
+        reads += 1;
+        if (reads === 1) {
+          await held;
+          throw new Error('provider temporarily unavailable');
+        }
+      };
+      const ledger = () =>
+        subscriptionModel.db.collection('paymentEvents').findOne({ stripeEventId: 'evt_same' });
+
+      const a = service.handleProviderEvent(completed('evt_same', pending.id));
+      const aOutcome = Promise.allSettled([a]);
+      await vi.waitFor(() => expect(reads).toBe(1));
+
+      // B: the same event, delivered again while A runs. It is covered and acknowledged, and must
+      // leave the ledger row unprocessed.
+      await service.handleProviderEvent(completed('evt_same', pending.id));
+      expect((await ledger())?.processedAt ?? null).toBeNull();
+
+      release();
+      const [aResult] = await aOutcome;
+      gateway.onRetrieve = undefined;
+      expect(aResult?.status).toBe('rejected');
+      expect((await repository.findById(pending.id))?.status).toBe('PENDING');
+      expect((await ledger())?.processedAt ?? null).toBeNull();
+      expect(provisioner.offices.size).toBe(0);
+
+      // The provider redelivers the event: the row is still unprocessed, so it is handled in full.
+      await service.handleProviderEvent(completed('evt_same', pending.id));
+      expect(await repository.findById(pending.id)).toMatchObject({
+        status: 'ACTIVE',
+        syncLeaseToken: null,
+        officeId: provisioner.offices.get(pending.id),
+      });
+      expect(provisioner.offices.size).toBe(1);
+      expect((await ledger())?.processedAt ?? null).not.toBeNull();
+    });
+
     it('a burst of events during a slow read is answered at once and ends in the provider LAST state: no 503, one office', async () => {
       const pending = await startCheckout();
       providerHas(pending.id); // active
@@ -208,10 +255,15 @@ describe('office subscriptions over MongoDB (integration, SPEC-012)', () => {
       expect([...others, ...holderResult].map((result) => result.status)).toEqual(
         Array(5).fill('fulfilled'),
       );
-      const processed = await subscriptionModel.db
-        .collection('paymentEvents')
-        .countDocuments({ processedAt: { $exists: true } });
-      expect(processed).toBe(5);
+      // Only the holder did the work, so only its event is stamped; the four covered deliveries
+      // are acknowledged but left unprocessed (SC-11: only a successful sync completes an event).
+      const processedIds = (
+        await subscriptionModel.db
+          .collection('paymentEvents')
+          .find({ processedAt: { $exists: true } })
+          .toArray()
+      ).map((row) => row.stripeEventId);
+      expect(processedIds).toEqual(['evt_burst_0']);
       // The stored state is what the provider says LAST (the holder's stale read was written, then
       // read again because the others asked).
       expect(await repository.findById(pending.id)).toMatchObject({

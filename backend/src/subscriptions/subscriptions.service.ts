@@ -121,33 +121,38 @@ export class SubscriptionsService {
     const recording = await this.events.record(event.id, event.type, this.clock.now());
     if (recording === 'processed') return;
 
-    await this.handle(event);
-    await this.events.markProcessed(event.id, this.clock.now());
+    const handledHere = await this.handle(event);
+    // SPEC-012 BR-012-13 / SC-11: only a delivery that did the work itself completes the event. A
+    // delivery COVERED by another sync (a lease holder asked to read again) has not read anything:
+    // if the holder then fails, the provider redelivers the holder's event, and a row this
+    // delivery had stamped would make that retry stop at 'processed' and never sync. Leaving the
+    // row unprocessed lets the redelivery handle it; the holder stamps it when its sync succeeds.
+    if (handledHere) await this.events.markProcessed(event.id, this.clock.now());
   }
 
-  private async handle(event: Exclude<PaymentEvent, { type: 'unhandled' }>): Promise<void> {
+  /** Resolves true when this delivery did the work, false when another sync covers it. */
+  private async handle(event: Exclude<PaymentEvent, { type: 'unhandled' }>): Promise<boolean> {
     switch (event.type) {
       case 'checkout.completed': {
         if (event.subscriptionId === null || event.subscriptionRef === null) {
           this.ignoreLegacy(event.type);
-          return;
+          return true;
         }
         // BR-012-09: the checkout redirect grants nothing; this confirmation, re-read from the
         // provider, is what makes the subscription real.
-        await this.syncFromProvider(event.subscriptionId, event.subscriptionRef);
-        return;
+        return this.didTheSync(
+          await this.syncFromProvider(event.subscriptionId, event.subscriptionRef),
+        );
       }
       case 'subscription.changed':
-        await this.syncFromProvider(event.subscriptionId);
-        return;
+        return this.didTheSync(await this.syncFromProvider(event.subscriptionId));
       case 'invoice.paid': {
         // An invoice of something that is not a subscription says nothing about one.
-        if (event.subscriptionId === null) return;
-        await this.syncFromProvider(event.subscriptionId);
-        return;
+        if (event.subscriptionId === null) return true;
+        return this.didTheSync(await this.syncFromProvider(event.subscriptionId));
       }
       case 'invoice.payment_failed': {
-        if (event.subscriptionId === null) return;
+        if (event.subscriptionId === null) return true;
         const synced = await this.syncFromProvider(event.subscriptionId);
         // The email is decided from the state THIS delivery read. When a holder covers the event
         // instead, that read is not ours to act on: the provider delivers the event again, and
@@ -157,16 +162,20 @@ export class SubscriptionsService {
         if (synced.kind === 'synced' && synced.record.status === 'PAST_DUE') {
           await this.notifyPaymentFailed(event.id, synced.record);
         }
-        return;
+        return true;
       }
       case 'checkout.expired': {
         // Acceptance: an abandoned checkout leaves no office and no subscription in effect. Only
         // the PENDING record of THIS checkout session, with no provider subscription, is removed.
         const removed = await this.subscriptions.deleteAbandonedPending(event.checkoutSessionId);
         this.logger.log(`Abandoned checkout cleaned up: ${removed ? 1 : 0} pending subscription`);
-        return;
+        return true;
       }
     }
+  }
+
+  private didTheSync(result: SyncResult): boolean {
+    return result.kind !== 'covered';
   }
 
   /** The production keys carry placeholder Stripe values: no real user-level subscriber exists. */
