@@ -80,6 +80,12 @@ export class RemindersScheduler implements OnModuleInit {
         this.logger.warn(`User not found for reminder ${reminder._id}`);
         return;
       }
+      // SPEC-010 BR-010-14 / BR-001-16: no notification is sent again to a closed (or deactivated)
+      // account. The reminder stays pending; the purge deletes it with the rest of the account's data.
+      if ((user.status ?? 'active') !== 'active') {
+        this.logger.warn(`Reminder ${reminder._id} not sent: the account is not active`);
+        return;
+      }
 
       const auction = reminder.auction;
 

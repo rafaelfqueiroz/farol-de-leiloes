@@ -127,6 +127,43 @@ describe('RemindersScheduler.processReminders', () => {
     expect(jobExecutionService.recordExecution).toHaveBeenCalledWith(REMINDERS_JOB, RunMode.AUTO);
   });
 
+  it.each(['closed', 'deactivated'])(
+    'BR-010-14: nothing is sent to a %s account, whatever the channel, and the reminder stays pending',
+    async (status) => {
+      const {
+        scheduler,
+        remindersService,
+        usersService,
+        emailService,
+        smsService,
+        whatsAppService,
+      } = build();
+      usersService.findByIdFull.mockResolvedValue({ ...USER, status });
+      remindersService.getDueReminders.mockResolvedValue([
+        aReminder({ _id: 'r1', channel: ReminderChannel.EMAIL }),
+        aReminder({ _id: 'r2', channel: ReminderChannel.SMS }),
+        aReminder({ _id: 'r3', channel: ReminderChannel.WHATSAPP }),
+      ]);
+
+      await scheduler.processReminders();
+
+      expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+      expect(smsService.sendReminderSms).not.toHaveBeenCalled();
+      expect(whatsAppService.sendReminderWhatsApp).not.toHaveBeenCalled();
+      expect(remindersService.logNotification).not.toHaveBeenCalled();
+      expect(remindersService.markAsSent).not.toHaveBeenCalled();
+    },
+  );
+
+  it('BR-010-14: an account with no status stored is active (AR-28) and is still notified', async () => {
+    const { scheduler, remindersService, emailService } = build();
+    remindersService.getDueReminders.mockResolvedValue([aReminder()]);
+
+    await scheduler.processReminders();
+
+    expect(emailService.sendReminderEmail).toHaveBeenCalledTimes(1);
+  });
+
   it('logs a failure to load the due reminders by code and does not record a run', async () => {
     const logger = spyOnLogger();
     const { scheduler, remindersService, jobExecutionService } = build();

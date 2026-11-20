@@ -24,19 +24,24 @@ export class SavedFiltersPersonalData implements PersonalDataProvider {
   async collect(ctx: AccessContext): Promise<Record<string, unknown>> {
     const found = await this.savedFilters.findAllForExport(ctx);
     return {
-      items: found.map((saved) => ({
-        name: saved.name,
-        filters: {
-          state: saved.filters.state,
-          city: saved.filters.city,
-          neighborhood: saved.filters.neighborhood,
-          modality: saved.filters.modality,
-          // AR-17: the price bounds are strings, never a JS number.
-          minPrice: moneyToJson(fromDecimal128OrNull(saved.filters.minPrice)),
-          maxPrice: moneyToJson(fromDecimal128OrNull(saved.filters.maxPrice)),
-        },
-        createdAt: saved.createdAt,
-      })),
+      items: found.map((saved) => {
+        // A filter saved with no criteria is stored without its `filters` path (Mongoose drops an
+        // empty object): the export shows it as empty, never fails on it.
+        const filters = saved.filters ?? {};
+        return {
+          name: saved.name,
+          filters: {
+            state: filters.state,
+            city: filters.city,
+            neighborhood: filters.neighborhood,
+            modality: filters.modality,
+            // AR-17: the price bounds are strings, never a JS number.
+            minPrice: moneyToJson(fromDecimal128OrNull(filters.minPrice)),
+            maxPrice: moneyToJson(fromDecimal128OrNull(filters.maxPrice)),
+          },
+          createdAt: saved.createdAt,
+        };
+      }),
     };
   }
 
