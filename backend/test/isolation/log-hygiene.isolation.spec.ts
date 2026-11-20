@@ -259,6 +259,8 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
 
       // A fault: the admin access log refuses its insert, so the read fails (BR-002-27).
       const connection = moduleRef.get<Connection>(getConnectionToken());
+      // collMod cannot run while a background index build (autoIndex) is still going on this database.
+      await connection.syncIndexes();
       await connection.db?.command({
         collMod: 'adminAccessLogs',
         validator: { $jsonSchema: { required: ['a field no entry has'] } },

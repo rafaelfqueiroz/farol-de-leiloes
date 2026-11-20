@@ -4,8 +4,8 @@
 // gate needs no spec for them; this proves the owner surface they sit behind: A never reads B's
 // acceptances, and a request of A carrying B's id acts on A and leaves B untouched.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { getModelToken } from '@nestjs/mongoose';
-import { type Model, Types } from 'mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import { type Connection, type Model, Types } from 'mongoose';
 import { ConsentEntity } from '../../src/privacy/schemas/consent.schema.js';
 import { WhatsappConsentEntity } from '../../src/privacy/schemas/whatsapp-consent.schema.js';
 import { useTestDatabase } from '../support/test-database.js';
@@ -32,6 +32,9 @@ describe('BR-002-11 / TS-17: acceptances and WhatsApp consent belong to the sign
 
   beforeAll(async () => {
     app = await createIsolationApp(db, [], { TERMS_ENFORCEMENT_ENABLED: 'true' });
+    // The unique acceptance index (migration 0008 in production) must exist before the first write:
+    // autoIndex builds it in the background, so a slow start could otherwise race the accepts.
+    await app.harness.moduleRef.get<Connection>(getConnectionToken()).syncIndexes();
     [a, b] = await app.signUpAll('a', 'b');
     // B grants the WhatsApp consent; A has only the sign-up refusal.
     await app

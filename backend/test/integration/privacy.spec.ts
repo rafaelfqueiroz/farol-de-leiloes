@@ -14,14 +14,20 @@ import { AuctionsModule } from '../../src/auctions/auctions.module.js';
 import { AuctionEntity } from '../../src/auctions/schemas/auction.schema.js';
 import type { GoogleIdentity } from '../../src/auth/google/google-identity.js';
 import { GoogleAuthGuard } from '../../src/auth/guards/google-auth.guard.js';
+import { CouponsModule } from '../../src/coupons/coupons.module.js';
 import { FavoritesModule } from '../../src/favorites/favorites.module.js';
+import { PaymentGateway } from '../../src/payments/payment-gateway.js';
+import { PaymentsModule } from '../../src/payments/payments.module.js';
+import { PlansModule } from '../../src/plans/plans.module.js';
 import { ConsentEntity } from '../../src/privacy/schemas/consent.schema.js';
+import { ConsentsService } from '../../src/privacy/consents.service.js';
 import { LEGAL_DOCUMENTS } from '../../src/privacy/legal/registry.js';
 import { WhatsappConsentEntity } from '../../src/privacy/schemas/whatsapp-consent.schema.js';
 import { WhatsappConsentService } from '../../src/privacy/whatsapp-consent.service.js';
 import { UserEntity } from '../../src/users/schemas/user.schema.js';
 import { aLegalDocument, aLegalRegistry } from '../builders/legal-document.builder.js';
 import { DAY } from '../fakes/fake-clock.js';
+import { FakePaymentGateway } from '../fakes/fake-payment-gateway.js';
 import { AUTH_TEST_START, createAuthTestApp, type AuthTestApp } from '../support/auth-test-app.js';
 import { useTestDatabase } from '../support/test-database.js';
 
@@ -111,6 +117,8 @@ describe('SPEC-010 privacy and consent (integration)', () => {
     builder
       .overrideProvider(LEGAL_DOCUMENTS)
       .useValue(REGISTRY)
+      .overrideProvider(PaymentGateway)
+      .useValue(new FakePaymentGateway())
       .overrideGuard(GoogleAuthGuard)
       .useValue({
         canActivate(context: ExecutionContext) {
@@ -126,7 +134,7 @@ describe('SPEC-010 privacy and consent (integration)', () => {
   beforeAll(async () => {
     harness = await createAuthTestApp(
       db,
-      [AuctionsModule, FavoritesModule],
+      [AuctionsModule, FavoritesModule, PaymentsModule, PlansModule, CouponsModule],
       { TERMS_ENFORCEMENT_ENABLED: 'true' },
       stubbedGoogle,
     );
@@ -235,6 +243,31 @@ describe('SPEC-010 privacy and consent (integration)', () => {
         expect(response.body.code).toBe('VALIDATION_FAILED');
       },
     );
+
+    it.each([
+      ['a 404 for a version that does not exist', '/api/legal/terms/9.9', 404],
+      ['a 404 for a version not in force yet', '/api/legal/privacy/0.2', 404],
+      ['a 400 for an invalid type', '/api/legal/cookies/0.1', 400],
+      ['a 400 for an invalid version', '/api/legal/terms/latest', 400],
+    ])(
+      'answers %s with no cache header: a shared cache must not store the error',
+      async (_what, path, status) => {
+        const response = await request(server()).get(path).expect(status);
+
+        expect(response.headers['cache-control'] ?? '').not.toMatch(/public|max-age/);
+      },
+    );
+
+    it('marks only the successful answers cacheable', async () => {
+      for (const [path, maxAge] of [
+        ['/api/legal/current', 60],
+        ['/api/legal', 60],
+        ['/api/legal/terms/0.1', 300],
+      ] as const) {
+        const response = await request(server()).get(path).expect(200);
+        expect(response.headers['cache-control']).toBe(`public, max-age=${maxAge}`);
+      }
+    });
   });
 
   describe('e-mail sign-up (BR-010-01, BR-010-03, BR-010-27)', () => {
@@ -610,6 +643,10 @@ describe('SPEC-010 privacy and consent (integration)', () => {
 
     it('BR-010-27: an account that predates the channel is asked once: pending until any answer, then never', async () => {
       const ana = await account('legacy');
+      // An account of before the channel: no answer on record, never asked.
+      await whatsappConsents.collection.deleteMany({
+        userId: new connection.base.Types.ObjectId(ana.id),
+      });
       await users.collection.updateOne(
         { email: ana.email },
         { $unset: { whatsappPromptAnsweredAt: '' } },
@@ -639,12 +676,9 @@ describe('SPEC-010 privacy and consent (integration)', () => {
         .set(as(login.body.accessToken as string))
         .expect(200);
       expect(again.body.whatsappPromptPending).toBe(false);
-      expect(
-        await whatsappConsents.collection.countDocuments({
-          action: 'declined',
-          method: 'existing_account_prompt',
-        }),
-      ).toBeGreaterThanOrEqual(1);
+      expect(await whatsappRows(ana.id)).toEqual([
+        expect.objectContaining({ action: 'declined', method: 'existing_account_prompt' }),
+      ]);
     });
 
     it.each(['granted', 'withdrawn', 'declined'] as const)(
@@ -767,6 +801,289 @@ describe('SPEC-010 privacy and consent (integration)', () => {
       ).rejects.toMatchObject({
         code: 11000,
       });
+    });
+  });
+
+  describe('DL-010-03: what stays reachable while a new version is pending (enforcement on)', () => {
+    /** An account that signed up under 0.1, with 0.2 now in force. */
+    async function pendingAccount(label: string) {
+      const ana = await account(label);
+      harness.clock.set(AFTER_V2);
+      return ana;
+    }
+    const refusedBody = {
+      code: 'TERMS_ACCEPTANCE_REQUIRED',
+      context: {
+        documents: [
+          { type: 'terms', version: '0.2' },
+          { type: 'privacy', version: '0.2' },
+        ],
+      },
+    };
+
+    it("BR-010-08, BR-010-12: reading and correcting one's own data works, while a favorite is refused", async () => {
+      const ana = await pendingAccount('rights');
+
+      const full = await request(server())
+        .get('/api/auth/profile/full')
+        .set(as(ana.token))
+        .expect(200);
+      expect(full.body.email).toBe(ana.email);
+      const patched = await request(server())
+        .patch('/api/auth/profile')
+        .set(as(ana.token))
+        .send({ name: 'Nome Corrigido' })
+        .expect(200);
+      expect(patched.body.name).toBe('Nome Corrigido');
+      const refused = await request(server())
+        .post('/api/favorites')
+        .set(as(ana.token))
+        .send({ code: 'PRIV0001' })
+        .expect(403);
+      expect(refused.body).toEqual(refusedBody);
+    });
+
+    it('SC-07: the payment webhook, the plans and the public auction routes still answer', async () => {
+      harness.clock.set(AFTER_V2);
+
+      // Anonymous routes never meet the guard: the webhook reaches its own signature check (400,
+      // not 401 or 403), the catalogue and the search answer.
+      const webhook = await request(server())
+        .post('/api/payments/webhook')
+        .set('stripe-signature', 'bad')
+        .send({})
+        .expect(400);
+      expect(webhook.body.code).toBe('INVALID_WEBHOOK_SIGNATURE');
+      await request(server()).get('/api/plans').expect(200);
+      await request(server()).get('/api/auctions').expect(200);
+      await request(server()).get('/api/auctions/PRIV0001').expect(200);
+    });
+
+    it('BR-002-23: an admin route is refused to a pending account, then answers once it accepts', async () => {
+      const boss = await pendingAccount('admin');
+      await users.collection.updateOne({ email: boss.email }, { $set: { isAdmin: true } });
+
+      const refused = await request(server()).get('/api/coupons').set(as(boss.token)).expect(403);
+      expect(refused.body).toEqual(refusedBody);
+
+      await request(server())
+        .post('/api/privacy/accept')
+        .set(as(boss.token))
+        .send({ termsVersion: '0.2', privacyVersion: '0.2' })
+        .expect(200);
+      await request(server()).get('/api/coupons').set(as(boss.token)).expect(200);
+    });
+  });
+
+  describe("DL-001-02: a Google takeover of an unconfirmed account does not inherit the registrant's consent", () => {
+    /** The registrant signs up by e-mail (never confirming) ticking WhatsApp, then the owner signs in with Google. */
+    async function takeover() {
+      counter += 1;
+      const email = `takeover-${counter}@example.test`;
+      const registrant = await register(email, { whatsappConsent: true }).expect(201);
+      const id = registrant.body.user._id as string;
+      const who: GoogleIdentity = {
+        googleId: `google-sub-owner-${counter}`,
+        email,
+        emailVerified: true,
+        name: 'Dona Real',
+      };
+      const exchange = await request(server())
+        .post('/api/auth/google/exchange')
+        .send({ code: await googleCode(who) })
+        .expect(200);
+      expect(exchange.body.status).toBe('signed_in');
+      return {
+        id,
+        email,
+        registrantToken: registrant.body.accessToken as string,
+        token: exchange.body.accessToken as string,
+      };
+    }
+    const service = () => harness.moduleRef.get(WhatsappConsentService);
+
+    it("the registrant's acceptance and WhatsApp consent count for nobody; the owner is asked again, to accept and to answer", async () => {
+      const t = await takeover();
+      expect(await service().hasConsent(t.id)).toBe(false); // the registrant ticked it: not the owner's
+      expect(await whatsappRows(t.id)).toHaveLength(1); // the registrant's row is kept as history
+
+      // Enforcement on: the owner is refused like any account that has not accepted.
+      const refused = await request(server())
+        .post('/api/favorites')
+        .set(as(t.token))
+        .send({ code: 'PRIV0001' })
+        .expect(403);
+      expect(refused.body.code).toBe('TERMS_ACCEPTANCE_REQUIRED');
+      const me = await request(server()).get('/api/auth/me').set(as(t.token)).expect(200);
+      expect(me.body).toMatchObject({
+        termsAcceptanceRequired: true,
+        documents: [
+          { type: 'terms', version: '0.1' },
+          { type: 'privacy', version: '0.1' },
+        ],
+        whatsappPromptPending: true,
+      });
+      const mine = await request(server())
+        .get('/api/privacy/acceptances')
+        .set(as(t.token))
+        .expect(200);
+      expect(mine.body.items).toEqual([]); // the registrant's rows are not the owner's
+      expect(
+        (await request(server()).get('/api/privacy/whatsapp-consent').set(as(t.token)).expect(200))
+          .body,
+      ).toEqual({ state: 'none', at: null, textVersion: null });
+
+      // The owner accepts the very versions the registrant had accepted: allowed, then unlocked.
+      await request(server())
+        .post('/api/privacy/accept')
+        .set(as(t.token))
+        .send({ termsVersion: '0.1', privacyVersion: '0.1' })
+        .expect(200);
+      await request(server())
+        .post('/api/favorites')
+        .set(as(t.token))
+        .send({ code: 'PRIV0001' })
+        .expect(201);
+      // And answers the WhatsApp request for themselves.
+      await request(server())
+        .post('/api/privacy/whatsapp-consent')
+        .set(as(t.token))
+        .send({ action: 'declined', method: 'existing_account_prompt' })
+        .expect(200);
+      expect(
+        (await request(server()).get('/api/auth/me').set(as(t.token)).expect(200)).body,
+      ).toMatchObject({ termsAcceptanceRequired: false, whatsappPromptPending: false });
+      expect(await service().hasConsent(t.id)).toBe(false);
+
+      // The proof is never rewritten: both generations are in the collection, apart.
+      const rows = await consentRows(t.id);
+      expect(rows).toHaveLength(4);
+      expect(rows.filter((r) => r.consentResetAt === null)).toHaveLength(2);
+      expect(
+        rows.filter((r) => r.consentResetAt?.getTime() === AUTH_TEST_START.getTime()),
+      ).toHaveLength(2);
+      const stored = await users.collection.findOne({ email: t.email });
+      expect(stored?.consentResetAt).toEqual(AUTH_TEST_START);
+    });
+
+    it("the registrant's old session is refused (SPEC-001 takeover atomicity is intact)", async () => {
+      const t = await takeover();
+
+      await request(server()).get('/api/auth/me').set(as(t.registrantToken)).expect(401);
+      const stored = await users.collection.findOne({ email: t.email });
+      expect(stored).not.toHaveProperty('password');
+      expect(stored?.credentialVersion).toBe(1);
+    });
+
+    it("a registrant's write that lands after the takeover counts for nobody", async () => {
+      const t = await takeover();
+      const consentsService = harness.moduleRef.get(ConsentsService);
+
+      // The registrant's request finishing late: generation null, as it was created.
+      await consentsService.recordAcceptance(
+        t.id,
+        { terms: '0.1', privacy: '0.1' },
+        'signup_email',
+      );
+      await service().recordAtSignup(t.id, true);
+
+      expect(await service().hasConsent(t.id)).toBe(false);
+      const me = await request(server()).get('/api/auth/me').set(as(t.token)).expect(200);
+      expect(me.body).toMatchObject({ termsAcceptanceRequired: true, whatsappPromptPending: true });
+    });
+
+    it("linking a CONFIRMED account changes nothing: its acceptance and consent stay the owner's", async () => {
+      const ana = await account('confirmed', { whatsappConsent: true });
+      const who: GoogleIdentity = {
+        googleId: `google-sub-confirmed-${(counter += 1)}`,
+        email: ana.email,
+        emailVerified: true,
+        name: 'Ana',
+      };
+      const exchange = await request(server())
+        .post('/api/auth/google/exchange')
+        .send({ code: await googleCode(who) })
+        .expect(200);
+
+      const token = exchange.body.accessToken as string;
+      await request(server())
+        .post('/api/favorites')
+        .set(as(token))
+        .send({ code: 'PRIV0001' })
+        .expect(201);
+      expect(await service().hasConsent(ana.id)).toBe(true);
+      expect(
+        (await users.collection.findOne({ email: ana.email }))?.consentResetAt,
+      ).toBeUndefined();
+      expect(
+        (await request(server()).get('/api/auth/me').set(as(token)).expect(200)).body,
+      ).toMatchObject({ termsAcceptanceRequired: false, whatsappPromptPending: false });
+    });
+  });
+
+  describe('BR-010-27: answering what the latest answer already says', () => {
+    it('records nothing new: an identical answer is idempotent and still answers the state', async () => {
+      const ana = await account('idempotent');
+      const post = (action: string) =>
+        request(server())
+          .post('/api/privacy/whatsapp-consent')
+          .set(as(ana.token))
+          .send({ action, method: 'privacy_page' });
+
+      const first = await post('granted').expect(200);
+      const again = await post('granted').expect(200);
+      await post('granted').expect(200);
+
+      expect(again.body).toEqual(first.body);
+      // The sign-up refusal, then ONE grant however often it was repeated.
+      expect((await whatsappRows(ana.id)).map((r) => r.action)).toEqual(['declined', 'granted']);
+      await post('withdrawn').expect(200);
+      await post('granted').expect(200); // differs from the latest (withdrawn): recorded
+      expect((await whatsappRows(ana.id)).map((r) => r.action)).toEqual([
+        'declined',
+        'granted',
+        'withdrawn',
+        'granted',
+      ]);
+    });
+  });
+
+  describe('BR-010-05: up to date means the distinct documents were accepted, not a number of rows', () => {
+    it('duplicate rows of one document (no unique index) cannot make an account look up to date', async () => {
+      const ana = await account('duplicates');
+      const ObjectId = connection.base.Types.ObjectId;
+      const userId = new ObjectId(ana.id);
+      await consents.collection.deleteMany({ userId });
+      await consents.collection.dropIndex('one_acceptance_per_version');
+      try {
+        const row = {
+          userId,
+          documentType: 'terms',
+          version: '0.1',
+          contentHash: 'a'.repeat(64),
+          acceptedAt: AUTH_TEST_START,
+          method: 'signup_email',
+          consentResetAt: null,
+        };
+        await consents.collection.insertMany([{ ...row }, { ...row }]); // two rows, one document
+
+        const me = await request(server()).get('/api/auth/me').set(as(ana.token)).expect(200);
+
+        expect(me.body).toMatchObject({
+          termsAcceptanceRequired: true,
+          documents: [{ type: 'privacy', version: '0.1' }],
+        });
+        // The guard reads the same state: the missing document is what it demands.
+        const refused = await request(server())
+          .post('/api/favorites')
+          .set(as(ana.token))
+          .send({ code: 'PRIV0001' })
+          .expect(403);
+        expect(refused.body.context).toEqual({ documents: [{ type: 'privacy', version: '0.1' }] });
+      } finally {
+        await consents.collection.deleteMany({ userId });
+        await connection.syncIndexes();
+      }
     });
   });
 });
