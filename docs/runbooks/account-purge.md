@@ -7,8 +7,8 @@
 ## How it works
 
 - **Closure** (`POST /api/privacy/delete-account`) closes the account at once: `status: 'closed'`, `closedAt`, a new credential version, sessions and links gone, queued exports cancelled. It deletes nothing.
-- **Purge** (`AccountPurgeJob`, daily 04:10 Brasília time, flag `ACCOUNT_PURGE_ENABLED`): for each closed account without `purgedAt`, oldest first (100 a run), it takes a claim (`purgeClaimToken`, 10-minute lease), repeats the closure effects, runs every registered provider's `purge` (the registry), and writes the tombstone last: name, phone, sign-in methods and legacy fields removed, address replaced by `purged-<id>@removed.invalid`, `purgedAt` set. A failure at any step leaves the account unpurged and the next run repeats everything. Run-level lock: `jobLocks`, `job:account-purge`.
-- **Alert:** an `error` log with a count when a closed account is still unpurged `ACCOUNT_PURGE_ALERT_DAYS` (25) after `closedAt`; the legal ceiling is `ACCOUNT_PURGE_MAX_DAYS` (30). Each run is a row in `jobexecutions` (`account-purge`; `PARTIAL_FAILURE` when some account failed).
+- **Purge** (`AccountPurgeJob`, daily 04:10 Brasília time, flag `ACCOUNT_PURGE_ENABLED`): for each closed account without `purgedAt`, oldest first (read 100 at a time, up to 500 attempts a run; an account that fails is left out of the rest of the run, so one that never succeeds does not stall the others), it takes a claim (`purgeClaimToken`, 10-minute lease), repeats the closure effects, runs every registered provider's `purge` (the registry), and writes the tombstone last: name, phone, sign-in methods and legacy fields removed, address replaced by `purged-<id>@removed.invalid`, `purgedAt` set. A failure at any step leaves the account unpurged and the next run repeats everything. Run-level lock: `jobLocks`, `job:account-purge`.
+- **Alert:** its own daily check at 04:20 (it runs even with `ACCOUNT_PURGE_ENABLED=false`): an `error` log with a count when a closed account is still unpurged `ACCOUNT_PURGE_ALERT_DAYS` (25) after `closedAt`; the legal ceiling is `ACCOUNT_PURGE_MAX_DAYS` (30). Each run is a row in `jobexecutions` (`account-purge`; `PARTIAL_FAILURE` when some account failed).
 - **Exports:** `DataExportJob` builds queued exports every 2 minutes (flag `DATA_EXPORT_ENABLED`) into the **private** bucket, and hourly expires them after `EXPORT_TTL_DAYS` (7) and deletes the files of failed, cancelled and expired ones. Without `R2_PRIVATE_BUCKET` every export fails with `EXPORT_STORAGE_UNAVAILABLE`.
 
 ## Do not
@@ -23,7 +23,7 @@
 ### The alert fired, or accounts stay unpurged
 
 1. `jobexecutions`: the latest `account-purge` rows. `FAILED` with `PARTIAL_FAILURE` means some account failed; another code means the whole run failed (database, lock). No row for a day: the job did not run (flag off, backend down).
-2. Backend logs: `An account could not be purged this time: <code>` names the failure kind. Typical: `EXPORT_FILE_DELETE_FAILED` (the private bucket refuses deletes: check R2 and `R2_PRIVATE_BUCKET`; the row and file are kept and the next run retries), a database error.
+2. Backend logs: `An account could not be purged this time: <code>` names the failure kind. Typical: `ClosureHookFailedError` (a closure hook of another module keeps failing: the tombstone waits until it works, by design), `ExportBuildInProgressError` (a worker is still building the account's export; the next run finishes), `EXPORT_FILE_DELETE_FAILED` (the private bucket refuses deletes: check R2 and `R2_PRIVATE_BUCKET`; the row and file are kept and the next run retries), a database error.
 3. Fix the cause. The next run (or a restart for an immediate run, see below) repeats every step; nothing needs repairing by hand.
 4. If a claim looks stuck (`purgeClaimUntil` in the future for a worker that died), it expires by itself within 10 minutes.
 
@@ -43,6 +43,9 @@ For an id the owner gives you (not a name): `db.users.findOne({ _id: ObjectId("<
 ### After a restore
 
 Deleted data is back with a snapshot: replay the purges ([backup-and-restore.md](backup-and-restore.md#restore-replay-the-purges)).
+
+- **Reminders:** closure (and the purge, again) turn the account's pending reminders into `CANCELLED`; the scheduler also cancels a closed or missing account's reminder it still meets. A reminder of a *deactivated* account stays pending. A reminder with no phone for an SMS/WhatsApp channel is skipped each run and stays pending (SPEC-007 owns that semantics).
+- **Exports:** a failed export keeps its `fileKey` until the cleanup deletes the file (a crashed worker may have uploaded under it); the cleanup and the purge leave a row alone while its worker's lease is live (10 minutes).
 
 ## Known gaps
 

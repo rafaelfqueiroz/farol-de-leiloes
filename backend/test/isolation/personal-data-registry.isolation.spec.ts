@@ -85,6 +85,13 @@ describe('SPEC-010 SC-27: every model that holds a person is in the registry or 
     ).toEqual([]);
   });
 
+  it('the account document itself is covered by the users provider', () => {
+    // UserEntity has no user path (the document IS the person), so the path rule above cannot see it.
+    const owner = registry.providers().find((provider) => provider.models.includes('UserEntity'));
+
+    expect(owner?.name).toBe('account');
+  });
+
   it('BR-010-22 / BR-010-23: the retained models are the declared ones, each with its rule and reason', () => {
     expect(RETAINED_MODELS.map((entry) => entry.model).sort()).toEqual([
       'AdminAccessLogEntity',

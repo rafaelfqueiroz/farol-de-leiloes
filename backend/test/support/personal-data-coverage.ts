@@ -11,7 +11,7 @@
 import type { Connection, Schema } from 'mongoose';
 import type { RetainedModel } from '../../src/privacy/registry/retained-models.js';
 
-/** The schema paths that tie a record to a person. */
+/** The schema paths that tie a record to a person, by name (the six of SC-27 and the ones SPEC-011 names). */
 export const USER_PATHS = [
   'userId',
   'requesterUserId',
@@ -19,17 +19,40 @@ export const USER_PATHS = [
   'buyerUserId',
   'adminUserId',
   'createdBy',
+  'invitedBy',
+  'memberUserId',
+  'investorUserId',
 ] as const;
+
+/**
+ * Any path whose LAST segment names a person even if it is not in the list above: `...User`,
+ * `...UserId`, `...UserIds`, `...Users` (`closedByUserId`, `reviewerUser`, `userIds`). Matched on the
+ * segment, so `owner.userId`, `members.userId` and an array of ids `watcherUserIds` are all found.
+ */
+export const USER_PATH_PATTERN = /(^user|[a-z]User)(Ids?|s)?$/;
+
+function isUserPath(path: string): boolean {
+  const last = path.split('.').pop() ?? path;
+  return (USER_PATHS as readonly string[]).includes(last) || USER_PATH_PATTERN.test(last);
+}
+
+/** The user paths of one schema, nested objects, arrays and sub-documents included, by full name. */
+export function userPathsOf(schema: Schema, prefix = ''): string[] {
+  const found: string[] = [];
+  schema.eachPath((name, type) => {
+    const full = `${prefix}${name}`;
+    if (isUserPath(full)) found.push(full);
+    // An array of sub-documents (`members: [{ userId }]`) or a single sub-document: look inside.
+    const inner = (type as unknown as { schema?: Schema }).schema;
+    if (inner) found.push(...userPathsOf(inner, `${full}.`));
+  });
+  return found;
+}
 
 export interface ModelUserPaths {
   readonly name: string;
   /** The user paths the model's schema has (possibly none). */
   readonly paths: readonly string[];
-}
-
-/** The user paths of one schema. */
-export function userPathsOf(schema: Schema): string[] {
-  return USER_PATHS.filter((path) => schema.path(path) !== undefined);
 }
 
 /** Every model the connection registered, with its user paths. */

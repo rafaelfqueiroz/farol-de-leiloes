@@ -4,10 +4,11 @@
 // R2 port a fake (TS-07).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AuthService } from '../../src/auth/auth.service.js';
+import { AccountTokenService } from '../../src/auth/tokens/account-token.service.js';
 import { AccountClosureService } from '../../src/privacy/rights/account-closure.service.js';
 import { DataExportsRepository } from '../../src/privacy/rights/data-exports.repository.js';
 import { UsersService } from '../../src/users/users.service.js';
-import { DAY } from '../fakes/fake-clock.js';
+import { DAY, MINUTE } from '../fakes/fake-clock.js';
 import {
   createRightsApp,
   nextOrigin,
@@ -238,7 +239,10 @@ describe('SPEC-010 closing the account (BR-010-13, BR-010-14)', () => {
       expect(sentTo).toContain(bia.email);
       expect(sentTo).not.toContain(ana.email);
       const reminders = app.collection('reminders');
-      expect(await reminders.countDocuments({ userId: oid(ana.id), status: 'PENDING' })).toBe(1);
+      // The closure cancelled it (status CANCELLED, which the due query never selects); the row stays
+      // for the purge to delete.
+      expect(await reminders.countDocuments({ userId: oid(ana.id), status: 'CANCELLED' })).toBe(1);
+      expect(await reminders.countDocuments({ userId: oid(ana.id), status: 'PENDING' })).toBe(0);
     });
 
     it('the closure effects ran once: the hook, the queued export cancelled, the links revoked', async () => {
@@ -434,6 +438,7 @@ describe('SPEC-010 closing the account (BR-010-13, BR-010-14)', () => {
     });
 
     it('a worker that crashed after writing the file is repaired: the file is deleted by the cleanup', async () => {
+      await app.exportJob.runExpiry(); // files of the earlier tests' failed exports are cleaned first
       const ana = await account();
       await app.as(ana).post('/api/privacy/exports').expect(202);
       // The upload "succeeds", then storage keeps the file while the marking fails (cancelled), and
@@ -446,11 +451,116 @@ describe('SPEC-010 closing the account (BR-010-13, BR-010-14)', () => {
       await app.exportJob.runBuild();
       expect(app.storage.files.size).toBe(1); // an orphan for now: the row still names it
       app.storage.failDeletes = false;
+      // The worker's lease keeps the cleanup (and the purge) away from the row while it may still be
+      // writing; once it is over, the cleanup deletes the file.
+      expect(await app.exportJob.runExpiry()).toEqual({ expired: 0, cleaned: 0, failed: 0 });
+      app.harness.clock.advance(11 * MINUTE);
 
       const repair = await app.exportJob.runExpiry();
 
       expect(repair).toEqual({ expired: 0, cleaned: 1, failed: 0 });
       expect(app.storage.files.size).toBe(0);
+    });
+  });
+
+  describe('board #177: a closed account’s reminders never crowd out another account’s', () => {
+    const PAGE = 50; // RemindersScheduler asks for at most 50 due reminders per run
+
+    /** `count` pending reminders of `userId`, all due one day before the harness clock. */
+    const backlog = async (userId: string, count: number) => {
+      const due = new Date(app.harness.clock.now().getTime() - DAY);
+      await app.collection('reminders').insertMany(
+        Array.from({ length: count }, (_, n) => ({
+          userId: oid(userId),
+          auction: oid('64b7f00000000000000bee01'),
+          channel: 'EMAIL',
+          scheduledAt: new Date(due.getTime() + n),
+          status: 'PENDING',
+          description: 'backlog',
+        })),
+      );
+    };
+
+    it('at the source: closing the account cancels a backlog bigger than a page, and the active account is served in ONE run', async () => {
+      const [closing, active] = [await account('Fecha'), await account('Ativa')];
+      await backlog(closing.id, PAGE + 10);
+      await closeWithPassword(closing).expect(200);
+      const start = app.harness.clock.now();
+      app.harness.clock.advance(3 * DAY);
+
+      await app.scheduler.processReminders();
+      app.harness.clock.set(start);
+
+      const reminders = app.collection('reminders');
+      expect(await reminders.countDocuments({ userId: oid(closing.id), status: 'PENDING' })).toBe(
+        0,
+      );
+      expect(await reminders.countDocuments({ userId: oid(closing.id), status: 'CANCELLED' })).toBe(
+        PAGE + 10 + 1,
+      ); // the backlog and the seeded one: kept for the purge to delete
+      const sentTo = app.harness.mailbox.reminderEmails.map((sent) => sent.email);
+      expect(sentTo).toContain(active.email);
+      expect(sentTo).not.toContain(closing.email);
+    });
+
+    it('a straggler that escaped the closure (its effects failed) is cancelled by the scheduler itself, page after page, and never blocks the active account', async () => {
+      const [stranded, active] = [await account('Presa'), await account('Livre')];
+      await backlog(stranded.id, PAGE + 10);
+      // Closed, but the closure's effects never ran (as after a crash right after the status write).
+      await app.users.updateOne({ _id: stranded.id }, { $set: { status: 'closed' } });
+      const start = app.harness.clock.now();
+      app.harness.clock.advance(3 * DAY);
+
+      await app.scheduler.processReminders(); // the oldest page: all of the closed account's
+      const afterFirst = await app
+        .collection('reminders')
+        .countDocuments({ userId: oid(stranded.id), status: 'PENDING' });
+      await app.scheduler.processReminders(); // the rest of the backlog, then the active account's
+      app.harness.clock.set(start);
+
+      expect(afterFirst).toBeLessThan(PAGE + 11); // progress, never stuck on the same page
+      expect(
+        await app
+          .collection('reminders')
+          .countDocuments({ userId: oid(stranded.id), status: 'PENDING' }),
+      ).toBe(0);
+      const sentTo = app.harness.mailbox.reminderEmails.map((sent) => sent.email);
+      expect(sentTo).toContain(active.email);
+      expect(sentTo).not.toContain(stranded.email);
+    });
+  });
+
+  describe('a recovery link that outlives the account rewrites nothing', () => {
+    it('issued before the closure and spent after it (a request that raced it): the generic invalid-token, credentials untouched', async () => {
+      const ana = await account();
+      await closeWithPassword(ana).expect(200);
+      const before = await stored(ana);
+      // The closure revokes the links it knows; one issued by a reset request racing it is not among them.
+      const late = await app.get(AccountTokenService).issue(ana.id, 'account_recovery');
+
+      await expect(
+        app.authService.resetPassword(late, 'A brand new password 1'),
+      ).rejects.toMatchObject({
+        code: 'INVALID_RESET_TOKEN',
+      });
+
+      expect(await stored(ana)).toEqual(before); // password hash, providers, credential version: all as they were
+      const login = await app.signIn(ana.email, 'A brand new password 1');
+      expect(login.status).toBe(401);
+    });
+
+    it('and the write itself is conditional: setPassword on a closed account matches nothing', async () => {
+      const ana = await account();
+      await closeWithPassword(ana).expect(200);
+      const before = await stored(ana);
+
+      await expect(
+        app.get(UsersService).setPassword(ana.id, 'A brand new password 1'),
+      ).rejects.toMatchObject({
+        code: 'USER_NOT_FOUND',
+      });
+
+      expect(await stored(ana)).toEqual(before);
     });
   });
 });

@@ -24,12 +24,39 @@ describe('userPathsOf', () => {
     expect(userPathsOf(new Schema({ [path]: String, other: String }))).toEqual([path]);
   });
 
-  it('finds several, in the order of the rule, and none on a schema without them', () => {
+  it('finds several, and none on a schema without them', () => {
     expect(userPathsOf(new Schema({ createdBy: String, userId: String }))).toEqual([
-      'userId',
       'createdBy',
+      'userId',
     ]);
     expect(userPathsOf(new Schema({ name: String, ownerId: String }))).toEqual([]);
+  });
+
+  it.each(['closedByUserId', 'reviewerUser', 'userIds', 'watcherUserIds', 'users', 'lastUser'])(
+    'finds %s by its name (the pattern)',
+    (path) => {
+      expect(userPathsOf(new Schema({ [path]: [String] }))).toEqual([path]);
+    },
+  );
+
+  it.each(['superuser', 'username', 'userAgent', 'ownerId', 'userland'])(
+    'does not mistake %s for a person',
+    (path) => {
+      expect(userPathsOf(new Schema({ [path]: String }))).toEqual([]);
+    },
+  );
+
+  it('finds a nested path, an array of ids and a path inside an array of sub-documents', () => {
+    const schema = new Schema({
+      owner: { userId: String },
+      watcherUserIds: [String],
+      members: [new Schema({ role: String, memberUserId: String })],
+      meta: new Schema({ invitedBy: String }),
+    });
+
+    expect(userPathsOf(schema).sort()).toEqual(
+      ['members.memberUserId', 'meta.invitedBy', 'owner.userId', 'watcherUserIds'].sort(),
+    );
   });
 
   it('reads the models of a connection', () => {

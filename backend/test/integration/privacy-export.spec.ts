@@ -342,4 +342,75 @@ describe('SPEC-010 data access and portability (BR-010-08..11)', () => {
       expect(next.status).toBe('queued');
     });
   });
+
+  describe('BR-010-08: "my data" is bounded, the export is complete', () => {
+    it('shows 200 of each list with a truncated marker and the total, while the export holds every record', async () => {
+      const cap = await fresh(await seedAccount(app, 'cap', 'Conta Cheia', '+55 31 99999-0001'));
+      const auction = oid('64b7f00000000000000bee02');
+      await app.collection('favorites').insertMany(
+        Array.from({ length: 250 }, (_, n) => ({
+          userId: oid(cap.id),
+          auctionCode: `CAP${String(n).padStart(4, '0')}`,
+          auction,
+          createdAt: new Date(Date.UTC(2099, 0, 1, 0, 0, n)),
+        })),
+      );
+
+      const view = (await app.as(cap).get('/api/privacy/my-data').expect(200)).body as MyData;
+
+      // 250 inserted + the one seeded = 251 favorites; only 200 are shown, and it says so.
+      expect(view.favorites.items).toHaveLength(200);
+      expect(view.favorites).toMatchObject({ truncated: true, totals: { items: 251 } });
+      // A short list carries no marker at all.
+      expect(view.savedFilters).not.toHaveProperty('truncated');
+      expect(view.reminders).not.toHaveProperty('truncated');
+
+      await app.as(cap).post('/api/privacy/exports').expect(202);
+      await app.exportJob.runBuild();
+      const file = JSON.parse(
+        [...app.storage.files.values()].pop()?.toString('utf8') ?? '{}',
+      ) as MyData;
+      expect(file.favorites.items).toHaveLength(251); // complete, whatever the page size it was read by
+      expect(file.favorites).not.toHaveProperty('truncated');
+    });
+  });
+
+  describe('BR-010-11: a ready export past its time is not live', () => {
+    const askAt = async (offsetMs: number) => {
+      const owner = await fresh(
+        await seedAccount(app, `exp${offsetMs}`, 'Conta Expira', '+55 41 99999-0002'),
+      );
+      const first = await request(owner);
+      await app.exportJob.runBuild();
+      const ready = (await listOf(owner)).items.find((e) => e.id === first.id) as ExportBody;
+      app.harness.clock.set(new Date(new Date(ready.expiresAt as string).getTime() + offsetMs));
+      const signedIn = await fresh(owner);
+      return { first, ready, again: await request(signedIn), signedIn };
+    };
+
+    it('one minute before expiresAt, asking again answers the same ready export', async () => {
+      const { first, again } = await askAt(-60_000);
+
+      expect(again).toMatchObject({ id: first.id, status: 'ready' });
+    });
+
+    it.each([0, 60_000])(
+      'at expiresAt%s, asking for an export queues a fresh one and the old one is expired',
+      async (offset) => {
+        const { first, again, signedIn } = await askAt(offset);
+
+        expect(again.id).not.toBe(first.id);
+        expect(again.status).toBe('queued');
+        const old = (await listOf(signedIn)).items.find((e) => e.id === first.id);
+        expect(old?.status).toBe('expired');
+        // Its file is deleted by the cleanup (the key stayed on the row for it).
+        const key = (await app.collection('dataExports').findOne({ _id: oid(first.id) }))?.[
+          'fileKey'
+        ] as string;
+        expect(app.storage.files.has(key)).toBe(true);
+        await app.exportJob.runExpiry();
+        expect(app.storage.files.has(key)).toBe(false);
+      },
+    );
+  });
 });

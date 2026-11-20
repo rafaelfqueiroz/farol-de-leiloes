@@ -483,26 +483,210 @@ describe('SPEC-010 purging closed accounts (BR-010-15)', () => {
       const closedAt = (await stored(who)).closedAt as Date;
 
       app.harness.clock.set(new Date(closedAt.getTime() + 25 * DAY - MINUTE));
-      const early = await app.purgeJob.run();
+      const early = await app.purgeJob.checkOverdue();
       const earlyLines = errors.mock.calls.map(([line]) => String(line));
 
       app.harness.clock.set(new Date(closedAt.getTime() + 25 * DAY));
-      const due = await app.purgeJob.run();
+      const due = await app.purgeJob.checkOverdue();
       const dueLines = errors.mock.calls.map(([line]) => String(line));
 
-      expect(early?.overdue).toBe(0);
+      expect(early).toBe(0);
       expect(earlyLines.filter((line) => line.includes('not purged'))).toEqual([]);
-      expect(due?.overdue).toBe(1);
+      expect(due).toBe(1);
       const alert = dueLines.find((line) => line.includes('not purged'));
       expect(alert).toBe(
         '1 closed account(s) not purged 25 days after closure; the legal limit is 30 days (BR-010-15)',
       );
       expect(dueLines.join('\n')).not.toContain(who.email);
       expect(dueLines.join('\n')).not.toContain(who.id);
+      // The purge run itself fails for this account, but the alert did not depend on it running.
+      expect(await app.purgeJob.run()).toMatchObject({ failed: 1, overdue: 1 });
       stuck.mockRestore();
       errors.mockRestore();
       await app.purgeJob.run(); // converges once the provider is back
       expect((await stored(who)).purgedAt).toBeDefined();
+    });
+  });
+
+  describe('the tombstone address cannot be squatted (BR-010-15)', () => {
+    beforeEach(drain);
+
+    it('a placeholder planted under purged-<id>@removed.invalid does not fail the purge: a suffixed address is used', async () => {
+      const who = await closed('Placeholder ocupado');
+      await app.collection('users').insertOne({
+        email: `purged-${who.id}@removed.invalid`,
+        name: 'Squatter',
+        status: 'active',
+      });
+
+      const outcome = await app.purgeJob.run();
+
+      expect(outcome).toMatchObject({ purged: 1, failed: 0 });
+      const tomb = await stored(who);
+      expect(tomb.purgedAt).toBeDefined();
+      expect(tomb.email).toMatch(new RegExp(`^purged-${who.id}-[0-9a-f]{16}@removed\\.invalid$`));
+      expect(await app.scan(markersOf(who))).toEqual([]);
+    });
+
+    it('sign-up refuses the reserved domain (and nothing is created)', async () => {
+      const refused = await app.authService
+        .register({
+          email: 'purged-64b7f00000000000000ffff1@removed.invalid',
+          name: 'Squatter',
+          password: PASSWORD,
+          acceptTerms: true,
+        })
+        .catch((error: unknown) => error);
+
+      expect(refused).toMatchObject({ code: 'VALIDATION_FAILED', context: { fields: ['email'] } });
+      expect(
+        await app
+          .collection('users')
+          .countDocuments({ email: 'purged-64b7f00000000000000ffff1@removed.invalid' }),
+      ).toBe(0);
+    });
+  });
+
+  describe('purge liveness: a bad head of the queue never stalls the others', () => {
+    beforeEach(drain);
+
+    it('more than a batch of permanently failing accounts do not keep a later account from being purged', async () => {
+      const stuckCount = 105; // more than one batch of 100
+      const closedLongAgo = new Date(app.harness.clock.now().getTime() - 40 * DAY);
+      const stuck = await app.collection('users').insertMany(
+        Array.from({ length: stuckCount }, (_, n) => ({
+          email: `stuck-${n}@example.test`,
+          name: 'Presa',
+          status: 'closed',
+          closedAt: new Date(closedLongAgo.getTime() + n),
+          providers: ['local'],
+        })),
+      );
+      const stuckIds = new Set(Object.values(stuck.insertedIds).map((id) => id.toHexString()));
+      const later = await closed('Conta posterior');
+      const registry = app.get(PersonalDataRegistry);
+      const real = registry.purge.bind(registry);
+      const fault = vi
+        .spyOn(registry, 'purge')
+        .mockImplementation((userId: string) =>
+          stuckIds.has(userId) ? Promise.reject(new Error('permanent fault')) : real(userId),
+        );
+
+      const outcome = await app.purgeJob.run();
+
+      expect(outcome).toMatchObject({ purged: 1, failed: stuckCount });
+      expect((await stored(later)).purgedAt).toBeDefined();
+      expect(await app.scan(markersOf(later))).toEqual([]);
+      // The stuck ones are untouched and stay candidates (and overdue): the alert watches them.
+      expect(
+        await app
+          .collection('users')
+          .countDocuments({ status: 'closed', purgedAt: { $exists: false } }),
+      ).toBe(stuckCount);
+      expect(await app.purgeJob.checkOverdue()).toBe(stuckCount);
+      fault.mockRestore();
+      expect(await app.purgeJob.run()).toMatchObject({ purged: stuckCount, failed: 0 });
+    });
+  });
+
+  describe('closure hooks must have ended before the tombstone (BR-010-17)', () => {
+    beforeEach(drain);
+
+    it('a hook that keeps failing fails the purge: no tombstone, claim released, and the next run finishes once it works', async () => {
+      const who = await closed('Hook teimoso');
+      app.hook.failWith = new Error('links service down');
+      app.hook.calls.length = 0;
+
+      const failed = await app.purgeJob.run();
+
+      expect(failed).toMatchObject({ purged: 0, failed: 1 });
+      const midway = await stored(who);
+      expect(midway.purgedAt).toBeUndefined();
+      expect(midway.name).toBe(who.name); // nothing was erased
+      expect(midway.purgeClaimToken).toBeUndefined();
+      expect(await app.collection('favorites').countDocuments({ userId: oid(who.id) })).toBe(1);
+
+      app.hook.failWith = undefined;
+      app.harness.clock.advance(MINUTE);
+      expect(await app.purgeJob.run()).toMatchObject({ purged: 1, failed: 0 });
+      expect(app.hook.calls[app.hook.calls.length - 1]).toBe(who.id);
+      expect(await app.scan(markersOf(who))).toEqual([]);
+    });
+  });
+
+  describe('an export file is never orphaned (BR-010-11, BR-010-15)', () => {
+    beforeEach(drain);
+
+    it('a crashed worker A left its upload under the key; worker B fails the export; the key is kept and the cleanup deletes the file', async () => {
+      const who = await seedAccount(app, label(), 'Worker caiu', '+55 11 98765-4321');
+      await app.as(who).post('/api/privacy/exports').expect(202);
+      const KEY = 'private/exports/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json';
+      // Worker A claimed with this key, uploaded, and died: its lease ran out.
+      await app.collection('dataExports').updateOne(
+        { userId: oid(who.id) },
+        {
+          $set: {
+            fileKey: KEY,
+            claimToken: 'dead-worker',
+            claimUntil: new Date(app.harness.clock.now().getTime() - MINUTE),
+          },
+        },
+      );
+      app.storage.files.set(KEY, Buffer.from('{"half":"written"}'));
+      // Worker B takes the export over (the key is reused) and fails.
+      vi.spyOn(app.get(PersonalDataRegistry), 'collect').mockRejectedValueOnce(new Error('boom'));
+
+      expect(await app.exportJob.runBuild()).toMatchObject({ failed: 1 });
+
+      const row = await app.collection('dataExports').findOne({ userId: oid(who.id) });
+      expect(row).toMatchObject({
+        status: 'failed',
+        errorCode: 'EXPORT_BUILD_FAILED',
+        fileKey: KEY,
+      });
+      expect(app.storage.files.has(KEY)).toBe(true); // still there: the key was NOT dropped
+      expect(await app.exportJob.runExpiry()).toMatchObject({ cleaned: 1 });
+      expect(app.storage.files.size).toBe(0);
+      expect(
+        (await app.collection('dataExports').findOne({ userId: oid(who.id) }))?.['fileKey'],
+      ).toBeUndefined();
+    });
+
+    it('the purge waits out a worker still building: it fails for now, the worker deletes its own file, the next run finishes', async () => {
+      const who = await seedAccount(app, label(), 'Worker lento', '+55 11 98765-4321');
+      await app.as(who).post('/api/privacy/exports').expect(202);
+      let purgeDuringBuild: unknown;
+      app.storage.afterStore = async () => {
+        app.storage.afterStore = undefined;
+        await closeAccount(who); // the closure cancels the export...
+        purgeDuringBuild = await app.purgeJob.purgeAccount(who.id).catch((error: unknown) => error);
+      };
+
+      const built = await app.exportJob.runBuild();
+
+      // ...the purge met the live lease and did NOT delete the row under the worker...
+      expect(purgeDuringBuild).toMatchObject({ name: 'ExportBuildInProgressError' });
+      expect((await stored(who)).purgedAt).toBeUndefined();
+      // ...the worker's ready-update matched nothing and it deleted the file it had just written.
+      expect(built).toMatchObject({ ready: 0, discarded: 1 });
+      expect(app.storage.files.size).toBe(0);
+
+      expect(await app.purgeJob.purgeAccount(who.id)).toBe('purged');
+      expect(await app.collection('dataExports').countDocuments({ userId: oid(who.id) })).toBe(0);
+      expect(app.storage.files.size).toBe(0);
+    });
+
+    it('if the row is already gone when the worker finishes, it still deletes its own file', async () => {
+      const who = await seedAccount(app, label(), 'Linha sumiu', '+55 11 98765-4321');
+      await app.as(who).post('/api/privacy/exports').expect(202);
+      app.storage.afterStore = async () => {
+        app.storage.afterStore = undefined;
+        await app.collection('dataExports').deleteMany({ userId: oid(who.id) });
+      };
+
+      expect(await app.exportJob.runBuild()).toMatchObject({ ready: 0, discarded: 1 });
+
+      expect(app.storage.files.size).toBe(0);
     });
   });
 });
