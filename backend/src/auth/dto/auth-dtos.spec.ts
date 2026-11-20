@@ -44,6 +44,32 @@ const valid = {
   acceptTerms: true,
 };
 
+describe('SPEC-010 BR-010-15: no address under the reserved .invalid domain', () => {
+  it.each([
+    'purged-64b7f00000000000000ffff1@removed.invalid',
+    'someone@removed.invalid',
+    'a@b.INVALID',
+    'a@sub.domain.invalid',
+  ])('RegisterDto refuses %s', async (email) => {
+    expect(await failedFields(RegisterDto, { ...valid, email })).toEqual(['email']);
+  });
+
+  it('every EmailField refuses it: login and reset request too', async () => {
+    expect(await failedFields(LoginDto, { email: 'x@removed.invalid', password: 'p' })).toEqual([
+      'email',
+    ]);
+    expect(await failedFields(RequestResetPasswordDto, { email: 'x@removed.invalid' })).toEqual([
+      'email',
+    ]);
+  });
+
+  it('still accepts a real address, one that merely contains "invalid", and the reserved test domain', async () => {
+    for (const email of ['ana@example.test', 'invalid@example.com', 'ana@invalid-domain.com']) {
+      expect(await failedFields(RegisterDto, { ...valid, email })).toEqual([]);
+    }
+  });
+});
+
 describe('RegisterDto', () => {
   it('BR-001-01: trims and lower-cases the email, and trims the name', async () => {
     const dto = await parse(RegisterDto, {

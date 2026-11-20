@@ -19,6 +19,7 @@ const PINNED = [
   'auth/auth.controller.ts#AuthController.updateProfile', //  PATCH /auth/profile
   'privacy/legal.controller.ts#LegalController', //           /legal/*
   'privacy/privacy.controller.ts#PrivacyController', //       /privacy/*
+  'privacy/rights/privacy-rights.controller.ts#PrivacyRightsController', // /privacy/* (SPEC-010 BR-010-08..14)
 ];
 
 const sources = (readdirSync(SRC, { recursive: true }) as string[])

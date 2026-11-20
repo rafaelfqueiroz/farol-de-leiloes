@@ -11,6 +11,8 @@ export interface SchedulerConfig {
   cache: CacheConfig;
   reminders: SchedulerRemindersConfig;
   subscriptionsReconcile: SchedulerSubscriptionsReconcileConfig;
+  accountPurge: SchedulerAccountPurgeConfig;
+  dataExport: SchedulerDataExportConfig;
   cleanup: SchedulerCleanupConfig;
 }
 
@@ -19,6 +21,14 @@ export interface SchedulerRemindersConfig {
 }
 
 export interface SchedulerSubscriptionsReconcileConfig {
+  enabled: boolean;
+}
+
+export interface SchedulerAccountPurgeConfig {
+  enabled: boolean;
+}
+
+export interface SchedulerDataExportConfig {
   enabled: boolean;
 }
 
@@ -50,6 +60,8 @@ export function schedulerConfigFrom(env: Env): SchedulerConfig {
     },
     reminders: { enabled: env.REMINDERS_ENABLED },
     subscriptionsReconcile: { enabled: env.SUBSCRIPTIONS_RECONCILE_ENABLED },
+    accountPurge: { enabled: env.ACCOUNT_PURGE_ENABLED },
+    dataExport: { enabled: env.DATA_EXPORT_ENABLED },
     cleanup: { onStartup: env.CLEANUP_ON_STARTUP },
   };
 }

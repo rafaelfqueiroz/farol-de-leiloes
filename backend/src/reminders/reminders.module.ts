@@ -14,6 +14,8 @@ import { EmailModule } from '../email/email.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { CommonModule } from '../common/common.module.js';
 import schedulerConfig from '../config/scheduler.config.js';
+import { NotificationLogsPersonalData, RemindersPersonalData } from './reminders.personal-data.js';
+import { PersonalDataRegistryModule } from '../privacy/registry/personal-data-registry.module.js';
 
 @Module({
   imports: [
@@ -27,6 +29,7 @@ import schedulerConfig from '../config/scheduler.config.js';
     EmailModule,
     NotificationsModule,
     CommonModule,
+    PersonalDataRegistryModule, // SPEC-010: registered for export and purge
   ],
   controllers: [RemindersController],
   providers: [
@@ -34,6 +37,8 @@ import schedulerConfig from '../config/scheduler.config.js';
     RemindersScheduler,
     RemindersRepository,
     NotificationLogsRepository,
+    RemindersPersonalData,
+    NotificationLogsPersonalData,
   ],
   exports: [RemindersService],
 })

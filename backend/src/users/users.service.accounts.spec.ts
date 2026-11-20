@@ -278,15 +278,18 @@ describe('UsersService.setPassword and changePassword', () => {
 
     await aService(Model).setPassword('u1', 'newsecret');
 
-    expect(Model.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: { $eq: 'u1' } }, // unfenced: a spent recovery token is the authority
+    const [filter, update, options] = plain(Model.findOneAndUpdate.mock.calls[0]) as unknown[];
+    // Unfenced on the version (a spent recovery token is the authority), but only an ACTIVE account's
+    // credentials are ever rewritten (SPEC-010 BR-010-14).
+    expect(filter).toEqual({ _id: { $eq: 'u1' }, status: { $in: ['active', null] } });
+    expect([update, options]).toEqual([
       {
         $set: { password: 'hashed:newsecret' },
         $inc: { credentialVersion: 1 },
         $addToSet: { providers: 'local' },
       },
       { returnDocument: 'after' },
-    );
+    ]);
     expect(query.calls['select']).toEqual([['-password']]);
   });
 
@@ -313,6 +316,7 @@ describe('UsersService.setPassword and changePassword', () => {
     const [filter, update, options] = plain(Model.findOneAndUpdate.mock.calls[0]) as unknown[];
     expect(filter).toEqual({
       _id: { $eq: 'u1' },
+      status: { $in: ['active', null] },
       credentialVersion: { $in: [2] },
       providers: { $eq: 'local' },
     });
@@ -536,4 +540,24 @@ describe('UsersService.discardUnfinishedSignup (SPEC-010 BR-010-01)', () => {
     const { Model } = aModel({ deleteOne: { deletedCount: 0 } });
     await expect(aService(Model).discardUnfinishedSignup('u1')).resolves.toBe(false);
   });
+});
+
+describe('SPEC-010 BR-010-15: no account under the reserved .invalid domain', () => {
+  it.each(['purged-64b7f00000000000000ffff1@removed.invalid', 'x@Removed.INVALID', 'x@a.invalid.'])(
+    'createLocalAccount and createGoogleAccount refuse %s, and nothing is looked up or stored',
+    async (email) => {
+      const { Model, created } = aModel();
+      const service = aService(Model);
+
+      await expect(
+        service.createLocalAccount({ email, name: 'N', password: 'password-1234' }),
+      ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', context: { fields: ['email'] } });
+      await expect(
+        service.createGoogleAccount({ email, name: 'N', googleId: 'g-1' }),
+      ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', context: { fields: ['email'] } });
+
+      expect(created).toEqual([]);
+      expect(Model.findOne).not.toHaveBeenCalled();
+    },
+  );
 });

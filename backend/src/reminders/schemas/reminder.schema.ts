@@ -11,6 +11,12 @@ export enum ReminderChannel {
 export enum ReminderStatus {
   PENDING = 'PENDING',
   SENT = 'SENT',
+  /**
+   * SPEC-010 BR-010-14: the reminder will never be sent because its account was closed. The due
+   * query never selects it (it asks for PENDING), so a closed account's reminders cannot crowd out
+   * other accounts'; the row stays until the purge deletes it with the account.
+   */
+  CANCELLED = 'CANCELLED',
 }
 
 @Schema({ collection: 'reminders', timestamps: true })

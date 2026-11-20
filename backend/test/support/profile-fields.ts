@@ -34,6 +34,12 @@ export const PROTECTED = [
   'whatsappPromptAnsweredAt',
   // SPEC-010 DL-001-02: set only by the Google takeover of an unconfirmed account (UsersService).
   'consentResetAt',
+  // SPEC-010 BR-010-14, BR-010-15: closure and the purge's claim and tombstone instants, written by
+  // UsersService.closeAccount and the purge job only (no request body reaches them).
+  'closedAt',
+  'purgedAt',
+  'purgeClaimToken',
+  'purgeClaimUntil',
 ] as const;
 
 /** Mongoose bookkeeping, not account attributes. */
@@ -67,4 +73,8 @@ export const HOSTILE_VALUES: Record<string, unknown> = {
   isAdmin: true,
   whatsappPromptAnsweredAt: '2000-01-01T00:00:00.000Z',
   consentResetAt: '2000-01-01T00:00:00.000Z',
+  closedAt: '2000-01-01T00:00:00.000Z',
+  purgedAt: '2000-01-01T00:00:00.000Z',
+  purgeClaimToken: 'hostile-claim',
+  purgeClaimUntil: '2999-01-01T00:00:00.000Z',
 };

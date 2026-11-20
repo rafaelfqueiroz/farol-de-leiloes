@@ -37,6 +37,25 @@ export class WhatsappConsentRepository {
     await this.model.create({ ...entry, userId: new Types.ObjectId(entry.userId) });
   }
 
+  /** Every answer of the account under its current consent generation, oldest first (BR-010-08). */
+  async listForUser(userId: string, consentResetAt: Date | null): Promise<WhatsappAnswer[]> {
+    const rows = await this.model
+      .find({
+        userId: { $eq: new Types.ObjectId(userId) },
+        consentResetAt: { $eq: consentResetAt },
+      })
+      .sort({ at: 1, _id: 1 })
+      .select('action method textVersion at')
+      .lean()
+      .exec();
+    return rows.map((row) => ({
+      action: row.action,
+      method: row.method,
+      textVersion: row.textVersion,
+      at: row.at,
+    }));
+  }
+
   /**
    * The account's latest answer under its CURRENT consent generation (by instant, then by
    * insertion), or null if it never answered under it: an answer given by whoever registered the

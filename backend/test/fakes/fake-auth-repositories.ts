@@ -47,9 +47,14 @@ export class FakeAccountTokenRepository implements Port<AccountTokenRepository> 
     this.stored.splice(0, this.stored.length, ...keep);
   }
 
-  async consume(tokenHash: string, purpose: UserTokenPurpose, now: Date) {
+  async consume(tokenHash: string, purpose: UserTokenPurpose, now: Date, forUserId?: string) {
     const token = this.stored.find(
-      (t) => t.tokenHash === tokenHash && t.purpose === purpose && !t.usedAt && t.expiresAt > now,
+      (t) =>
+        t.tokenHash === tokenHash &&
+        t.purpose === purpose &&
+        !t.usedAt &&
+        t.expiresAt > now &&
+        (forUserId === undefined || t.userId === forUserId),
     );
     if (!token?.userId) return null;
     token.usedAt = now;
@@ -63,6 +68,23 @@ export class FakeAccountTokenRepository implements Port<AccountTokenRepository> 
   async deleteAllUnusedForUser(userId: string): Promise<void> {
     const keep = this.stored.filter((t) => !(t.userId === userId && !t.usedAt));
     this.stored.splice(0, this.stored.length, ...keep);
+  }
+
+  async listUnusedForUser(userId: string, now: Date) {
+    return this.stored
+      .filter((t) => t.userId === userId && !t.usedAt && t.expiresAt > now)
+      .map((t) => ({
+        purpose: t.purpose as UserTokenPurpose,
+        issuedAt: new Date(0),
+        expiresAt: t.expiresAt,
+      }));
+  }
+
+  async deleteAllForUser(userId: string): Promise<number> {
+    const keep = this.stored.filter((t) => t.userId !== userId);
+    const deleted = this.stored.length - keep.length;
+    this.stored.splice(0, this.stored.length, ...keep);
+    return deleted;
   }
 
   async insertGoogleSignup(token: Parameters<AccountTokenRepository['insertGoogleSignup']>[0]) {
@@ -135,6 +157,24 @@ export class FakeSessionsRepository implements Port<SessionsRepository> {
     for (const s of this.stored) {
       if (s.userId === userId && !s.revokedAt && s.id !== exceptId) s.revokedAt = now;
     }
+  }
+
+  async listForUser(userId: string, limit: number) {
+    return this.stored
+      .filter((s) => s.userId === userId)
+      .slice(0, limit)
+      .map((s) => ({
+        startedAt: new Date(0),
+        expiresAt: s.expiresAt,
+        ...(s.revokedAt ? { revokedAt: s.revokedAt } : {}),
+      }));
+  }
+
+  async deleteAllForUser(userId: string): Promise<number> {
+    const keep = this.stored.filter((s) => s.userId !== userId);
+    const deleted = this.stored.length - keep.length;
+    this.stored.splice(0, this.stored.length, ...keep);
+    return deleted;
   }
 
   async rebind(id: string, userId: string, credentialVersion: number, now: Date): Promise<boolean> {

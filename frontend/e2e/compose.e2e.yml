@@ -88,6 +88,9 @@ services:
       SCRAPER_ENABLED: 'false'
       REMINDERS_ENABLED: 'false'
       SUBSCRIPTIONS_RECONCILE_ENABLED: 'false'
+      # SPEC-010: no purge or export worker runs in the stack (AR-04); the specs drive the routes.
+      ACCOUNT_PURGE_ENABLED: 'false'
+      DATA_EXPORT_ENABLED: 'false'
       CLEANUP_ON_STARTUP: 'false'
     healthcheck:
       test:

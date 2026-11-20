@@ -166,6 +166,7 @@ describe('assertMigrationOrder', () => {
       '0006-subscription-indexes',
       '0007-billing-indexes',
       '0008-consent-indexes',
+      '0009-privacy-rights-indexes',
     ]);
   });
 });

@@ -180,3 +180,20 @@ describe('the private bucket of client files (SC-18, BR-002-08)', () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+
+describe('StorageService.isPrivateStorageConfigured (SC-18, SPEC-010 BR-010-11)', () => {
+  it('is true only with R2 configured and a private bucket set', () => {
+    expect(new StorageService(config).isPrivateStorageConfigured()).toBe(true);
+  });
+
+  it('is false without the private bucket: an export never falls back to the public one', () => {
+    expect(new StorageService(withoutPrivateBucket).isPrivateStorageConfigured()).toBe(false);
+  });
+
+  it('is false when R2 itself is not configured', () => {
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const incomplete = { ...config, accessKeyId: '' };
+
+    expect(new StorageService(incomplete).isPrivateStorageConfigured()).toBe(false);
+  });
+});

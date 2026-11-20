@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, type QueryFilter } from 'mongoose';
@@ -5,9 +6,16 @@ import { UserEntity, UserDocument } from './schemas/user.schema.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import { DomainError } from '../common/errors/domain-error.js';
-import { normalizeEmail } from '../common/normalize-email.js';
+import { isReservedEmailDomain, normalizeEmail } from '../common/normalize-email.js';
 import { serverOperators } from '../common/mongo/query-safety.js';
 import { decideGoogleLink } from './domain/google-link.js';
+import {
+  CLOSABLE_STATUSES,
+  PURGE_CLAIM_FIELDS,
+  PURGE_REMOVED_FIELDS,
+  purgedEmail,
+  purgedEmailWithSuffix,
+} from './domain/account-closure.js';
 
 // SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34). Nothing that
 // decides how the account signs in is here (`password`, `providers`, `googleId`): those change only
@@ -22,6 +30,8 @@ const TEXT_FIELDS = ['name', 'phone'] as const;
 const BCRYPT_COST = 10;
 // 11000: MongoDB's duplicate-key error code.
 const DUPLICATE_KEY = 11000;
+// A tombstone address that collides is retried with a random suffix this many times in all.
+const TOMBSTONE_EMAIL_ATTEMPTS = 3;
 
 /**
  * What `linkGoogleIdentity` did (BR-001-10). `linked_*` carry the account after the write;
@@ -51,6 +61,7 @@ export class UsersService {
     password: string;
   }): Promise<UserDocument> {
     const email = normalizeEmail(input.email);
+    this.assertAcceptableEmail(email);
     // BR-001-01: unique without regard to case or surrounding spaces.
     if (await this.findByEmail(email)) {
       throw new DomainError('EMAIL_ALREADY_REGISTERED');
@@ -64,6 +75,16 @@ export class UsersService {
         emailVerified: false,
       }),
     );
+  }
+
+  /**
+   * SPEC-010 BR-010-15: no account is created under the reserved `.invalid` domain, where the purge
+   * keeps its tombstone addresses (a squatted placeholder would collide with the unique email).
+   */
+  private assertAcceptableEmail(email: string): void {
+    if (isReservedEmailDomain(email)) {
+      throw new DomainError('VALIDATION_FAILED', { fields: ['email'] });
+    }
   }
 
   /** The unique index decides a race between two sign-ups with the same email (BR-001-01). */
@@ -115,6 +136,7 @@ export class UsersService {
     name: string;
   }): Promise<UserDocument> {
     const email = normalizeEmail(input.email);
+    this.assertAcceptableEmail(email);
     // BR-001-01: unique without regard to case or surrounding spaces.
     if (await this.findByEmail(email)) {
       throw new DomainError('EMAIL_ALREADY_REGISTERED');
@@ -308,6 +330,9 @@ export class UsersService {
     const fence = expectedCredentialVersion !== undefined;
     const filter: QueryFilter<UserDocument> = {
       _id: { $eq: userId },
+      // SPEC-010 BR-010-14: a closed (or deactivated) account's credentials are never rewritten, by
+      // a recovery link spent after the closure or by any other flow; a missing status is active.
+      status: serverOperators({ $in: ['active' as const, null] }),
       // DL-001-02: the version the caller's decision was based on. An account without the field
       // is at 0 (the same rule as `credentialVersionOf`).
       ...(fence
@@ -561,6 +586,172 @@ export class UsersService {
         { $set: { whatsappPromptAnsweredAt: at } },
       )
       .exec();
+  }
+
+  /**
+   * SPEC-010 BR-010-14: closes the account, at once and for good, in ONE conditional update: the
+   * status goes from `active` or `deactivated` (a missing status is active, AR-28) to `closed`,
+   * `closedAt` is set to `now` (the injected Clock) and the credential version goes up by one, the
+   * same atomic write (SC-03, DL-001-02): a sign-in that already passed its checks just before this
+   * instant opened a session stamped with the old version, which `JwtStrategy` now refuses, so no
+   * session survives the closure however it races. Revoking the sessions and the rest of the
+   * clean-up is the caller's job.
+   *
+   * `closed`: this call closed it. `already_closed`: it was closed before (by a concurrent request
+   * or an earlier one): nothing was written, so the caller does nothing more. `not_found`: no such
+   * account. The conditional update decides a race between two closures: exactly one gets `closed`.
+   */
+  async closeAccount(
+    userId: string,
+    now: Date,
+  ): Promise<'closed' | 'already_closed' | 'not_found'> {
+    const closed = await this.userRepository
+      .findOneAndUpdate(
+        {
+          _id: { $eq: userId },
+          // SC-10: server-written operators; a missing or null status is active (AR-28).
+          status: serverOperators({ $in: [...CLOSABLE_STATUSES, null] }),
+        },
+        { $set: { status: 'closed', closedAt: now }, $inc: { credentialVersion: 1 } },
+        { returnDocument: 'after' },
+      )
+      .select('_id')
+      .lean()
+      .exec();
+    if (closed) return 'closed';
+    // Nothing matched: either it does not exist or it is already closed.
+    const exists = await this.userRepository.exists({ _id: { $eq: userId } });
+    return exists ? 'already_closed' : 'not_found';
+  }
+
+  /**
+   * SPEC-010 BR-010-15 / AR-12: the closed accounts whose personal data is still to be purged,
+   * oldest closure first (a missing `closedAt` first of all), with no live claim at `now`, leaving out
+   * `excludeIds`. A job
+   * method: it reads across accounts and answers ids only.
+   */
+  async findPurgeCandidates(
+    now: Date,
+    limit: number,
+    excludeIds: readonly string[] = [],
+  ): Promise<string[]> {
+    const rows = await this.userRepository
+      .find({
+        status: { $eq: 'closed' },
+        purgedAt: serverOperators({ $exists: false }),
+        $or: [
+          { purgeClaimUntil: serverOperators({ $exists: false }) },
+          { purgeClaimUntil: serverOperators({ $lte: now }) },
+        ],
+        // The accounts that already failed (or were skipped) in this run: a permanently failing
+        // head of the queue must not keep the others from being purged.
+        ...(excludeIds.length > 0 ? { _id: serverOperators({ $nin: [...excludeIds] }) } : {}),
+      })
+      .sort({ closedAt: 1, _id: 1 })
+      .limit(limit)
+      .select('_id')
+      .lean()
+      .exec();
+    return rows.map((row) => row._id.toHexString());
+  }
+
+  /**
+   * The atomic claim of one closed, unpurged account for a purge worker: a random token and its
+   * expiry, set only while the account is closed, not purged and has no live claim (one conditional
+   * update, so of two workers exactly one wins). True when this worker holds it.
+   */
+  async claimForPurge(userId: string, token: string, now: Date, until: Date): Promise<boolean> {
+    const result = await this.userRepository
+      .updateOne(
+        {
+          _id: { $eq: userId },
+          status: { $eq: 'closed' },
+          purgedAt: serverOperators({ $exists: false }),
+          $or: [
+            { purgeClaimUntil: serverOperators({ $exists: false }) },
+            { purgeClaimUntil: serverOperators({ $lte: now }) },
+          ],
+        },
+        { $set: { purgeClaimToken: token, purgeClaimUntil: until } },
+      )
+      .exec();
+    return result.matchedCount > 0;
+  }
+
+  /** Gives the claim back (a failed purge, so the next run need not wait for the lease to end). */
+  async releasePurgeClaim(userId: string, token: string): Promise<void> {
+    await this.userRepository
+      .updateOne(
+        { _id: { $eq: userId }, purgeClaimToken: { $eq: token } },
+        { $unset: { purgeClaimToken: '', purgeClaimUntil: '' } },
+      )
+      .exec();
+  }
+
+  /**
+   * SPEC-010 BR-010-15: the tombstone, the LAST step of a purge, conditional on the claim the worker
+   * holds (`token`) and on the account still being closed and unpurged. It removes every field in
+   * `PURGE_REMOVED_FIELDS`, replaces the email with `purged-<id>@removed.invalid` (which frees the
+   * real address for a new sign-up) and sets `purgedAt`; `_id`, `status`, `closedAt` and the rest
+   * stay. In one update, so a crash leaves either the whole personal document or the whole
+   * tombstone. False when the claim was lost (nothing was written).
+   */
+  async completePurge(userId: string, token: string, now: Date): Promise<boolean> {
+    const removed = Object.fromEntries(
+      [...PURGE_REMOVED_FIELDS, ...PURGE_CLAIM_FIELDS].map((field) => [field, '']),
+    );
+    // The plain tombstone address first; if somebody holds it (a placeholder squatted before sign-ups
+    // refused `.invalid`, or planted by hand) the purge never fails for that: it takes the same
+    // address with a random suffix. The unique index on `email` is what says "taken".
+    for (let attempt = 0; attempt < TOMBSTONE_EMAIL_ATTEMPTS; attempt += 1) {
+      const email =
+        attempt === 0
+          ? purgedEmail(userId)
+          : purgedEmailWithSuffix(userId, randomBytes(8).toString('hex'));
+      try {
+        const result = await this.userRepository
+          .updateOne(
+            {
+              _id: { $eq: userId },
+              status: { $eq: 'closed' },
+              purgeClaimToken: { $eq: token },
+              purgedAt: serverOperators({ $exists: false }),
+            },
+            { $set: { email, purgedAt: now }, $unset: removed },
+            // The tombstone is a controlled write of fields the schema requires (name) to be removed.
+            { runValidators: false },
+          )
+          .exec();
+        return result.matchedCount > 0;
+      } catch (error) {
+        if ((error as { code?: number }).code !== DUPLICATE_KEY) throw error;
+      }
+    }
+    throw new Error('A tombstone address could not be found');
+  }
+
+  /**
+   * SPEC-010 BR-010-15: how many closed accounts are still unpurged although they were closed at or
+   * before `closedAtOrBefore` (the alert's count). Counts only, never who.
+   */
+  async countOverduePurges(closedAtOrBefore: Date): Promise<number> {
+    return this.userRepository
+      .countDocuments({
+        status: { $eq: 'closed' },
+        purgedAt: serverOperators({ $exists: false }),
+        closedAt: serverOperators({ $lte: closedAtOrBefore }),
+      })
+      .exec();
+  }
+
+  /** SPEC-010 BR-010-11: whether the account is active (a missing status counts, AR-28). */
+  async isActive(userId: string): Promise<boolean> {
+    const user = await this.userRepository
+      .findOne({ _id: { $eq: userId } })
+      .select('status')
+      .lean()
+      .exec();
+    return !!user && (user.status ?? 'active') === 'active';
   }
 
   async isEmailVerified(userId: string): Promise<boolean> {

@@ -114,6 +114,11 @@ export const envSchema = z
     REMINDERS_ENABLED: flag.default(true),
     // SPEC-012 (ADR-005): the daily job that re-reads subscriptions from the payment provider.
     SUBSCRIPTIONS_RECONCILE_ENABLED: flag.default(true),
+    // SPEC-010 BR-010-15: the daily job that deletes the personal data of closed accounts (AR-04).
+    ACCOUNT_PURGE_ENABLED: flag.default(true),
+    // SPEC-010 BR-010-11: the worker that builds the data exports (AR-04). A request is queued
+    // whatever this says; with it off nothing is built until it is switched on again.
+    DATA_EXPORT_ENABLED: flag.default(true),
     CLEANUP_ON_STARTUP: flag.default(false),
     NEIGHBORHOODS_CACHE_ENABLED: flag.default(false),
     // Milliseconds; 600000 = 10 minutes.
@@ -137,6 +142,16 @@ export const envSchema = z
     // acceptances is always on. Off by default while no screen asks for the acceptance; the
     // frontend change that adds it flips the default to true.
     TERMS_ENFORCEMENT_ENABLED: flag.default(false),
+    // SPEC-010 BR-010-15 (AR-43): the legal ceiling, in days, between the closure of an account and
+    // the deletion of its personal data (RNF-24). The purge job runs daily and normally finishes
+    // within one day; this value is what the alert and the health text are measured against.
+    ACCOUNT_PURGE_MAX_DAYS: positiveInt.default(30),
+    // SPEC-010 BR-010-15: an error is logged when a closed account is still not purged this many
+    // days after its closure, early enough to act before ACCOUNT_PURGE_MAX_DAYS (superRefine).
+    ACCOUNT_PURGE_ALERT_DAYS: positiveInt.default(25),
+    // SPEC-010 BR-010-11: days an export stays downloadable after it became ready, then it is
+    // deleted (RNF-22).
+    EXPORT_TTL_DAYS: positiveInt.default(7),
 
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
@@ -156,6 +171,14 @@ export const envSchema = z
           code: 'custom',
           path: ['LOG_HASH_SECRET'],
           message: 'required when NODE_ENV is production',
+        });
+      }
+      // BR-010-15: an alert after the ceiling would never warn anybody in time.
+      if (env.ACCOUNT_PURGE_ALERT_DAYS > env.ACCOUNT_PURGE_MAX_DAYS) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['ACCOUNT_PURGE_ALERT_DAYS'],
+          message: 'must not be more than ACCOUNT_PURGE_MAX_DAYS',
         });
       }
       // SC-18: a client file in the public bucket would be reachable at R2_PUBLIC_URL, unsigned.
