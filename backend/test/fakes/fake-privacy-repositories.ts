@@ -85,6 +85,12 @@ export class FakeWhatsappConsentRepository implements Port<WhatsappConsentReposi
     this.rows.push(entry);
   }
 
+  async listForUser(userId: string, consentResetAt: Date | null): Promise<WhatsappAnswer[]> {
+    return this.rows
+      .filter((row) => row.userId === userId && sameGeneration(row.consentResetAt, consentResetAt))
+      .map(({ action, method, textVersion, at }) => ({ action, method, textVersion, at }));
+  }
+
   async latest(userId: string, consentResetAt: Date | null): Promise<WhatsappAnswer | null> {
     const own = this.rows.filter(
       (row) => row.userId === userId && sameGeneration(row.consentResetAt, consentResetAt),

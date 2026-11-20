@@ -63,6 +63,16 @@ export class SessionsService {
     await this.sessions.revokeAllForUser(userId, this.clock.now(), exceptJti);
   }
 
+  /** SPEC-010 BR-010-08: when the account's sessions started, ended and expire; never an id. */
+  listForAccount(userId: string) {
+    return this.sessions.listForUser(userId, 100);
+  }
+
+  /** SPEC-010 BR-010-15 / AR-31: JOB ONLY. Deletes every session record of a closed account. */
+  purgeAllForUser(userId: string): Promise<number> {
+    return this.sessions.deleteAllForUser(userId);
+  }
+
   /**
    * DL-001-02: after the account holder changes their own credential, the session that made the
    * change is bound to the new version so it stays signed in, while every other session (still

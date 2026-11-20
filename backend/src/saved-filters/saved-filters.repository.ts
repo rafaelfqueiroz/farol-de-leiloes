@@ -33,6 +33,19 @@ export class SavedFiltersRepository extends AccountScopedRepository<SavedFilterR
     );
   }
 
+  /** SPEC-010 BR-010-08: every saved filter of the account, newest first, for the export. */
+  findAllForExport(ctx: AccessContext): Promise<SavedFilterRecord[]> {
+    return this.find(ctx, {}, { sort: { createdAt: -1, _id: -1 } });
+  }
+
+  /**
+   * AR-12 / AR-31 / SPEC-010 BR-010-15: JOB ONLY. Deletes every saved filter of one closed account;
+   * idempotent. Never called from a request.
+   */
+  purgeAccountByJob(accountId: string): Promise<number> {
+    return this.deleteAllOfAccountByJob(accountId);
+  }
+
   /** The account's filter with this name. SC-10: the name is the user's text, compared by value. */
   findByName(ctx: AccessContext, name: string): Promise<SavedFilterRecord | null> {
     return this.findOne(ctx, { name: { $eq: name } });

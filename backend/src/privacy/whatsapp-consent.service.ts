@@ -15,7 +15,7 @@ import {
   type WhatsappConsentState,
   type WhatsappMethod,
 } from './domain/whatsapp-consent.js';
-import { WhatsappConsentRepository } from './whatsapp-consent.repository.js';
+import { WhatsappConsentRepository, type WhatsappAnswer } from './whatsapp-consent.repository.js';
 
 export interface WhatsappConsentView {
   readonly state: WhatsappConsentState;
@@ -83,6 +83,11 @@ export class WhatsappConsentService {
       at: latest?.at ?? null,
       textVersion: latest?.textVersion ?? null,
     };
+  }
+
+  /** BR-010-08: every answer of the account under its consent generation, oldest first. */
+  historyFor(userId: string, consentResetAt: Date | null): Promise<readonly WhatsappAnswer[]> {
+    return this.answers.listForUser(userId, consentResetAt);
   }
 
   /**

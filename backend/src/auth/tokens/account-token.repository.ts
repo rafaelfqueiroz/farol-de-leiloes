@@ -72,14 +72,17 @@ export class AccountTokenRepository {
   /**
    * Marks the token used and returns it, in one atomic step: of two concurrent requests with the
    * same link exactly one gets the record (BR-001-05, BR-001-22). Null when the hash is unknown,
-   * the purpose differs, the token was used, or it expired at `now`.
+   * the purpose differs, the token was used, or it expired at `now`. With `forUserId` the token
+   * must also belong to that account: another account's token is then NOT spent (SPEC-010
+   * BR-010-13: a code of someone else proves nothing and must not burn it).
    */
   async consume(
     tokenHash: string,
     purpose: UserTokenPurpose,
     now: Date,
+    forUserId?: string,
   ): Promise<AccountTokenRecord | null> {
-    const token = await this.markUsed(tokenHash, purpose, now);
+    const token = await this.markUsed(tokenHash, purpose, now, forUserId);
     if (!token?.userId) return null;
     return {
       userId: token.userId.toHexString(),
@@ -93,6 +96,36 @@ export class AccountTokenRepository {
     await this.model
       .deleteMany({ userId: { $eq: new Types.ObjectId(userId) }, usedAt: null })
       .exec();
+  }
+
+  /** SPEC-010 BR-010-08: the purposes and instants of the account's links not yet used. */
+  async listUnusedForUser(
+    userId: string,
+    now: Date,
+  ): Promise<{ purpose: UserTokenPurpose; issuedAt: Date; expiresAt: Date }[]> {
+    const rows = await this.model
+      .find({
+        userId: { $eq: new Types.ObjectId(userId) },
+        usedAt: null,
+        expiresAt: serverOperators({ $gt: now }),
+      })
+      .sort({ createdAt: -1, _id: -1 })
+      .select('purpose createdAt expiresAt')
+      .lean()
+      .exec();
+    return rows.map((row) => ({
+      purpose: row.purpose as UserTokenPurpose,
+      issuedAt: (row as unknown as { createdAt: Date }).createdAt,
+      expiresAt: row.expiresAt,
+    }));
+  }
+
+  /** SPEC-010 BR-010-15 / AR-31: JOB ONLY. Deletes EVERY token of one closed account, used or not. */
+  async deleteAllForUser(userId: string): Promise<number> {
+    const result = await this.model
+      .deleteMany({ userId: { $eq: new Types.ObjectId(userId) } })
+      .exec();
+    return result.deletedCount;
   }
 
   async insertGoogleSignup(token: NewGoogleSignupToken): Promise<void> {
@@ -142,7 +175,7 @@ export class AccountTokenRepository {
       .exec();
   }
 
-  private markUsed(tokenHash: string, purpose: AccountTokenPurpose, now: Date) {
+  private markUsed(tokenHash: string, purpose: AccountTokenPurpose, now: Date, forUserId?: string) {
     return this.model
       .findOneAndUpdate(
         {
@@ -150,6 +183,7 @@ export class AccountTokenRepository {
           purpose: { $eq: purpose },
           usedAt: null,
           expiresAt: serverOperators({ $gt: now }),
+          ...(forUserId === undefined ? {} : { userId: { $eq: new Types.ObjectId(forUserId) } }),
         },
         { $set: { usedAt: now } },
         { returnDocument: 'after' },

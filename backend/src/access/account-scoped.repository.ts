@@ -214,6 +214,16 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
   }
 
   /**
+   * AR-12 / AR-31: UNSCOPED delete of EVERY record of ONE closed account, for the purge job only
+   * (SPEC-010 BR-010-15), never from a request handler. A subclass exposes it under a name that says
+   * so. Idempotent: with nothing left it deletes nothing. Answers how many it deleted.
+   */
+  protected async deleteAllOfAccountByJob(accountId: string): Promise<number> {
+    const result = await this.records.deleteMany({ userId: { $eq: accountId } }).exec();
+    return result.deletedCount;
+  }
+
+  /**
    * AR-12: a record a JOB writes for an account it read from another record of that same account
    * (e.g. the notification log of a reminder), never from a request (BR-002-29).
    */

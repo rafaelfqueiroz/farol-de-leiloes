@@ -56,11 +56,16 @@ export class AccountTokenService {
 
   /**
    * Spends a token: the record when it is valid, null when it is unknown, of another purpose,
-   * already used or expired. Callers answer all four the same way (no oracle).
+   * already used or expired. Callers answer all four the same way (no oracle). With `forUserId`,
+   * another account's token is a fifth way to get null, and it is left unspent.
    */
-  async consume(plain: string, purpose: UserTokenPurpose): Promise<AccountTokenRecord | null> {
+  async consume(
+    plain: string,
+    purpose: UserTokenPurpose,
+    forUserId?: string,
+  ): Promise<AccountTokenRecord | null> {
     if (typeof plain !== 'string' || plain.length === 0) return null;
-    return this.tokens.consume(hashAccountToken(plain), purpose, this.clock.now());
+    return this.tokens.consume(hashAccountToken(plain), purpose, this.clock.now(), forUserId);
   }
 
   /**
@@ -69,6 +74,16 @@ export class AccountTokenService {
    */
   async revokeAllUnused(userId: string): Promise<void> {
     await this.tokens.deleteAllUnusedForUser(userId);
+  }
+
+  /** SPEC-010 BR-010-08: the account's outstanding links as purpose and instants (no hash, no link). */
+  pendingFor(userId: string) {
+    return this.tokens.listUnusedForUser(userId, this.clock.now());
+  }
+
+  /** SPEC-010 BR-010-15 / AR-31: JOB ONLY. Deletes every token record of a closed account. */
+  purgeAllForUser(userId: string): Promise<number> {
+    return this.tokens.deleteAllForUser(userId);
   }
 
   /**

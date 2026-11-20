@@ -8,8 +8,11 @@ import { describe, expect, it } from 'vitest';
 
 const MODULE_DIR = join(import.meta.dirname, '..', '..', 'src', 'privacy');
 
+// `rights/` (SPEC-010 part 2: exports, closure, purge, pseudonyms) holds records that ARE edited and
+// deleted by design and has its own repositories; the insert-only rule is the consent records'.
 const sources = (readdirSync(MODULE_DIR, { recursive: true }) as string[])
   .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts'))
+  .filter((file) => !file.split('\\').join('/').startsWith('rights/'))
   .map((file) => ({ file, text: readFileSync(join(MODULE_DIR, file), 'utf8') }));
 
 const MUTATING_CALL =
@@ -41,7 +44,7 @@ describe('SPEC-010 BR-010-03 / AR-30: acceptances and consents are insert-only',
 
   it('WhatsappConsentRepository exposes inserts and reads only', () => {
     const text = sources.find(({ file }) => file === 'whatsapp-consent.repository.ts')?.text ?? '';
-    expect(methodsOf(text)).toEqual(['insert', 'latest']);
+    expect(methodsOf(text)).toEqual(['insert', 'listForUser', 'latest']);
   });
 
   it('only the two repositories touch the two models (AR-08)', () => {
@@ -73,6 +76,7 @@ describe('SPEC-010 AR-08, AR-09, AR-30: no code outside the repositories reaches
     'privacy/consents.repository.ts', // the only code that injects them
     'privacy/whatsapp-consent.repository.ts',
     'privacy/privacy.module.ts', // registers them (MongooseModule.forFeature)
+    'privacy/registry/retained-models.ts', // declares them retained (BR-010-22/23), by name
     'migrations/0008-consent-indexes.migration.ts', // builds their indexes through the driver
   ]);
   const NAMES =

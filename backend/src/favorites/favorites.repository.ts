@@ -14,6 +14,7 @@ export interface FavoriteRecord {
   userId: Types.ObjectId;
   auctionCode: string;
   auction: Types.ObjectId;
+  createdAt?: Date;
 }
 
 @Injectable()
@@ -33,6 +34,19 @@ export class FavoritesRepository extends AccountScopedRepository<FavoriteRecord>
       },
     );
     return favorites.map((favorite) => favorite.auctionCode);
+  }
+
+  /** SPEC-010 BR-010-08: every favorite of the account, newest first, for the export and "my data". */
+  findAllForExport(ctx: AccessContext): Promise<FavoriteRecord[]> {
+    return this.find(ctx, {}, { sort: { createdAt: -1, _id: -1 } });
+  }
+
+  /**
+   * AR-12 / AR-31 / SPEC-010 BR-010-15: JOB ONLY. Deletes every favorite of one closed account;
+   * idempotent. Never called from a request.
+   */
+  purgeAccountByJob(accountId: string): Promise<number> {
+    return this.deleteAllOfAccountByJob(accountId);
   }
 
   /** The account's favorite of one auction. SC-10: the code is compared by equality. */

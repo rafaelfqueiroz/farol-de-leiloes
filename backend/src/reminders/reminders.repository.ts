@@ -56,6 +56,31 @@ export class RemindersRepository extends AccountScopedRepository<ReminderRecord>
   }
 
   /**
+   * SPEC-010 BR-010-08: every reminder of the account with the code of its auction (and nothing
+   * else of it), soonest first, for the export. Scoped to the request's account like every read.
+   */
+  async findAllForExport(
+    ctx: AccessContext,
+  ): Promise<(Omit<ReminderRecord, 'auction'> & { auction: { code?: string } | null })[]> {
+    return (await this.reminders
+      .find(this.ownedBy(ctx))
+      .populate<{ auction: { code?: string } | null }>('auction', 'code')
+      .sort({ scheduledAt: 1, _id: 1 })
+      .lean()
+      .exec()) as unknown as (Omit<ReminderRecord, 'auction'> & {
+      auction: { code?: string } | null;
+    })[];
+  }
+
+  /**
+   * AR-12 / AR-31 / SPEC-010 BR-010-15: JOB ONLY. Deletes every reminder of one closed account;
+   * idempotent. Never called from a request.
+   */
+  purgeAccountByJob(accountId: string): Promise<number> {
+    return this.deleteAllOfAccountByJob(accountId);
+  }
+
+  /**
    * AR-12 / BR-002-29: CROSS-ACCOUNT, for the reminders scheduler only: pending reminders of every
    * account due at `now`, each delivered to its own account.
    */
