@@ -4,8 +4,9 @@
 // Marker strings are seeded through the real API into every place client or personal text lives
 // today — an account's name and email, a profile change, a support request's title and
 // description, a saved filter's name, a reminder's note, an owned (probe) record's name, the name and
-// address of an office member who gets the payment-failed email and the name of a buyer whose
-// customer the payment provider is told about (SPEC-012) — and the flows run end to end: success
+// address of an office member who gets the payment-failed email, the name of a buyer whose
+// customer the payment provider is told about (SPEC-012) and the name and e-mail of accounts that
+// sign up with an acceptance and a WhatsApp answer (SPEC-010) — and the flows run end to end: success
 // paths, refusals, a read under a support grant, a fault (the admin access log refusing its
 // insert, BR-002-27), the reminders scheduler once and the subscriptions reconcile job (FakeClock). No
 // marker may appear in any of three captures:
@@ -26,6 +27,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { type Connection, type Model, Types } from 'mongoose';
 import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
+import request from 'supertest';
 import type { OfficePlanState } from '../../src/access/sources/office-plan.source.js';
 import { AuctionEntity } from '../../src/auctions/schemas/auction.schema.js';
 import { AuctionsModule } from '../../src/auctions/auctions.module.js';
@@ -82,6 +84,7 @@ const MARKERS = {
   probeName: 'MKR-PROBE-NAME-QX7',
   memberContactName: 'MKR-MEMBER-CONTACT-NAME-QX7',
   buyerName: 'MKR-BUYER-NAME-QX7',
+  consentName: 'MKR-CONSENT-NAME-QX7',
 } as const;
 /** SPEC-012 BR-012-20: an office member the payment-failed email is addressed to. */
 const MEMBER_CONTACT = {
@@ -162,6 +165,44 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
       app.sources.forAccount(member.id, { memberships: [{ officeId: OFFICE_A }] });
       await app.makeAdmin(admin);
       const as = app.as(member);
+
+      // SPEC-010: a sign-up that records the acceptance and the WhatsApp answer (name and e-mail are
+      // markers), a stale-version refusal, an accept, an answer and the reads, refusals included.
+      const consenting = await app.signUp('marker-consent', MARKERS.consentName);
+      emails.push(consenting.email);
+      const staleEmail = 'mkr-stale-signup-qx7@example.test';
+      emails.push(staleEmail);
+      await call(
+        request(app.harness.app.getHttpServer() as Parameters<typeof request>[0])
+          .post('/api/auth/register')
+          .send({
+            email: staleEmail,
+            password: 'correct horse battery',
+            name: MARKERS.consentName,
+            acceptTerms: true,
+            termsVersion: '0.0',
+          }),
+      );
+      const consentSession = app.as(consenting);
+      await call(consentSession.get('/api/privacy/acceptances'));
+      await call(
+        consentSession
+          .post('/api/privacy/accept')
+          .send({ termsVersion: '0.1', privacyVersion: '0.1' }),
+      );
+      await call(
+        consentSession
+          .post('/api/privacy/accept')
+          .send({ termsVersion: '0.0', privacyVersion: '0.1' }),
+      );
+      await call(
+        consentSession
+          .post('/api/privacy/whatsapp-consent')
+          .send({ action: 'granted', method: 'privacy_page' }),
+      );
+      await call(consentSession.post('/api/privacy/whatsapp-consent').send({ action: 'maybe' }));
+      await call(consentSession.get('/api/privacy/whatsapp-consent'));
+      await call(consentSession.get('/api/auth/me'));
 
       await call(as.patch('/api/auth/profile').send({ name: MARKERS.profileName }));
       await call(
@@ -345,6 +386,16 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
     ]);
     expect(logged).toContain('Payment failed email sent to 1 of 1 members');
     expect(logged).toContain('Subscriptions reconciled');
+    // SPEC-010: the consent flows ran, including their refusals.
+    expect(errorBodies).toContainEqual({
+      code: 'TERMS_VERSION_OUTDATED',
+      context: {
+        documents: [
+          { type: 'terms', version: '0.1' },
+          { type: 'privacy', version: '0.1' },
+        ],
+      },
+    });
     expect(gateway.customers).toHaveLength(1); // the provider was told the buyer, not the log
     expect(errorBodies.length).toBeGreaterThanOrEqual(6);
   });
