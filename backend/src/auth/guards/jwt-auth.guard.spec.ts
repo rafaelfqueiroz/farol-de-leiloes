@@ -25,7 +25,9 @@ import { StubSubscriptionsModule } from '../../../test/support/stub-subscription
 import type { AccessContext } from '../../access/access-context.js';
 import { Access } from '../../access/decorators/access.decorator.js';
 import { RequiresPersona } from '../../access/decorators/access-guards.decorator.js';
+import { ConsentsService } from '../../privacy/consents.service.js';
 import { AccessContextGuard } from '../../access/guards/access-context.guard.js';
+import { CurrentTermsGuard } from '../../privacy/guards/current-terms.guard.js';
 
 @Controller('guard-test')
 class DefaultProtectedController {
@@ -81,6 +83,8 @@ const productionGuards = (
       useValue: { activeCredentialVersion: vi.fn().mockResolvedValue(0) },
     },
     { provide: ConfigService, useValue: testConfigService() },
+    // SPEC-010: the third global guard reads the account's acceptances (enforcement is off here).
+    { provide: ConsentsService, useValue: { pendingFor: vi.fn().mockResolvedValue([]) } },
     {
       provide: UsersService,
       useValue: {
@@ -124,9 +128,17 @@ describe('global JWT authentication (SC-07)', () => {
 
   it('SPEC-002 AR-13: registers AccessContextGuard immediately after JwtAuthGuard', () => {
     // Global guards of one module run in the order of this array (auth.module.ts).
+    expect(productionGuards.slice(0, 2)).toEqual([
+      { provide: APP_GUARD, useClass: JwtAuthGuard },
+      { provide: APP_GUARD, useClass: AccessContextGuard },
+    ]);
+  });
+
+  it('SPEC-010 BR-010-05: registers CurrentTermsGuard after both, so it sees the authenticated user', () => {
     expect(productionGuards).toEqual([
       { provide: APP_GUARD, useClass: JwtAuthGuard },
       { provide: APP_GUARD, useClass: AccessContextGuard },
+      { provide: APP_GUARD, useClass: CurrentTermsGuard },
     ]);
   });
 

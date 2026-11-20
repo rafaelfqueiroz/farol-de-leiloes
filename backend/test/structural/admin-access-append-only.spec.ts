@@ -95,13 +95,14 @@ const REGISTRY_MEMBERS = new Set(['models', 'collections', 'modelNames']);
 /**
  * Files outside admin-access allowed a `.collection(<non-literal>)` that cannot be resolved
  * statically (6). 0001 iterates a fixed list of money collections, 0006 a fixed record of the
- * plans, subscriptions and paymentEvents indexes and 0007 one of the subscriptions and ownerCounters
- * indexes, none of the two protected ones.
+ * plans, subscriptions and paymentEvents indexes, 0007 one of the subscriptions and ownerCounters
+ * indexes and 0008 one of the consents and whatsappConsents indexes, none of the two protected ones.
  */
 const UNRESOLVED_ALLOWED = [
   'migrations/0001-money-decimal128.migration.ts',
   'migrations/0006-subscription-indexes.migration.ts',
   'migrations/0007-billing-indexes.migration.ts',
+  'migrations/0008-consent-indexes.migration.ts',
 ];
 
 const PRIVATE_PATHS = [

@@ -22,6 +22,7 @@ import {
   FakeSessionsRepository,
 } from '../../test/fakes/fake-auth-repositories.js';
 import { FakeUsersService, type FakeAccount } from '../../test/fakes/fake-users-service.js';
+import { wirePrivacy } from '../../test/support/privacy-services.js';
 
 const CREATED = new Date('2026-01-01T12:00:00.000Z');
 
@@ -33,6 +34,7 @@ function build() {
   const sign = vi
     .fn()
     .mockImplementation((payload: { sub: string; jti: string }) => `jwt:${payload.sub}`);
+  const privacy = wirePrivacy(clock, users as unknown as UsersService);
   const service = new AuthService(
     users as unknown as UsersService,
     { sign } as unknown as JwtService,
@@ -43,9 +45,12 @@ function build() {
       new FakeLoginAttemptsRepository() as unknown as LoginAttemptsRepository,
       clock,
     ),
+    privacy.consents,
+    privacy.whatsapp,
+    clock,
   );
   const tokens = new AccountTokenService(tokenRepo as unknown as AccountTokenRepository, clock);
-  return { service, users, clock, tokenRepo, sessionRepo, tokens };
+  return { service, users, clock, tokenRepo, sessionRepo, tokens, privacy };
 }
 
 const identity = (overrides: Partial<GoogleIdentity> = {}): GoogleIdentity => ({
@@ -362,6 +367,129 @@ describe('AuthService.completeGoogleSignup (BR-001-03, BR-001-09, SPEC-010 BR-01
     expect(ctx.sessionRepo.stored).toHaveLength(1);
   });
 
+  it('BR-010-03: records the acceptance with the account, by Google sign-up', async () => {
+    const code = await ctx.service.beginGoogleSignIn(identity());
+
+    await ctx.service.completeGoogleSignup(code);
+
+    const id = [...ctx.users.accounts.keys()][0];
+    expect(ctx.privacy.consentsRepo.rows.map((r) => [r.userId, r.documentType, r.method])).toEqual([
+      [id, 'terms', 'signup_google'],
+      [id, 'privacy', 'signup_google'],
+    ]);
+  });
+
+  it('BR-010-27: records the WhatsApp checkbox either way, and the account exists all the same', async () => {
+    const declined = await ctx.service.beginGoogleSignIn(identity({ googleId: 'g-1' }));
+    await ctx.service.completeGoogleSignup(declined, {});
+    const granted = await ctx.service.beginGoogleSignIn(
+      identity({ googleId: 'g-2', email: 'bia@example.test' }),
+    );
+    await ctx.service.completeGoogleSignup(granted, { whatsappConsent: true });
+
+    expect(ctx.users.accounts.size).toBe(2);
+    expect(ctx.privacy.whatsappRepo.rows.map((r) => [r.action, r.method])).toEqual([
+      ['declined', 'signup'],
+      ['granted', 'signup'],
+    ]);
+  });
+
+  it('BR-010-01: a stale version is TERMS_VERSION_OUTDATED, creates nothing and does NOT spend the code', async () => {
+    const code = await ctx.service.beginGoogleSignIn(identity());
+
+    await expect(ctx.service.completeGoogleSignup(code, { privacyVersion: '0.0' })).rejects.toEqual(
+      new DomainError('TERMS_VERSION_OUTDATED', {
+        documents: [
+          { type: 'terms', version: '0.1' },
+          { type: 'privacy', version: '0.1' },
+        ],
+      }),
+    );
+
+    expect(ctx.users.accounts.size).toBe(0);
+    expect(ctx.privacy.consentsRepo.rows).toEqual([]);
+    // The pending sign-up is still there: the person can accept the current version and finish.
+    await expect(
+      ctx.service.completeGoogleSignup(code, { privacyVersion: '0.1' }),
+    ).resolves.toBeDefined();
+    expect(ctx.users.accounts.size).toBe(1);
+  });
+
+  it('BR-010-01: when the acceptance cannot be written the new account is rolled back and the person can sign in again', async () => {
+    const code = await ctx.service.beginGoogleSignIn(identity());
+    ctx.privacy.consentsRepo.failInsertsWith = new Error('db down');
+
+    await expect(ctx.service.completeGoogleSignup(code)).rejects.toThrow('db down');
+
+    expect(ctx.users.accounts.size).toBe(0);
+    expect(ctx.sessionRepo.stored).toEqual([]);
+    // The code was spent with the attempt; a new Google sign-in gives a new one and completes.
+    await expect(ctx.service.completeGoogleSignup(code)).rejects.toEqual(
+      new DomainError('INVALID_GOOGLE_CODE'),
+    );
+    ctx.privacy.consentsRepo.failInsertsWith = undefined;
+    const again = await ctx.service.beginGoogleSignIn(identity());
+    await expect(ctx.service.completeGoogleSignup(again)).resolves.toBeDefined();
+    expect(ctx.users.accounts.size).toBe(1);
+    expect(ctx.privacy.consentsRepo.rows).toHaveLength(2);
+  });
+
+  it('DL-001-02, SPEC-010: taking over an unconfirmed account starts a new consent generation and asks the owner again', async () => {
+    // The registrant (never confirmed the address) signed up and consented to WhatsApp.
+    const registrant = ctx.users.seed(
+      account({ emailVerified: false, whatsappPromptAnsweredAt: CREATED }),
+    );
+    const id = registrant._id as string;
+    await ctx.privacy.consents.recordAcceptance(
+      id,
+      { terms: '0.1', privacy: '0.1' },
+      'signup_email',
+    );
+    await ctx.privacy.whatsapp.record(id, 'granted', 'signup', null);
+    const code = await ctx.service.beginGoogleSignIn(identity());
+
+    await ctx.service.exchangeGoogleCode(code);
+
+    const owner = ctx.users.accounts.get(id);
+    expect(owner?.consentResetAt).toEqual(ctx.clock.now()); // the takeover instant, from the Clock
+    expect(owner?.whatsappPromptAnsweredAt).toBeUndefined(); // the owner is asked once more
+    expect(await ctx.privacy.consents.pendingFor(id, owner?.consentResetAt ?? null)).toHaveLength(
+      2,
+    );
+    expect(await ctx.privacy.whatsapp.hasConsent(id)).toBe(false);
+  });
+
+  it('SPEC-010: linking a CONFIRMED account keeps its consents and its answered prompt', async () => {
+    const owner = ctx.users.seed(
+      account({ emailVerified: true, whatsappPromptAnsweredAt: CREATED }),
+    );
+    const id = owner._id as string;
+    await ctx.privacy.consents.recordAcceptance(
+      id,
+      { terms: '0.1', privacy: '0.1' },
+      'signup_email',
+    );
+    await ctx.privacy.whatsapp.record(id, 'granted', 'signup', null);
+    const code = await ctx.service.beginGoogleSignIn(identity());
+
+    await ctx.service.exchangeGoogleCode(code);
+
+    expect(ctx.users.accounts.get(id)?.consentResetAt).toBeUndefined();
+    expect(ctx.users.accounts.get(id)?.whatsappPromptAnsweredAt).toEqual(CREATED);
+    expect(await ctx.privacy.consents.pendingFor(id, null)).toEqual([]);
+    expect(await ctx.privacy.whatsapp.hasConsent(id)).toBe(true);
+  });
+
+  it('race: an account that appeared since the redirect keeps its own acceptance; none is recorded for it', async () => {
+    const code = await ctx.service.beginGoogleSignIn(identity());
+    ctx.users.seed(account({ _id: '64b000000000000000000009' }));
+
+    await ctx.service.completeGoogleSignup(code);
+
+    expect(ctx.privacy.consentsRepo.rows).toEqual([]);
+    expect(ctx.privacy.whatsappRepo.rows).toEqual([]);
+  });
+
   it('spends the code: a second completion is INVALID_GOOGLE_CODE and creates nothing more', async () => {
     const code = await ctx.service.beginGoogleSignIn(identity());
     await ctx.service.completeGoogleSignup(code);
@@ -476,6 +604,9 @@ describe('AuthService.cancelGoogleSignup (SPEC-010 BR-010-01)', () => {
 
     expect(ctx.tokenRepo.stored).toEqual([]);
     expect(ctx.users.accounts.size).toBe(0);
+    // BR-010-01: declining stores nothing at all: no account, no acceptance, no WhatsApp answer.
+    expect(ctx.privacy.consentsRepo.rows).toEqual([]);
+    expect(ctx.privacy.whatsappRepo.rows).toEqual([]);
     await expect(ctx.service.completeGoogleSignup(code)).rejects.toEqual(
       new DomainError('INVALID_GOOGLE_CODE'),
     );

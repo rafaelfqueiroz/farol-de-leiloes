@@ -51,6 +51,12 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // BR-002-30 / D-47: the office's plan lapsed beyond its grace period; writes are refused.
   OFFICE_READ_ONLY: HttpStatus.FORBIDDEN,
 
+  // SPEC-010 BR-010-05: a new version of the terms or the policy is in force and the account has not
+  // accepted it; the context lists the documents. A 403 involves no record (AR-14).
+  TERMS_ACCEPTANCE_REQUIRED: HttpStatus.FORBIDDEN,
+  // BR-010-01, BR-010-05: the version the request names is not the current one; ask again.
+  TERMS_VERSION_OUTDATED: HttpStatus.CONFLICT,
+
   PLAN_NOT_ALLOWED: HttpStatus.FORBIDDEN,
   INVALID_PLAN: HttpStatus.BAD_REQUEST,
   // Stripe answered without a checkout URL: an upstream failure, not the caller's.

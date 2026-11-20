@@ -52,6 +52,8 @@ import type { GoogleIdentity } from './google/google-identity.js';
 import { GoogleCodeDto, GoogleCompleteDto } from './dto/google-code.dto.js';
 import { Access } from '../access/decorators/access.decorator.js';
 import type { AccessContext } from '../access/access-context.js';
+import { ConsentsService } from '../privacy/consents.service.js';
+import { AllowWithoutTerms } from '../privacy/decorators/allow-without-terms.decorator.js';
 
 // GoogleStrategy.validate hands the verified Google identity to passport, which sets it on the
 // request.
@@ -64,6 +66,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private readonly config: ConfigService<Env, true>,
+    private readonly consents: ConsentsService,
   ) {}
 
   @Public()
@@ -72,8 +75,13 @@ export class AuthController {
   @ApiOperation({
     summary: 'Create a local account and send the verification email',
     description:
-      'acceptTerms must be true (BR-001-02); without it, or false, the request is refused as VALIDATION_FAILED and creates nothing. Any property beyond email, name, password and ' +
-      'acceptTerms is refused as VALIDATION_FAILED and creates nothing (BR-001-31). ' +
+      'acceptTerms must be true (BR-001-02); without it, or false, the request is refused as VALIDATION_FAILED and creates nothing. Any property beyond email, name, password, ' +
+      'acceptTerms, termsVersion, privacyVersion and whatsappConsent is refused as VALIDATION_FAILED and creates nothing (BR-001-31). ' +
+      'The acceptance is recorded with the account (versions, time, method signup_email, BR-010-03); ' +
+      'termsVersion and privacyVersion default to the current ones and, when sent, must be the ' +
+      'current ones or the request is TERMS_VERSION_OUTDATED (409) and creates nothing (BR-010-01). ' +
+      'whatsappConsent is its own optional choice, recorded either way, and never stops the ' +
+      'account from being created (BR-010-27). ' +
       'EMAIL_ALREADY_REGISTERED (409) when the address exists in any letter case (BR-001-01).',
   })
   @ApiCreatedResponse({ type: AuthResponseDto })
@@ -167,12 +175,15 @@ export class AuthController {
       'acceptTerms must be true (VALIDATION_FAILED otherwise, and nothing is created or spent). ' +
       'The code is spent, the account is created with only the searcher persona, its email ' +
       'confirmed and no password, and a session opens (BR-001-03, BR-001-09, SPEC-010 BR-010-01). ' +
+      'The acceptance is recorded with the account (method signup_google, BR-010-03) and the ' +
+      'optional termsVersion, privacyVersion and whatsappConsent work as in POST /auth/register; ' +
+      'a stale version is TERMS_VERSION_OUTDATED (409) and the code is NOT spent. ' +
       'INVALID_GOOGLE_CODE (400) for an unknown, used or expired code.',
   })
   @ApiOkResponse({ type: AuthResponseDto })
   @ApiTooManyRequestsResponse({ description: 'TOO_MANY_REQUESTS', type: ErrorResponseDto })
   async googleComplete(@Body() dto: GoogleCompleteDto): Promise<AuthResponseDto> {
-    const result = await this.authService.completeGoogleSignup(dto.code);
+    const result = await this.authService.completeGoogleSignup(dto.code, dto);
     return new AuthResponseDto(result);
   }
 
@@ -224,22 +235,32 @@ export class AuthController {
   }
 
   @Get('me')
+  @AllowWithoutTerms() // BR-010-05: the interface learns here that a new version must be accepted
   @ApiJwtAuth()
   @ApiOperation({
     summary: 'The signed-in user',
     description:
       'isAdmin and personas are read and derived on this request (SPEC-002 BR-002-14, ' +
-      'BR-002-15); they tell the interface what to show and authorize nothing by themselves.',
+      'BR-002-15); they tell the interface what to show and authorize nothing by themselves. ' +
+      'termsAcceptanceRequired is true, with the `documents` still to accept, when the account has ' +
+      'not accepted the current terms and privacy policy (SPEC-010 BR-010-05); whatsappPromptPending ' +
+      'is true until the account answers the one-time WhatsApp consent request (BR-010-27). ' +
+      'Answered without accepting anything first.',
   })
   @ApiOkResponse({ type: CurrentUserResponseDto })
   async getProfile(
     @CurrentUser() user: AuthenticatedUser,
     @Access() access: AccessContext,
   ): Promise<CurrentUserResponseDto> {
-    return new CurrentUserResponseDto(user, access);
+    return new CurrentUserResponseDto(
+      user,
+      access,
+      await this.consents.pendingFor(user.userId, user.consentResetAt),
+    );
   }
 
   @Post('logout')
+  @AllowWithoutTerms() // BR-010-05: signing out never waits for an acceptance
   @HttpCode(HttpStatus.OK)
   @ApiJwtAuth()
   @ApiOperation({
@@ -253,6 +274,7 @@ export class AuthController {
   }
 
   @Patch('profile')
+  @AllowWithoutTerms() // BR-010-08, BR-010-12, DL-010-03: reading and correcting one's data never waits
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Change the signed-in user name or phone (the e-mail is read-only)' })
   @ApiOkResponse({ type: UserProfileResponseDto })
@@ -351,6 +373,7 @@ export class AuthController {
   }
 
   @Get('profile/full')
+  @AllowWithoutTerms() // BR-010-08, BR-010-12, DL-010-03: reading and correcting one's data never waits
   @ApiJwtAuth()
   @ApiOperation({ summary: 'The signed-in user full profile' })
   @ApiOkResponse({ type: UserProfileResponseDto })

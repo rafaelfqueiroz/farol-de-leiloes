@@ -10,6 +10,8 @@ import {
 import { SUBSCRIPTION_STATUSES } from '../../users/subscription-status.js';
 import type { AccessContext } from '../../access/access-context.js';
 import { type Persona, PERSONAS } from '../../access/domain/personas.js';
+import type { LegalDocumentRef } from '../../privacy/domain/legal-versions.js';
+import { LegalDocumentRefDto } from '../../privacy/dto/legal-document-ref.dto.js';
 
 export const PROVIDERS = ['local', 'google'] as const;
 export const ROLES = ['admin', 'free', 'standard', 'premium'] as const;
@@ -161,7 +163,34 @@ export class CurrentUserResponseDto {
   })
   personas: Persona[];
 
-  constructor(user: AuthenticatedUser, access: AccessContext) {
+  @ApiProperty({
+    type: Boolean,
+    description:
+      'True when the account has not accepted the current terms of use and privacy policy ' +
+      '(SPEC-010 BR-010-05): the interface asks for the acceptance. Reported whether or not the ' +
+      'server already refuses the account features (TERMS_ENFORCEMENT_ENABLED).',
+  })
+  termsAcceptanceRequired: boolean;
+
+  @ApiProperty({
+    type: () => [LegalDocumentRefDto],
+    description: 'The documents still to accept; empty when termsAcceptanceRequired is false',
+  })
+  documents: LegalDocumentRefDto[];
+
+  @ApiProperty({
+    type: Boolean,
+    description:
+      'True until the account answers the one-time WhatsApp consent request, whichever the ' +
+      'answer (SPEC-010 BR-010-27)',
+  })
+  whatsappPromptPending: boolean;
+
+  constructor(
+    user: AuthenticatedUser,
+    access: AccessContext,
+    pendingDocuments: readonly LegalDocumentRef[] = [],
+  ) {
     this.userId = user.userId;
     this.email = user.email;
     this.name = user.name;
@@ -171,6 +200,9 @@ export class CurrentUserResponseDto {
     this.subscriptionStatus = user.subscriptionStatus;
     this.isAdmin = access.isAdmin;
     this.personas = [...access.personas];
+    this.termsAcceptanceRequired = pendingDocuments.length > 0;
+    this.documents = pendingDocuments.map((document) => new LegalDocumentRefDto(document));
+    this.whatsappPromptPending = user.whatsappPromptPending;
   }
 }
 

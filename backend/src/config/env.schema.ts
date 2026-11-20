@@ -132,6 +132,12 @@ export const envSchema = z
     // cancelling the first subscription refunds it in full (CDC art. 49).
     REFUND_WINDOW_DAYS: positiveInt.default(7),
 
+    // Privacy (SPEC-010 BR-010-05): whether an account that has not accepted the current terms and
+    // privacy policy is refused the account features (403 TERMS_ACCEPTANCE_REQUIRED). Recording
+    // acceptances is always on. Off by default while no screen asks for the acceptance; the
+    // frontend change that adds it flips the default to true.
+    TERMS_ENFORCEMENT_ENABLED: flag.default(false),
+
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
     // AR-46: the HMAC key of the hashed user id in log lines. Required in production (superRefine

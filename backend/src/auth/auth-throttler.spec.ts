@@ -8,6 +8,7 @@ import { createHttpApp } from '../../test/support/http-app.js';
 import { testEnv } from '../../test/support/test-env.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { ConsentsService } from '../privacy/consents.service.js';
 import { AUTH_RATE_LIMIT, AuthThrottlerModule } from './auth-throttler.module.js';
 
 let app: INestApplication | undefined;
@@ -29,7 +30,10 @@ async function boot(nodeEnv: string, trustProxyHops = '0') {
         AuthThrottlerModule,
       ],
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: {} }],
+      providers: [
+        { provide: AuthService, useValue: {} },
+        { provide: ConsentsService, useValue: {} },
+      ],
     },
     { env: { NODE_ENV: nodeEnv, TRUST_PROXY_HOPS: trustProxyHops } },
   );

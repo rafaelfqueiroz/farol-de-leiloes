@@ -13,6 +13,8 @@ import { VerifyEmailDto } from './verify-email.dto.js';
 import { GoogleCodeDto, GoogleCompleteDto } from './google-code.dto.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import { propertyPaths } from '../../app.setup.js';
+import { AcceptTermsDto } from '../../privacy/dto/accept-terms.dto.js';
+import { RecordWhatsappConsentDto } from '../../privacy/dto/whatsapp-consent.dto.js';
 
 const pipe = new ValidationPipe({
   whitelist: true,
@@ -228,5 +230,86 @@ describe('GoogleCodeDto and GoogleCompleteDto (BR-001-09, BR-001-20, SPEC-010 BR
   it('BR-001-31: completing carries no role, plan or provider', async () => {
     const extra = { code: 'a', acceptTerms: true, role: 'admin', providers: ['local'] };
     expect(await failedFields(GoogleCompleteDto, extra)).toEqual(['role', 'providers']);
+  });
+});
+
+// SPEC-010 BR-010-01, BR-010-03, BR-010-27: the consent fields of the sign-up contracts, the accept
+// request and the WhatsApp answer.
+describe.each([
+  ['RegisterDto', RegisterDto, valid],
+  ['GoogleCompleteDto', GoogleCompleteDto, { code: 'a', acceptTerms: true }],
+] as const)('%s consent fields (SPEC-010)', (_name, type, base) => {
+  const fieldsOf = (extra: Record<string, unknown>) =>
+    failedFields(type as Type<unknown>, { ...base, ...extra });
+
+  it('BR-010-01: the versions and the WhatsApp choice are optional', async () => {
+    expect(await fieldsOf({})).toEqual([]);
+    expect(await fieldsOf({ termsVersion: '0.1', privacyVersion: '0.1' })).toEqual([]);
+    expect(await fieldsOf({ whatsappConsent: true })).toEqual([]);
+    expect(await fieldsOf({ whatsappConsent: false })).toEqual([]);
+  });
+
+  it.each(['', 'v1', '1.', '0.1; drop', 'a'.repeat(33), 1, { $ne: null }])(
+    'BR-010-01: refuses a version that is not a dotted number (%j)',
+    async (version) => {
+      expect(await fieldsOf({ termsVersion: version })).toEqual(['termsVersion']);
+      expect(await fieldsOf({ privacyVersion: version })).toEqual(['privacyVersion']);
+    },
+  );
+
+  it.each(['true', 1, 'yes', null, {}])('BR-010-27: refuses whatsappConsent %j', async (value) => {
+    // null is an explicit "no value", which IsOptional lets through; the rest are refused.
+    const fields = await fieldsOf({ whatsappConsent: value });
+    expect(fields).toEqual(value === null ? [] : ['whatsappConsent']);
+  });
+});
+
+describe('AcceptTermsDto (SPEC-010 BR-010-05)', () => {
+  it('needs both versions, as dotted numbers', async () => {
+    await expect(
+      parse(AcceptTermsDto, { termsVersion: '0.2', privacyVersion: '1.0' }),
+    ).resolves.toMatchObject({ termsVersion: '0.2', privacyVersion: '1.0' });
+    expect(await failedFields(AcceptTermsDto, {})).toEqual(['termsVersion', 'privacyVersion']);
+    expect(
+      await failedFields(AcceptTermsDto, { termsVersion: '0.2', privacyVersion: 'x' }),
+    ).toEqual(['privacyVersion']);
+  });
+
+  it('BR-002-11: a body naming an account is refused as a whole', async () => {
+    expect(
+      await failedFields(AcceptTermsDto, {
+        termsVersion: '0.1',
+        privacyVersion: '0.1',
+        userId: 'x',
+      }),
+    ).toEqual(['userId']);
+  });
+});
+
+describe('RecordWhatsappConsentDto (SPEC-010 BR-010-27)', () => {
+  it.each(['granted', 'withdrawn', 'declined'])('accepts the action %s', async (action) => {
+    await expect(
+      parse(RecordWhatsappConsentDto, { action, method: 'privacy_page' }),
+    ).resolves.toBeDefined();
+  });
+
+  it('refuses an unknown action, and the sign-up method, which only the sign-up records', async () => {
+    expect(
+      await failedFields(RecordWhatsappConsentDto, { action: 'maybe', method: 'privacy_page' }),
+    ).toEqual(['action']);
+    expect(
+      await failedFields(RecordWhatsappConsentDto, { action: 'granted', method: 'signup' }),
+    ).toEqual(['method']);
+    expect(await failedFields(RecordWhatsappConsentDto, {})).toEqual(['action', 'method']);
+  });
+
+  it('BR-002-11: a body naming an account is refused as a whole', async () => {
+    expect(
+      await failedFields(RecordWhatsappConsentDto, {
+        action: 'withdrawn',
+        method: 'privacy_page',
+        userId: '64b7f0000000000000000001',
+      }),
+    ).toEqual(['userId']);
   });
 });

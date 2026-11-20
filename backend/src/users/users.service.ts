@@ -141,19 +141,25 @@ export class UsersService {
    * - email not confirmed: the same, and the email becomes confirmed, the password is deleted,
    *   `local` leaves the providers (whoever set that password never proved they own the address)
    *   and the credential version goes up by one, which ends every session issued for the old
-   *   credential, even one a sign-in that already checked the password opens afterwards.
+   *   credential, even one a sign-in that already checked the password opens afterwards. The same
+   *   update moves `consentResetAt` to `now` and clears `whatsappPromptAnsweredAt`: what the
+   *   registrant accepted or consented to is not the owner's (SPEC-010).
    *
    * The unique index on `googleId` makes a second account unable to take the same identity even
    * under a race (DUPLICATE_KEY is a conflict). Ending the sessions and links of a taken-over
    * account is the caller's job (`linked_unconfirmed`).
    */
-  async linkGoogleIdentity(userId: string, googleId: string): Promise<GoogleLinkOutcome> {
+  async linkGoogleIdentity(
+    userId: string,
+    googleId: string,
+    now: Date,
+  ): Promise<GoogleLinkOutcome> {
     // Two attempts: the first can miss only because a concurrent write changed the account between
     // the filter and the explanation below (e.g. an unlinked-then-linked race); more is not needed.
     for (let attempt = 0; attempt < 2; attempt += 1) {
       let before;
       try {
-        before = await this.applyGoogleLink(userId, googleId);
+        before = await this.applyGoogleLink(userId, googleId, now);
       } catch (error) {
         if ((error as { code?: number }).code === DUPLICATE_KEY) {
           return { result: 'google_conflict' };
@@ -184,7 +190,7 @@ export class UsersService {
   }
 
   /** The conditional pipeline update of `linkGoogleIdentity`; the document as it was, or null. */
-  private applyGoogleLink(userId: string, googleId: string) {
+  private applyGoogleLink(userId: string, googleId: string, now: Date) {
     const confirmed = { $eq: ['$emailVerified', true] };
     const providersWithGoogle = (without: string[]) => ({
       $concatArrays: [
@@ -229,6 +235,16 @@ export class UsersService {
                   '$credentialVersion',
                   { $add: [{ $ifNull: ['$credentialVersion', 0] }, 1] },
                 ],
+              },
+              // SPEC-010: the same takeover makes the consent records of whoever registered the
+              // address count for nothing (consentResetAt moves to `now`, from the injected Clock)
+              // and asks the owner the one-time WhatsApp request again (the answer flag goes). A
+              // confirmed account keeps both. In this one update, so no write can fall in between.
+              consentResetAt: {
+                $cond: [confirmed, '$consentResetAt', { $literal: now }],
+              },
+              whatsappPromptAnsweredAt: {
+                $cond: [confirmed, '$whatsappPromptAnsweredAt', '$$REMOVE'],
               },
             },
           },
@@ -410,6 +426,25 @@ export class UsersService {
     return fields;
   }
 
+  /**
+   * Rolls back a sign-up whose consent records could not be written (SPEC-010 BR-010-01: an account
+   * must not exist without its acceptance). It deletes the account CREATED BY THIS SAME REQUEST,
+   * before anything was issued for it (no session, no email, no other data), so it is the undo of a
+   * failed creation, not the deletion of a person's data (AR-31 does not apply: closure and purge
+   * are for accounts that lived). It is conditional on the credential version still being 0, so an
+   * account that was taken over or had its password changed in between (DL-001-02) is never
+   * deleted. Returns whether it was deleted.
+   */
+  async discardUnfinishedSignup(userId: string): Promise<boolean> {
+    const result = await this.userRepository
+      .deleteOne({
+        _id: { $eq: userId },
+        credentialVersion: serverOperators({ $in: [0, null] }),
+      })
+      .exec();
+    return result.deletedCount > 0;
+  }
+
   async remove(id: string): Promise<void> {
     const result = await this.userRepository.deleteOne({ _id: id }).exec();
     if (result.deletedCount === 0) {
@@ -501,6 +536,31 @@ export class UsersService {
       .updateOne({ _id: { $eq: userId } }, { $set: { isAdmin: false } })
       .exec();
     return revoked.matchedCount > 0;
+  }
+
+  /**
+   * SPEC-010 BR-010-27: the one-time WhatsApp consent request is answered, whatever the answer. Set
+   * once: the first answer's instant stays, and only under the `consentResetAt` the answer was given
+   * under (null: never reset). Written only by the privacy module's
+   * WhatsappConsentService, never from a request (BR-001-30).
+   */
+  async markWhatsappPromptAnswered(
+    userId: string,
+    at: Date,
+    consentResetAt: Date | null,
+  ): Promise<void> {
+    await this.userRepository
+      .updateOne(
+        {
+          _id: { $eq: userId },
+          whatsappPromptAnsweredAt: serverOperators({ $exists: false }),
+          // The answer is for the consent generation it was given under: if the account was taken
+          // over meanwhile (DL-001-02) it is not the owner's answer and marks nothing.
+          consentResetAt: { $eq: consentResetAt },
+        },
+        { $set: { whatsappPromptAnsweredAt: at } },
+      )
+      .exec();
   }
 
   async isEmailVerified(userId: string): Promise<boolean> {
