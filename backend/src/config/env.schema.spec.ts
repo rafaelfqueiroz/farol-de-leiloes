@@ -90,6 +90,8 @@ describe('validateEnv', () => {
       SCRAPER_ON_START_UP: false,
       REMINDERS_ENABLED: true,
       SUBSCRIPTIONS_RECONCILE_ENABLED: true,
+      ACCOUNT_PURGE_ENABLED: true,
+      DATA_EXPORT_ENABLED: true,
       CLEANUP_ON_STARTUP: false,
       NEIGHBORHOODS_CACHE_ENABLED: false,
       NEIGHBORHOODS_CACHE_TTL: 600_000,
@@ -98,6 +100,9 @@ describe('validateEnv', () => {
       SUBSCRIPTION_GRACE_DAYS: 10,
       REFUND_WINDOW_DAYS: 7,
       TERMS_ENFORCEMENT_ENABLED: false,
+      ACCOUNT_PURGE_MAX_DAYS: 30,
+      ACCOUNT_PURGE_ALERT_DAYS: 25,
+      EXPORT_TTL_DAYS: 7,
     });
   });
 
@@ -107,6 +112,9 @@ describe('validateEnv', () => {
       'UNAVAILABLE_AUCTION_RETENTION_DAYS',
       'SUBSCRIPTION_GRACE_DAYS',
       'REFUND_WINDOW_DAYS',
+      'ACCOUNT_PURGE_MAX_DAYS',
+      'ACCOUNT_PURGE_ALERT_DAYS',
+      'EXPORT_TTL_DAYS',
     ])('%s is a positive integer', (key) => {
       expect(testEnv({ [key]: '25' })[key as 'SAVED_FILTERS_MAX_PER_USER']).toBe(25);
       for (const bad of ['0', '-1', '1.5', 'many']) {
@@ -263,8 +271,15 @@ describe('namespaced configs built from the validated environment', () => {
       cache: { neighborhoodsTtl: 5, neighborhoodsEnabled: false },
       reminders: { enabled: true },
       subscriptionsReconcile: { enabled: true },
+      accountPurge: { enabled: true },
+      dataExport: { enabled: true },
       cleanup: { onStartup: false },
     });
+    expect(
+      schedulerConfigFrom(
+        testEnv({ ACCOUNT_PURGE_ENABLED: 'false', DATA_EXPORT_ENABLED: 'false' }),
+      ),
+    ).toMatchObject({ accountPurge: { enabled: false }, dataExport: { enabled: false } });
     expect(
       schedulerConfigFrom(testEnv({ SUBSCRIPTIONS_RECONCILE_ENABLED: 'false' }))
         .subscriptionsReconcile,
@@ -291,6 +306,7 @@ describe('namespaced configs built from the validated environment', () => {
       savedFilters: { maxPerUser: 10 },
       retention: { unavailableAuctionDays: 14 },
       subscriptions: { graceDays: 10, refundWindowDays: 7 },
+      privacy: { accountPurgeMaxDays: 30, accountPurgeAlertDays: 25, exportTtlDays: 7 },
     });
     expect(
       businessConfigFrom(
@@ -299,13 +315,28 @@ describe('namespaced configs built from the validated environment', () => {
           UNAVAILABLE_AUCTION_RETENTION_DAYS: '60',
           SUBSCRIPTION_GRACE_DAYS: '5',
           REFUND_WINDOW_DAYS: '14',
+          ACCOUNT_PURGE_MAX_DAYS: '40',
+          ACCOUNT_PURGE_ALERT_DAYS: '35',
+          EXPORT_TTL_DAYS: '3',
         }),
       ),
     ).toEqual({
       savedFilters: { maxPerUser: 3 },
       retention: { unavailableAuctionDays: 60 },
       subscriptions: { graceDays: 5, refundWindowDays: 14 },
+      privacy: { accountPurgeMaxDays: 40, accountPurgeAlertDays: 35, exportTtlDays: 3 },
     });
+  });
+
+  it('BR-010-15: the purge alert may not come after the legal ceiling', () => {
+    expect(errorOf({ ...TEST_ENV, ACCOUNT_PURGE_ALERT_DAYS: '31' })).toContain(
+      'ACCOUNT_PURGE_ALERT_DAYS: must not be more than ACCOUNT_PURGE_MAX_DAYS',
+    );
+    expect(testEnv({ ACCOUNT_PURGE_ALERT_DAYS: '30' }).ACCOUNT_PURGE_ALERT_DAYS).toBe(30);
+    expect(
+      testEnv({ ACCOUNT_PURGE_MAX_DAYS: '60', ACCOUNT_PURGE_ALERT_DAYS: '45' })
+        .ACCOUNT_PURGE_ALERT_DAYS,
+    ).toBe(45);
   });
 
   it('maps the R2 settings', () => {
