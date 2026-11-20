@@ -64,6 +64,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // BR-010-11: the owner's export is past its 7 days (or was deleted); ask for another. Only the
   // owner ever sees it: another account's id is the same 404 as a missing one (AR-14).
   EXPORT_EXPIRED: HttpStatus.GONE,
+  // BR-010-25: the feature handles third parties' data and the lawyer's validation is not recorded
+  // in a production-like environment. The context names the scope only. A 403 involves no record.
+  LEGAL_VALIDATION_REQUIRED: HttpStatus.FORBIDDEN,
 
   PLAN_NOT_ALLOWED: HttpStatus.FORBIDDEN,
   INVALID_PLAN: HttpStatus.BAD_REQUEST,

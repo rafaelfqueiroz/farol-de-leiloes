@@ -9,6 +9,18 @@ import type {
 } from '../../src/privacy/consents.repository.js';
 import type { LegalDocumentRef } from '../../src/privacy/domain/legal-versions.js';
 import type {
+  LegalValidationScope,
+  ValidationRecord,
+} from '../../src/privacy/domain/legal-validation.js';
+import type {
+  LegalValidationsRepository,
+  NewLegalValidation,
+} from '../../src/privacy/legal-validation/legal-validations.repository.js';
+import type {
+  NewRetentionDeletion,
+  RetentionDeletionsRepository,
+} from '../../src/privacy/retention/retention-deletions.repository.js';
+import type {
   NewWhatsappAnswer,
   WhatsappAnswer,
   WhatsappConsentRepository,
@@ -99,5 +111,53 @@ export class FakeWhatsappConsentRepository implements Port<WhatsappConsentReposi
     return last === undefined
       ? null
       : { action: last.action, method: last.method, textVersion: last.textVersion, at: last.at };
+  }
+}
+
+export class FakeRetentionDeletionsRepository implements Port<RetentionDeletionsRepository> {
+  readonly rows: NewRetentionDeletion[] = [];
+  /** The next inserts fail with this error (a database fault), this many times. */
+  failures = 0;
+  failWith: Error = new Error('database unavailable');
+
+  /** Like the unique index on `journeyId`: a repeat is not inserted and answers false. */
+  insert(entry: NewRetentionDeletion): Promise<boolean> {
+    if (this.failures > 0) {
+      this.failures -= 1;
+      return Promise.reject(this.failWith);
+    }
+    if (this.rows.some((row) => row.journeyId === entry.journeyId)) return Promise.resolve(false);
+    this.rows.push(entry);
+    return Promise.resolve(true);
+  }
+}
+
+export class FakeLegalValidationsRepository implements Port<LegalValidationsRepository> {
+  readonly rows: NewLegalValidation[] = [];
+  /** Makes reads fail, as an unreachable database would (the gate must fail closed). */
+  failReadsWith: Error | undefined;
+
+  insert(entry: NewLegalValidation): Promise<void> {
+    this.rows.push(entry);
+    return Promise.resolve();
+  }
+
+  /** Newest first, like the real query; the validator and the reference are not returned. */
+  newestOfScope(scope: LegalValidationScope): Promise<ValidationRecord[]> {
+    if (this.failReadsWith) return Promise.reject(this.failReadsWith);
+    return Promise.resolve(
+      this.rows
+        .filter((row) => row.scope === scope)
+        .map((row, index) => ({ row, index }))
+        .sort(
+          (a, b) => b.row.validatedAt.getTime() - a.row.validatedAt.getTime() || b.index - a.index,
+        )
+        .map(({ row }) => ({
+          scope: row.scope,
+          validatedAt: row.validatedAt,
+          documentVersions: row.documentVersions,
+          retentionYears: row.retentionYears ?? null,
+        })),
+    );
   }
 }
