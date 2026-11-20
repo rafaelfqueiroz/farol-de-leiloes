@@ -252,7 +252,11 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
     @Access() access: AccessContext,
   ): Promise<CurrentUserResponseDto> {
-    return new CurrentUserResponseDto(user, access, await this.consents.pendingFor(user.userId));
+    return new CurrentUserResponseDto(
+      user,
+      access,
+      await this.consents.pendingFor(user.userId, user.consentResetAt),
+    );
   }
 
   @Post('logout')
@@ -270,6 +274,7 @@ export class AuthController {
   }
 
   @Patch('profile')
+  @AllowWithoutTerms() // BR-010-08, BR-010-12, DL-010-03: reading and correcting one's data never waits
   @ApiJwtAuth()
   @ApiOperation({ summary: 'Change the signed-in user name or phone (the e-mail is read-only)' })
   @ApiOkResponse({ type: UserProfileResponseDto })
@@ -368,6 +373,7 @@ export class AuthController {
   }
 
   @Get('profile/full')
+  @AllowWithoutTerms() // BR-010-08, BR-010-12, DL-010-03: reading and correcting one's data never waits
   @ApiJwtAuth()
   @ApiOperation({ summary: 'The signed-in user full profile' })
   @ApiOkResponse({ type: UserProfileResponseDto })

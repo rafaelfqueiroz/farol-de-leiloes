@@ -8,6 +8,10 @@ import { LegalController } from './legal.controller.js';
 import { LegalDocumentsService } from './legal-documents.service.js';
 import { LEGAL_DOCUMENTS, LEGAL_REGISTRY } from './legal/registry.js';
 import { PrivacyController } from './privacy.controller.js';
+import {
+  PrivacyAccountThrottlerGuard,
+  PrivacyThrottlerModule,
+} from './privacy-throttler.module.js';
 import { ConsentEntity, ConsentSchema } from './schemas/consent.schema.js';
 import { WhatsappConsentEntity, WhatsappConsentSchema } from './schemas/whatsapp-consent.schema.js';
 import { WhatsappConsentRepository } from './whatsapp-consent.repository.js';
@@ -32,6 +36,7 @@ import { WhatsappConsentService } from './whatsapp-consent.service.js';
     ]),
     CommonModule, // AR-24: the Clock
     UsersModule, // the one-time WhatsApp request is answered on the account
+    PrivacyThrottlerModule, // SC-04: a per-account limit on the consent write routes
   ],
   controllers: [LegalController, PrivacyController],
   providers: [
@@ -41,6 +46,7 @@ import { WhatsappConsentService } from './whatsapp-consent.service.js';
     ConsentsService,
     WhatsappConsentRepository,
     WhatsappConsentService,
+    PrivacyAccountThrottlerGuard,
   ],
   exports: [LegalDocumentsService, ConsentsService, WhatsappConsentService],
 })

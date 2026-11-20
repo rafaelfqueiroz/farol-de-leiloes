@@ -36,7 +36,7 @@ describe('SPEC-010 BR-010-03 / AR-30: acceptances and consents are insert-only',
 
   it('ConsentsRepository exposes inserts and reads only', () => {
     const text = sources.find(({ file }) => file === 'consents.repository.ts')?.text ?? '';
-    expect(methodsOf(text)).toEqual(['insert', 'countAccepted', 'findAccepted', 'listForUser']);
+    expect(methodsOf(text)).toEqual(['insert', 'findAccepted', 'listForUser']);
   });
 
   it('WhatsappConsentRepository exposes inserts and reads only', () => {
@@ -50,5 +50,64 @@ describe('SPEC-010 BR-010-03 / AR-30: acceptances and consents are insert-only',
       .map(({ file }) => file)
       .sort();
     expect(users).toEqual(['consents.repository.ts', 'whatsapp-consent.repository.ts']);
+  });
+});
+
+// The two models are reachable only from the privacy module's own repositories, wherever else in
+// src/ someone looks (the way admin-access-append-only.spec.ts guards its two collections): another
+// module asks ConsentsService / WhatsappConsentService (AR-09), and nothing below Mongoose (driver,
+// `.collection(...)`, a connection) is used on them.
+describe('SPEC-010 AR-08, AR-09, AR-30: no code outside the repositories reaches the two models', () => {
+  const SRC = join(MODULE_DIR, '..');
+  const all = (readdirSync(SRC, { recursive: true }) as string[])
+    .filter((file) => file.endsWith('.ts'))
+    .map((file) => ({
+      file: file.split('\\').join('/'),
+      text: readFileSync(join(SRC, file), 'utf8'),
+    }));
+
+  /** The files that may name the models or their collections, and why. */
+  const ALLOWED = new Set([
+    'privacy/schemas/consent.schema.ts', // defines the model
+    'privacy/schemas/whatsapp-consent.schema.ts',
+    'privacy/consents.repository.ts', // the only code that injects them
+    'privacy/whatsapp-consent.repository.ts',
+    'privacy/privacy.module.ts', // registers them (MongooseModule.forFeature)
+    'migrations/0008-consent-indexes.migration.ts', // builds their indexes through the driver
+  ]);
+  const NAMES =
+    /\b(ConsentEntity|WhatsappConsentEntity|ConsentSchema|WhatsappConsentSchema)\b|['"](consents|whatsappConsents)['"]/;
+
+  it('finds the whole of src/', () => {
+    expect(all.length).toBeGreaterThan(200);
+  });
+
+  it('only the schemas, the two repositories, the module and migration 0008 name them', () => {
+    const offenders = all
+      .filter(({ file }) => !file.endsWith('.spec.ts') && !ALLOWED.has(file))
+      .filter(({ text }) => NAMES.test(text))
+      .map(({ file }) => file);
+    expect(offenders).toEqual([]);
+  });
+
+  it('every allowed file exists (the allowlist is not stale)', () => {
+    const files = new Set(all.map(({ file }) => file));
+    for (const file of ALLOWED) expect(files.has(file), file).toBe(true);
+  });
+
+  it('no other module injects a model by the names of these two (AR-09)', () => {
+    const offenders = all
+      .filter(({ file }) => !file.endsWith('.spec.ts') && !file.startsWith('privacy/'))
+      .filter(({ text }) => /(getModelToken|InjectModel)\(\s*(Whatsapp)?Consent/.test(text))
+      .map(({ file }) => file);
+    expect(offenders).toEqual([]);
+  });
+
+  it('nothing in privacy/ reaches the driver or a connection below Mongoose', () => {
+    const offenders = all
+      .filter(({ file }) => file.startsWith('privacy/') && !file.endsWith('.spec.ts'))
+      .filter(({ text }) => /\.collection\b|InjectConnection|\.db\b|\$merge|\$out/.test(text))
+      .map(({ file }) => file);
+    expect(offenders).toEqual([]);
   });
 });
