@@ -325,6 +325,25 @@ describe('the launch checklist with the placeholder texts (drafts)', () => {
     expect(body.launchReady).toBe(false);
   });
 
+  it('with no record at all every gate is blocked, says what it blocks, and the periods are provisional', async () => {
+    const body = (await app.as(admin).get('/api/admin/launch-checklist').expect(200)).body;
+
+    expect(
+      body.gates.map((gate: { scope: string; validated: boolean }) => [gate.scope, gate.validated]),
+    ).toEqual([
+      ['third-party-processing', false],
+      ['retention-periods', false],
+      ['privacy-policy', false],
+      ['terms', false],
+    ]);
+    for (const gate of body.gates) {
+      expect(gate.blocks.length).toBeGreaterThan(0);
+      expect(gate).not.toHaveProperty('validatedAt');
+    }
+    expect(body.retention).toEqual({ documentYears: 5, provisional: true });
+    expect(body.launchReady).toBe(false);
+  });
+
   it('a draft placeholder cannot be validated by the script: nothing is written', async () => {
     const moduleRef = app.harness.moduleRef;
     const command = new RecordValidationCommand(
