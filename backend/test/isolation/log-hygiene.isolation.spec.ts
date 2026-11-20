@@ -159,6 +159,10 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
           .useValue({ memberContacts: () => Promise.resolve([MEMBER_CONTACT]) }),
     );
     const { moduleRef, clock } = app.harness;
+    // The unique acceptance index (migration 0008 in production) must exist before the first sign-up:
+    // autoIndex builds it in the background, and under load a repeated accept could otherwise slip
+    // in a duplicate row before it is there.
+    await moduleRef.get<Connection>(getConnectionToken()).syncIndexes();
     const auctions = moduleRef.get<Model<unknown>>(getModelToken(AuctionEntity.name));
     const phase = { modality: 'ONLINE_SALES', minimumPrice: null, phaseDates: [AUCTION_START] };
     await auctions.collection.insertOne({
