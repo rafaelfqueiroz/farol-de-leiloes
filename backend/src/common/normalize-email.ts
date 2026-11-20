@@ -13,6 +13,9 @@ export function normalizeEmail(email: string): string {
  * tombstone's unique email collide. Every place an address is accepted refuses it.
  */
 export function isReservedEmailDomain(email: string): boolean {
-  const domain = normalizeEmail(email).split('@').pop() ?? '';
-  return domain.replace(/\.+$/, '').endsWith('.invalid') || domain === 'invalid';
+  let domain = normalizeEmail(email).split('@').pop() ?? '';
+  // A trailing dot names the same DNS root; strip them in a loop (a `/\.+$/` regex is polynomial on
+  // a long run of dots, CodeQL js/polynomial-redos).
+  while (domain.endsWith('.')) domain = domain.slice(0, -1);
+  return domain.endsWith('.invalid') || domain === 'invalid';
 }
