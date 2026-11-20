@@ -25,6 +25,11 @@ export interface UserAccount {
    */
   isAdmin?: boolean;
   subscriptionStatus?: SubscriptionStatus | null;
+  /**
+   * SPEC-010 BR-010-27: when the account first answered the one-time WhatsApp consent request;
+   * absent means it has not been asked yet. Server-written only (BR-001-30).
+   */
+  whatsappPromptAnsweredAt?: Date;
   phone?: string;
   createdAt: Date;
   updatedAt: Date;

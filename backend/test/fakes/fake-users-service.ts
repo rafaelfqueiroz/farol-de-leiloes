@@ -32,6 +32,7 @@ interface UsersPort {
   createLocalAccount(...args: Args<'createLocalAccount'>): Promise<FakeAccount>;
   changePassword(...args: Args<'changePassword'>): Promise<FakeAccount>;
   confirmEmail(...args: Args<'confirmEmail'>): Promise<boolean>;
+  markWhatsappPromptAnswered(...args: Args<'markWhatsappPromptAnswered'>): Promise<void>;
 }
 
 /**
@@ -183,6 +184,14 @@ export class FakeUsersService implements UsersPort {
     if (account?.email !== normalizeEmail(email)) return false;
     account.emailVerified = true;
     return true;
+  }
+
+  /** Set once, like the real conditional update: the first answer's instant stays. */
+  async markWhatsappPromptAnswered(userId: string, at: Date): Promise<void> {
+    const account = this.accounts.get(userId);
+    if (account && account.whatsappPromptAnsweredAt === undefined) {
+      account.whatsappPromptAnsweredAt = at;
+    }
   }
 }
 

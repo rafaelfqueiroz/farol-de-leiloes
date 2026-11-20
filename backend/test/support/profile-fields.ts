@@ -30,6 +30,8 @@ export const PROTECTED = [
   'credentialVersion',
   // SPEC-002 BR-002-21: only the grant-admin script sets it (UsersService.setAdminCapability).
   'isAdmin',
+  // SPEC-010 BR-010-27: set by sign-up and the privacy routes (WhatsappConsentService) only.
+  'whatsappPromptAnsweredAt',
 ] as const;
 
 /** Mongoose bookkeeping, not account attributes. */
@@ -61,4 +63,5 @@ export const HOSTILE_VALUES: Record<string, unknown> = {
   subscriptionStatus: 'active',
   credentialVersion: 99,
   isAdmin: true,
+  whatsappPromptAnsweredAt: '2000-01-01T00:00:00.000Z',
 };

@@ -503,6 +503,20 @@ export class UsersService {
     return revoked.matchedCount > 0;
   }
 
+  /**
+   * SPEC-010 BR-010-27: the one-time WhatsApp consent request is answered, whatever the answer. Set
+   * once: the first answer's instant stays. Written only by the privacy module's
+   * WhatsappConsentService, never from a request (BR-001-30).
+   */
+  async markWhatsappPromptAnswered(userId: string, at: Date): Promise<void> {
+    await this.userRepository
+      .updateOne(
+        { _id: { $eq: userId }, whatsappPromptAnsweredAt: serverOperators({ $exists: false }) },
+        { $set: { whatsappPromptAnsweredAt: at } },
+      )
+      .exec();
+  }
+
   async isEmailVerified(userId: string): Promise<boolean> {
     const user = await this.userRepository.findById(userId).exec();
     return user?.emailVerified ?? false;
