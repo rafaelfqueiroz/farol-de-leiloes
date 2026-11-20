@@ -39,6 +39,9 @@ export const ERROR_CODES = [
   // Access (SPEC-002)
   'PERSONA_REQUIRED',
   'OFFICE_READ_ONLY',
+  // Privacy and consent (SPEC-010)
+  'TERMS_ACCEPTANCE_REQUIRED',
+  'TERMS_VERSION_OUTDATED',
   // Plans and payments
   'PLAN_NOT_ALLOWED',
   'INVALID_PLAN',

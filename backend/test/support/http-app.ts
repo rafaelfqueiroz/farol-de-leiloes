@@ -33,6 +33,7 @@ export const TEST_USER: AuthenticatedUser = {
   role: 'standard',
   subscriptionStatus: 'active',
   isAdmin: false,
+  whatsappPromptPending: false,
 };
 
 export interface HttpAppOptions {

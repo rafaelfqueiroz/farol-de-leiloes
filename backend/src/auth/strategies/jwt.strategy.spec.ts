@@ -151,6 +151,39 @@ describe('JwtStrategy.validate', () => {
     expect(new CurrentUserResponseDto(user, access).subscriptionStatus).toBe('past_due');
   });
 
+  it.each([
+    ['never answered (absent)', undefined, true],
+    ['never answered (null)', null, true],
+    ['answered', new Date('2026-06-01T12:00:00.000Z'), false],
+  ])('SPEC-010 BR-010-27: an account that %s', async (_label, answeredAt, pending) => {
+    // Pending is true until the one-time WhatsApp request is answered, whichever the answer.
+    await expect(
+      build({ ...base, whatsappPromptAnsweredAt: answeredAt }).validate(payload),
+    ).resolves.toMatchObject({ whatsappPromptPending: pending });
+  });
+
+  it('SPEC-010 BR-010-05, BR-010-27: /auth/me carries the terms state and the pending prompt', async () => {
+    const user = await build({ ...base }).validate(payload);
+    const access = await accessContextFactory().forAccount(user);
+
+    const upToDate = new CurrentUserResponseDto(user, access);
+    expect(upToDate).toMatchObject({
+      termsAcceptanceRequired: false,
+      documents: [],
+      whatsappPromptPending: true,
+    });
+
+    const behind = new CurrentUserResponseDto(user, access, [
+      { type: 'terms', version: '0.2' },
+      { type: 'privacy', version: '0.2' },
+    ]);
+    expect(behind.termsAcceptanceRequired).toBe(true);
+    expect(behind.documents).toEqual([
+      { type: 'terms', version: '0.2' },
+      { type: 'privacy', version: '0.2' },
+    ]);
+  });
+
   it('SPEC-002 BR-002-15: carries the stored admin capability, read on this request', async () => {
     await expect(build({ ...base, isAdmin: true }).validate(payload)).resolves.toMatchObject({
       isAdmin: true,

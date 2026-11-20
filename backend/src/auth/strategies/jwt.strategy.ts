@@ -85,6 +85,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // SPEC-002 BR-002-15 / BR-002-23: the admin capability is the stored flag, read now; a
       // missing one is false (AR-28). `role === 'admin'` grants nothing any more.
       isAdmin: user.isAdmin === true,
+      // SPEC-010 BR-010-27: absent means the account was never asked (it predates the channel).
+      whatsappPromptPending: !user.whatsappPromptAnsweredAt,
     };
   }
 }

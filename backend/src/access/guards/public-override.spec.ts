@@ -36,6 +36,7 @@ import {
 } from '../decorators/access-guards.decorator.js';
 import { MEMBERSHIP_SOURCE } from '../sources/membership.source.js';
 import { OFFICE_PLAN_SOURCE, type OfficePlanState } from '../sources/office-plan.source.js';
+import { ConsentsService } from '../../privacy/consents.service.js';
 import { AdminGuard } from './admin.guard.js';
 
 /** A @Public() controller whose handlers carry access requirements: they must authenticate. */
@@ -113,6 +114,8 @@ const productionGuards = (
       useValue: { activeCredentialVersion: vi.fn().mockResolvedValue(0) },
     },
     { provide: ConfigService, useValue: testConfigService() },
+    // SPEC-010: the third global guard (enforcement is off in this spec).
+    { provide: ConsentsService, useValue: { pendingFor: vi.fn().mockResolvedValue([]) } },
     {
       provide: UsersService,
       useValue: {

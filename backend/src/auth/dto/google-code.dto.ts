@@ -1,5 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Equals, IsBoolean, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import {
+  PrivacyVersionField,
+  TermsVersionField,
+  WhatsappConsentField,
+} from '../../privacy/dto/signup-consent.fields.js';
 
 /** The one-time code of the redirect back from Google (BR-001-20). */
 export class GoogleCodeDto {
@@ -16,4 +21,14 @@ export class GoogleCompleteDto extends GoogleCodeDto {
   @IsBoolean()
   @Equals(true)
   acceptTerms!: boolean;
+
+  // SPEC-010 BR-010-01, BR-010-03, BR-010-27: same optional fields as the e-mail sign-up.
+  @TermsVersionField()
+  termsVersion?: string;
+
+  @PrivacyVersionField()
+  privacyVersion?: string;
+
+  @WhatsappConsentField()
+  whatsappConsent?: boolean;
 }

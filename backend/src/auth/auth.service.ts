@@ -19,9 +19,21 @@ import { SessionsService } from './sessions/sessions.service.js';
 import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
 import { credentialVersionOf } from '../users/domain/credential-version.js';
 import type { GoogleIdentity } from './google/google-identity.js';
+import { ConsentsService, type AcceptedVersions } from '../privacy/consents.service.js';
+import type { AcceptanceMethod } from '../privacy/domain/legal-versions.js';
+import { WhatsappConsentService } from '../privacy/whatsapp-consent.service.js';
 
 function idOf(user: UserAccount): string {
   return typeof user._id === 'string' ? user._id : user._id.toHexString();
+}
+
+/** SPEC-010: what a sign-up carries beside the accepted terms (RegisterDto, GoogleCompleteDto). */
+export interface SignupConsentInput {
+  /** The versions the person was shown; omitted means the current ones (BR-010-01). */
+  termsVersion?: string;
+  privacyVersion?: string;
+  /** The WhatsApp checkbox; omitted or false is recorded as declined (BR-010-27). */
+  whatsappConsent?: boolean;
 }
 
 @Injectable()
@@ -37,9 +49,18 @@ export class AuthService implements BeforeApplicationShutdown {
     private accountTokens: AccountTokenService,
     private sessions: SessionsService,
     private loginAttempts: LoginAttemptsService,
+    private consents: ConsentsService,
+    private whatsappConsent: WhatsappConsentService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResult> {
+    // BR-010-01: the versions the person was shown must be the current ones, checked BEFORE the
+    // account exists so that a stale form creates nothing (TERMS_VERSION_OUTDATED, 409).
+    const versions = this.consents.resolveVersions({
+      terms: registerDto.termsVersion,
+      privacy: registerDto.privacyVersion,
+    });
+
     // BR-001-31: only email, name and password cross into the account; acceptTerms is checked by
     // the DTO (BR-001-02) and is not an account attribute.
     const user = await this.usersService.createLocalAccount({
@@ -48,8 +69,26 @@ export class AuthService implements BeforeApplicationShutdown {
       password: registerDto.password,
     });
 
+    // BR-010-03, BR-010-27: then the acceptance and the WhatsApp answer, with the account. A
+    // failure here leaves an account with no acceptance, which the terms guard blocks (fail safe).
+    await this.recordSignupConsents(idOf(user), versions, 'signup_email', registerDto);
+
     await this.sendConfirmationEmail(user);
     return this.startSession(user);
+  }
+
+  /**
+   * BR-010-03: the acceptance of the terms and the privacy policy, and BR-010-27: the WhatsApp
+   * checkbox (an answer either way; it never stops the account from existing).
+   */
+  private async recordSignupConsents(
+    userId: string,
+    versions: AcceptedVersions,
+    method: Extract<AcceptanceMethod, 'signup_email' | 'signup_google'>,
+    input: SignupConsentInput,
+  ): Promise<void> {
+    await this.consents.recordAcceptance(userId, versions, method);
+    await this.whatsappConsent.recordAtSignup(userId, input.whatsappConsent === true);
   }
 
   async login(loginDto: LoginDto, ip: string): Promise<AuthResult> {
@@ -123,14 +162,19 @@ export class AuthService implements BeforeApplicationShutdown {
   /**
    * POST /auth/google/complete: the person accepted the terms (the DTO requires `true`). The code
    * is spent atomically, then the account is created: searcher only, email already confirmed, no
-   * password (BR-001-03, BR-001-09).
+   * password (BR-001-03, BR-001-09), and the acceptance is recorded with it (BR-010-03,
+   * `signup_google`). The versions are checked BEFORE the code is spent, so a stale screen keeps
+   * the pending sign-up (TERMS_VERSION_OUTDATED, 409) and nothing is stored.
    */
-  async completeGoogleSignup(code: string): Promise<AuthResult> {
+  async completeGoogleSignup(code: string, consent: SignupConsentInput = {}): Promise<AuthResult> {
+    const versions = this.consents.resolveVersions({
+      terms: consent.termsVersion,
+      privacy: consent.privacyVersion,
+    });
     const profile = await this.accountTokens.consumeGoogleSignup(code);
     if (!profile) {
       throw new DomainError('INVALID_GOOGLE_CODE');
     }
-    // TODO(#10): SPEC-010 records the acceptance (versions, time, method) with the account.
     const identity: GoogleIdentity = { ...profile, emailVerified: true };
 
     // Someone may have registered this email, or linked this Google identity, since the redirect:
@@ -145,7 +189,11 @@ export class AuthService implements BeforeApplicationShutdown {
         }
         account = await this.resolveGoogleAccount(identity);
         if (!account) throw error;
+        // Not created by this request: the account's own sign-up recorded its acceptance.
+        return this.startSession(account);
       }
+      // BR-010-03, BR-010-27: only an account this request created records the acceptance.
+      await this.recordSignupConsents(idOf(account), versions, 'signup_google', consent);
     }
     return this.startSession(account);
   }
