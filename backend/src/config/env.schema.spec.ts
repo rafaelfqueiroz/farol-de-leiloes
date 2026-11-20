@@ -2,7 +2,7 @@
 // tunables default, and the error names variables without ever echoing a value (SC-16).
 import { describe, expect, it } from 'vitest';
 import { TEST_ENV, testEnv } from '../../test/support/test-env.js';
-import { validateEnv } from './env.js';
+import { legalGateEnforced, validateEnv } from './env.js';
 import { ENV_KEYS } from './env.schema.js';
 import { r2ConfigFrom } from './r2.config.js';
 import { schedulerConfigFrom } from './scheduler.config.js';
@@ -92,6 +92,7 @@ describe('validateEnv', () => {
       SUBSCRIPTIONS_RECONCILE_ENABLED: true,
       ACCOUNT_PURGE_ENABLED: true,
       DATA_EXPORT_ENABLED: true,
+      DOCUMENT_RETENTION_ENABLED: true,
       CLEANUP_ON_STARTUP: false,
       NEIGHBORHOODS_CACHE_ENABLED: false,
       NEIGHBORHOODS_CACHE_TTL: 600_000,
@@ -103,6 +104,7 @@ describe('validateEnv', () => {
       ACCOUNT_PURGE_MAX_DAYS: 30,
       ACCOUNT_PURGE_ALERT_DAYS: 25,
       EXPORT_TTL_DAYS: 7,
+      DOCUMENT_RETENTION_YEARS: 5,
     });
   });
 
@@ -115,6 +117,7 @@ describe('validateEnv', () => {
       'ACCOUNT_PURGE_MAX_DAYS',
       'ACCOUNT_PURGE_ALERT_DAYS',
       'EXPORT_TTL_DAYS',
+      'DOCUMENT_RETENTION_YEARS',
     ])('%s is a positive integer', (key) => {
       expect(testEnv({ [key]: '25' })[key as 'SAVED_FILTERS_MAX_PER_USER']).toBe(25);
       for (const bad of ['0', '-1', '1.5', 'many']) {
@@ -273,6 +276,7 @@ describe('namespaced configs built from the validated environment', () => {
       subscriptionsReconcile: { enabled: true },
       accountPurge: { enabled: true },
       dataExport: { enabled: true },
+      documentRetention: { enabled: true },
       cleanup: { onStartup: false },
     });
     expect(
@@ -280,6 +284,9 @@ describe('namespaced configs built from the validated environment', () => {
         testEnv({ ACCOUNT_PURGE_ENABLED: 'false', DATA_EXPORT_ENABLED: 'false' }),
       ),
     ).toMatchObject({ accountPurge: { enabled: false }, dataExport: { enabled: false } });
+    expect(
+      schedulerConfigFrom(testEnv({ DOCUMENT_RETENTION_ENABLED: 'false' })).documentRetention,
+    ).toEqual({ enabled: false });
     expect(
       schedulerConfigFrom(testEnv({ SUBSCRIPTIONS_RECONCILE_ENABLED: 'false' }))
         .subscriptionsReconcile,
@@ -291,6 +298,38 @@ describe('namespaced configs built from the validated environment', () => {
     expect(testEnv({ TERMS_ENFORCEMENT_ENABLED: 'true' }).TERMS_ENFORCEMENT_ENABLED).toBe(true);
     // z.stringbool(): the string "false" is false (z.coerce.boolean would read it as true).
     expect(testEnv({ TERMS_ENFORCEMENT_ENABLED: 'false' }).TERMS_ENFORCEMENT_ENABLED).toBe(false);
+  });
+
+  it('SPEC-010 BR-010-25: the legal gate flag is optional; unset it follows NODE_ENV', () => {
+    expect(testEnv().LEGAL_GATE_ENFORCED).toBeUndefined();
+    expect(testEnv({ LEGAL_GATE_ENFORCED: 'true' }).LEGAL_GATE_ENFORCED).toBe(true);
+    // z.stringbool(): the string "false" is false.
+    expect(testEnv({ LEGAL_GATE_ENFORCED: 'false' }).LEGAL_GATE_ENFORCED).toBe(false);
+    expect(errorOf({ ...TEST_ENV, LEGAL_GATE_ENFORCED: 'maybe' })).toContain(
+      'LEGAL_GATE_ENFORCED:',
+    );
+    // Unset: closed in production, open elsewhere. Set: it wins in both directions.
+    expect(legalGateEnforced(testEnv({ NODE_ENV: 'production' }))).toBe(true);
+    expect(legalGateEnforced(testEnv({ NODE_ENV: 'development' }))).toBe(false);
+    expect(legalGateEnforced(testEnv({ NODE_ENV: 'test' }))).toBe(false);
+    expect(
+      legalGateEnforced(testEnv({ NODE_ENV: 'production', LEGAL_GATE_ENFORCED: 'false' })),
+    ).toBe(false);
+    expect(
+      legalGateEnforced(testEnv({ NODE_ENV: 'development', LEGAL_GATE_ENFORCED: 'true' })),
+    ).toBe(true);
+  });
+
+  it('SPEC-010 BR-010-18: the document retention is 5 whole years unless set, never 0 or a fraction', () => {
+    expect(businessConfigFrom(testEnv()).privacy.documentRetentionYears).toBe(5);
+    expect(
+      businessConfigFrom(testEnv({ DOCUMENT_RETENTION_YEARS: '6' })).privacy.documentRetentionYears,
+    ).toBe(6);
+    for (const bad of ['0', '-5', '5.5', 'five']) {
+      expect(errorOf({ ...TEST_ENV, DOCUMENT_RETENTION_YEARS: bad })).toContain(
+        'DOCUMENT_RETENTION_YEARS:',
+      );
+    }
   });
 
   it('SPEC-012: the Billing Portal configuration id is optional and read as is', () => {
@@ -306,7 +345,12 @@ describe('namespaced configs built from the validated environment', () => {
       savedFilters: { maxPerUser: 10 },
       retention: { unavailableAuctionDays: 14 },
       subscriptions: { graceDays: 10, refundWindowDays: 7 },
-      privacy: { accountPurgeMaxDays: 30, accountPurgeAlertDays: 25, exportTtlDays: 7 },
+      privacy: {
+        accountPurgeMaxDays: 30,
+        accountPurgeAlertDays: 25,
+        exportTtlDays: 7,
+        documentRetentionYears: 5,
+      },
     });
     expect(
       businessConfigFrom(
@@ -318,13 +362,19 @@ describe('namespaced configs built from the validated environment', () => {
           ACCOUNT_PURGE_MAX_DAYS: '40',
           ACCOUNT_PURGE_ALERT_DAYS: '35',
           EXPORT_TTL_DAYS: '3',
+          DOCUMENT_RETENTION_YEARS: '6',
         }),
       ),
     ).toEqual({
       savedFilters: { maxPerUser: 3 },
       retention: { unavailableAuctionDays: 60 },
       subscriptions: { graceDays: 5, refundWindowDays: 14 },
-      privacy: { accountPurgeMaxDays: 40, accountPurgeAlertDays: 35, exportTtlDays: 3 },
+      privacy: {
+        accountPurgeMaxDays: 40,
+        accountPurgeAlertDays: 35,
+        exportTtlDays: 3,
+        documentRetentionYears: 6,
+      },
     });
   });
 

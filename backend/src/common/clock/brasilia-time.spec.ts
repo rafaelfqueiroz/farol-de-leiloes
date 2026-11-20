@@ -6,7 +6,9 @@ import {
   addYearsAnniversary,
   BRASILIA_TIME_MARKER,
   BRASILIA_TIME_ZONE,
+  brasiliaCalendarDate,
   brasiliaMonthBounds,
+  brasiliaToday,
   brasiliaWallClockToInstant,
   endOfBrasiliaDay,
   formatBrasiliaDateTime,
@@ -281,5 +283,40 @@ describe('formatBrasiliaDateTime', () => {
     expect(formatBrasiliaDateTimeMarked(utc('2026-01-26T13:00:00.000Z'))).toBe(
       '26/01/2026 10:00 (horário de Brasília)',
     );
+  });
+});
+
+describe('brasiliaCalendarDate and brasiliaToday (AR-22, SPEC-010 BR-010-19)', () => {
+  it('is the Brasília day, so 23:59 in Brasília is still that day though UTC has moved on', () => {
+    // 31/01/2026 23:59 Brasília = 01/02/2026 02:59 UTC; 00:00 on 01/02 Brasília = 03:00 UTC.
+    expect(brasiliaCalendarDate(utc('2026-02-01T02:59:00.000Z'))).toBe('2026-01-31');
+    expect(brasiliaCalendarDate(utc('2026-02-01T03:00:00.000Z'))).toBe('2026-02-01');
+  });
+
+  it('keeps an instant after 03:00 UTC on its own date', () => {
+    expect(brasiliaCalendarDate(utc('2026-01-15T12:00:00.000Z'))).toBe('2026-01-15');
+  });
+
+  it('is 29 February while 1 March has begun in UTC only', () => {
+    // 01/03/2028 02:30 UTC = 29/02/2028 23:30 Brasília.
+    expect(brasiliaCalendarDate(utc('2028-03-01T02:30:00.000Z'))).toBe('2028-02-29');
+  });
+
+  it('ends the year on 31 December', () => {
+    // 01/01/2027 02:59 UTC = 31/12/2026 23:59 Brasília.
+    expect(brasiliaCalendarDate(utc('2027-01-01T02:59:00.000Z'))).toBe('2026-12-31');
+    expect(brasiliaCalendarDate(utc('2027-01-01T03:00:00.000Z'))).toBe('2027-01-01');
+  });
+
+  it('follows the zone rules: in December 2018 (UTC-2) midnight in Brasília was 02:00 UTC', () => {
+    // 30/11/2018 23:59 Brasília (UTC-2) = 01/12/2018 01:59 UTC.
+    expect(brasiliaCalendarDate(utc('2018-12-01T01:59:00.000Z'))).toBe('2018-11-30');
+    expect(brasiliaCalendarDate(utc('2018-12-01T02:00:00.000Z'))).toBe('2018-12-01');
+  });
+
+  it('brasiliaToday reads the injected clock', () => {
+    const at = (iso: string) => ({ now: () => utc(iso) });
+    expect(brasiliaToday(at('2026-02-01T02:59:00.000Z'))).toBe('2026-01-31');
+    expect(brasiliaToday(at('2026-02-01T03:00:00.000Z'))).toBe('2026-02-01');
   });
 });

@@ -16,6 +16,15 @@ export type { Env, LlmProvider } from './env.schema.js';
 export type AppConfigService = ConfigService<Env, true>;
 
 /**
+ * SPEC-010 BR-010-25: whether the legal-validation gate refuses. An explicit `LEGAL_GATE_ENFORCED`
+ * wins; unset, the gate is closed in production and open elsewhere, so a developer's machine and
+ * the test suites are not blocked while a production-like environment is (staging sets it true).
+ */
+export function legalGateEnforced(env: Pick<Env, 'NODE_ENV' | 'LEGAL_GATE_ENFORCED'>): boolean {
+  return env.LEGAL_GATE_ENFORCED ?? env.NODE_ENV === 'production';
+}
+
+/**
  * Parses the raw environment against the schema. An empty value counts as unset, so `KEY=` in a
  * .env file takes the default or fails as missing instead of failing as malformed.
  *

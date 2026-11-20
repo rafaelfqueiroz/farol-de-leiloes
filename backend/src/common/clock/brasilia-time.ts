@@ -109,3 +109,17 @@ export function formatBrasiliaDateTime(instant: Date): string {
 export function formatBrasiliaDateTimeMarked(instant: Date): string {
   return `${formatBrasiliaDateTime(instant)} ${BRASILIA_TIME_MARKER}`;
 }
+
+/**
+ * The Brasília calendar day `instant` falls on, as `YYYY-MM-DD` (AR-22): what a calendar-date
+ * column stores and what the retention clock counts from (SPEC-010 BR-010-19). 23:59 in Brasília is
+ * already the next day in UTC; this answers the Brasília one, whatever the host's zone.
+ */
+export function brasiliaCalendarDate(instant: Date): string {
+  return format(instant, 'yyyy-MM-dd', { in: inBrasilia });
+}
+
+/** Today's Brasília calendar day from the injected clock (AR-24). */
+export function brasiliaToday(clock: { now(): Date }): string {
+  return brasiliaCalendarDate(clock.now());
+}
