@@ -22,6 +22,8 @@ export interface NewAcceptance {
   readonly contentHash: string;
   readonly acceptedAt: Date;
   readonly method: AcceptanceMethod;
+  /** The account's consentResetAt when it accepted (null: never reset), see consent.schema.ts. */
+  readonly consentResetAt: Date | null;
 }
 
 /** What the account may see of its own acceptance. */
@@ -54,32 +56,36 @@ export class ConsentsRepository {
     }
   }
 
-  /** How many of `refs` the account accepted: one indexed query (the terms guard runs it per request). */
-  async countAccepted(userId: string, refs: readonly LegalDocumentRef[]): Promise<number> {
-    if (refs.length === 0) return 0;
-    return this.model
-      .countDocuments({ userId: { $eq: new Types.ObjectId(userId) }, $or: anyOf(refs) })
-      .exec();
-  }
-
-  /** Which of `refs` the account accepted. */
+  /**
+   * Which of `refs` the account accepted under its CURRENT consent generation (`consentResetAt`,
+   * null when never reset): one indexed query, which the terms guard runs per request. Rows of an
+   * earlier generation (made by whoever registered the address before a takeover) are not found.
+   */
   async findAccepted(
     userId: string,
+    consentResetAt: Date | null,
     refs: readonly LegalDocumentRef[],
   ): Promise<LegalDocumentRef[]> {
     if (refs.length === 0) return [];
     const rows = await this.model
-      .find({ userId: { $eq: new Types.ObjectId(userId) }, $or: anyOf(refs) })
+      .find({
+        userId: { $eq: new Types.ObjectId(userId) },
+        consentResetAt: { $eq: consentResetAt },
+        $or: anyOf(refs),
+      })
       .select('documentType version')
       .lean()
       .exec();
     return rows.map((row) => ({ type: row.documentType, version: row.version }));
   }
 
-  /** Every acceptance of the account, newest first (BR-010-04). */
-  async listForUser(userId: string): Promise<AcceptanceRecord[]> {
+  /** Every acceptance of the account under its current consent generation, newest first (BR-010-04). */
+  async listForUser(userId: string, consentResetAt: Date | null): Promise<AcceptanceRecord[]> {
     const rows = await this.model
-      .find({ userId: { $eq: new Types.ObjectId(userId) } })
+      .find({
+        userId: { $eq: new Types.ObjectId(userId) },
+        consentResetAt: { $eq: consentResetAt },
+      })
       .sort({ acceptedAt: -1, _id: -1 })
       .select('documentType version acceptedAt method')
       .lean()

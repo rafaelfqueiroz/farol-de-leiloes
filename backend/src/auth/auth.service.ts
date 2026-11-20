@@ -13,6 +13,7 @@ import {
   GoogleExchangeResult,
 } from './interfaces/auth.interface.js';
 import { DomainError } from '../common/errors/domain-error.js';
+import { Clock } from '../common/clock/clock.js';
 import { normalizeEmail } from '../common/normalize-email.js';
 import { AccountTokenService } from './tokens/account-token.service.js';
 import { SessionsService } from './sessions/sessions.service.js';
@@ -51,6 +52,7 @@ export class AuthService implements BeforeApplicationShutdown {
     private loginAttempts: LoginAttemptsService,
     private consents: ConsentsService,
     private whatsappConsent: WhatsappConsentService,
+    private clock: Clock, // AR-24: the instant of a takeover's consent reset
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResult> {
@@ -69,12 +71,44 @@ export class AuthService implements BeforeApplicationShutdown {
       password: registerDto.password,
     });
 
-    // BR-010-03, BR-010-27: then the acceptance and the WhatsApp answer, with the account. A
-    // failure here leaves an account with no acceptance, which the terms guard blocks (fail safe).
-    await this.recordSignupConsents(idOf(user), versions, 'signup_email', registerDto);
+    // BR-010-03, BR-010-27: then the acceptance and the WhatsApp answer, with the account; if they
+    // cannot be written the account is rolled back (see recordOrRollBack).
+    await this.recordOrRollBack(user, versions, 'signup_email', registerDto);
 
     await this.sendConfirmationEmail(user);
     return this.startSession(user);
+  }
+
+  /**
+   * Records the consents of an account this request just created and, when that fails, deletes the
+   * account and rethrows: an account must not exist without its acceptance (BR-010-01), and nothing
+   * has been issued for it yet (no session, no email), so a failed sign-up leaves nothing behind
+   * and the address is free to try again. The deletion is the undo of a failed creation, not an
+   * AR-31 deletion of a person's data (see UsersService.discardUnfinishedSignup). The log names the
+   * kind of failure only (SC-15). For Google the one-time code is already spent: the person signs
+   * in with Google again and is asked again.
+   */
+  private async recordOrRollBack(
+    account: UserAccount,
+    versions: AcceptedVersions,
+    method: Extract<AcceptanceMethod, 'signup_email' | 'signup_google'>,
+    input: SignupConsentInput,
+  ): Promise<void> {
+    try {
+      await this.recordSignupConsents(idOf(account), versions, method, input);
+    } catch (error) {
+      let rolledBack = false;
+      try {
+        rolledBack = await this.usersService.discardUnfinishedSignup(idOf(account));
+      } catch {
+        // Reported below with the original failure; the original error is what is rethrown.
+      }
+      this.logger.error(
+        `Sign-up consent records could not be written (${error instanceof Error ? error.name : 'error'}); ` +
+          `account ${rolledBack ? 'rolled back' : 'NOT rolled back'}`,
+      );
+      throw error;
+    }
   }
 
   /**
@@ -193,7 +227,7 @@ export class AuthService implements BeforeApplicationShutdown {
         return this.startSession(account);
       }
       // BR-010-03, BR-010-27: only an account this request created records the acceptance.
-      await this.recordSignupConsents(idOf(account), versions, 'signup_google', consent);
+      await this.recordOrRollBack(account, versions, 'signup_google', consent);
     }
     return this.startSession(account);
   }
@@ -221,7 +255,11 @@ export class AuthService implements BeforeApplicationShutdown {
     if (!existing) return null;
 
     const userId = idOf(existing);
-    const outcome = await this.usersService.linkGoogleIdentity(userId, identity.googleId);
+    const outcome = await this.usersService.linkGoogleIdentity(
+      userId,
+      identity.googleId,
+      this.clock.now(),
+    );
     if (outcome.result !== 'linked_confirmed' && outcome.result !== 'linked_unconfirmed') {
       // Not active (BR-001-16), another Google identity already linked (BR-001-11), or gone.
       throw new DomainError('GOOGLE_SIGN_IN_FAILED');

@@ -123,6 +123,8 @@ describe('UsersService finders', () => {
   });
 });
 
+const NOW = new Date('2026-06-01T12:00:00.000Z');
+
 describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', () => {
   /** Queues what the update returns (the account as it was), then the account read after it. */
   function link(before: unknown, after: unknown = { _id: 'u1' }) {
@@ -135,7 +137,7 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
   it('writes one conditional pipeline update keyed by the account, active status and free identity', async () => {
     const { Model, service } = link({ emailVerified: true });
 
-    await service.linkGoogleIdentity('u1', 'g-1');
+    await service.linkGoogleIdentity('u1', 'g-1', NOW);
 
     expect(Model.findOneAndUpdate).toHaveBeenCalledTimes(1);
     const [filter, update, options] = Model.findOneAndUpdate.mock.calls[0] as [
@@ -151,13 +153,37 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
     expect(options).toMatchObject({ returnDocument: 'before', updatePipeline: true });
   });
 
+  it('SPEC-010 DL-001-02: the same update moves consentResetAt to the Clock instant and clears the WhatsApp answer, only for an unconfirmed account', async () => {
+    const { Model, service } = link({ emailVerified: false });
+
+    await service.linkGoogleIdentity('u1', 'g-1', NOW);
+
+    const [, pipeline] = Model.findOneAndUpdate.mock.calls[0] as [
+      unknown,
+      [{ $set: Record<string, unknown> }],
+    ];
+    expect(pipeline).toHaveLength(1); // one atomic stage: nothing can fall between the writes
+    const set = pipeline[0].$set;
+    const confirmed = { $eq: ['$emailVerified', true] };
+    expect(set['consentResetAt']).toEqual({
+      $cond: [confirmed, '$consentResetAt', { $literal: NOW }],
+    });
+    expect(set['whatsappPromptAnsweredAt']).toEqual({
+      $cond: [confirmed, '$whatsappPromptAnsweredAt', '$$REMOVE'],
+    });
+    // The takeover's other effects are in the very same stage (DL-001-02 atomicity).
+    expect(Object.keys(set)).toEqual(
+      expect.arrayContaining(['credentialVersion', 'password', 'providers', 'emailVerified']),
+    );
+  });
+
   it('a confirmed account is linked and the password stays (linked_confirmed)', async () => {
     const { service } = link(
       { emailVerified: true },
       { _id: 'u1', providers: ['local', 'google'] },
     );
 
-    await expect(service.linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({
+    await expect(service.linkGoogleIdentity('u1', 'g-1', NOW)).resolves.toEqual({
       result: 'linked_confirmed',
       account: { _id: 'u1', providers: ['local', 'google'] },
     });
@@ -168,7 +194,7 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
     async (before) => {
       const { service } = link(before);
 
-      await expect(service.linkGoogleIdentity('u1', 'g-1')).resolves.toMatchObject({
+      await expect(service.linkGoogleIdentity('u1', 'g-1', NOW)).resolves.toMatchObject({
         result: 'linked_unconfirmed',
       });
     },
@@ -182,7 +208,7 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
     const { Model } = aModel({ findOne: current });
     Model.findOneAndUpdate.mockReturnValue(new FakeQuery(null));
 
-    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({ result });
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1', NOW)).resolves.toEqual({ result });
     expect(Model.findOneAndUpdate).toHaveBeenCalledTimes(1);
   });
 
@@ -190,7 +216,7 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
     const { Model } = aModel();
     Model.findOneAndUpdate.mockReturnValue(new FakeQuery(null));
 
-    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1', NOW)).resolves.toEqual({
       result: 'not_found',
     });
   });
@@ -202,7 +228,7 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
       .mockReturnValueOnce(new FakeQuery({ emailVerified: true }));
     Model.findById.mockReturnValue(new FakeQuery({ _id: 'u1' }));
 
-    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toMatchObject({
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1', NOW)).resolves.toMatchObject({
       result: 'linked_confirmed',
     });
     expect(Model.findOneAndUpdate).toHaveBeenCalledTimes(2);
@@ -212,7 +238,7 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
     const { Model } = aModel({ findOne: { status: 'active' } });
     Model.findOneAndUpdate.mockReturnValue(new FakeQuery(null));
 
-    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1', NOW)).resolves.toEqual({
       result: 'google_conflict',
     });
   });
@@ -223,7 +249,7 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
       new FakeQuery(Object.assign(new Error('dup'), { code: 11000 })),
     );
 
-    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1', NOW)).resolves.toEqual({
       result: 'google_conflict',
     });
   });
@@ -232,13 +258,15 @@ describe('UsersService.linkGoogleIdentity (BR-001-10, BR-001-11, BR-001-16)', ()
     const { Model } = aModel();
     Model.findOneAndUpdate.mockReturnValue(new FakeQuery(new Error('network')));
 
-    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1')).rejects.toThrow('network');
+    await expect(aService(Model).linkGoogleIdentity('u1', 'g-1', NOW)).rejects.toThrow('network');
   });
 
   it('answers not_found when the account disappears after the update', async () => {
     const { service } = link({ emailVerified: true }, null);
 
-    await expect(service.linkGoogleIdentity('u1', 'g-1')).resolves.toEqual({ result: 'not_found' });
+    await expect(service.linkGoogleIdentity('u1', 'g-1', NOW)).resolves.toEqual({
+      result: 'not_found',
+    });
   });
 });
 
@@ -464,5 +492,48 @@ describe('UsersService.confirmEmail and isEmailVerified', () => {
     await expect(aService(verified).isEmailVerified('u1')).resolves.toBe(true);
     await expect(aService(unverified).isEmailVerified('u1')).resolves.toBe(false);
     await expect(aService(aModel().Model).isEmailVerified('u1')).resolves.toBe(false);
+  });
+});
+
+describe('UsersService.markWhatsappPromptAnswered (SPEC-010 BR-010-27, DL-001-02)', () => {
+  it('sets the flag once, and only under the consent generation the answer was given under', async () => {
+    const { Model } = aModel();
+    const reset = new Date('2026-06-02T09:00:00.000Z');
+
+    await aService(Model).markWhatsappPromptAnswered('u1', NOW, reset);
+
+    const [filter, update] = Model.updateOne.mock.calls[0] as [Record<string, unknown>, unknown];
+    expect(filter).toMatchObject({
+      _id: { $eq: 'u1' },
+      consentResetAt: { $eq: reset },
+    });
+    expect(Object.keys(filter['whatsappPromptAnsweredAt'] as object)).toEqual(['$exists']);
+    expect(update).toEqual({ $set: { whatsappPromptAnsweredAt: NOW } });
+  });
+
+  it('a never-reset account is matched by a null generation', async () => {
+    const { Model } = aModel();
+
+    await aService(Model).markWhatsappPromptAnswered('u1', NOW, null);
+
+    expect(Model.updateOne.mock.calls[0]?.[0]).toMatchObject({ consentResetAt: { $eq: null } });
+  });
+});
+
+describe('UsersService.discardUnfinishedSignup (SPEC-010 BR-010-01)', () => {
+  it('deletes only an account still at credential version 0, and says whether it did', async () => {
+    const { Model } = aModel();
+
+    await expect(aService(Model).discardUnfinishedSignup('u1')).resolves.toBe(true);
+
+    const [filter] = Model.deleteOne.mock.calls[0] as [Record<string, unknown>];
+    expect(filter['_id']).toEqual({ $eq: 'u1' });
+    // An account that was taken over or had its password changed (version above 0) is never deleted.
+    expect(Object.keys(filter['credentialVersion'] as object)).toEqual(['$in']);
+  });
+
+  it('answers false when nothing matched (the account moved on, DL-001-02)', async () => {
+    const { Model } = aModel({ deleteOne: { deletedCount: 0 } });
+    await expect(aService(Model).discardUnfinishedSignup('u1')).resolves.toBe(false);
   });
 });

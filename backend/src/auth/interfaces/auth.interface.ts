@@ -41,6 +41,11 @@ export interface AuthenticatedUser {
   isAdmin: boolean;
   /** SPEC-010 BR-010-27: the account has not answered the one-time WhatsApp consent request yet. */
   whatsappPromptPending: boolean;
+  /**
+   * SPEC-010 DL-001-02: the instant from which the account's consent records count; null when it
+   * was never reset. Read on every request, with the account.
+   */
+  consentResetAt: Date | null;
 }
 
 export interface AuthResult {

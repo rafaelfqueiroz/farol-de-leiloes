@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { ApiOkResponse, ApiOperation, ApiTags, ApiTooManyRequestsResponse } from '@nestjs/swagger';
 import { ApiJwtAuth } from '../auth/decorators/api-jwt-auth.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/interfaces/auth.interface.js';
 import { ApiErrorResponses } from '../common/errors/api-error-responses.decorator.js';
+import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
 import { ConsentsService } from './consents.service.js';
+import { PrivacyAccountThrottlerGuard } from './privacy-throttler.module.js';
 import { AllowWithoutTerms } from './decorators/allow-without-terms.decorator.js';
 import { AcceptTermsDto } from './dto/accept-terms.dto.js';
 import { AcceptancesResponseDto } from './dto/acceptances-response.dto.js';
@@ -33,6 +35,7 @@ export class PrivacyController {
   ) {}
 
   @Post('accept')
+  @UseGuards(PrivacyAccountThrottlerGuard) // SC-04: per account
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Accept the current terms of use and privacy policy again (re-acceptance)',
@@ -42,15 +45,17 @@ export class PrivacyController {
       "changes nothing (BR-010-03, BR-010-05). Answers the account's acceptances.",
   })
   @ApiOkResponse({ type: AcceptancesResponseDto })
+  @ApiTooManyRequestsResponse({ description: 'TOO_MANY_REQUESTS', type: ErrorResponseDto })
   async accept(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: AcceptTermsDto,
   ): Promise<AcceptancesResponseDto> {
     return new AcceptancesResponseDto(
-      await this.consents.accept(user.userId, {
-        terms: dto.termsVersion,
-        privacy: dto.privacyVersion,
-      }),
+      await this.consents.accept(
+        user.userId,
+        { terms: dto.termsVersion, privacy: dto.privacyVersion },
+        user.consentResetAt,
+      ),
     );
   }
 
@@ -63,7 +68,9 @@ export class PrivacyController {
   })
   @ApiOkResponse({ type: AcceptancesResponseDto })
   async acceptances(@CurrentUser() user: AuthenticatedUser): Promise<AcceptancesResponseDto> {
-    return new AcceptancesResponseDto(await this.consents.listFor(user.userId));
+    return new AcceptancesResponseDto(
+      await this.consents.listFor(user.userId, user.consentResetAt),
+    );
   }
 
   @Get('whatsapp-consent')
@@ -75,25 +82,30 @@ export class PrivacyController {
   async whatsappConsent(
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<WhatsappConsentResponseDto> {
-    return new WhatsappConsentResponseDto(await this.whatsapp.current(user.userId));
+    return new WhatsappConsentResponseDto(
+      await this.whatsapp.current(user.userId, user.consentResetAt),
+    );
   }
 
   @Post('whatsapp-consent')
+  @UseGuards(PrivacyAccountThrottlerGuard) // SC-04: per account
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Grant, withdraw or decline the WhatsApp consent',
     description:
       'Records the answer with the text version and the time, and marks the one-time request as ' +
       'answered (`whatsappPromptPending` of GET /auth/me turns false), whichever the answer. ' +
+      'Answering what the latest answer already says records nothing new and answers the state. ' +
       'Withdrawing works at any time and from then on no WhatsApp message is sent (BR-010-27).',
   })
   @ApiOkResponse({ type: WhatsappConsentResponseDto })
+  @ApiTooManyRequestsResponse({ description: 'TOO_MANY_REQUESTS', type: ErrorResponseDto })
   async recordWhatsappConsent(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: RecordWhatsappConsentDto,
   ): Promise<WhatsappConsentResponseDto> {
     return new WhatsappConsentResponseDto(
-      await this.whatsapp.record(user.userId, dto.action, dto.method),
+      await this.whatsapp.record(user.userId, dto.action, dto.method, user.consentResetAt),
     );
   }
 }

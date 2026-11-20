@@ -21,8 +21,14 @@ describe('0008-consent-indexes (integration)', () => {
       }))
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
-  const acceptance = (userId: Types.ObjectId, documentType: string, version: string) => ({
+  const acceptance = (
+    userId: Types.ObjectId,
+    documentType: string,
+    version: string,
+    consentResetAt: Date | null = null,
+  ) => ({
     userId,
+    consentResetAt,
     documentType,
     version,
     contentHash: 'a'.repeat(64),
@@ -46,14 +52,14 @@ describe('0008-consent-indexes (integration)', () => {
     expect(await indexesOf('consents')).toEqual([
       { key: { _id: 1 }, name: '_id_' },
       {
-        key: { userId: 1, documentType: 1, version: 1 },
+        key: { userId: 1, consentResetAt: 1, documentType: 1, version: 1 },
         name: 'one_acceptance_per_version',
         unique: true,
       },
     ]);
     expect(await indexesOf('whatsappConsents')).toEqual([
       { key: { _id: 1 }, name: '_id_' },
-      { key: { userId: 1, at: -1 }, name: 'userId_1_at_-1' },
+      { key: { userId: 1, consentResetAt: 1, at: -1 }, name: 'userId_1_consentResetAt_1_at_-1' },
     ]);
   });
 
@@ -68,6 +74,12 @@ describe('0008-consent-indexes (integration)', () => {
     await consents.insertOne(acceptance(ana, 'privacy', '0.1'));
     await consents.insertOne(acceptance(ana, 'terms', '0.2'));
     await consents.insertOne(acceptance(new Types.ObjectId(), 'terms', '0.1'));
+    // DL-001-02: a new consent generation (a Google takeover) may accept the same version again.
+    const owner = new Date('2099-02-01T00:00:00.000Z');
+    await consents.insertOne(acceptance(ana, 'terms', '0.1', owner));
+    await expect(consents.insertOne(acceptance(ana, 'terms', '0.1', owner))).rejects.toMatchObject({
+      code: 11000,
+    });
   });
 
   it('is idempotent (AR-29): running it again changes nothing', async () => {

@@ -41,3 +41,18 @@ export function decideGoogleLink(subject: GoogleLinkSubject, googleId: string): 
   if (subject.googleId != null && subject.googleId !== googleId) return 'google_conflict';
   return subject.emailVerified === true ? 'linked_confirmed' : 'linked_unconfirmed';
 }
+
+/**
+ * SPEC-010 BR-010-03, BR-010-27: the instant from which an account's consent records count
+ * (`users.consentResetAt`). Taking over an unconfirmed account moves it to `now`, in the same atomic
+ * update that deletes the password: the acceptances and the WhatsApp answers written by whoever
+ * registered the address (who never proved they own it) are not the owner's, so from this instant
+ * they count for nothing and the owner is asked again. Any other outcome leaves it as it was.
+ */
+export function consentResetAfterLink(
+  current: Date | null | undefined,
+  decision: GoogleLinkDecision,
+  now: Date,
+): Date | null {
+  return decision === 'linked_unconfirmed' ? now : (current ?? null);
+}

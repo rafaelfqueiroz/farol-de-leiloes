@@ -40,6 +40,7 @@ function wire(users: UsersService, email: EmailService, sign: (payload: never) =
     new LoginAttemptsService(attemptRepo as unknown as LoginAttemptsRepository, clock),
     privacy.consents,
     privacy.whatsapp,
+    clock,
   );
   return { service, clock, tokenRepo, sessionRepo, attemptRepo, privacy };
 }
@@ -360,6 +361,75 @@ describe('AuthService with fake collaborators', () => {
       expect(email.verificationEmails).toEqual([]);
       expect(privacy.consentsRepo.rows).toEqual([]);
       expect(privacy.whatsappRepo.rows).toEqual([]);
+    });
+
+    it.each([
+      [
+        'the acceptance',
+        (privacy: ReturnType<typeof build>['privacy']) =>
+          (privacy.consentsRepo.failInsertsWith = new Error('db down')),
+      ],
+      [
+        'the WhatsApp answer',
+        (privacy: ReturnType<typeof build>['privacy']) =>
+          (privacy.whatsappRepo.failInsertsWith = new Error('db down')),
+      ],
+    ])(
+      'BR-010-01: when %s cannot be written the new account is rolled back, the failure surfaces and the address is free',
+      async (_what, breakIt) => {
+        const { service, users, email, sessionRepo, privacy } = build();
+        const logged = spyOnLogger();
+        breakIt(privacy);
+
+        await expect(service.register(registration)).rejects.toThrow('db down');
+
+        // No account, no confirmation e-mail, no session: nothing was issued for it.
+        expect(users.accounts.size).toBe(0);
+        expect(email.verificationEmails).toEqual([]);
+        expect(sessionRepo.stored).toEqual([]);
+        // SC-15: the log names the kind of failure and the outcome, never the address or the message.
+        const text = logged.loggedText();
+        expect(text).toContain(
+          'Sign-up consent records could not be written (Error); account rolled back',
+        );
+        expect(text).not.toContain('new@example.test');
+        expect(text).not.toContain('db down');
+        // The same address can sign up again once the database is back.
+        privacy.consentsRepo.failInsertsWith = undefined;
+        privacy.whatsappRepo.failInsertsWith = undefined;
+        await expect(service.register(registration)).resolves.toMatchObject({
+          user: { email: 'new@example.test' },
+        });
+        expect(users.accounts.size).toBe(1);
+      },
+    );
+
+    it('BR-010-01: a failure of the rollback itself is reported and the original error is what surfaces', async () => {
+      const { service, users, privacy } = build();
+      const logged = spyOnLogger();
+      privacy.consentsRepo.failInsertsWith = new Error('db down');
+      users.discardUnfinishedSignup = async () => {
+        throw new Error('delete failed');
+      };
+
+      await expect(service.register(registration)).rejects.toThrow('db down');
+
+      expect(logged.loggedText()).toContain('account NOT rolled back');
+    });
+
+    it('DL-001-02: an account that moved on (taken over) before the rollback is not deleted', async () => {
+      const { service, users, privacy } = build();
+      privacy.consentsRepo.failInsertsWith = new Error('db down');
+      const original = users.discardUnfinishedSignup.bind(users);
+      users.discardUnfinishedSignup = async (id: string) => {
+        const account = users.accounts.get(id);
+        if (account) account.credentialVersion = 1; // a Google takeover bumped it
+        return original(id);
+      };
+
+      await expect(service.register(registration)).rejects.toThrow('db down');
+
+      expect(users.accounts.size).toBe(1);
     });
 
     it('a sign-up refused for a taken address records no acceptance', async () => {

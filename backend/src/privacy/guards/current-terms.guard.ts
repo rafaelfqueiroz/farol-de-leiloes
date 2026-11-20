@@ -46,7 +46,7 @@ export class CurrentTermsGuard implements CanActivate {
     const { user } = context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>();
     // A protected route with no authenticated user means the JWT guard did not run: refuse (SC-07).
     if (!user) throw new DomainError('UNAUTHENTICATED');
-    const pending = await this.consents.pendingFor(user.userId);
+    const pending = await this.consents.pendingFor(user.userId, user.consentResetAt);
     if (pending.length > 0) {
       throw new DomainError('TERMS_ACCEPTANCE_REQUIRED', {
         documents: pending.map((document) => ({ type: document.type, version: document.version })),

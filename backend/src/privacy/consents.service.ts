@@ -52,11 +52,18 @@ export class ConsentsService {
    * already accepted is left as it is: a repeat, or two accepts at the same moment, end with one
    * row per document. The versions are those the person was shown (see `resolveVersions`), so a
    * version published between the check and this write is simply accepted as the older text.
+   *
+   * `consentResetAt` is the account's consent generation the acceptance is made under (DL-001-02):
+   * null for an account just created by this request (the default: SPEC-011's invitation, sign-up),
+   * the account's own value for a signed-in re-acceptance. It is passed in, never re-read here, so a
+   * takeover that lands between a registrant's account creation and this write leaves the row
+   * under the old generation, where it counts for nobody.
    */
   async recordAcceptance(
     userId: string,
     versions: AcceptedVersions,
     method: AcceptanceMethod,
+    consentResetAt: Date | null = null,
   ): Promise<void> {
     const acceptedAt = this.clock.now();
     const rows = LEGAL_DOCUMENT_TYPES.map((type) => {
@@ -76,31 +83,40 @@ export class ConsentsService {
         contentHash: document.contentHash,
         acceptedAt,
         method,
+        consentResetAt,
       };
     });
     await Promise.all(rows.map((row) => this.consents.insert(row)));
   }
 
   /** POST /privacy/accept: a re-acceptance of the current versions (BR-010-05). */
-  async accept(userId: string, requested: AcceptedVersions): Promise<AcceptanceRecord[]> {
+  async accept(
+    userId: string,
+    requested: AcceptedVersions,
+    consentResetAt: Date | null,
+  ): Promise<AcceptanceRecord[]> {
     const versions = this.resolveVersions(requested);
-    await this.recordAcceptance(userId, versions, 'reacceptance');
-    return this.consents.listForUser(userId);
+    await this.recordAcceptance(userId, versions, 'reacceptance', consentResetAt);
+    return this.consents.listForUser(userId, consentResetAt);
   }
 
-  /** The account's own acceptances, newest first (BR-010-04). */
-  listFor(userId: string): Promise<AcceptanceRecord[]> {
-    return this.consents.listForUser(userId);
+  /** The account's own acceptances under its current consent generation, newest first (BR-010-04). */
+  listFor(userId: string, consentResetAt: Date | null): Promise<AcceptanceRecord[]> {
+    return this.consents.listForUser(userId, consentResetAt);
   }
 
   /**
    * The current documents the account has not accepted (BR-010-05): empty when it is up to date.
-   * One indexed count per call; the second query runs only for an account that is behind. Never
-   * cached across requests (AR-13): it is read on every request that needs it.
+   * One indexed query per call, whatever the answer. It compares the distinct (type, version) pairs
+   * found with the current ones, never a count of rows, so a duplicate row (should the unique index
+   * ever be missing) cannot make an account look up to date. Only acceptances under the account's
+   * current consent generation count (DL-001-02). Never cached across requests (AR-13).
    */
-  async pendingFor(userId: string): Promise<LegalDocumentRef[]> {
+  async pendingFor(userId: string, consentResetAt: Date | null): Promise<LegalDocumentRef[]> {
     const current = this.legal.currentRefs();
-    if ((await this.consents.countAccepted(userId, current)) === current.length) return [];
-    return pendingAcceptances(current, await this.consents.findAccepted(userId, current));
+    return pendingAcceptances(
+      current,
+      await this.consents.findAccepted(userId, consentResetAt, current),
+    );
   }
 }

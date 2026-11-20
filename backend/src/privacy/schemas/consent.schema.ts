@@ -35,17 +35,26 @@ export class ConsentEntity {
 
   @Prop({ required: true, type: String, enum: ACCEPTANCE_METHODS })
   method!: AcceptanceMethod;
+
+  /**
+   * The account's `users.consentResetAt` when the row was written; null when it was never reset.
+   * Only rows of the account's CURRENT value count (DL-001-02): what the registrant of an address
+   * accepted before the real owner took the account over is not the owner's acceptance. It is part
+   * of the unique key so the owner can accept a version the registrant had already accepted.
+   */
+  @Prop({ type: Date, default: null })
+  consentResetAt!: Date | null;
 }
 
 export type ConsentDocument = HydratedDocument<ConsentEntity>;
 
 export const ConsentSchema = SchemaFactory.createForClass(ConsentEntity);
 
-// BR-010-03: one acceptance per account, document and version. Also serves the terms guard's one
+// BR-010-03: one acceptance per account, consent generation, document and version. Also serves the terms guard's one
 // query per request (AR-27) and the account's own list. Built in production by migration
 // 0008-consent-indexes (AR-29), whose unit spec holds it equal to this.
 ConsentSchema.index(
-  { userId: 1, documentType: 1, version: 1 },
+  { userId: 1, consentResetAt: 1, documentType: 1, version: 1 },
   { unique: true, name: 'one_acceptance_per_version' },
 );
 

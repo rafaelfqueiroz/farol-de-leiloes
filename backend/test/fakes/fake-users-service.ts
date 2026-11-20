@@ -1,6 +1,7 @@
 import { normalizeEmail } from '../../src/common/normalize-email.js';
 import { DomainError } from '../../src/common/errors/domain-error.js';
 import {
+  consentResetAfterLink,
   credentialVersionAfterLink,
   decideGoogleLink,
 } from '../../src/users/domain/google-link.js';
@@ -33,6 +34,7 @@ interface UsersPort {
   changePassword(...args: Args<'changePassword'>): Promise<FakeAccount>;
   confirmEmail(...args: Args<'confirmEmail'>): Promise<boolean>;
   markWhatsappPromptAnswered(...args: Args<'markWhatsappPromptAnswered'>): Promise<void>;
+  discardUnfinishedSignup(...args: Args<'discardUnfinishedSignup'>): Promise<boolean>;
 }
 
 /**
@@ -88,12 +90,17 @@ export class FakeUsersService implements UsersPort {
   }
 
   /** The same table as `UsersService.linkGoogleIdentity`, read through `decideGoogleLink`. */
-  async linkGoogleIdentity(userId: string, googleId: string): Promise<FakeLinkOutcome> {
+  async linkGoogleIdentity(userId: string, googleId: string, now: Date): Promise<FakeLinkOutcome> {
     const account = this.accounts.get(userId);
     if (!account) return { result: 'not_found' };
     const decision = decideGoogleLink(account, googleId);
     if (decision === 'inactive' || decision === 'google_conflict') return { result: decision };
     account.credentialVersion = credentialVersionAfterLink(account.credentialVersion, decision);
+    // SPEC-010: the takeover of an unconfirmed account moves the consent generation and clears the
+    // one-time WhatsApp answer, as the real pipeline update does.
+    const reset = consentResetAfterLink(account.consentResetAt, decision, now);
+    if (reset) account.consentResetAt = reset;
+    if (decision === 'linked_unconfirmed') delete account.whatsappPromptAnsweredAt;
     account.googleId = googleId;
     account.emailVerified = true;
     if (decision === 'linked_unconfirmed') {
@@ -186,12 +193,25 @@ export class FakeUsersService implements UsersPort {
     return true;
   }
 
-  /** Set once, like the real conditional update: the first answer's instant stays. */
-  async markWhatsappPromptAnswered(userId: string, at: Date): Promise<void> {
+  /** Set once, like the real conditional update, and only under the generation it was given under. */
+  async markWhatsappPromptAnswered(
+    userId: string,
+    at: Date,
+    consentResetAt: Date | null,
+  ): Promise<void> {
     const account = this.accounts.get(userId);
-    if (account && account.whatsappPromptAnsweredAt === undefined) {
+    const sameGeneration =
+      (account?.consentResetAt?.getTime() ?? null) === (consentResetAt?.getTime() ?? null);
+    if (account && sameGeneration && account.whatsappPromptAnsweredAt === undefined) {
       account.whatsappPromptAnsweredAt = at;
     }
+  }
+
+  /** Like the real one: only an account that is still at credential version 0 is deleted. */
+  async discardUnfinishedSignup(userId: string): Promise<boolean> {
+    const account = this.accounts.get(userId);
+    if (!account || credentialVersionOf(account) !== 0) return false;
+    return this.accounts.delete(userId);
   }
 }
 

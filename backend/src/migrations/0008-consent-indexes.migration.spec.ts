@@ -20,18 +20,20 @@ describe('createConsentIndexes', () => {
 
     await expect(createConsentIndexes(db)).resolves.toEqual({
       consents: ['one_acceptance_per_version'],
-      whatsappConsents: ['userId_at'],
+      whatsappConsents: ['userId_consentResetAt_at'],
     });
 
     expect(collection.mock.calls).toEqual([['consents'], ['whatsappConsents']]);
     expect(createIndexes).toHaveBeenNthCalledWith(1, [
       {
-        key: { userId: 1, documentType: 1, version: 1 },
+        key: { userId: 1, consentResetAt: 1, documentType: 1, version: 1 },
         name: 'one_acceptance_per_version',
         unique: true,
       },
     ]);
-    expect(createIndexes).toHaveBeenNthCalledWith(2, [{ key: { userId: 1, at: -1 } }]);
+    expect(createIndexes).toHaveBeenNthCalledWith(2, [
+      { key: { userId: 1, consentResetAt: 1, at: -1 } },
+    ]);
   });
 
   it('fails the run when the driver refuses an index (the deploy stops, DV-34)', async () => {

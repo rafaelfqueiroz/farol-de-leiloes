@@ -34,3 +34,11 @@ export function hasConsent(latest: WhatsappAction | null): boolean {
 export function signupAction(ticked: boolean): WhatsappAction {
   return ticked ? 'granted' : 'declined';
 }
+
+/**
+ * Answering what the latest answer already says changes nothing, so it is not recorded again (the
+ * log is the proof of each choice, not a counter of clicks). `null` (never answered) repeats nothing.
+ */
+export function repeatsLatest(latest: WhatsappAction | null, action: WhatsappAction): boolean {
+  return latest === action;
+}

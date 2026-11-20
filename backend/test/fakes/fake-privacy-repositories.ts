@@ -16,16 +16,23 @@ import type {
 
 type Port<T> = { [K in keyof T]: T[K] };
 
+const sameGeneration = (a: Date | null, b: Date | null) =>
+  (a?.getTime() ?? null) === (b?.getTime() ?? null);
+
 export class FakeConsentsRepository implements Port<ConsentsRepository> {
   readonly rows: NewAcceptance[] = [];
-  /** How many queries the terms guard's path made (count + find), for the "one query" claim. */
-  counts = 0;
+  /** How many queries the terms guard's path made, for the "one query" claim. */
   finds = 0;
+  /** Makes every insert fail, as an unreachable database would (the sign-up rollback specs). */
+  failInsertsWith: Error | undefined;
 
+  /** Like the unique index {userId, consentResetAt, documentType, version}. */
   async insert(entry: NewAcceptance): Promise<boolean> {
+    if (this.failInsertsWith) throw this.failInsertsWith;
     const exists = this.rows.some(
       (row) =>
         row.userId === entry.userId &&
+        sameGeneration(row.consentResetAt, entry.consentResetAt) &&
         row.documentType === entry.documentType &&
         row.version === entry.version,
     );
@@ -33,34 +40,30 @@ export class FakeConsentsRepository implements Port<ConsentsRepository> {
     return !exists;
   }
 
-  async countAccepted(userId: string, refs: readonly LegalDocumentRef[]): Promise<number> {
-    this.counts += 1;
-    return (await this.findAcceptedQuietly(userId, refs)).length;
+  /** Inserts a row with no uniqueness check, as a database without the unique index would. */
+  insertUnchecked(entry: NewAcceptance): void {
+    this.rows.push(entry);
   }
 
   async findAccepted(
     userId: string,
+    consentResetAt: Date | null,
     refs: readonly LegalDocumentRef[],
   ): Promise<LegalDocumentRef[]> {
     this.finds += 1;
-    return this.findAcceptedQuietly(userId, refs);
-  }
-
-  private findAcceptedQuietly(userId: string, refs: readonly LegalDocumentRef[]) {
-    return Promise.resolve(
-      this.rows
-        .filter(
-          (row) =>
-            row.userId === userId &&
-            refs.some((ref) => ref.type === row.documentType && ref.version === row.version),
-        )
-        .map((row) => ({ type: row.documentType, version: row.version })),
-    );
-  }
-
-  async listForUser(userId: string): Promise<AcceptanceRecord[]> {
     return this.rows
-      .filter((row) => row.userId === userId)
+      .filter(
+        (row) =>
+          row.userId === userId &&
+          sameGeneration(row.consentResetAt, consentResetAt) &&
+          refs.some((ref) => ref.type === row.documentType && ref.version === row.version),
+      )
+      .map((row) => ({ type: row.documentType, version: row.version }));
+  }
+
+  async listForUser(userId: string, consentResetAt: Date | null): Promise<AcceptanceRecord[]> {
+    return this.rows
+      .filter((row) => row.userId === userId && sameGeneration(row.consentResetAt, consentResetAt))
       .map(({ documentType, version, acceptedAt, method }) => ({
         documentType,
         version,
@@ -74,12 +77,18 @@ export class FakeConsentsRepository implements Port<ConsentsRepository> {
 export class FakeWhatsappConsentRepository implements Port<WhatsappConsentRepository> {
   readonly rows: NewWhatsappAnswer[] = [];
 
+  /** Makes every insert fail, as an unreachable database would. */
+  failInsertsWith: Error | undefined;
+
   async insert(entry: NewWhatsappAnswer): Promise<void> {
+    if (this.failInsertsWith) throw this.failInsertsWith;
     this.rows.push(entry);
   }
 
-  async latest(userId: string): Promise<WhatsappAnswer | null> {
-    const own = this.rows.filter((row) => row.userId === userId);
+  async latest(userId: string, consentResetAt: Date | null): Promise<WhatsappAnswer | null> {
+    const own = this.rows.filter(
+      (row) => row.userId === userId && sameGeneration(row.consentResetAt, consentResetAt),
+    );
     const last = own[own.length - 1];
     return last === undefined
       ? null

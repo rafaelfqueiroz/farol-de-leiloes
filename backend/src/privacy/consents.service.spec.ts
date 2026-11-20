@@ -81,6 +81,7 @@ describe('BR-010-03: recording an acceptance', () => {
         contentHash: legal.find('terms', '0.1')?.contentHash,
         acceptedAt: T0,
         method: 'signup_email',
+        consentResetAt: null,
       },
       {
         userId: USER,
@@ -89,6 +90,7 @@ describe('BR-010-03: recording an acceptance', () => {
         contentHash: legal.find('privacy', '0.1')?.contentHash,
         acceptedAt: T0,
         method: 'signup_email',
+        consentResetAt: null,
       },
     ]);
     expect(repo.rows[0]?.contentHash).not.toBe(repo.rows[1]?.contentHash);
@@ -135,19 +137,39 @@ describe('BR-010-03: recording an acceptance', () => {
 
 describe('BR-010-05: re-acceptance and what is pending', () => {
   it('an account that accepted nothing has both current documents pending', async () => {
-    expect(await build().service.pendingFor(USER)).toEqual([
+    expect(await build().service.pendingFor(USER, null)).toEqual([
       { type: 'terms', version: '0.1' },
       { type: 'privacy', version: '0.1' },
     ]);
   });
 
-  it('an up-to-date account has nothing pending, with one count query and no more', async () => {
+  it('an up-to-date account has nothing pending, with one query whatever the answer', async () => {
     const { repo, service } = build();
     await service.recordAcceptance(USER, { terms: '0.1', privacy: '0.1' }, 'signup_email');
 
-    expect(await service.pendingFor(USER)).toEqual([]);
-    expect(repo.counts).toBe(1);
-    expect(repo.finds).toBe(0);
+    expect(await service.pendingFor(USER, null)).toEqual([]);
+    expect(repo.finds).toBe(1);
+    await service.pendingFor(OTHER, null);
+    expect(repo.finds).toBe(2);
+  });
+
+  it('BR-010-05: duplicate rows of one document cannot make an account look up to date', async () => {
+    // Should the unique index ever be missing, two rows of `terms` must not stand in for `privacy`:
+    // the decision compares distinct (type, version) pairs, not the number of rows.
+    const { repo, service } = build();
+    const row = {
+      userId: USER,
+      documentType: 'terms' as const,
+      version: '0.1',
+      contentHash: 'a'.repeat(64),
+      acceptedAt: T0,
+      method: 'signup_email' as const,
+      consentResetAt: null,
+    };
+    repo.insertUnchecked(row);
+    repo.insertUnchecked(row);
+
+    expect(await service.pendingFor(USER, null)).toEqual([{ type: 'privacy', version: '0.1' }]);
   });
 
   it('a newly published version makes both documents pending again, until accepted', async () => {
@@ -155,14 +177,14 @@ describe('BR-010-05: re-acceptance and what is pending', () => {
     await service.recordAcceptance(USER, { terms: '0.1', privacy: '0.1' }, 'signup_email');
     clock.set(V2_AT);
 
-    expect(await service.pendingFor(USER)).toEqual([
+    expect(await service.pendingFor(USER, null)).toEqual([
       { type: 'terms', version: '0.2' },
       { type: 'privacy', version: '0.2' },
     ]);
 
-    const accepted = await service.accept(USER, { terms: '0.2', privacy: '0.2' });
+    const accepted = await service.accept(USER, { terms: '0.2', privacy: '0.2' }, null);
 
-    expect(await service.pendingFor(USER)).toEqual([]);
+    expect(await service.pendingFor(USER, null)).toEqual([]);
     // The older acceptances stay, and the account sees all of them, newest first (BR-010-04).
     expect(accepted.map((a) => [a.documentType, a.version, a.method])).toEqual([
       ['privacy', '0.2', 'reacceptance'],
@@ -178,27 +200,70 @@ describe('BR-010-05: re-acceptance and what is pending', () => {
     await service.recordAcceptance(USER, { terms: '0.1', privacy: '0.1' }, 'signup_email');
     clock.set(V2_AT);
     // An accept of the stale versions is refused whole, and changes nothing.
-    await expect(service.accept(USER, { terms: '0.2', privacy: '0.1' })).rejects.toMatchObject({
+    await expect(
+      service.accept(USER, { terms: '0.2', privacy: '0.1' }, null),
+    ).rejects.toMatchObject({
       code: 'TERMS_VERSION_OUTDATED',
     });
-    expect(await service.pendingFor(USER)).toHaveLength(2);
+    expect(await service.pendingFor(USER, null)).toHaveLength(2);
   });
 
   it("BR-002-11: one account's acceptance counts for nobody else", async () => {
     const { service } = build();
     await service.recordAcceptance(USER, { terms: '0.1', privacy: '0.1' }, 'signup_email');
 
-    expect(await service.pendingFor(OTHER)).toHaveLength(2);
-    expect(await service.listFor(OTHER)).toEqual([]);
-    expect(await service.listFor(USER)).toHaveLength(2);
+    expect(await service.pendingFor(OTHER, null)).toHaveLength(2);
+    expect(await service.listFor(OTHER, null)).toEqual([]);
+    expect(await service.listFor(USER, null)).toHaveLength(2);
   });
 
   it('refuses a stale accept without recording anything', async () => {
     const { clock, repo, service } = build();
     clock.set(V2_AT);
-    await expect(service.accept(USER, { terms: '0.1', privacy: '0.1' })).rejects.toMatchObject({
+    await expect(
+      service.accept(USER, { terms: '0.1', privacy: '0.1' }, null),
+    ).rejects.toMatchObject({
       code: 'TERMS_VERSION_OUTDATED',
     });
     expect(repo.rows).toEqual([]);
+  });
+});
+
+describe('DL-001-02: consent generations (a takeover starts a new one)', () => {
+  const RESET = new Date('2026-06-02T09:00:00.000Z');
+
+  it('an acceptance made before the account was taken over does not count for its owner', async () => {
+    const { service } = build();
+    // The registrant of the address accepted under generation null.
+    await service.recordAcceptance(USER, { terms: '0.1', privacy: '0.1' }, 'signup_email', null);
+
+    expect(await service.pendingFor(USER, null)).toEqual([]);
+    expect(await service.pendingFor(USER, RESET)).toEqual([
+      { type: 'terms', version: '0.1' },
+      { type: 'privacy', version: '0.1' },
+    ]);
+    expect(await service.listFor(USER, RESET)).toEqual([]);
+  });
+
+  it('the owner can accept a version the registrant already accepted, and then counts as up to date', async () => {
+    const { repo, service } = build();
+    await service.recordAcceptance(USER, { terms: '0.1', privacy: '0.1' }, 'signup_email', null);
+
+    await service.accept(USER, { terms: '0.1', privacy: '0.1' }, RESET);
+
+    expect(await service.pendingFor(USER, RESET)).toEqual([]);
+    expect(repo.rows).toHaveLength(4); // both generations kept: the proof is never rewritten
+    expect((await service.listFor(USER, RESET)).map((r) => r.method)).toEqual([
+      'reacceptance',
+      'reacceptance',
+    ]);
+  });
+
+  it('a row written under the old generation after the takeover still counts for nobody', async () => {
+    // The registrant's request finished writing its consents after the owner took the account over.
+    const { service } = build();
+    await service.recordAcceptance(USER, { terms: '0.1', privacy: '0.1' }, 'signup_email'); // default: null
+
+    expect(await service.pendingFor(USER, RESET)).toHaveLength(2);
   });
 });

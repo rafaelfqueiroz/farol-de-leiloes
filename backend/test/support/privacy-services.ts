@@ -14,7 +14,7 @@ import { aLegalRegistry } from '../builders/legal-document.builder.js';
 
 export function wirePrivacy(
   clock: Clock,
-  users: Pick<UsersService, 'markWhatsappPromptAnswered'>,
+  users: Pick<UsersService, 'markWhatsappPromptAnswered' | 'findById'>,
   registry: readonly PublishedLegalDocument[] = aLegalRegistry(),
 ) {
   const legal = new LegalDocumentsService(registry, clock);

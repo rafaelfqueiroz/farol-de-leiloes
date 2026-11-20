@@ -15,6 +15,8 @@ export interface NewWhatsappAnswer {
   readonly method: WhatsappMethod;
   readonly textVersion: string;
   readonly at: Date;
+  /** The account's consentResetAt when it answered (null: never reset), see consent.schema.ts. */
+  readonly consentResetAt: Date | null;
 }
 
 export interface WhatsappAnswer {
@@ -35,10 +37,17 @@ export class WhatsappConsentRepository {
     await this.model.create({ ...entry, userId: new Types.ObjectId(entry.userId) });
   }
 
-  /** The account's latest answer (by instant, then by insertion), or null if it never answered. */
-  async latest(userId: string): Promise<WhatsappAnswer | null> {
+  /**
+   * The account's latest answer under its CURRENT consent generation (by instant, then by
+   * insertion), or null if it never answered under it: an answer given by whoever registered the
+   * address before a takeover (DL-001-02) is not the owner's and is not found.
+   */
+  async latest(userId: string, consentResetAt: Date | null): Promise<WhatsappAnswer | null> {
     const row = await this.model
-      .findOne({ userId: { $eq: new Types.ObjectId(userId) } })
+      .findOne({
+        userId: { $eq: new Types.ObjectId(userId) },
+        consentResetAt: { $eq: consentResetAt },
+      })
       .sort({ at: -1, _id: -1 })
       .select('action method textVersion at')
       .lean()

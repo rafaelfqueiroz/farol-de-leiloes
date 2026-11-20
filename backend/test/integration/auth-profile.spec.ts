@@ -54,6 +54,7 @@ describe('AuthService hydrated account profiles (integration)', () => {
       {} as AuthDeps[5],
       {} as AuthDeps[6],
       {} as AuthDeps[7],
+      {} as AuthDeps[8],
     );
 
     const { user: profile } = await service.startSession(user);

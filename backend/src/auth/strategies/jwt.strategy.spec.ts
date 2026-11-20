@@ -162,6 +162,23 @@ describe('JwtStrategy.validate', () => {
     ).resolves.toMatchObject({ whatsappPromptPending: pending });
   });
 
+  it.each([
+    ['absent', undefined, null],
+    ['null', null, null],
+    [
+      'set by a takeover',
+      new Date('2026-06-02T09:00:00.000Z'),
+      new Date('2026-06-02T09:00:00.000Z'),
+    ],
+  ])(
+    'SPEC-010 DL-001-02: a consentResetAt that is %s is carried as the generation of this request',
+    async (_label, stored, expected) => {
+      await expect(
+        build({ ...base, consentResetAt: stored }).validate(payload),
+      ).resolves.toMatchObject({ consentResetAt: expected });
+    },
+  );
+
   it('SPEC-010 BR-010-05, BR-010-27: /auth/me carries the terms state and the pending prompt', async () => {
     const user = await build({ ...base }).validate(payload);
     const access = await accessContextFactory().forAccount(user);

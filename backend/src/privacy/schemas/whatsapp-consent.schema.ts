@@ -32,6 +32,10 @@ export class WhatsappConsentEntity {
   /** From the injected Clock (AR-24). */
   @Prop({ required: true, type: Date })
   at!: Date;
+
+  /** The account's `users.consentResetAt` when the row was written (see consent.schema.ts). */
+  @Prop({ type: Date, default: null })
+  consentResetAt!: Date | null;
 }
 
 export type WhatsappConsentDocument = HydratedDocument<WhatsappConsentEntity>;
@@ -40,7 +44,7 @@ export const WhatsappConsentSchema = SchemaFactory.createForClass(WhatsappConsen
 
 // AR-27: "the latest answer of this account". Built in production by migration
 // 0008-consent-indexes (AR-29), whose unit spec holds it equal to this.
-WhatsappConsentSchema.index({ userId: 1, at: -1 });
+WhatsappConsentSchema.index({ userId: 1, consentResetAt: 1, at: -1 });
 
 makeInsertOnly(WhatsappConsentSchema, 'whatsappConsents');
 

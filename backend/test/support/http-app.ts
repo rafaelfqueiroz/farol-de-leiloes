@@ -34,6 +34,7 @@ export const TEST_USER: AuthenticatedUser = {
   subscriptionStatus: 'active',
   isAdmin: false,
   whatsappPromptPending: false,
+  consentResetAt: null,
 };
 
 export interface HttpAppOptions {

@@ -30,6 +30,11 @@ export interface UserAccount {
    * absent means it has not been asked yet. Server-written only (BR-001-30).
    */
   whatsappPromptAnsweredAt?: Date;
+  /**
+   * SPEC-010 DL-001-02: set when an unconfirmed account is taken over at Google link; consent rows
+   * written under another value (or none) do not count. Server-written only (BR-001-30).
+   */
+  consentResetAt?: Date;
   phone?: string;
   createdAt: Date;
   updatedAt: Date;
