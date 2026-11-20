@@ -22,6 +22,14 @@ describe('DeleteAccountDto', () => {
     ['no confirmation', { password: 'p' }, 'confirm'],
     ['a confirmation that is false', { password: 'p', confirm: false }, 'confirm'],
     ['an empty password', { password: '', confirm: true }, 'password'],
+    ['a null password', { password: null, confirm: true }, 'password'],
+    ['a null Google code', { googleCode: null, confirm: true }, 'googleCode'],
+    ['a numeric password', { password: 12345678, confirm: true }, 'password'],
+    [
+      'a null password next to a valid Google code',
+      { password: null, googleCode: 'c', confirm: true },
+      'password',
+    ],
     ['an empty Google code', { googleCode: '', confirm: true }, 'googleCode'],
     [
       'a property outside the DTO (BR-002-11)',

@@ -390,8 +390,24 @@ export class AuthService implements BeforeApplicationShutdown {
       throw new DomainError('INVALID_RESET_TOKEN');
     }
 
+    // SPEC-010 BR-010-14: a link that outlived the account (spent after its closure, or issued by a
+    // request that raced it) rewrites nothing: the answer is the generic invalid-token one, and the
+    // write itself is conditional on the account being active, so a closure between this check and
+    // the write cannot be overtaken either.
+    const holder = await this.usersService.findById(record.userId);
+    if (!holder || (holder.status ?? 'active') !== 'active') {
+      throw new DomainError('INVALID_RESET_TOKEN');
+    }
+
     // BR-001-24: finishing recovery adds email-and-password sign-in to a Google-only account.
-    await this.usersService.setPassword(record.userId, newPassword);
+    try {
+      await this.usersService.setPassword(record.userId, newPassword);
+    } catch (error) {
+      if (error instanceof DomainError && error.code === 'USER_NOT_FOUND') {
+        throw new DomainError('INVALID_RESET_TOKEN');
+      }
+      throw error;
+    }
     // BR-001-22: a successful reset kills every outstanding recovery link.
     await this.accountTokens.revokeUnused(record.userId, 'account_recovery');
     // BR-001-19: and every session; the reset does not sign anyone in.

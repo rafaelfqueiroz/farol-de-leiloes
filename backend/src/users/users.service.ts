@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, type QueryFilter } from 'mongoose';
@@ -5,7 +6,7 @@ import { UserEntity, UserDocument } from './schemas/user.schema.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import { DomainError } from '../common/errors/domain-error.js';
-import { normalizeEmail } from '../common/normalize-email.js';
+import { isReservedEmailDomain, normalizeEmail } from '../common/normalize-email.js';
 import { serverOperators } from '../common/mongo/query-safety.js';
 import { decideGoogleLink } from './domain/google-link.js';
 import {
@@ -13,6 +14,7 @@ import {
   PURGE_CLAIM_FIELDS,
   PURGE_REMOVED_FIELDS,
   purgedEmail,
+  purgedEmailWithSuffix,
 } from './domain/account-closure.js';
 
 // SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34). Nothing that
@@ -28,6 +30,8 @@ const TEXT_FIELDS = ['name', 'phone'] as const;
 const BCRYPT_COST = 10;
 // 11000: MongoDB's duplicate-key error code.
 const DUPLICATE_KEY = 11000;
+// A tombstone address that collides is retried with a random suffix this many times in all.
+const TOMBSTONE_EMAIL_ATTEMPTS = 3;
 
 /**
  * What `linkGoogleIdentity` did (BR-001-10). `linked_*` carry the account after the write;
@@ -57,6 +61,7 @@ export class UsersService {
     password: string;
   }): Promise<UserDocument> {
     const email = normalizeEmail(input.email);
+    this.assertAcceptableEmail(email);
     // BR-001-01: unique without regard to case or surrounding spaces.
     if (await this.findByEmail(email)) {
       throw new DomainError('EMAIL_ALREADY_REGISTERED');
@@ -70,6 +75,16 @@ export class UsersService {
         emailVerified: false,
       }),
     );
+  }
+
+  /**
+   * SPEC-010 BR-010-15: no account is created under the reserved `.invalid` domain, where the purge
+   * keeps its tombstone addresses (a squatted placeholder would collide with the unique email).
+   */
+  private assertAcceptableEmail(email: string): void {
+    if (isReservedEmailDomain(email)) {
+      throw new DomainError('VALIDATION_FAILED', { fields: ['email'] });
+    }
   }
 
   /** The unique index decides a race between two sign-ups with the same email (BR-001-01). */
@@ -121,6 +136,7 @@ export class UsersService {
     name: string;
   }): Promise<UserDocument> {
     const email = normalizeEmail(input.email);
+    this.assertAcceptableEmail(email);
     // BR-001-01: unique without regard to case or surrounding spaces.
     if (await this.findByEmail(email)) {
       throw new DomainError('EMAIL_ALREADY_REGISTERED');
@@ -314,6 +330,9 @@ export class UsersService {
     const fence = expectedCredentialVersion !== undefined;
     const filter: QueryFilter<UserDocument> = {
       _id: { $eq: userId },
+      // SPEC-010 BR-010-14: a closed (or deactivated) account's credentials are never rewritten, by
+      // a recovery link spent after the closure or by any other flow; a missing status is active.
+      status: serverOperators({ $in: ['active' as const, null] }),
       // DL-001-02: the version the caller's decision was based on. An account without the field
       // is at 0 (the same rule as `credentialVersionOf`).
       ...(fence
@@ -607,10 +626,15 @@ export class UsersService {
 
   /**
    * SPEC-010 BR-010-15 / AR-12: the closed accounts whose personal data is still to be purged,
-   * oldest closure first (a missing `closedAt` first of all), with no live claim at `now`. A job
+   * oldest closure first (a missing `closedAt` first of all), with no live claim at `now`, leaving out
+   * `excludeIds`. A job
    * method: it reads across accounts and answers ids only.
    */
-  async findPurgeCandidates(now: Date, limit: number): Promise<string[]> {
+  async findPurgeCandidates(
+    now: Date,
+    limit: number,
+    excludeIds: readonly string[] = [],
+  ): Promise<string[]> {
     const rows = await this.userRepository
       .find({
         status: { $eq: 'closed' },
@@ -619,6 +643,9 @@ export class UsersService {
           { purgeClaimUntil: serverOperators({ $exists: false }) },
           { purgeClaimUntil: serverOperators({ $lte: now }) },
         ],
+        // The accounts that already failed (or were skipped) in this run: a permanently failing
+        // head of the queue must not keep the others from being purged.
+        ...(excludeIds.length > 0 ? { _id: serverOperators({ $nin: [...excludeIds] }) } : {}),
       })
       .sort({ closedAt: 1, _id: 1 })
       .limit(limit)
@@ -673,20 +700,34 @@ export class UsersService {
     const removed = Object.fromEntries(
       [...PURGE_REMOVED_FIELDS, ...PURGE_CLAIM_FIELDS].map((field) => [field, '']),
     );
-    const result = await this.userRepository
-      .updateOne(
-        {
-          _id: { $eq: userId },
-          status: { $eq: 'closed' },
-          purgeClaimToken: { $eq: token },
-          purgedAt: serverOperators({ $exists: false }),
-        },
-        { $set: { email: purgedEmail(userId), purgedAt: now }, $unset: removed },
-        // The tombstone is a controlled write of fields the schema requires (name) to be removed.
-        { runValidators: false },
-      )
-      .exec();
-    return result.matchedCount > 0;
+    // The plain tombstone address first; if somebody holds it (a placeholder squatted before sign-ups
+    // refused `.invalid`, or planted by hand) the purge never fails for that: it takes the same
+    // address with a random suffix. The unique index on `email` is what says "taken".
+    for (let attempt = 0; attempt < TOMBSTONE_EMAIL_ATTEMPTS; attempt += 1) {
+      const email =
+        attempt === 0
+          ? purgedEmail(userId)
+          : purgedEmailWithSuffix(userId, randomBytes(8).toString('hex'));
+      try {
+        const result = await this.userRepository
+          .updateOne(
+            {
+              _id: { $eq: userId },
+              status: { $eq: 'closed' },
+              purgeClaimToken: { $eq: token },
+              purgedAt: serverOperators({ $exists: false }),
+            },
+            { $set: { email, purgedAt: now }, $unset: removed },
+            // The tombstone is a controlled write of fields the schema requires (name) to be removed.
+            { runValidators: false },
+          )
+          .exec();
+        return result.matchedCount > 0;
+      } catch (error) {
+        if ((error as { code?: number }).code !== DUPLICATE_KEY) throw error;
+      }
+    }
+    throw new Error('A tombstone address could not be found');
   }
 
   /**

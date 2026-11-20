@@ -6,6 +6,7 @@ import {
   PURGE_CLAIM_FIELDS,
   PURGE_REMOVED_FIELDS,
   purgedEmail,
+  purgedEmailWithSuffix,
 } from './account-closure.js';
 
 describe('BR-010-14: which accounts can be closed', () => {
@@ -46,6 +47,12 @@ describe('BR-010-15: what the purge removes from the account document', () => {
   it('replaces the email with one on the reserved .invalid domain that carries the id', () => {
     expect(purgedEmail('64b7f00000000000000ffff1')).toBe(
       'purged-64b7f00000000000000ffff1@removed.invalid',
+    );
+  });
+
+  it('has a fallback with a random suffix, still on the reserved domain and carrying the id', () => {
+    expect(purgedEmailWithSuffix('64b7f00000000000000ffff1', 'a1b2c3d4e5f60718')).toBe(
+      'purged-64b7f00000000000000ffff1-a1b2c3d4e5f60718@removed.invalid',
     );
   });
 });

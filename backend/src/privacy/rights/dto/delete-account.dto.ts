@@ -1,5 +1,5 @@
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
-import { Equals, IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Equals, IsBoolean, IsNotEmpty, IsString, MaxLength, ValidateIf } from 'class-validator';
 import type { ReauthenticationProof } from '../../../auth/auth.service.js';
 import { DomainError } from '../../../common/errors/domain-error.js';
 
@@ -14,7 +14,8 @@ export class DeleteAccountDto {
     format: 'password',
     description: 'The current password. Exactly one of `password` and `googleCode`',
   })
-  @IsOptional()
+  // Absent is fine (the other proof is used); anything PRESENT, null included, must be a string.
+  @ValidateIf((dto: DeleteAccountDto) => dto.password !== undefined)
   @IsString()
   @IsNotEmpty()
   @MaxLength(1024) // no length rule of the account's own password (BR-001-14), only a bound on input
@@ -26,7 +27,7 @@ export class DeleteAccountDto {
       'The one-time `code` of a fresh Google sign-in of THIS account (the redirect of ' +
       '/auth/google/callback). Exactly one of `password` and `googleCode`',
   })
-  @IsOptional()
+  @ValidateIf((dto: DeleteAccountDto) => dto.googleCode !== undefined)
   @IsString()
   @IsNotEmpty()
   @MaxLength(256)

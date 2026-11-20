@@ -45,3 +45,11 @@ export const PURGE_CLAIM_FIELDS = ['purgeClaimToken', 'purgeClaimUntil'] as cons
 export function purgedEmail(userId: string): string {
   return `purged-${userId}@removed.invalid`;
 }
+
+/**
+ * The same tombstone address with a random suffix, for the (not expected) case that the plain one is
+ * taken: sign-ups refuse the `.invalid` domain, but the purge must never fail for that reason.
+ */
+export function purgedEmailWithSuffix(userId: string, suffix: string): string {
+  return `purged-${userId}-${suffix}@removed.invalid`;
+}

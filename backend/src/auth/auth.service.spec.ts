@@ -736,6 +736,23 @@ describe('AuthService with fake collaborators', () => {
       expect(ctx.email.passwordResetEmails).toEqual([]);
     });
 
+    it.each(['closed', 'deactivated'] as const)(
+      'SPEC-010 BR-010-14: a link spent after the account became %s changes nothing and answers the generic invalid-token',
+      async (status) => {
+        const ctx = build();
+        ctx.users.seed(localAccount());
+        const token = await requestToken(ctx); // issued while the account was active
+        ctx.users.accounts.set(ID, { ...localAccount(), status });
+
+        await expectDomainError(
+          ctx.service.resetPassword(token, 'brand-new-password'),
+          'INVALID_RESET_TOKEN',
+        );
+
+        expect(ctx.users.accounts.get(ID)?.password).toBe('correct-password');
+      },
+    );
+
     it('BR-001-24: works for a Google-only account and adds email-and-password sign-in', async () => {
       const ctx = build();
       ctx.users.seed(localAccount({ providers: ['google'], password: undefined }));
