@@ -3,8 +3,12 @@
 // the export, the "my data" view and the purge (AR-09: through its own repositories).
 import { Injectable } from '@nestjs/common';
 import type { AccessContext } from '../access/access-context.js';
+import { listSection } from '../privacy/domain/export-document.js';
 import { PersonalDataRegistry } from '../privacy/registry/personal-data-registry.js';
-import type { PersonalDataProvider } from '../privacy/registry/personal-data-provider.js';
+import type {
+  CollectOptions,
+  PersonalDataProvider,
+} from '../privacy/registry/personal-data-provider.js';
 import { NotificationLogsRepository } from './notification-logs.repository.js';
 import { RemindersRepository } from './reminders.repository.js';
 import { NotificationLog } from './schemas/notification-log.schema.js';
@@ -22,10 +26,10 @@ export class RemindersPersonalData implements PersonalDataProvider {
     registry.register(this);
   }
 
-  async collect(ctx: AccessContext): Promise<Record<string, unknown>> {
-    const found = await this.reminders.findAllForExport(ctx);
-    return {
-      items: found.map((reminder) => ({
+  async collect(ctx: AccessContext, options?: CollectOptions): Promise<Record<string, unknown>> {
+    const { items: found, total } = await this.reminders.findAllForExport(ctx, options?.limit);
+    return listSection(
+      found.map((reminder) => ({
         auctionCode: reminder.auction?.code ?? null,
         channel: reminder.channel,
         scheduledAt: reminder.scheduledAt,
@@ -33,7 +37,8 @@ export class RemindersPersonalData implements PersonalDataProvider {
         status: reminder.status,
         createdAt: reminder.createdAt,
       })),
-    };
+      total,
+    );
   }
 
   async purge(userId: string): Promise<{ deleted: number }> {
@@ -53,10 +58,10 @@ export class NotificationLogsPersonalData implements PersonalDataProvider {
     registry.register(this);
   }
 
-  async collect(ctx: AccessContext): Promise<Record<string, unknown>> {
-    const found = await this.logs.findAllForExport(ctx);
-    return {
-      items: found.map((log) => ({
+  async collect(ctx: AccessContext, options?: CollectOptions): Promise<Record<string, unknown>> {
+    const { items: found, total } = await this.logs.findAllForExport(ctx, options?.limit);
+    return listSection(
+      found.map((log) => ({
         reminderId: log.reminderId.toHexString(),
         channel: log.channel,
         // The address or phone the message was sent to: the account's own data (BR-010-08).
@@ -65,7 +70,8 @@ export class NotificationLogsPersonalData implements PersonalDataProvider {
         errorMessage: log.errorMessage ?? null,
         sentAt: log.createdAt ?? null,
       })),
-    };
+      total,
+    );
   }
 
   async purge(userId: string): Promise<{ deleted: number }> {

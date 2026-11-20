@@ -18,21 +18,23 @@ function build(hooks: AccountClosureHook[] = []) {
     closeAccount: vi.fn(() => Promise.resolve(state.closeOutcome)),
   };
   const exports = { cancelLiveOf: vi.fn().mockResolvedValue(1) };
+  const reminders = { cancelPendingOfAccount: vi.fn().mockResolvedValue(2) };
   const clock = new FakeClock();
   const service = new AccountClosureService(
     auth as never,
     users as never,
     exports as never,
+    reminders as never,
     hooks,
     clock,
   );
-  return { service, state, auth, users, exports, clock };
+  return { service, state, auth, users, exports, reminders, clock };
 }
 
 describe('closeOwnAccount', () => {
   it('re-authenticates, closes at the Clock instant and runs the effects once', async () => {
     const hook = { name: 'links', onAccountClosed: vi.fn().mockResolvedValue(undefined) };
-    const { service, auth, users, exports, clock } = build([hook]);
+    const { service, auth, users, exports, reminders, clock } = build([hook]);
 
     await service.closeOwnAccount(ID, { password: 'p' }, '203.0.113.1');
 
@@ -40,6 +42,7 @@ describe('closeOwnAccount', () => {
     expect(users.closeAccount).toHaveBeenCalledWith(ID, clock.now());
     expect(auth.endAllSessionsAndLinks).toHaveBeenCalledWith(ID);
     expect(exports.cancelLiveOf).toHaveBeenCalledWith(ID);
+    expect(reminders.cancelPendingOfAccount).toHaveBeenCalledWith(ID);
     expect(hook.onAccountClosed).toHaveBeenCalledWith(ID);
   });
 
@@ -111,15 +114,22 @@ describe('closeOwnAccount', () => {
 });
 
 describe('applyClosureEffects', () => {
-  it('answers the names of the steps that failed', async () => {
+  it('answers the built-in steps and the hooks that failed, separately', async () => {
     const failing = { name: 'links', onAccountClosed: vi.fn().mockRejectedValue(new Error('x')) };
-    const { service, exports } = build([failing]);
+    const { service, exports, reminders } = build([failing]);
     exports.cancelLiveOf.mockRejectedValue(new Error('y'));
+    reminders.cancelPendingOfAccount.mockRejectedValue(new Error('z'));
 
-    expect(await service.applyClosureEffects(ID)).toEqual(['exports', 'hook-links']);
+    expect(await service.applyClosureEffects(ID)).toEqual({
+      failedSteps: ['exports', 'reminders'],
+      failedHooks: ['hook-links'],
+    });
   });
 
   it('answers none when everything worked', async () => {
-    expect(await build().service.applyClosureEffects(ID)).toEqual([]);
+    expect(await build().service.applyClosureEffects(ID)).toEqual({
+      failedSteps: [],
+      failedHooks: [],
+    });
   });
 });

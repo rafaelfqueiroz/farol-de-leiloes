@@ -8,7 +8,7 @@ import { Clock } from '../../common/clock/clock.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import { type Paginated, type PageRequest, paginated } from '../../common/pagination/paginated.js';
 import { PRIVATE_FILE_LINK_SECONDS, StorageService } from '../../storage/storage.service.js';
-import { downloadVerdict } from '../domain/data-export.js';
+import { downloadVerdict, isExportExpired } from '../domain/data-export.js';
 import { DataExportsRepository, type DataExportRecord } from './data-exports.repository.js';
 
 /** The attempts to either insert or find the live export when a concurrent transition races. */
@@ -38,7 +38,7 @@ export class DataExportService {
 
   /**
    * Queues an export of the account's data, or answers the one it already has live (queued or
-   * ready): one live export per account, whatever races (the partial unique index decides, so twenty
+   * ready and not past `expiresAt`): one live export per account, whatever races (the partial unique index decides, so twenty
    * requests at once end with one row and all answer it, BR-010-11). The file is built by the worker.
    */
   async request(userId: string): Promise<DataExportView> {
@@ -47,6 +47,17 @@ export class DataExportService {
       if (created) return view(created);
       // The live one may have finished (expired, failed) between the two calls: then insert again.
       const live = await this.exports.findLiveOf(userId);
+      if (
+        live &&
+        live.status === 'ready' &&
+        live.expiresAt &&
+        isExportExpired(live.expiresAt, this.clock.now())
+      ) {
+        // Ready, but its 7 days are over (the hourly job has not got to it yet): it is not live any
+        // more. End it here (its file is deleted by the cleanup) and queue a fresh one.
+        await this.exports.expireNow(live.id);
+        continue;
+      }
       if (live) return view(live);
     }
     throw new Error('A data export could not be queued');

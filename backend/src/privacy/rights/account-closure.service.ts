@@ -10,7 +10,8 @@
 //      version, so a sign-in that passed its checks a moment before cannot keep one), and a second
 //      closure is not a transition. Of two closures at once exactly one wins this update;
 //   3. the effects, each attempted, idempotent and repeatable: every session revoked and the
-//      outstanding one-time links removed, the account's queued or ready exports cancelled, and the
+//      outstanding one-time links removed, the account's queued or ready exports cancelled, its
+//      pending reminders cancelled, and the
 //      registered `AccountClosureHook`s (SPEC-011 ends the investor's links and an advisor's
 //      memberships, BR-010-16/17; SPEC-012 its billing hooks). A failing step is logged by name and
 //      repaired by the purge job, which runs the same effects again; the account is closed whatever
@@ -23,6 +24,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AuthService, type ReauthenticationProof } from '../../auth/auth.service.js';
 import { Clock } from '../../common/clock/clock.js';
 import { DomainError } from '../../common/errors/domain-error.js';
+import { RemindersService } from '../../reminders/reminders.service.js';
 import { UsersService } from '../../users/users.service.js';
 import { DataExportsRepository } from './data-exports.repository.js';
 
@@ -38,6 +40,24 @@ export interface AccountClosureHook {
   onAccountClosed(userId: string): Promise<void>;
 }
 
+/** What `applyClosureEffects` could not do, as step names (never data). */
+export interface ClosureEffectsResult {
+  readonly failedSteps: readonly string[];
+  readonly failedHooks: readonly string[];
+}
+
+/**
+ * Thrown by the purge when a registered closure hook still fails: the tombstone is NOT written (the
+ * client links and memberships a hook ends would stay), the claim is released and the next run tries
+ * again. Its name is the stable code the job records (SC-15).
+ */
+export class ClosureHookFailedError extends Error {
+  constructor(readonly hooks: readonly string[]) {
+    super('A closure hook failed');
+    this.name = 'ClosureHookFailedError';
+  }
+}
+
 /** DI token of the registered hooks, a list; the module binds it to none until a spec binds its own. */
 export const ACCOUNT_CLOSURE_HOOKS = Symbol('ACCOUNT_CLOSURE_HOOKS');
 
@@ -49,6 +69,7 @@ export class AccountClosureService {
     private readonly auth: AuthService,
     private readonly users: UsersService,
     private readonly exports: DataExportsRepository,
+    private readonly reminders: RemindersService,
     @Inject(ACCOUNT_CLOSURE_HOOKS) private readonly hooks: readonly AccountClosureHook[],
     private readonly clock: Clock, // AR-24
   ) {}
@@ -71,7 +92,8 @@ export class AccountClosureService {
     if (outcome === 'already_closed') return; // lost the race: the winner runs the effects
     if (outcome === 'not_found') throw new DomainError('USER_NOT_FOUND');
 
-    const failed = await this.applyClosureEffects(userId);
+    const { failedSteps, failedHooks } = await this.applyClosureEffects(userId);
+    const failed = [...failedSteps, ...failedHooks];
     if (failed.length > 0) {
       // SC-15: step names only. The account IS closed; the purge job repeats these.
       this.logger.error(
@@ -81,27 +103,37 @@ export class AccountClosureService {
   }
 
   /**
-   * The effects of a closure, each attempted whatever the others did, answered as the names of the
-   * ones that failed. Idempotent: also run by the purge job for each account it purges.
+   * The effects of a closure, each attempted whatever the others did. Idempotent: also run by the
+   * purge job for each account it purges. `failedSteps` are the built-in ones (sessions and links,
+   * exports, reminders): best-effort, they only tidy up. `failedHooks` are the registered
+   * `AccountClosureHook`s (SPEC-011 ends client links and memberships): the purge treats those as a
+   * reason NOT to write the tombstone (see `ClosureHookFailedError`).
    */
-  async applyClosureEffects(userId: string): Promise<string[]> {
-    const steps: { name: string; run: () => Promise<unknown> }[] = [
+  async applyClosureEffects(userId: string): Promise<ClosureEffectsResult> {
+    const failedSteps: string[] = [];
+    const failedHooks: string[] = [];
+    const builtIn: { name: string; run: () => Promise<unknown> }[] = [
       { name: 'sessions-and-links', run: () => this.auth.endAllSessionsAndLinks(userId) },
       { name: 'exports', run: () => this.exports.cancelLiveOf(userId) },
-      ...this.hooks.map((hook) => ({
-        name: `hook-${hook.name}`,
-        run: () => hook.onAccountClosed(userId),
-      })),
+      // A closed account's pending reminders are cancelled so the scheduler's due query never
+      // selects them again (they would otherwise crowd out other accounts' reminders).
+      { name: 'reminders', run: () => this.reminders.cancelPendingOfAccount(userId) },
     ];
-    const failed: string[] = [];
-    for (const step of steps) {
+    for (const step of builtIn) {
       try {
         await step.run();
       } catch {
-        failed.push(step.name);
+        failedSteps.push(step.name);
       }
     }
-    return failed;
+    for (const hook of this.hooks) {
+      try {
+        await hook.onAccountClosed(userId);
+      } catch {
+        failedHooks.push(`hook-${hook.name}`);
+      }
+    }
+    return { failedSteps, failedHooks };
   }
 
   private async isClosed(userId: string): Promise<boolean> {

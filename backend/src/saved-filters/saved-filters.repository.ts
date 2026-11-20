@@ -34,8 +34,11 @@ export class SavedFiltersRepository extends AccountScopedRepository<SavedFilterR
   }
 
   /** SPEC-010 BR-010-08: every saved filter of the account, newest first, for the export. */
-  findAllForExport(ctx: AccessContext): Promise<SavedFilterRecord[]> {
-    return this.find(ctx, {}, { sort: { createdAt: -1, _id: -1 } });
+  findAllForExport(
+    ctx: AccessContext,
+    limit?: number,
+  ): Promise<{ items: SavedFilterRecord[]; total: number }> {
+    return this.findPagedForExport(ctx, { createdAt: -1, _id: -1 }, limit);
   }
 
   /**

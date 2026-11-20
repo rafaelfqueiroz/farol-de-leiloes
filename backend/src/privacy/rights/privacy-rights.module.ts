@@ -5,6 +5,7 @@ import { AuthModule } from '../../auth/auth.module.js';
 import { CommonModule } from '../../common/common.module.js';
 import businessConfig from '../../config/business.config.js';
 import schedulerConfig from '../../config/scheduler.config.js';
+import { RemindersModule } from '../../reminders/reminders.module.js';
 import { StorageModule } from '../../storage/storage.module.js';
 import { UsersModule } from '../../users/users.module.js';
 import {
@@ -56,6 +57,7 @@ import { PrivacyRightsController } from './privacy-rights.controller.js';
     UsersModule,
     AuthModule, // re-authentication, sessions and links
     StorageModule, // the private bucket (SC-18)
+    RemindersModule, // closure cancels the account's pending reminders
     PersonalDataRegistryModule,
     PrivacyThrottlerModule, // SC-04: a per-account limit on the sensitive routes
   ],

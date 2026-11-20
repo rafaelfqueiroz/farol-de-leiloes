@@ -28,3 +28,52 @@ export function buildExportDocument(
     generatedAt: generatedAt.toISOString(),
   };
 }
+
+/** How many records of each list "my data" shows; the rest is in the export (BR-010-08). */
+export const MY_DATA_LIST_LIMIT = 200;
+
+/**
+ * A list section for a provider that read at most `limit` records out of `total`: `{ items }` when
+ * nothing was cut, and `{ items, truncated: true, totals: { items: total } }` when something was,
+ * so the interface can say "showing 200 of 1 340, ask for the export".
+ */
+export function listSection<T>(items: readonly T[], total: number): Record<string, unknown> {
+  return items.length >= total ? { items } : { items, truncated: true, totals: { items: total } };
+}
+
+/**
+ * The safety net of "my data" over every provider: any list directly inside a section that is still
+ * longer than `limit` is cut to its first `limit` entries and the section says so
+ * (`truncated: true`, `totals: { <list>: <length before the cut> }`, merged with what the provider
+ * already reported). Sections that are not plain objects pass through. The export never calls this:
+ * it is complete.
+ */
+export function capSections(
+  sections: Readonly<Record<string, unknown>>,
+  limit: number,
+): Record<string, unknown> {
+  const capped: Record<string, unknown> = {};
+  for (const [name, section] of Object.entries(sections)) {
+    if (typeof section !== 'object' || section === null || Array.isArray(section)) {
+      capped[name] = section;
+      continue;
+    }
+    const entries = Object.entries(section as Record<string, unknown>);
+    const cut: Record<string, unknown> = {};
+    const totals: Record<string, number> = {
+      ...((section as { totals?: Record<string, number> }).totals ?? {}),
+    };
+    let truncated = (section as { truncated?: boolean }).truncated === true;
+    for (const [key, value] of entries) {
+      if (Array.isArray(value) && value.length > limit) {
+        cut[key] = value.slice(0, limit);
+        totals[key] = value.length;
+        truncated = true;
+      } else {
+        cut[key] = value;
+      }
+    }
+    capped[name] = truncated ? { ...cut, truncated: true, totals } : cut;
+  }
+  return capped;
+}

@@ -3,8 +3,12 @@
 // reads and deletes through the module's own repository).
 import { Injectable } from '@nestjs/common';
 import type { AccessContext } from '../access/access-context.js';
+import { listSection } from '../privacy/domain/export-document.js';
 import { PersonalDataRegistry } from '../privacy/registry/personal-data-registry.js';
-import type { PersonalDataProvider } from '../privacy/registry/personal-data-provider.js';
+import type {
+  CollectOptions,
+  PersonalDataProvider,
+} from '../privacy/registry/personal-data-provider.js';
 import { FavoritesRepository } from './favorites.repository.js';
 import { FavoriteEntity } from './schemas/favorite.schema.js';
 
@@ -20,14 +24,15 @@ export class FavoritesPersonalData implements PersonalDataProvider {
     registry.register(this);
   }
 
-  async collect(ctx: AccessContext): Promise<Record<string, unknown>> {
-    const found = await this.favorites.findAllForExport(ctx);
-    return {
-      items: found.map((favorite) => ({
+  async collect(ctx: AccessContext, options?: CollectOptions): Promise<Record<string, unknown>> {
+    const { items, total } = await this.favorites.findAllForExport(ctx, options?.limit);
+    return listSection(
+      items.map((favorite) => ({
         auctionCode: favorite.auctionCode,
         addedAt: favorite.createdAt ?? null,
       })),
-    };
+      total,
+    );
   }
 
   async purge(userId: string): Promise<{ deleted: number }> {

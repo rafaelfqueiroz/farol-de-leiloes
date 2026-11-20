@@ -37,6 +37,7 @@ function build(reminders = { enabled: true }) {
     getDueReminders: vi.fn().mockResolvedValue([]),
     logNotification: vi.fn().mockResolvedValue(undefined),
     markAsSent: vi.fn().mockResolvedValue(undefined),
+    markAsCancelled: vi.fn().mockResolvedValue(undefined),
   };
   const usersService = { findByIdFull: vi.fn().mockResolvedValue(USER) };
   const emailService = { sendReminderEmail: vi.fn().mockResolvedValue(undefined) };
@@ -128,7 +129,7 @@ describe('RemindersScheduler.processReminders', () => {
   });
 
   it.each(['closed', 'deactivated'])(
-    'BR-010-14: nothing is sent to a %s account, whatever the channel, and the reminder stays pending',
+    'BR-010-14: nothing is sent to a %s account, whatever the channel',
     async (status) => {
       const {
         scheduler,
@@ -154,6 +155,31 @@ describe('RemindersScheduler.processReminders', () => {
       expect(remindersService.markAsSent).not.toHaveBeenCalled();
     },
   );
+
+  it('BR-010-14: a CLOSED account’s reminders are cancelled so they are never read again; a deactivated one’s stay pending', async () => {
+    const closed = build();
+    closed.usersService.findByIdFull.mockResolvedValue({ ...USER, status: 'closed' });
+    closed.remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r1' })]);
+    const deactivated = build();
+    deactivated.usersService.findByIdFull.mockResolvedValue({ ...USER, status: 'deactivated' });
+    deactivated.remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r2' })]);
+
+    await closed.scheduler.processReminders();
+    await deactivated.scheduler.processReminders();
+
+    expect(closed.remindersService.markAsCancelled).toHaveBeenCalledWith('r1');
+    expect(deactivated.remindersService.markAsCancelled).not.toHaveBeenCalled();
+  });
+
+  it('a reminder whose account no longer exists is cancelled too: it can never be sent', async () => {
+    const { scheduler, remindersService, usersService } = build();
+    usersService.findByIdFull.mockResolvedValue(null);
+    remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r9' })]);
+
+    await scheduler.processReminders();
+
+    expect(remindersService.markAsCancelled).toHaveBeenCalledWith('r9');
+  });
 
   it('BR-010-14: an account with no status stored is active (AR-28) and is still notified', async () => {
     const { scheduler, remindersService, emailService } = build();

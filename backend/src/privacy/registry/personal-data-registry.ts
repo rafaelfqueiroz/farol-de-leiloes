@@ -4,7 +4,7 @@
 // repository or schema is imported here (only the type of the access context).
 import { Injectable } from '@nestjs/common';
 import type { AccessContext } from '../../access/access-context.js';
-import type { PersonalDataProvider } from './personal-data-provider.js';
+import type { CollectOptions, PersonalDataProvider } from './personal-data-provider.js';
 import { EXPORT_RESERVED_KEYS } from '../domain/export-document.js';
 import { RETAINED_MODELS } from './retained-models.js';
 
@@ -58,10 +58,10 @@ export class PersonalDataRegistry {
    * What every provider holds about the account of `ctx`, keyed by provider name. One provider
    * failing fails the whole collection: an incomplete export is never handed out as complete.
    */
-  async collect(ctx: AccessContext): Promise<Record<string, unknown>> {
+  async collect(ctx: AccessContext, options?: CollectOptions): Promise<Record<string, unknown>> {
     const collected: Record<string, unknown> = {};
     for (const provider of this.registered) {
-      collected[provider.name] = await provider.collect(ctx);
+      collected[provider.name] = await provider.collect(ctx, options);
     }
     return collected;
   }

@@ -4,7 +4,12 @@
 import { Injectable } from '@nestjs/common';
 import type { AccessContext } from '../../access/access-context.js';
 import { Clock } from '../../common/clock/clock.js';
-import { type ExportDocument, buildExportDocument } from '../domain/export-document.js';
+import {
+  type ExportDocument,
+  MY_DATA_LIST_LIMIT,
+  buildExportDocument,
+  capSections,
+} from '../domain/export-document.js';
 import { PersonalDataRegistry } from '../registry/personal-data-registry.js';
 
 @Injectable()
@@ -14,8 +19,15 @@ export class MyDataService {
     private readonly clock: Clock, // AR-24
   ) {}
 
-  /** What every provider holds about the account of `ctx`, under the export's envelope. SC-15: never logged. */
+  /**
+   * What every provider holds about the account of `ctx`, under the export's envelope, with each
+   * list bounded to MY_DATA_LIST_LIMIT records: a section that was cut says `truncated: true` and
+   * the `totals`, and the interface points to the export, which is complete (BR-010-09). The
+   * providers read only that many (`limit`); `capSections` is the net for any that do not. SC-15:
+   * never logged.
+   */
   async view(ctx: AccessContext): Promise<ExportDocument> {
-    return buildExportDocument(this.clock.now(), await this.registry.collect(ctx));
+    const sections = await this.registry.collect(ctx, { limit: MY_DATA_LIST_LIMIT });
+    return buildExportDocument(this.clock.now(), capSections(sections, MY_DATA_LIST_LIMIT));
   }
 }

@@ -37,8 +37,11 @@ export class NotificationLogsRepository extends AccountScopedRepository<Notifica
   }
 
   /** SPEC-010 BR-010-08: every delivery attempt to the account, newest first, for the export. */
-  findAllForExport(ctx: AccessContext): Promise<NotificationLogRecord[]> {
-    return this.find(ctx, {}, { sort: { createdAt: -1, _id: -1 } });
+  findAllForExport(
+    ctx: AccessContext,
+    limit?: number,
+  ): Promise<{ items: NotificationLogRecord[]; total: number }> {
+    return this.findPagedForExport(ctx, { createdAt: -1, _id: -1 }, limit);
   }
 
   /**

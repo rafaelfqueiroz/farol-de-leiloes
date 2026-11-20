@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DAY, FakeClock } from '../../../test/fakes/fake-clock.js';
 import { FakeStorage } from '../../../test/fakes/fake-storage.js';
+import { spyOnLogger } from '../../../test/support/logger-spy.js';
 import { testBusinessConfig } from '../../../test/support/test-env.js';
 import { DataExportWorker, EXPORT_BATCH_SIZE, newExportFileKey } from './data-export.worker.js';
 import type { DataExportRecord } from './data-exports.repository.js';
@@ -28,7 +29,7 @@ function build(options: { account?: object | null } = {}) {
     claimNextQueued: vi.fn(async () => queue.shift() ?? null),
     markReady: vi.fn().mockResolvedValue(true),
     markFailed: vi.fn().mockResolvedValue(true),
-    findDeadWithFile: vi.fn().mockResolvedValue(null),
+    findById: vi.fn().mockResolvedValue(null),
     clearFileKey: vi.fn().mockResolvedValue(undefined),
     findDueForExpiry: vi.fn().mockResolvedValue([]),
     markExpired: vi.fn().mockResolvedValue(true),
@@ -102,7 +103,6 @@ describe('processQueued', () => {
       'e1',
       expect.any(String),
       'EXPORT_STORAGE_UNAVAILABLE',
-      false,
     );
     expect(storage.files.size).toBe(0);
   });
@@ -116,7 +116,6 @@ describe('processQueued', () => {
         'e1',
         expect.any(String),
         'EXPORT_ACCOUNT_NOT_ACTIVE',
-        false,
       );
       expect(storage.files.size).toBe(0);
     }
@@ -138,12 +137,11 @@ describe('processQueued', () => {
       'e1',
       expect.any(String),
       'EXPORT_BUILD_FAILED',
-      false,
     );
     expect(storage.files.size).toBe(0);
   });
 
-  it('a failed upload keeps the key on the row (the object may exist) for the cleanup', async () => {
+  it('a failed upload never removes the key: the object may exist and the cleanup deletes it', async () => {
     const { worker, exportsRepo, storage } = build();
     storage.failUploads = true;
 
@@ -152,14 +150,13 @@ describe('processQueued', () => {
       'e1',
       expect.any(String),
       'EXPORT_STORAGE_UNAVAILABLE',
-      true,
     );
   });
 
   it('when the export was cancelled meanwhile the file it wrote is deleted and the key cleared', async () => {
     const { worker, exportsRepo, storage } = build();
     exportsRepo.markReady.mockResolvedValue(false);
-    exportsRepo.findDeadWithFile.mockResolvedValue({ ...claimed(), status: 'cancelled' });
+    exportsRepo.findById.mockResolvedValue({ ...claimed(), status: 'cancelled' });
 
     expect(await worker.processQueued()).toEqual({ ready: 0, failed: 0, discarded: 1 });
 
@@ -171,15 +168,41 @@ describe('processQueued', () => {
   it('when another worker owns the export (still live) the file is left alone', async () => {
     const { worker, exportsRepo, storage } = build();
     exportsRepo.markReady.mockResolvedValue(false);
+    exportsRepo.findById.mockResolvedValue(claimed()); // queued again: another worker took it over
 
     expect(await worker.processQueued()).toMatchObject({ discarded: 1 });
     expect(storage.deleteRequests).toEqual([]);
   });
 
+  it('when the row is gone (the purge deleted it) the worker deletes its own file', async () => {
+    const { worker, exportsRepo, storage } = build();
+    exportsRepo.markReady.mockResolvedValue(false);
+    exportsRepo.findById.mockResolvedValue(null);
+
+    expect(await worker.processQueued()).toMatchObject({ discarded: 1 });
+
+    expect(storage.deleteRequests).toEqual([KEY]);
+    expect(storage.files.size).toBe(0);
+    expect(exportsRepo.clearFileKey).not.toHaveBeenCalled(); // no row to clear
+  });
+
+  it('when the row is gone and the delete fails, an orphan error is logged without the key', async () => {
+    const logger = spyOnLogger();
+    const { worker, exportsRepo, storage } = build();
+    exportsRepo.markReady.mockResolvedValue(false);
+    exportsRepo.findById.mockResolvedValue(null);
+    storage.failDeletes = true;
+
+    await worker.processQueued();
+
+    expect(logger.loggedText()).toContain('EXPORT_ORPHAN_FILE');
+    expect(logger.loggedText()).not.toContain('private/exports');
+  });
+
   it('a failed delete keeps the key so the cleanup retries', async () => {
     const { worker, exportsRepo, storage } = build();
     exportsRepo.markReady.mockResolvedValue(false);
-    exportsRepo.findDeadWithFile.mockResolvedValue({ ...claimed(), status: 'cancelled' });
+    exportsRepo.findById.mockResolvedValue({ ...claimed(), status: 'cancelled' });
     storage.failDeletes = true;
 
     await worker.processQueued();

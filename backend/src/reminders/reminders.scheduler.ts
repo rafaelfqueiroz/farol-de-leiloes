@@ -77,12 +77,20 @@ export class RemindersScheduler implements OnModuleInit {
     try {
       const user = await this.usersService.findByIdFull(reminder.userId.toString());
       if (!user) {
+        // The account is gone for good (never comes back): the reminder can never be sent.
+        await this.remindersService.markAsCancelled(reminder._id.toString());
         this.logger.warn(`User not found for reminder ${reminder._id}`);
         return;
       }
       // SPEC-010 BR-010-14 / BR-001-16: no notification is sent again to a closed (or deactivated)
-      // account. The reminder stays pending; the purge deletes it with the rest of the account's data.
+      // account. A CLOSED account never comes back, so its reminder is cancelled (the closure and the
+      // purge do it too; this catches a straggler) and is never read again, which keeps a closed
+      // account's backlog from crowding out other accounts'. A DEACTIVATED account may be reactivated
+      // (SPEC-009), so its reminder stays pending and is only skipped now.
       if ((user.status ?? 'active') !== 'active') {
+        if (user.status === 'closed') {
+          await this.remindersService.markAsCancelled(reminder._id.toString());
+        }
         this.logger.warn(`Reminder ${reminder._id} not sent: the account is not active`);
         return;
       }

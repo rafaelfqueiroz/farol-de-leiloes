@@ -7,7 +7,11 @@ import { currentLogContext } from '../../common/observability/log-context.js';
 import { spyOnLogger } from '../../../test/support/logger-spy.js';
 import { FakeClock, DAY } from '../../../test/fakes/fake-clock.js';
 import { testBusinessConfig } from '../../../test/support/test-env.js';
-import { ACCOUNT_PURGE_JOB, AccountPurgeJob } from './account-purge.job.js';
+import {
+  ACCOUNT_PURGE_JOB,
+  AccountPurgeJob,
+  PURGE_MAX_ATTEMPTS_PER_RUN,
+} from './account-purge.job.js';
 
 function build(options: { enabled?: boolean; locked?: boolean; overdue?: number } = {}) {
   const clock = new FakeClock();
@@ -19,7 +23,9 @@ function build(options: { enabled?: boolean; locked?: boolean; overdue?: number 
     countOverduePurges: vi.fn().mockResolvedValue(options.overdue ?? 0),
   };
   const registry = { purge: vi.fn().mockResolvedValue({}) };
-  const closure = { applyClosureEffects: vi.fn().mockResolvedValue([]) };
+  const closure = {
+    applyClosureEffects: vi.fn().mockResolvedValue({ failedSteps: [], failedHooks: [] }),
+  };
   const locks = {
     runLocked: vi.fn(async (_name: string, _ms: number, work: () => Promise<unknown>) =>
       options.locked === false ? { ran: false } : { ran: true, result: await work() },
@@ -68,7 +74,7 @@ describe('AR-04 / AR-46: the schedule', () => {
 describe('run', () => {
   it('purges each candidate, oldest first, and records one automatic success', async () => {
     const { job, users, registry, closure, jobs } = build();
-    users.findPurgeCandidates.mockResolvedValue(['a', 'b']);
+    users.findPurgeCandidates.mockResolvedValueOnce(['a', 'b']).mockResolvedValue([]);
 
     const outcome = await job.run();
 
@@ -81,7 +87,7 @@ describe('run', () => {
 
   it('skips an account another worker holds, and one whose claim was lost before the tombstone', async () => {
     const { job, users } = build();
-    users.findPurgeCandidates.mockResolvedValue(['held', 'lost']);
+    users.findPurgeCandidates.mockResolvedValueOnce(['held', 'lost']).mockResolvedValue([]);
     users.claimForPurge.mockResolvedValueOnce(false);
     users.completePurge.mockResolvedValueOnce(false);
 
@@ -99,7 +105,7 @@ describe('run', () => {
   it('a failing account releases its claim, writes no tombstone, and the run records PARTIAL_FAILURE', async () => {
     const logger = spyOnLogger();
     const { job, users, registry, jobs } = build();
-    users.findPurgeCandidates.mockResolvedValue(['bad', 'good']);
+    users.findPurgeCandidates.mockResolvedValueOnce(['bad', 'good']).mockResolvedValue([]);
     registry.purge.mockRejectedValueOnce(new TypeError('quotes ana@example.test'));
 
     expect(await job.run()).toMatchObject({ purged: 1, failed: 1 });
@@ -117,7 +123,7 @@ describe('run', () => {
 
   it('a release that fails too does not hide the original failure', async () => {
     const { job, users, registry } = build();
-    users.findPurgeCandidates.mockResolvedValue(['bad']);
+    users.findPurgeCandidates.mockResolvedValueOnce(['bad']).mockResolvedValue([]);
     registry.purge.mockRejectedValue(new Error('x'));
     users.releasePurgeClaim.mockRejectedValue(new Error('y'));
 
@@ -135,12 +141,12 @@ describe('run', () => {
   it('logs closure effects that are still incomplete at purge, by name only', async () => {
     const logger = spyOnLogger();
     const { job, users, closure } = build();
-    users.findPurgeCandidates.mockResolvedValue(['a']);
-    closure.applyClosureEffects.mockResolvedValue(['hook-links']);
+    users.findPurgeCandidates.mockResolvedValueOnce(['a']).mockResolvedValue([]);
+    closure.applyClosureEffects.mockResolvedValue({ failedSteps: ['exports'], failedHooks: [] });
 
     await job.run();
 
-    expect(logger.loggedText()).toContain('hook-links');
+    expect(logger.loggedText()).toContain('exports');
   });
 });
 
@@ -149,9 +155,8 @@ describe('BR-010-15: the alert', () => {
     const logger = spyOnLogger();
     const { job, users, clock } = build({ overdue: 3 });
 
-    const outcome = await job.run();
+    expect(await job.checkOverdue()).toBe(3);
 
-    expect(outcome?.overdue).toBe(3);
     expect(users.countOverduePurges).toHaveBeenCalledWith(
       new Date(clock.now().getTime() - 25 * DAY),
     );
@@ -162,8 +167,108 @@ describe('BR-010-15: the alert', () => {
 
   it('is silent with nothing overdue', async () => {
     const logger = spyOnLogger();
-    await build().job.run();
 
+    expect(await build().job.checkOverdue()).toBe(0);
     expect(logger.loggedText()).not.toContain('not purged');
+  });
+
+  it('runs daily even with ACCOUNT_PURGE_ENABLED off: that is when it matters most', async () => {
+    const logger = spyOnLogger();
+    const { job, locks } = build({ enabled: false, overdue: 2 });
+
+    await job.purgeDaily();
+    await job.checkOverdueDaily();
+
+    expect(locks.runLocked).not.toHaveBeenCalled(); // the purge did not run...
+    expect(logger.loggedText()).toContain('2 closed account(s) not purged'); // ...and the alert did
+  });
+
+  it('runs in a job log context of its own (AR-46) and never throws', async () => {
+    const logger = spyOnLogger();
+    const { job, users } = build();
+    let seen: string | undefined;
+    users.countOverduePurges.mockImplementation(() => {
+      seen = currentLogContext()?.jobName;
+      return Promise.reject(new RangeError('db'));
+    });
+
+    await expect(job.checkOverdueDaily()).resolves.toBeUndefined();
+
+    expect(seen).toBe('account-purge-alert');
+    expect(logger.loggedText()).toContain('Account purge overdue check failed: RangeError');
+  });
+
+  it('the purge run reports the overdue count in its outcome without logging the alert twice', async () => {
+    const logger = spyOnLogger();
+
+    const outcome = await build({ overdue: 4 }).job.run();
+
+    expect(outcome?.overdue).toBe(4);
+    expect(logger.loggedText()).not.toContain('not purged');
+  });
+});
+
+describe('a bad head of the queue never stalls the rest', () => {
+  it('leaves an account that failed out of the rest of the run and goes on to the later ones', async () => {
+    const { job, users, registry } = build();
+    const done = new Set<string>();
+    const asked: (readonly string[])[] = [];
+    users.findPurgeCandidates.mockImplementation(
+      (_now: Date, _limit: number, excluded: readonly string[]) => {
+        asked.push([...excluded]);
+        return Promise.resolve(
+          ['bad', 'good'].filter((id) => !excluded.includes(id) && !done.has(id)),
+        );
+      },
+    );
+    registry.purge.mockImplementation((id: string) =>
+      id === 'bad' ? Promise.reject(new Error('x')) : Promise.resolve({}),
+    );
+    users.completePurge.mockImplementation((id: string) => {
+      done.add(id);
+      return Promise.resolve(true);
+    });
+
+    const outcome = await job.run();
+
+    expect(outcome).toMatchObject({ purged: 1, failed: 1 });
+    expect(asked[0]).toEqual([]);
+    expect(asked[1]).toEqual(['bad']); // not asked for again in this run
+  });
+
+  it('stops after the attempts budget even if there is always another candidate', async () => {
+    const { job, users } = build();
+    let n = 0;
+    users.findPurgeCandidates.mockImplementation(() =>
+      Promise.resolve(Array.from({ length: 100 }, () => `id-${(n += 1)}`)),
+    );
+
+    const outcome = await job.run();
+
+    expect(outcome?.purged).toBe(PURGE_MAX_ATTEMPTS_PER_RUN);
+  });
+});
+
+describe('closure hooks must have ended before the tombstone', () => {
+  it('a hook that still fails fails the account’s purge: no provider runs after it, no tombstone, claim released', async () => {
+    const logger = spyOnLogger();
+    const { job, users, registry, closure, jobs } = build();
+    users.findPurgeCandidates.mockResolvedValueOnce(['a']).mockResolvedValue([]);
+    closure.applyClosureEffects.mockResolvedValue({
+      failedSteps: [],
+      failedHooks: ['hook-links'],
+    });
+
+    expect(await job.run()).toMatchObject({ purged: 0, failed: 1 });
+
+    expect(registry.purge).not.toHaveBeenCalled();
+    expect(users.completePurge).not.toHaveBeenCalled();
+    expect(users.releasePurgeClaim).toHaveBeenCalledWith('a', expect.any(String));
+    expect(jobs.recordFailure).toHaveBeenCalledWith(
+      ACCOUNT_PURGE_JOB,
+      RunMode.AUTO,
+      'PARTIAL_FAILURE',
+    );
+    expect(logger.loggedText()).toContain('ClosureHookFailedError');
   });
 });

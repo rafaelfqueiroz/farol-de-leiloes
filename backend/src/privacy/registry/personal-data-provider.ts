@@ -6,6 +6,17 @@
 // model with a user path that no provider covers and no retained entry declares.
 import type { AccessContext } from '../../access/access-context.js';
 
+/** What a caller may ask a provider to bound. */
+export interface CollectOptions {
+  /**
+   * At most this many records of each list the provider holds (the "my data" view, which shows a
+   * bounded page and points to the export). Absent means everything, read in pages: the export is
+   * COMPLETE (BR-010-08, BR-010-09). A provider that honours it marks what it cut with
+   * `truncated: true` and `totals: { <list>: <how many there are> }` (see `listSection`).
+   */
+  readonly limit?: number;
+}
+
 export interface PersonalDataProvider {
   /**
    * The key of this provider's part in the export and in the "my data" view: letters and digits,
@@ -27,7 +38,7 @@ export interface PersonalDataProvider {
    * hash, a token hash or a stored secret never appears in it. SC-15: this value is the export's
    * content, so it is never logged.
    */
-  collect(ctx: AccessContext): Promise<Record<string, unknown>>;
+  collect(ctx: AccessContext, options?: CollectOptions): Promise<Record<string, unknown>>;
 
   /**
    * Deletes or irreversibly anonymises this provider's records of the CLOSED account `userId`

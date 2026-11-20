@@ -23,7 +23,7 @@ import businessConfig from '../../config/business.config.js';
 import { jobErrorCode } from '../../common/services/job-error-code.js';
 import { StorageService } from '../../storage/storage.service.js';
 import { UsersService } from '../../users/users.service.js';
-import { type ExportErrorCode, exportExpiresAt } from '../domain/data-export.js';
+import { type ExportErrorCode, exportExpiresAt, isLiveExport } from '../domain/data-export.js';
 import { buildExportDocument } from '../domain/export-document.js';
 import { PersonalDataRegistry } from '../registry/personal-data-registry.js';
 import { DataExportsRepository } from './data-exports.repository.js';
@@ -106,7 +106,7 @@ export class DataExportWorker {
   ): Promise<'ready' | 'failed' | 'discarded'> {
     // SC-18: no private bucket, no export; never the public one.
     if (!this.storage.isPrivateStorageConfigured()) {
-      return this.fail(id, token, 'EXPORT_STORAGE_UNAVAILABLE', false);
+      return this.fail(id, token, 'EXPORT_STORAGE_UNAVAILABLE');
     }
 
     let body: Buffer | null;
@@ -114,17 +114,18 @@ export class DataExportWorker {
       body = await this.build(userId);
     } catch (error) {
       this.logger.warn(`A data export could not be built: ${jobErrorCode(error)}`);
-      return this.fail(id, token, 'EXPORT_BUILD_FAILED', false);
+      return this.fail(id, token, 'EXPORT_BUILD_FAILED');
     }
     // The account is no longer active (closed or deactivated since the request): no file at all.
-    if (body === null) return this.fail(id, token, 'EXPORT_ACCOUNT_NOT_ACTIVE', false);
+    if (body === null) return this.fail(id, token, 'EXPORT_ACCOUNT_NOT_ACTIVE');
 
     try {
       await this.storage.uploadBuffer(fileKey, body, 'application/json');
     } catch (error) {
       this.logger.warn(`A data export could not be stored: ${jobErrorCode(error)}`);
-      // The object may have been written before the failure: the row keeps its key for the cleanup.
-      return this.fail(id, token, 'EXPORT_STORAGE_UNAVAILABLE', true);
+      // The object may have been written before the failure; the row keeps its key either way and
+      // the cleanup deletes the file (idempotent).
+      return this.fail(id, token, 'EXPORT_STORAGE_UNAVAILABLE');
     }
 
     const readyAt = this.clock.now();
@@ -139,7 +140,7 @@ export class DataExportWorker {
     // The export was cancelled (a closure) or taken over since the claim: it is no longer ours to
     // publish. If it is no longer live, nobody references the file: delete it now. If it is still
     // queued another worker owns the same key and will publish it: leave the file alone.
-    await this.deleteFileOfDeadExport(id);
+    await this.deleteOwnFileOfLostExport(id, fileKey);
     return 'discarded';
   }
 
@@ -154,22 +155,30 @@ export class DataExportWorker {
     return Buffer.from(JSON.stringify(buildExportDocument(this.clock.now(), sections)), 'utf8');
   }
 
-  private async fail(
-    id: string,
-    token: string,
-    code: ExportErrorCode,
-    fileMayExist: boolean,
-  ): Promise<'failed'> {
-    await this.exports.markFailed(id, token, code, fileMayExist);
+  private async fail(id: string, token: string, code: ExportErrorCode): Promise<'failed'> {
+    await this.exports.markFailed(id, token, code);
     return 'failed';
   }
 
-  /** Deletes the file of an export that is no longer live and removes the key once it is gone. */
-  private async deleteFileOfDeadExport(id: string): Promise<void> {
-    const dead = await this.exports.findDeadWithFile(id);
-    if (dead?.fileKey && (await this.storage.deleteFile(dead.fileKey))) {
-      await this.exports.clearFileKey(id);
+  /**
+   * The worker lost its export after writing the file (the update to `ready` matched nothing). Its
+   * row decides what to do with the file under the key the worker chose before writing:
+   * - gone (the purge deleted it): nobody references the file, delete it;
+   * - no longer live (cancelled by a closure, failed, expired): delete it and clear the key and the
+   *   claim; a failed delete leaves the key on the row and the cleanup retries;
+   * - still live (queued: another worker took the lease over and owns the same key): leave it.
+   */
+  private async deleteOwnFileOfLostExport(id: string, fileKey: string): Promise<void> {
+    const row = await this.exports.findById(id);
+    if (row && isLiveExport(row.status)) return;
+    if (!(await this.storage.deleteFile(fileKey))) {
+      if (!row) {
+        // No row left to retry from: say so, with a count-free code (SC-15: never the key).
+        this.logger.error('EXPORT_ORPHAN_FILE: a data export file could not be deleted');
+      }
+      return;
     }
+    if (row) await this.exports.clearFileKey(id);
   }
 
   /**
@@ -190,7 +199,7 @@ export class DataExportWorker {
       if (await this.exports.markExpired(due.id)) expired += 1;
     }
 
-    for (const stale of await this.exports.findWithStaleFile(EXPIRY_BATCH_SIZE)) {
+    for (const stale of await this.exports.findWithStaleFile(this.clock.now(), EXPIRY_BATCH_SIZE)) {
       if (stale.fileKey && (await this.storage.deleteFile(stale.fileKey))) {
         await this.exports.clearFileKey(stale.id);
         cleaned += 1;

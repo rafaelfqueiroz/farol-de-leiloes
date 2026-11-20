@@ -24,6 +24,8 @@ export interface DataExportRecord {
   readonly readyAt?: Date;
   readonly expiresAt?: Date;
   readonly errorCode?: ExportErrorCode;
+  /** While a worker is building it (or was, and its lease has not run out): the lease's end. */
+  readonly claimUntil?: Date;
 }
 
 interface StoredExport {
@@ -35,6 +37,7 @@ interface StoredExport {
   readyAt?: Date;
   expiresAt?: Date;
   errorCode?: ExportErrorCode;
+  claimUntil?: Date;
 }
 
 function toRecord(row: StoredExport): DataExportRecord {
@@ -47,6 +50,7 @@ function toRecord(row: StoredExport): DataExportRecord {
     ...(row.readyAt === undefined ? {} : { readyAt: row.readyAt }),
     ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
     ...(row.errorCode === undefined ? {} : { errorCode: row.errorCode }),
+    ...(row.claimUntil === undefined ? {} : { claimUntil: row.claimUntil }),
   };
 }
 
@@ -186,23 +190,16 @@ export class DataExportsRepository {
   }
 
   /**
-   * queued -> failed with a stable code, for the worker that holds the claim. The file key is kept
-   * only when a file may have been written (`fileMayExist`: an upload that failed half way), so the
-   * cleanup deletes it; a failure before any upload leaves no key behind. True when it did.
+   * queued -> failed with a stable code, for the worker that holds the claim. The file key is NEVER
+   * removed here: it was chosen before any write and a file may exist under it (an upload that failed
+   * half way, or one a crashed earlier worker left), so the cleanup deletes the file and only then
+   * clears the key. True when it did.
    */
-  async markFailed(
-    id: string,
-    token: string,
-    errorCode: ExportErrorCode,
-    fileMayExist: boolean,
-  ): Promise<boolean> {
+  async markFailed(id: string, token: string, errorCode: ExportErrorCode): Promise<boolean> {
     const result = await this.model
       .updateOne(
         { _id: { $eq: id }, status: { $eq: 'queued' }, claimToken: { $eq: token } },
-        {
-          $set: { status: 'failed', errorCode },
-          $unset: fileMayExist ? CLEAR_LIVE_AND_CLAIM : { ...CLEAR_LIVE_AND_CLAIM, fileKey: '' },
-        },
+        { $set: { status: 'failed', errorCode }, $unset: CLEAR_LIVE_AND_CLAIM },
       )
       .exec();
     return result.matchedCount > 0;
@@ -221,7 +218,9 @@ export class DataExportsRepository {
           userId: { $eq: new Types.ObjectId(userId) },
           status: serverOperators({ $in: LIVE }),
         },
-        { $set: { status: 'cancelled' }, $unset: CLEAR_LIVE_AND_CLAIM },
+        // The claim stays: a worker that is still building keeps its lease visible, so the purge waits
+        // for it instead of deleting the row under it (see DataExportsPersonalData).
+        { $set: { status: 'cancelled' }, $unset: { live: '' } },
       )
       .exec();
     return result.modifiedCount;
@@ -250,15 +249,20 @@ export class DataExportsRepository {
   }
 
   /**
-   * Rows that are no longer live but still name a file (failed, cancelled, expired): the file is
-   * deleted and the key removed (`clearFileKey`). This is also what repairs a worker that crashed or
-   * lost a race after writing the file.
+   * Rows that are no longer live but still name a file (failed, cancelled, expired) and that no
+   * worker is building right now (no live claim lease at `now`): the file is deleted and the key
+   * removed (`clearFileKey`). This is also what repairs a worker that crashed or lost a race after
+   * writing the file.
    */
-  async findWithStaleFile(limit: number): Promise<DataExportRecord[]> {
+  async findWithStaleFile(now: Date, limit: number): Promise<DataExportRecord[]> {
     const rows = await this.model
       .find({
         status: serverOperators({ $in: DEAD }),
         fileKey: serverOperators({ $exists: true }),
+        $or: [
+          { claimUntil: serverOperators({ $exists: false }) },
+          { claimUntil: serverOperators({ $lte: now }) },
+        ],
       })
       .sort({ updatedAt: 1, _id: 1 })
       .limit(limit)
@@ -267,21 +271,35 @@ export class DataExportsRepository {
     return rows.map((row) => toRecord(row as unknown as StoredExport));
   }
 
-  /** The export by id when it is NOT live (failed, cancelled, expired); null otherwise or if gone. */
-  async findDeadWithFile(id: string): Promise<DataExportRecord | null> {
+  /** The export by id, whoever owns it (internal: the worker's check of its own row), or null. */
+  async findById(id: string): Promise<DataExportRecord | null> {
     if (!isObjectIdString(id)) return null;
     const row = await this.model
-      .findOne({
-        _id: { $eq: id },
-        status: serverOperators({ $in: DEAD }),
-        fileKey: serverOperators({ $exists: true }),
-      })
+      .findOne({ _id: { $eq: id } })
       .lean()
       .exec();
     return row ? toRecord(row as unknown as StoredExport) : null;
   }
 
-  /** Removes the file key of a row that is not live any more, once its file is deleted. */
+  /**
+   * SPEC-010 BR-010-11: a ready export whose time ran out is ended where it is found (a request for a
+   * new one): ready -> expired in one conditional update, the live flag removed so a new export can
+   * be queued. The file key stays, so the cleanup deletes the file. True when it did.
+   */
+  async expireNow(id: string): Promise<boolean> {
+    const result = await this.model
+      .updateOne(
+        { _id: { $eq: id }, status: { $eq: 'ready' } },
+        { $set: { status: 'expired' }, $unset: { live: '' } },
+      )
+      .exec();
+    return result.matchedCount > 0;
+  }
+
+  /**
+   * Removes the file key of a row that is not live any more, once its file is deleted, and the claim
+   * with it (nobody is building into that file any more).
+   */
   async clearFileKey(id: string): Promise<void> {
     await this.model
       .updateOne(
@@ -289,7 +307,7 @@ export class DataExportsRepository {
           _id: { $eq: id },
           status: serverOperators({ $in: DEAD }),
         },
-        { $unset: { fileKey: '' } },
+        { $unset: { fileKey: '', claimToken: '', claimUntil: '' } },
       )
       .exec();
   }

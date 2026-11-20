@@ -13,7 +13,9 @@
 // claim released or expiring; the next run repeats every step, each idempotent, and converges. The
 // tombstone is written only after every provider succeeded, so a half-purged account is never marked
 // purged. A closed account unpurged ACCOUNT_PURGE_ALERT_DAYS after closure raises an error log (a
-// count, never an id). Every run is recorded in `jobexecutions` (AR-03); the logs carry counts only
+// count, never an id) from its own daily check (checkOverdue), which runs even with the job switched
+// off. An account that fails is left out of the rest of the run, so a bad head of the queue never
+// stalls the others. Every run is recorded in `jobexecutions` (AR-03); the logs carry counts only
 // (SC-15). AR-04: switched off by ACCOUNT_PURGE_ENABLED. AR-25: the cron states its zone.
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -30,14 +32,22 @@ import schedulerConfig, { type SchedulerConfig } from '../../config/scheduler.co
 import { UsersService } from '../../users/users.service.js';
 import { claimExpiry, overdueClosedBefore } from '../domain/account-purge.js';
 import { PersonalDataRegistry } from '../registry/personal-data-registry.js';
-import { AccountClosureService } from './account-closure.service.js';
+import { AccountClosureService, ClosureHookFailedError } from './account-closure.service.js';
 import { JobLockService } from './job-lock.service.js';
 
 export const ACCOUNT_PURGE_JOB = 'account-purge';
+export const ACCOUNT_PURGE_ALERT_JOB = 'account-purge-alert';
 export const ACCOUNT_PURGE_LOCK = 'job:account-purge';
 export const ACCOUNT_PURGE_LOCK_MS = 2 * 60 * 60 * 1000;
-/** Bounds one run: the oldest closures first; the rest is purged tomorrow (the alert watches it). */
+/** How many candidates one query reads. */
 export const PURGE_BATCH_SIZE = 100;
+/**
+ * Bounds one run: at most this many accounts are attempted (purged or failed), oldest closure first;
+ * the rest waits for the next run and the overdue alert watches it. An account that fails or is
+ * skipped is left out of the rest of the run, so a permanently failing head of the queue (a hundred
+ * of them, say) never keeps the later accounts from being purged.
+ */
+export const PURGE_MAX_ATTEMPTS_PER_RUN = 500;
 
 /** What one run did, as counts. */
 export interface PurgeOutcome {
@@ -116,17 +126,31 @@ export class AccountPurgeJob {
     let purged = 0;
     let skipped = 0;
     let failed = 0;
-    for (const userId of await this.users.findPurgeCandidates(now, PURGE_BATCH_SIZE)) {
-      try {
-        if ((await this.purgeAccount(userId)) === 'purged') purged += 1;
-        else skipped += 1;
-      } catch (error) {
-        failed += 1;
-        // SC-15: the failure's code only, never the account, never the provider's message.
-        this.logger.warn(`An account could not be purged this time: ${jobErrorCode(error)}`);
+    // Accounts not to ask for again in this run: the ones that failed and the ones we did not get.
+    const leftOut: string[] = [];
+    let attempts = 0;
+    while (attempts < PURGE_MAX_ATTEMPTS_PER_RUN) {
+      const candidates = await this.users.findPurgeCandidates(now, PURGE_BATCH_SIZE, leftOut);
+      if (candidates.length === 0) break;
+      for (const userId of candidates) {
+        if (attempts >= PURGE_MAX_ATTEMPTS_PER_RUN) break;
+        attempts += 1;
+        try {
+          if ((await this.purgeAccount(userId)) === 'purged') {
+            purged += 1;
+          } else {
+            skipped += 1;
+            leftOut.push(userId);
+          }
+        } catch (error) {
+          failed += 1;
+          leftOut.push(userId);
+          // SC-15: the failure's code only, never the account, never the provider's message.
+          this.logger.warn(`An account could not be purged this time: ${jobErrorCode(error)}`);
+        }
       }
     }
-    return { purged, skipped, failed, overdue: await this.alertOverdue() };
+    return { purged, skipped, failed, overdue: await this.countOverdue() };
   }
 
   /**
@@ -140,12 +164,16 @@ export class AccountPurgeJob {
     const now = this.clock.now();
     if (!(await this.users.claimForPurge(userId, token, now, claimExpiry(now)))) return 'skipped';
     try {
-      // A closure whose effects crashed half way is repaired here; a step that still fails is
-      // logged by the closure service's caller path and does not hold the deletion back.
-      const failedEffects = await this.closure.applyClosureEffects(userId);
-      if (failedEffects.length > 0) {
-        this.logger.warn(`Closure effects incomplete at purge: ${failedEffects.join(', ')}`);
+      // A closure whose effects crashed half way is repaired here. The built-in ones (sessions,
+      // exports, reminders) only tidy up: a failure is logged and does not hold the deletion back.
+      // A registered HOOK that still fails does (SPEC-011's links and memberships must have ended
+      // before the person's data is erased): the purge fails, the claim is released, the next run
+      // tries again.
+      const { failedSteps, failedHooks } = await this.closure.applyClosureEffects(userId);
+      if (failedSteps.length > 0) {
+        this.logger.warn(`Closure effects incomplete at purge: ${failedSteps.join(', ')}`);
       }
+      if (failedHooks.length > 0) throw new ClosureHookFailedError(failedHooks);
       await this.registry.purge(userId);
       return (await this.users.completePurge(userId, token, this.clock.now()))
         ? 'purged'
@@ -156,15 +184,33 @@ export class AccountPurgeJob {
     }
   }
 
-  /**
-   * BR-010-15: closed accounts still unpurged `ACCOUNT_PURGE_ALERT_DAYS` after their closure raise an
-   * error (the legal ceiling, ACCOUNT_PURGE_MAX_DAYS, is days further away). A count, never who.
-   */
-  private async alertOverdue(): Promise<number> {
-    const { accountPurgeAlertDays, accountPurgeMaxDays } = this.config.privacy;
-    const overdue = await this.users.countOverduePurges(
-      overdueClosedBefore(this.clock.now(), accountPurgeAlertDays),
+  private countOverdue(): Promise<number> {
+    return this.users.countOverduePurges(
+      overdueClosedBefore(this.clock.now(), this.config.privacy.accountPurgeAlertDays),
     );
+  }
+
+  // AR-25: the zone is explicit. Ten minutes after the purge, and NOT behind ACCOUNT_PURGE_ENABLED:
+  // the alert exists to notice that accounts are not being purged, which is exactly what a switched
+  // off (or broken) purge job looks like.
+  @Cron('20 4 * * *', { timeZone: BRASILIA_TIME_ZONE })
+  @InJobContext(ACCOUNT_PURGE_ALERT_JOB) // AR-46
+  async checkOverdueDaily(): Promise<void> {
+    try {
+      await this.checkOverdue();
+    } catch (error) {
+      this.logger.error(`Account purge overdue check failed: ${jobErrorCode(error)}`);
+    }
+  }
+
+  /**
+   * BR-010-15: closed accounts still unpurged `ACCOUNT_PURGE_ALERT_DAYS` after their closure raise
+   * an error (the legal ceiling, ACCOUNT_PURGE_MAX_DAYS, is days further away). A count, never who.
+   * Independent of the purge job, its flag and its lock. Answers the count.
+   */
+  async checkOverdue(): Promise<number> {
+    const { accountPurgeAlertDays, accountPurgeMaxDays } = this.config.privacy;
+    const overdue = await this.countOverdue();
     if (overdue > 0) {
       this.logger.error(
         `${overdue} closed account(s) not purged ${accountPurgeAlertDays} days after closure; ` +

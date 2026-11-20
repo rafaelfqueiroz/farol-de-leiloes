@@ -36,9 +36,12 @@ export class FavoritesRepository extends AccountScopedRepository<FavoriteRecord>
     return favorites.map((favorite) => favorite.auctionCode);
   }
 
-  /** SPEC-010 BR-010-08: every favorite of the account, newest first, for the export and "my data". */
-  findAllForExport(ctx: AccessContext): Promise<FavoriteRecord[]> {
-    return this.find(ctx, {}, { sort: { createdAt: -1, _id: -1 } });
+  /** SPEC-010 BR-010-08: every favorite of the account, newest first, for the export (paged, complete) and "my data" (`limit`). */
+  findAllForExport(
+    ctx: AccessContext,
+    limit?: number,
+  ): Promise<{ items: FavoriteRecord[]; total: number }> {
+    return this.findPagedForExport(ctx, { createdAt: -1, _id: -1 }, limit);
   }
 
   /**

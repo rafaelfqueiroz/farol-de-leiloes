@@ -2,6 +2,7 @@
 // hand-written repositories and services (TS-03). That the whole registry covers every model, and what
 // is really stored and deleted, are the registry meta-test and test/integration/account-purge.spec.ts.
 import { Types } from 'mongoose';
+import { FakeClock } from '../../test/fakes/fake-clock.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { AccessContext } from '../access/access-context.js';
 import { AccountTokensPersonalData, SessionsPersonalData } from '../auth/auth.personal-data.js';
@@ -24,7 +25,10 @@ const AT = new Date('2026-03-10T15:00:00.000Z');
 describe('favorites, saved filters, reminders and delivery logs', () => {
   it('favorites: the codes and when they were added; purge deletes by account', async () => {
     const repo = {
-      findAllForExport: async () => [{ auctionCode: 'A1', createdAt: AT }, { auctionCode: 'A2' }],
+      findAllForExport: async () => ({
+        items: [{ auctionCode: 'A1', createdAt: AT }, { auctionCode: 'A2' }],
+        total: 2,
+      }),
       purgeAccountByJob: vi.fn().mockResolvedValue(2),
     };
     const provider = new FavoritesPersonalData(new PersonalDataRegistry(), repo as never);
@@ -41,19 +45,22 @@ describe('favorites, saved filters, reminders and delivery logs', () => {
 
   it('saved filters: the criteria with prices as strings (AR-17), and a filter saved with none', async () => {
     const repo = {
-      findAllForExport: async () => [
-        {
-          name: 'Natal',
-          createdAt: AT,
-          filters: {
-            state: 'RN',
-            city: ['Natal'],
-            minPrice: Types.Decimal128.fromString('120000.50'),
-            maxPrice: null,
+      findAllForExport: async () => ({
+        items: [
+          {
+            name: 'Natal',
+            createdAt: AT,
+            filters: {
+              state: 'RN',
+              city: ['Natal'],
+              minPrice: Types.Decimal128.fromString('120000.50'),
+              maxPrice: null,
+            },
           },
-        },
-        { name: 'Vazio', createdAt: AT, filters: undefined },
-      ],
+          { name: 'Vazio', createdAt: AT, filters: undefined },
+        ],
+        total: 2,
+      }),
       purgeAccountByJob: vi.fn().mockResolvedValue(2),
     };
     const provider = new SavedFiltersPersonalData(new PersonalDataRegistry(), repo as never);
@@ -72,17 +79,20 @@ describe('favorites, saved filters, reminders and delivery logs', () => {
 
   it('reminders: the auction code (null when the auction is gone), the channel and the note', async () => {
     const repo = {
-      findAllForExport: async () => [
-        {
-          auction: { code: 'A1' },
-          channel: 'EMAIL',
-          scheduledAt: AT,
-          description: 'n',
-          status: 'PENDING',
-          createdAt: AT,
-        },
-        { auction: null, channel: 'SMS', scheduledAt: AT, status: 'SENT', createdAt: AT },
-      ],
+      findAllForExport: async () => ({
+        items: [
+          {
+            auction: { code: 'A1' },
+            channel: 'EMAIL',
+            scheduledAt: AT,
+            description: 'n',
+            status: 'PENDING',
+            createdAt: AT,
+          },
+          { auction: null, channel: 'SMS', scheduledAt: AT, status: 'SENT', createdAt: AT },
+        ],
+        total: 2,
+      }),
       purgeAccountByJob: vi.fn().mockResolvedValue(2),
     };
     const provider = new RemindersPersonalData(new PersonalDataRegistry(), repo as never);
@@ -98,17 +108,20 @@ describe('favorites, saved filters, reminders and delivery logs', () => {
 
   it('delivery logs: the recipient the message went to is the account’s own data', async () => {
     const repo = {
-      findAllForExport: async () => [
-        {
-          reminderId: new Types.ObjectId(ID),
-          channel: 'EMAIL',
-          recipient: 'a@example.test',
-          success: false,
-          errorMessage: 'x',
-          createdAt: AT,
-        },
-        { reminderId: new Types.ObjectId(ID), channel: 'SMS', recipient: '+5511', success: true },
-      ],
+      findAllForExport: async () => ({
+        items: [
+          {
+            reminderId: new Types.ObjectId(ID),
+            channel: 'EMAIL',
+            recipient: 'a@example.test',
+            success: false,
+            errorMessage: 'x',
+            createdAt: AT,
+          },
+          { reminderId: new Types.ObjectId(ID), channel: 'SMS', recipient: '+5511', success: true },
+        ],
+        total: 2,
+      }),
       purgeAccountByJob: vi.fn().mockResolvedValue(2),
     };
     const provider = new NotificationLogsPersonalData(new PersonalDataRegistry(), repo as never);
@@ -125,6 +138,28 @@ describe('favorites, saved filters, reminders and delivery logs', () => {
     });
     expect(items[1]).toMatchObject({ errorMessage: null, sentAt: null });
     expect(await provider.purge(ID)).toEqual({ deleted: 2 });
+  });
+});
+
+describe('BR-010-08: the bounded "my data" view', () => {
+  it('a list cut at the limit says so and how many there are; a complete one does not', async () => {
+    const repo = {
+      findAllForExport: vi.fn(async (_ctx: unknown, limit?: number) => ({
+        items: [{ auctionCode: 'A1' }].slice(0, limit ?? 1),
+        total: 900,
+      })),
+    };
+    const provider = new FavoritesPersonalData(new PersonalDataRegistry(), repo as never);
+
+    expect(await provider.collect(ctx, { limit: 1 })).toEqual({
+      items: [{ auctionCode: 'A1', addedAt: null }],
+      truncated: true,
+      totals: { items: 900 },
+    });
+    expect(repo.findAllForExport).toHaveBeenCalledWith(ctx, 1);
+    repo.findAllForExport.mockResolvedValue({ items: [{ auctionCode: 'A1' }], total: 1 });
+    expect(await provider.collect(ctx)).toEqual({ items: [{ auctionCode: 'A1', addedAt: null }] });
+    expect(repo.findAllForExport).toHaveBeenLastCalledWith(ctx, undefined);
   });
 });
 
@@ -311,6 +346,7 @@ describe('acceptances, exports and pseudonyms', () => {
       new PersonalDataRegistry(),
       repo as never,
       storage as never,
+      new FakeClock(AT),
     );
 
     expect(JSON.stringify(await provider.collect(ctx))).not.toContain('private/');
@@ -336,9 +372,37 @@ describe('acceptances, exports and pseudonyms', () => {
       new PersonalDataRegistry(),
       repo as never,
       { deleteFile: async () => false } as never,
+      new FakeClock(AT),
     );
 
     await expect(provider.purge(ID)).rejects.toThrow('EXPORT_FILE_DELETE_FAILED');
+    expect(repo.deleteOne).not.toHaveBeenCalled();
+  });
+
+  it('exports: while a worker is still building one (its lease is live) the purge waits and deletes nothing', async () => {
+    const repo = {
+      allOf: async () => [
+        {
+          id: 'e1',
+          userId: ID,
+          status: 'cancelled',
+          requestedAt: AT,
+          fileKey: 'private/exports/x.json',
+          claimUntil: new Date(AT.getTime() + 60_000),
+        },
+      ],
+      deleteOne: vi.fn(),
+    };
+    const storage = { deleteFile: vi.fn() };
+    const provider = new DataExportsPersonalData(
+      new PersonalDataRegistry(),
+      repo as never,
+      storage as never,
+      new FakeClock(AT),
+    );
+
+    await expect(provider.purge(ID)).rejects.toMatchObject({ name: 'ExportBuildInProgressError' });
+    expect(storage.deleteFile).not.toHaveBeenCalled();
     expect(repo.deleteOne).not.toHaveBeenCalled();
   });
 
