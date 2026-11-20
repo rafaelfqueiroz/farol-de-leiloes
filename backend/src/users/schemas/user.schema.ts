@@ -68,6 +68,29 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: Date, required: false })
   consentResetAt?: Date;
 
+  // SPEC-010 BR-010-14: the instant the account was closed (from the injected Clock). Written in the
+  // same single conditional update that sets `status: 'closed'` (UsersService.closeAccount), never
+  // from a request; absent on every other account. Starts the 30-day purge window (BR-010-15). An
+  // instant, no personal content; inventoried in SECURITY.md §9.
+  @Prop({ type: Date, required: false })
+  closedAt?: Date;
+
+  // SPEC-010 BR-010-15: the instant the purge job removed the personal data of the closed account
+  // (the tombstone: name, phone, sign-in methods and legacy fields gone, email replaced). Absent
+  // until then; a purged account is never picked up again. Server-written only.
+  @Prop({ type: Date, required: false })
+  purgedAt?: Date;
+
+  // SPEC-010 BR-010-15: the claim a purge worker holds on this closed account while it works, a
+  // random token and its expiry (a lease): the tombstone write is conditional on the token, so two
+  // workers never both finish one account and a crashed worker's claim just expires. Both are
+  // removed by the tombstone. Server-written only; random and an instant, no personal content.
+  @Prop({ type: String, required: false })
+  purgeClaimToken?: string;
+
+  @Prop({ type: Date, required: false })
+  purgeClaimUntil?: Date;
+
   // Legacy plan tier. SPEC-012 moved plans to the office (BR-012-06) and nothing writes this any
   // more (BR-012-14); it stays in the schema and in the auth answers (the frontend still reads
   // it) until the contract step removes it (AR-28, follow-up issue). `'admin'` is a legacy value
@@ -132,3 +155,6 @@ markIsolation(UserSchema, {
 // email, googleId and stripeCustomerId are indexed by their `unique` @Prop options; declaring them
 // again here makes Mongoose 9 warn about duplicate indexes (TESTING §2: stray output is a defect).
 UserSchema.index({ role: 1 });
+// SPEC-010 AR-27: the purge job's scan (closed accounts, oldest closure first) and its alert count.
+// Built in production by migration 0009-privacy-rights-indexes (AR-29); the unit spec holds them equal.
+UserSchema.index({ status: 1, closedAt: 1 });
