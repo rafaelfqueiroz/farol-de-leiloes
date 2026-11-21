@@ -13,6 +13,7 @@ export interface SchedulerConfig {
   subscriptionsReconcile: SchedulerSubscriptionsReconcileConfig;
   accountPurge: SchedulerAccountPurgeConfig;
   dataExport: SchedulerDataExportConfig;
+  documentRetention: SchedulerDocumentRetentionConfig;
   cleanup: SchedulerCleanupConfig;
 }
 
@@ -29,6 +30,10 @@ export interface SchedulerAccountPurgeConfig {
 }
 
 export interface SchedulerDataExportConfig {
+  enabled: boolean;
+}
+
+export interface SchedulerDocumentRetentionConfig {
   enabled: boolean;
 }
 
@@ -62,6 +67,7 @@ export function schedulerConfigFrom(env: Env): SchedulerConfig {
     subscriptionsReconcile: { enabled: env.SUBSCRIPTIONS_RECONCILE_ENABLED },
     accountPurge: { enabled: env.ACCOUNT_PURGE_ENABLED },
     dataExport: { enabled: env.DATA_EXPORT_ENABLED },
+    documentRetention: { enabled: env.DOCUMENT_RETENTION_ENABLED },
     cleanup: { onStartup: env.CLEANUP_ON_STARTUP },
   };
 }

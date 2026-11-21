@@ -91,6 +91,8 @@ services:
       # SPEC-010: no purge or export worker runs in the stack (AR-04); the specs drive the routes.
       ACCOUNT_PURGE_ENABLED: 'false'
       DATA_EXPORT_ENABLED: 'false'
+      # SPEC-010: no retention job runs in the stack either (AR-04).
+      DOCUMENT_RETENTION_ENABLED: 'false'
       CLEANUP_ON_STARTUP: 'false'
     healthcheck:
       test:

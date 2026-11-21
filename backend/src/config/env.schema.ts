@@ -119,6 +119,10 @@ export const envSchema = z
     // SPEC-010 BR-010-11: the worker that builds the data exports (AR-04). A request is queued
     // whatever this says; with it off nothing is built until it is switched on again.
     DATA_EXPORT_ENABLED: flag.default(true),
+    // SPEC-010 BR-010-21: the daily job that deletes the documents of journeys closed more than
+    // DOCUMENT_RETENTION_YEARS ago (AR-04). Needs the closed-journey files source SPEC-017 binds;
+    // until then it finds nothing.
+    DOCUMENT_RETENTION_ENABLED: flag.default(true),
     CLEANUP_ON_STARTUP: flag.default(false),
     NEIGHBORHOODS_CACHE_ENABLED: flag.default(false),
     // Milliseconds; 600000 = 10 minutes.
@@ -152,6 +156,14 @@ export const envSchema = z
     // SPEC-010 BR-010-11: days an export stays downloadable after it became ready, then it is
     // deleted (RNF-22).
     EXPORT_TTL_DAYS: positiveInt.default(7),
+    // SPEC-010 BR-010-18, BR-010-24 (AR-43): whole years a closed journey's documents are kept after
+    // its closing date (RNF-24, D-38). A setting, so a period the lawyer confirms differently takes
+    // effect without a code change; provisional until the validation of BR-010-26 is recorded.
+    DOCUMENT_RETENTION_YEARS: positiveInt.default(5),
+    // SPEC-010 BR-010-25 (DL-010-07): whether the routes marked @RequiresLegalValidation refuse
+    // requests until a lawyer's validation is recorded. Unset means true in production and false
+    // elsewhere (legalGateEnforced in env.ts); a staging environment sets it to true.
+    LEGAL_GATE_ENFORCED: flag.optional(),
 
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),

@@ -146,6 +146,7 @@
     "REAUTHENTICATION_UNAVAILABLE": "Não há senha nem conta Google para confirmar a sua identidade. Entre em contato com o suporte.",
     "EXPORT_NOT_READY": "A exportação dos seus dados ainda está sendo preparada. Tente de novo em alguns minutos.",
     "EXPORT_EXPIRED": "Esta exportação expirou. Peça uma nova exportação.",
+    "LEGAL_VALIDATION_REQUIRED": "Este recurso ainda não está disponível. Ele será liberado depois da validação jurídica.",
     "PLAN_NOT_ALLOWED": "Seu plano não inclui este recurso. Veja os planos para liberar o acesso.",
     "INVALID_PLAN": "O plano escolhido não existe. Escolha um dos planos disponíveis.",
     "CHECKOUT_SESSION_FAILED": "Não foi possível iniciar o pagamento. Nenhuma cobrança foi feita. Tente novamente em instantes.",

@@ -17,6 +17,8 @@ const ACCESS_DECORATORS = new Set([
   'RequiresPersona',
   'RequiresEntitlement',
   'RequiresAccess',
+  // SPEC-010 BR-010-25: the legal-validation gate sets REQUIRES_ACCESS too.
+  'RequiresLegalValidation',
 ]);
 
 function decoratorNames(node: ts.HasDecorators): string[] {
@@ -78,6 +80,11 @@ describe('SC-07: @Public() is never combined with an access requirement', () => 
 
 describe('public/access conflict detection', () => {
   it.each([
+    [
+      'the legal-validation gate on a @Public() handler (SPEC-010 BR-010-25)',
+      `class C {\n  @Public()\n  @RequiresLegalValidation('third-party-processing')\n  route() {}\n}`,
+      'x.ts:2: C.route has @Public() and an access requirement',
+    ],
     [
       'both on one handler',
       `class C {\n  @Public()\n  @AdminOnly()\n  route() {}\n}`,
