@@ -30,7 +30,7 @@ describe('SPEC-010 BR-010-25: no HTTP route records a legal validation', () => {
     expect(controllers.filter(({ text }) => WRITE_VERBS.test(text))).toEqual([]);
   });
 
-  it('the validations repository is used by the service (reads) and the script (the insert) only', () => {
+  it('the validations repository is used by the validation service and the retention brake (reads) and the script (the insert) only', () => {
     const users = all
       .filter(({ text }) => /\bLegalValidationsRepository\b/.test(text))
       .map(({ file }) => file)
@@ -41,6 +41,9 @@ describe('SPEC-010 BR-010-25: no HTTP route records a legal validation', () => {
       'privacy/legal-validation/legal-validations.repository.ts',
       'privacy/legal-validation/record/record-validation.command.ts',
       'privacy/legal-validation/record/record-validation.module.ts',
+      // Read only: the retention service's safety brake reads the period the lawyer reviewed.
+      'privacy/retention/privacy-retention.module.ts',
+      'privacy/retention/retention.service.ts',
     ]);
   });
 

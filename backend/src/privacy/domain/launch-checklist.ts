@@ -64,12 +64,16 @@ export interface ChecklistInput {
   readonly current: readonly { type: LegalDocumentType; version: string; draft: boolean }[];
   readonly documentRetentionYears: number;
   readonly settings: ChecklistSettings;
+  /** NODE_ENV is production: there the legal gate must be enforced for the launch to be ready. */
+  readonly production: boolean;
 }
 
 /**
  * The checklist: a gate is blocking until validated; a current document still marked draft blocks;
  * the retention periods are provisional until their gate is validated (BR-010-24). `launchReady` is
- * every gate validated, no draft and not provisional (BR-010-26, DL-010-07).
+ * every gate validated, no draft, not provisional and, in production, the legal gate enforced: with
+ * `LEGAL_GATE_ENFORCED=false` the legal-analysis routes are open whatever the validations say, so the
+ * launch is not ready (BR-010-25, DL-010-07).
  */
 export function buildLaunchChecklist(input: ChecklistInput): LaunchChecklist {
   const drafts = input.current
@@ -84,6 +88,10 @@ export function buildLaunchChecklist(input: ChecklistInput): LaunchChecklist {
     retention: { documentYears: input.documentRetentionYears, provisional },
     lawyerSetPeriods: LAWYER_SET_PERIODS.map((period) => ({ ...period, deleted: false as const })),
     settings: input.settings,
-    launchReady: input.gates.every((gate) => gate.validated) && drafts.length === 0 && !provisional,
+    launchReady:
+      input.gates.every((gate) => gate.validated) &&
+      drafts.length === 0 &&
+      !provisional &&
+      (!input.production || input.settings.legalGateEnforced),
   };
 }

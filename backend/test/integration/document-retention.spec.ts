@@ -2,7 +2,7 @@
 // the unique log row, idempotency and a crash between the deletion and the row. The source is the fake
 // of SPEC-017's seam; the clock is the Brasília day. The rule's examples are in
 // privacy/domain/retention.spec.ts and privacy/retention/retention.service.spec.ts.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigModule } from '@nestjs/config';
 import { getConnectionToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -19,6 +19,9 @@ import {
   DOCUMENT_RETENTION_JOB,
   DocumentRetentionJob,
 } from '../../src/privacy/retention/document-retention.job.js';
+import { LegalValidationsRepository } from '../../src/privacy/legal-validation/legal-validations.repository.js';
+import { UNVALIDATED_RUN_CAP } from '../../src/privacy/domain/retention.js';
+import { RetentionDeletionsRepository } from '../../src/privacy/retention/retention-deletions.repository.js';
 import { PrivacyRetentionModule } from '../../src/privacy/retention/privacy-retention.module.js';
 import { RetentionDeletionEntity } from '../../src/privacy/schemas/retention-deletion.schema.js';
 import { FakeClock } from '../fakes/fake-clock.js';
@@ -40,6 +43,7 @@ describe('document retention (integration)', () => {
   let job: DocumentRetentionJob;
   let connection: Connection;
   let log: Model<unknown>;
+  let validations: LegalValidationsRepository;
 
   const rows = () => log.collection.find({}).sort({ _id: 1 }).toArray();
 
@@ -60,6 +64,7 @@ describe('document retention (integration)', () => {
     job = moduleRef.get(DocumentRetentionJob);
     connection = moduleRef.get<Connection>(getConnectionToken());
     log = moduleRef.get(getModelToken(RetentionDeletionEntity.name));
+    validations = moduleRef.get(LegalValidationsRepository);
     await createRetentionLegalIndexes(connection.db as never); // AR-29: the migration builds them
   });
 
@@ -71,8 +76,19 @@ describe('document retention (integration)', () => {
     await log.collection.deleteMany({});
     await connection.collection('jobexecutions').deleteMany({});
     await connection.collection('jobLocks').deleteMany({});
+    // The period is validated for the setting (5), so the safety brake is off unless a test sets it.
+    await connection.collection('legalValidations').deleteMany({});
+    await validations.insert({
+      scope: 'retention-periods',
+      validatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      validatorName: 'Dra. Fulana',
+      documentVersions: [],
+      retentionYears: 5,
+    });
     source.journeys.length = 0;
     source.purgeCalls.length = 0;
+    source.acknowledged.length = 0;
+    source.failingAcknowledge.clear();
     source.failing.clear();
     source.hold = undefined;
     source.ignoreCutoff = false;
@@ -115,31 +131,71 @@ describe('document retention (integration)', () => {
     expect(executions).not.toBeNull();
   });
 
-  it('is idempotent: a second run, and a journey listed again, end with one row', async () => {
+  it('is idempotent: a second run lists nothing, and the journey is acknowledged once', async () => {
     const journey = source.add('2027-03-15', { files: 3 });
 
     await job.run();
-    await job.run();
-    expect(await rows()).toHaveLength(1);
+    expect(await job.run()).toMatchObject({ deleted: 0, files: 0, failed: 0 });
 
-    // A crash after the deletion and before the row: the source lists the journey again, the repeat
-    // deletes nothing and the duplicate row is success.
-    journey.purged = false;
-    expect(await job.run()).toMatchObject({ deleted: 1, files: 0, failed: 0 });
     expect(await rows()).toHaveLength(1);
-    expect((await rows())[0]).toMatchObject({ fileCount: 3 });
+    expect(source.purgeCalls).toEqual([journey.journeyId]);
+    expect(source.acknowledged).toEqual([journey.journeyId]);
   });
 
-  it('repairs the row of a deletion whose log write failed: the next run writes it', async () => {
+  it('repairs a crash between the deletion and the row: the journey stays listed and the next run writes the row', async () => {
     const journey = source.add('2027-03-15', { files: 6 });
-    // The files went but the row did not (simulated: the source lists it again, the log is empty).
-    await source.purgeFiles(journey.journeyId);
-    journey.purged = false;
+    const insert = vi
+      .spyOn(moduleRef.get(RetentionDeletionsRepository), 'insert')
+      .mockRejectedValue(new Error('database down'));
+    try {
+      expect(await job.run()).toMatchObject({ deleted: 0, failed: 1, unrecorded: 1 });
+    } finally {
+      insert.mockRestore();
+    }
     expect(await rows()).toHaveLength(0);
+    expect(journey.files).toBe(0); // the files are gone
+    expect(journey.purged).toBe(false); // but the source keeps listing it: it was not acknowledged
 
-    await job.run();
+    expect(await job.run()).toMatchObject({ deleted: 1, failed: 0 });
+
+    // The repeat found nothing to delete, so the row undercounts (0): documented, accepted.
+    expect(await rows()).toHaveLength(1);
+    expect((await rows())[0]).toMatchObject({ fileCount: 0 });
+    expect(source.acknowledged).toEqual([journey.journeyId]);
+  });
+
+  it('repairs a crash between the row and the acknowledgement: the duplicate row is success', async () => {
+    const journey = source.add('2027-03-15', { files: 4 });
+    source.failingAcknowledge.add(journey.journeyId);
+
+    expect(await job.run()).toMatchObject({ deleted: 1, files: 4, failed: 1 });
+    expect(await rows()).toHaveLength(1);
+
+    source.failingAcknowledge.clear();
+    expect(await job.run()).toMatchObject({ deleted: 1, files: 0, failed: 0 });
 
     expect(await rows()).toHaveLength(1);
+    expect((await rows())[0]).toMatchObject({ fileCount: 4 }); // the first row stays as written
+    expect(source.acknowledged).toEqual([journey.journeyId]);
+    expect(await job.run()).toMatchObject({ deleted: 0 });
+  });
+
+  it('lowering the period below the validated one caps the run at a few journeys, with the real validations', async () => {
+    await validations.insert({
+      scope: 'retention-periods',
+      validatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      validatorName: 'Dra. Fulana',
+      documentVersions: [],
+      retentionYears: 6, // the setting is 5
+    });
+    for (let i = 0; i < UNVALIDATED_RUN_CAP + 5; i += 1) source.add('2027-03-15', { files: 1 });
+
+    expect(await job.run()).toMatchObject({
+      deleted: UNVALIDATED_RUN_CAP,
+      capped: true,
+      review: 'lowered',
+    });
+    expect(await rows()).toHaveLength(UNVALIDATED_RUN_CAP);
   });
 
   it('two runs at once delete once: the second finds the lock held and does nothing', async () => {

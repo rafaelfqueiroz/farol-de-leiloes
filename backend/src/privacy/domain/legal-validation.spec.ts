@@ -137,6 +137,17 @@ describe('retention-periods counts for the period reviewed (BR-010-24)', () => {
     expect(evaluateGate('retention-periods', [review, r], six).record).toBe(review);
   });
 
+  it('a validation naming 6 does not count when the setting is back to 5', () => {
+    const r = record('retention-periods', '2026-03-01T00:00:00Z', { retentionYears: 6 });
+    expect(evaluateGate('retention-periods', [r], { ...STATE, retentionYears: 5 })).toEqual({
+      validated: false,
+      record: null,
+    });
+    expect(evaluateGate('retention-periods', [r], { ...STATE, retentionYears: 6 }).validated).toBe(
+      true,
+    );
+  });
+
   it('a record with no period noted counts for whatever is set, null or absent', () => {
     expect(
       evaluateGate(

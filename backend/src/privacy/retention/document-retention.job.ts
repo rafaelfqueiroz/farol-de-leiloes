@@ -59,11 +59,17 @@ export class DocumentRetentionJob {
     const outcome = locked.result;
     this.logger.log(
       `Document retention: ${outcome.deleted} journeys deleted (${outcome.files} files), ` +
-        `${outcome.notDue} not due, ${outcome.failed} failed, ${outcome.unrecorded} unrecorded`,
+        `${outcome.outOfContract} out of contract, ${outcome.failed} failed, ${outcome.unrecorded} unrecorded`,
     );
-    if (outcome.notDue > 0) {
+    if (outcome.outOfContract > 0) {
       this.logger.warn(
-        `The closed-journey files source listed ${outcome.notDue} journeys that are not due yet`,
+        `The closed-journey files source listed ${outcome.outOfContract} journeys outside its contract`,
+      );
+    }
+    if (outcome.capped) {
+      this.logger.warn(
+        `Document retention stopped at its cap (${outcome.review}): the rest waits for the next run ` +
+          'until the retention period is validated or restored (BR-010-24)',
       );
     }
     if (outcome.unrecorded > 0) {

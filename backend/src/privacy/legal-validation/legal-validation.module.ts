@@ -1,8 +1,9 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { Logger, Module, type OnModuleInit } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CommonModule } from '../../common/common.module.js';
 import businessConfig from '../../config/business.config.js';
+import { type Env, legalGateEnforced } from '../../config/env.js';
 import schedulerConfig from '../../config/scheduler.config.js';
 import { PrivacyModule } from '../privacy.module.js';
 import {
@@ -44,4 +45,23 @@ import { LegalValidationsRepository } from './legal-validations.repository.js';
   ],
   exports: [LegalValidationService, LegalValidationGuard],
 })
-export class LegalValidationModule {}
+export class LegalValidationModule implements OnModuleInit {
+  constructor(private readonly config: ConfigService<Env, true>) {}
+
+  /**
+   * BR-010-25: `LEGAL_GATE_ENFORCED=false` in production opens every legal-analysis route whatever
+   * the validations say. Allowed (it is a switch), but never silent: a warning at every boot.
+   */
+  onModuleInit(): void {
+    const env = {
+      NODE_ENV: this.config.get('NODE_ENV', { infer: true }),
+      LEGAL_GATE_ENFORCED: this.config.get('LEGAL_GATE_ENFORCED', { infer: true }),
+    };
+    if (env.NODE_ENV === 'production' && !legalGateEnforced(env)) {
+      new Logger(LegalValidationModule.name).warn(
+        'LEGAL_GATE_ENFORCED is false in production: the legal-analysis routes are NOT gated by the ' +
+          "lawyer's validation (BR-010-25); the launch checklist is not ready while it stays so",
+      );
+    }
+  }
+}

@@ -36,6 +36,7 @@ const input = (overrides: Partial<ChecklistInput> = {}): ChecklistInput => ({
   current: FINAL,
   documentRetentionYears: 5,
   settings: SETTINGS,
+  production: false,
   ...overrides,
 });
 
@@ -73,6 +74,24 @@ describe('buildLaunchChecklist', () => {
     );
     expect(checklist.launchReady).toBe(false);
     expect(checklist.retention.provisional).toBe(missing === 'retention-periods');
+  });
+
+  it('in production the launch needs the legal gate enforced, even with all four validations', () => {
+    const validated = LEGAL_VALIDATION_SCOPES.map((scope) => gate(scope, true));
+    const open = { ...SETTINGS, legalGateEnforced: false };
+
+    expect(buildLaunchChecklist(input({ gates: validated, production: true })).launchReady).toBe(
+      true,
+    );
+    expect(
+      buildLaunchChecklist(input({ gates: validated, production: true, settings: open }))
+        .launchReady,
+    ).toBe(false);
+    // Elsewhere the flag is a convenience for developers and does not block the checklist.
+    expect(
+      buildLaunchChecklist(input({ gates: validated, production: false, settings: open }))
+        .launchReady,
+    ).toBe(true);
   });
 
   it('is not ready while a current document is still a draft, and lists it', () => {

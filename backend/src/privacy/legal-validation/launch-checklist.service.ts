@@ -31,6 +31,7 @@ export class LaunchChecklistService {
         draft,
       })),
       documentRetentionYears: this.business.privacy.documentRetentionYears,
+      production: this.config.get('NODE_ENV', { infer: true }) === 'production',
       settings: {
         termsEnforcementEnabled: this.config.get('TERMS_ENFORCEMENT_ENABLED', { infer: true }),
         accountPurgeEnabled: this.scheduler.accountPurge.enabled,

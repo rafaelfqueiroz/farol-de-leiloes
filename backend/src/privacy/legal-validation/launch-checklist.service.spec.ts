@@ -111,6 +111,32 @@ describe('LaunchChecklistService', () => {
     expect(on.retention.documentYears).toBe(6);
   });
 
+  it('is not ready in production with LEGAL_GATE_ENFORCED=false, even with all four validations', async () => {
+    const closed = build({ env: { NODE_ENV: 'production' } });
+    const open = build({ env: { NODE_ENV: 'production', LEGAL_GATE_ENFORCED: 'false' } });
+    for (const { repo } of [closed, open]) {
+      await record(repo, 'third-party-processing');
+      await record(repo, 'retention-periods', { retentionYears: 5 });
+      await record(repo, 'privacy-policy', { documentVersions: ['privacy:1.0'] });
+      await record(repo, 'terms', { documentVersions: ['terms:1.0'] });
+    }
+
+    expect((await closed.service.checklist()).launchReady).toBe(true);
+    const notReady = await open.service.checklist();
+    expect(notReady.launchReady).toBe(false);
+    expect(notReady.settings.legalGateEnforced).toBe(false);
+  });
+
+  it('a retention validation naming 6 does not count when the setting is back to 5', async () => {
+    const { service, repo } = build({ env: { DOCUMENT_RETENTION_YEARS: '5' } });
+    await record(repo, 'retention-periods', { retentionYears: 6 });
+
+    const checklist = await service.checklist();
+
+    expect(checklist.gates.find((g) => g.scope === 'retention-periods')?.validated).toBe(false);
+    expect(checklist.retention).toEqual({ documentYears: 5, provisional: true });
+  });
+
   it('carries no validator name', async () => {
     const { service, repo } = build();
     await record(repo, 'third-party-processing', { reference: 'parecer-9' });

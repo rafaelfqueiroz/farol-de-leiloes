@@ -118,7 +118,11 @@ export class LaunchChecklistResponseDto {
   @ApiProperty({ type: () => ChecklistSettingsDto })
   settings: ChecklistSettingsDto;
 
-  @ApiProperty({ description: 'Every gate validated, no draft and the periods not provisional' })
+  @ApiProperty({
+    description:
+      'Every gate validated, no draft, the periods not provisional and, when NODE_ENV is production, ' +
+      'the legal gate enforced (LEGAL_GATE_ENFORCED not false)',
+  })
   launchReady: boolean;
 
   constructor(checklist: LaunchChecklist) {

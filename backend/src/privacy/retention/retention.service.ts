@@ -3,19 +3,39 @@
 // reached through CLOSED_JOURNEY_FILES_SOURCE; this service only orchestrates:
 //
 //   today (Brasília) -> candidates the source lists at or before today - N years, oldest first
-//     -> RE-CHECK each with isDueForPurge (the source's filter is never trusted)
+//     -> RE-CHECK each: a known closing kind, a plausible closing date, and isDueForPurge (the
+//        source's filter and its "closed journeys only" are never trusted)
 //     -> source.purgeFiles(journeyId)  (idempotent)
-//     -> one `retentionDeletions` row (a duplicate means it is already logged: success).
+//     -> one `retentionDeletions` row (a duplicate means it is already logged: success)
+//     -> source.acknowledgePurged(journeyId)  (only now does the source stop listing it).
 //
-// A failing journey is left out and retried by the next run; it leaves no row. Logs and results are
-// counts only (SC-15, BR-010-21): no journey id, owner or file name is logged here.
+// A crash anywhere before the acknowledgement is repaired by the next run: the journey is listed
+// again, purgeFiles repeats (answers 0, so the logged count may undercount) and the duplicate row is
+// success. A failing journey leaves no row and is excluded from the rest of the run.
+//
+// SAFETY BRAKE: lowering DOCUMENT_RETENTION_YEARS deletes irreversibly at the next run. When the
+// setting is shorter than the period the lawyer's newest retention validation reviewed, or no
+// validation exists yet (provisional), a run deletes at most UNVALIDATED_RUN_CAP journeys and warns,
+// so an operator notices before everything goes. Raising the period never needs it.
+//
+// Logs and results are counts only (SC-15, BR-010-21), except that a journey outside the source's
+// contract is named by its id so the source's defect can be found.
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { brasiliaToday } from '../../common/clock/brasilia-time.js';
 import { Clock } from '../../common/clock/clock.js';
 import { jobErrorCode } from '../../common/services/job-error-code.js';
 import businessConfig from '../../config/business.config.js';
-import { closedOnCutoff, InvalidRetentionInputError, isDueForPurge } from '../domain/retention.js';
+import {
+  closedOnCutoff,
+  closingProblem,
+  InvalidRetentionInputError,
+  isDueForPurge,
+  retentionReview,
+  type RetentionReview,
+  UNVALIDATED_RUN_CAP,
+} from '../domain/retention.js';
+import { LegalValidationsRepository } from '../legal-validation/legal-validations.repository.js';
 import {
   CLOSED_JOURNEY_FILES_SOURCE,
   type ClosedJourneyFilesSource,
@@ -39,15 +59,19 @@ export interface RetentionOutcome {
   /** Files those deletions removed. */
   readonly files: number;
   /**
-   * Journeys the source listed that are not due yet AND closed after the cutoff it was given: the
-   * source broke its contract. They are left alone. (A journey closed exactly on the cutoff may be
-   * listed and not due, the last day of its retention: that is normal and not counted.)
+   * Journeys the source listed that it must not have: closed after the cutoff it was given and not
+   * due, with an unknown closing kind, or with an implausible closing date (before 2020-01-01 or in
+   * the future). They are left alone. (A journey closed exactly on the cutoff may be listed and not
+   * due, the last day of its retention: that is normal and not counted.)
    */
-  readonly notDue: number;
+  readonly outOfContract: number;
   /** Journeys that failed this run and stay candidates for the next one. */
   readonly failed: number;
   /** Of the failed: files gone but the log row could not be written. */
   readonly unrecorded: number;
+  /** The run stopped at UNVALIDATED_RUN_CAP journeys (the period is lowered or not validated). */
+  readonly capped: boolean;
+  readonly review: RetentionReview;
 }
 
 @Injectable()
@@ -57,6 +81,7 @@ export class RetentionService {
   constructor(
     @Inject(CLOSED_JOURNEY_FILES_SOURCE) private readonly source: ClosedJourneyFilesSource,
     private readonly deletions: RetentionDeletionsRepository,
+    private readonly validations: LegalValidationsRepository,
     private readonly clock: Clock, // AR-24
     @Inject(businessConfig.KEY) private readonly config: ConfigType<typeof businessConfig>,
   ) {}
@@ -70,24 +95,53 @@ export class RetentionService {
     const years = this.config.privacy.documentRetentionYears;
     const today = brasiliaToday(this.clock); // the Brasília calendar day, never the UTC one
     const cutoff = closedOnCutoff(today, years);
+    const review = await this.review(years);
+    const cap = review === 'validated' ? Number.POSITIVE_INFINITY : UNVALIDATED_RUN_CAP;
     let deleted = 0;
     let files = 0;
     let unrecorded = 0;
-    // Journeys not to try again in this run: they come back at the head of every listing.
-    const notDue = new Set<string>();
+    let capped = false;
+    let warned = false;
+    // Journeys not to ask for again in this run: they come back at the head of every listing, so the
+    // source is told to leave them out and the ones behind them are reached.
+    const handled = new Set<string>();
     const outOfContract = new Set<string>();
     const failed = new Set<string>();
 
-    for (let batch = 0; batch < RETENTION_MAX_BATCHES; batch += 1) {
-      const candidates = await this.source.listClosedJourneys(cutoff, RETENTION_BATCH_SIZE);
-      if (candidates.length === 0) break;
-      let progressed = false;
-      for (const journey of candidates) {
-        if (notDue.has(journey.journeyId) || failed.has(journey.journeyId)) continue;
+    batches: for (let batch = 0; batch < RETENTION_MAX_BATCHES; batch += 1) {
+      const candidates = await this.source.listClosedJourneys(cutoff, RETENTION_BATCH_SIZE, {
+        excludeJourneyIds: [...handled],
+      });
+      const fresh = candidates.filter((journey) => !handled.has(journey.journeyId));
+      if (fresh.length === 0) break;
+      if (review !== 'validated' && !warned) {
+        warned = true;
+        this.logger.warn(
+          review === 'lowered'
+            ? `DOCUMENT_RETENTION_YEARS (${years}) is shorter than the period the lawyer validated: ` +
+                `this run deletes at most ${UNVALIDATED_RUN_CAP} journeys (BR-010-24)`
+            : `The retention period (${years} years) is not validated yet (provisional): this run ` +
+                `deletes at most ${UNVALIDATED_RUN_CAP} journeys (BR-010-24)`,
+        );
+      }
+      for (const journey of fresh) {
+        if (deleted >= cap) {
+          capped = true;
+          break batches;
+        }
+        handled.add(journey.journeyId);
         try {
+          const problem = closingProblem(journey.closedOn, journey.closedKind, today);
+          if (problem !== null) {
+            outOfContract.add(journey.journeyId);
+            // The id only: what the operator needs to find the source's defect, never content.
+            this.logger.warn(
+              `The files source listed journey ${journey.journeyId} outside its contract (${problem}); not purged`,
+            );
+            continue;
+          }
           // The source's filter is a convenience; this check is the rule (BR-010-19).
           if (!isDueForPurge(today, journey.closedOn, years)) {
-            notDue.add(journey.journeyId);
             if (journey.closedOn > cutoff) outOfContract.add(journey.journeyId);
             continue;
           }
@@ -103,7 +157,16 @@ export class RetentionService {
           }
           deleted += 1;
           files += fileCount;
-          progressed = true;
+          // Only now may the source stop listing it. A failure leaves it listed: tomorrow's repeat
+          // finds nothing to delete, the row is a duplicate (success) and the acknowledgement retries.
+          try {
+            await this.source.acknowledgePurged(journey.journeyId);
+          } catch (error) {
+            failed.add(journey.journeyId);
+            this.logger.warn(
+              `A deletion could not be acknowledged to the files source: ${jobErrorCode(error)}`,
+            );
+          }
         } catch (error) {
           failed.add(journey.journeyId);
           // SC-15: the failure's code only, never the journey, never the source's message.
@@ -112,11 +175,34 @@ export class RetentionService {
           );
         }
       }
-      // The ones that failed or are not due come back at the head of the next listing: stop when
-      // a whole batch deleted nothing, instead of asking again for the same journeys.
-      if (!progressed || candidates.length < RETENTION_BATCH_SIZE) break;
+      if (candidates.length < RETENTION_BATCH_SIZE) break;
     }
-    return { deleted, files, notDue: outOfContract.size, failed: failed.size, unrecorded };
+    return {
+      deleted,
+      files,
+      outOfContract: outOfContract.size,
+      failed: failed.size,
+      unrecorded,
+      capped,
+      review,
+    };
+  }
+
+  /**
+   * How the setting stands against the lawyer's newest retention validation. Reading it is
+   * best-effort: when it cannot be read the run is treated as unvalidated (capped), never as safe.
+   */
+  private async review(years: number): Promise<RetentionReview> {
+    try {
+      const [newest] = await this.validations.newestOfScope('retention-periods');
+      return retentionReview(
+        years,
+        newest === undefined ? undefined : (newest.retentionYears ?? null),
+      );
+    } catch (error) {
+      this.logger.warn(`The retention validation could not be read: ${jobErrorCode(error)}`);
+      return 'provisional';
+    }
   }
 
   /**

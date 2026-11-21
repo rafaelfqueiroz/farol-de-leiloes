@@ -23,12 +23,24 @@
 
 A validation is never edited or deleted; record a new one.
 
+## Warning: lowering `DOCUMENT_RETENTION_YEARS` deletes for good
+
+**Lowering the period deletes irreversibly at the next 04:30 run**: every journey between the old and the new date becomes due and its files go, with no recovery. Confirm the new value against the lawyer's opinion **before** changing it. Raising it is safe (nothing is deleted that was not already due).
+
+The job has a brake against accidents. Before deleting it compares the setting with the `retentionYears` of the newest `retention-periods` validation:
+
+- the setting is **lower** than the validated period, or **no validation is recorded** (the period is provisional): the run deletes **at most 25 journeys**, logs a `warn` ("... shorter than the period the lawyer validated ..." or "... not validated yet (provisional) ...") and, when it stopped at the cap, a second `warn` ("stopped at its cap"); the rest waits for the next days' runs, so someone notices before everything goes;
+- the newest validation names the same period, a shorter one, or no period (or a later validation names the new value): no cap.
+
+So before launch, while nothing is validated, the job deletes at most 25 journeys a day. To lift the brake, restore the validated period or record the lawyer's validation of the new one. The cap only slows a deletion down: it is never a reason to ignore the warning.
+
 ## Do not
 
 - Do not record a validation before the lawyer has opined: the record is the evidence that the gate may open.
 - Do not put the validator's name or the reference in a ticket, a log or a chat: the script prints the outcome only, and the checklist shows no name (SC-15).
 - Do not insert into `legalValidations` by hand with `mongosh`: the script checks the versions against the registry and refuses a draft.
-- Do not set `LEGAL_GATE_ENFORCED=false` in production to "unblock" a feature. It exists for development and tests; production without a recorded validation must stay closed (BR-010-25).
+- Do not set `LEGAL_GATE_ENFORCED=false` in production to "unblock" a feature. It exists for development and tests; production without a recorded validation must stay closed (BR-010-25). If it is set anyway, the backend logs a warning at every boot and the launch checklist is **not ready** (`launchReady: false`) while it stays so.
+- Do not lower `DOCUMENT_RETENTION_YEARS` without the lawyer's opinion (see the warning above).
 
 ## Steps
 
@@ -56,7 +68,7 @@ A validation is never edited or deleted; record a new one.
 - `retention`: `documentYears` and `provisional`, true until `retention-periods` is validated (BR-010-24).
 - `lawyerSetPeriods`: billing records (BR-010-22), the admin access log and account status records (BR-010-23). Each says `deleted: false`: nothing is deleted until the lawyer sets the period (Q-21). When the periods are set, the change that implements their deletion also updates this list.
 - `settings`: `termsEnforcementEnabled`, `accountPurgeEnabled`, `dataExportEnabled`, `documentRetentionEnabled`, `privateBucketConfigured` (exports and client files need `R2_PRIVATE_BUCKET`) and `legalGateEnforced`.
-- `launchReady`: every gate validated, no draft, the periods not provisional.
+- `launchReady`: every gate validated, no draft, the periods not provisional and, in production, the legal gate enforced (`settings.legalGateEnforced`).
 
 The checklist holds no personal data: no validator, no reference, no account.
 
@@ -66,16 +78,17 @@ It is the gate working. Read the checklist; if `third-party-processing` is not v
 
 ### The document retention job
 
-`DocumentRetentionJob` runs daily at 04:30 Brasília time (`DOCUMENT_RETENTION_ENABLED`, run-level lock `job:document-retention`, each run a row in `jobexecutions` named `document-retention`; `PARTIAL_FAILURE` when some journey failed). It asks SPEC-017's closed-journey files source for journeys closed at or before today minus `DOCUMENT_RETENTION_YEARS` years, re-checks each with the retention rule, deletes the files and writes one row to `retentionDeletions`: journey, owner ids, number of files, date, never a name or content (BR-010-21).
+`DocumentRetentionJob` runs daily at 04:30 Brasília time (`DOCUMENT_RETENTION_ENABLED`, run-level lock `job:document-retention`, each run a row in `jobexecutions` named `document-retention`; `PARTIAL_FAILURE` when some journey failed). It asks SPEC-017's closed-journey files source for journeys closed at or before today minus `DOCUMENT_RETENTION_YEARS` years, re-checks each one, has the source delete the files, writes one row to `retentionDeletions` (journey, owner ids, number of files, date, never a name or content, BR-010-21) and only then **acknowledges** the journey to the source, which keeps listing it until then.
 
 - The documents are kept **through** the Nth anniversary of the closing date in Brasília and deleted from the next day; a journey closed on 29 February is kept through 28 February (BR-010-19). Won, lost and cancelled journeys follow the same rule (D-41).
+- The re-check does not trust the source: a closing kind other than `won`, `lost` or `cancelled`, a closing date before 2020-01-01 or in the future, or a journey not due is **never purged**. Those the source should not have listed are counted as `out of contract` and each is warned by its id, so the source's defect can be found.
 - Until SPEC-017 binds its source, the job finds nothing and records itself.
-- Logs are counts: `N journeys deleted (F files), X not due, Y failed, Z unrecorded`. `not due` above zero means the source listed journeys beyond the cutoff it was given (it must not). `unrecorded` above zero means files were deleted but the log row could not be written (an `error` log); the next run does not see the journey again if the source considers it purged, so compare the run's counts with `retentionDeletions` and note the gap with the date.
-- A failed journey leaves no row and is tried again the next day.
-- To change the period, change `DOCUMENT_RETENTION_YEARS`; the dates move with no code change, and `retention-periods` needs the lawyer's validation of the new value.
+- Logs are counts: `N journeys deleted (F files), X out of contract, Y failed, Z unrecorded`. `unrecorded` above zero means files were deleted but the log row could not be written (an `error` log); the journey stays listed (not acknowledged), so the next run repeats the deletion (finds nothing), writes the row and acknowledges it. **The only consequence is that the logged file count of such a journey undercounts (0)**; compare with the run's earlier log line if the exact number matters.
+- A failed journey leaves no row, is left out of the rest of the run (the source is told to exclude it, so a head of journeys that keep failing does not hide the newer ones) and is tried again the next day.
+- To change the period, change `DOCUMENT_RETENTION_YEARS`; the dates move with no code change, and `retention-periods` needs the lawyer's validation of the new value. Read the warning above before lowering it.
 
 ## Known gaps
 
 - The legal text is a placeholder until the lawyer writes it (Q-21); every gate is closed until then.
 - The periods for billing records, the admin access log and account status records are not set: nothing is deleted.
-- A crash between the deletion of a journey's files and its log row can leave files deleted without a row if the source stops listing the journey; the run reports it (`unrecorded`) when the write fails, but a process kill in that instant is only visible by comparing counts.
+- The file count logged for a journey whose deletion had to be repeated after a crash is 0, not the real number (the repeat found nothing left).

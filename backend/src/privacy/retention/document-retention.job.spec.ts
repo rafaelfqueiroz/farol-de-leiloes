@@ -8,7 +8,15 @@ import { spyOnLogger } from '../../../test/support/logger-spy.js';
 import { DOCUMENT_RETENTION_JOB, DocumentRetentionJob } from './document-retention.job.js';
 import type { RetentionOutcome } from './retention.service.js';
 
-const OUTCOME: RetentionOutcome = { deleted: 2, files: 9, notDue: 0, failed: 0, unrecorded: 0 };
+const OUTCOME: RetentionOutcome = {
+  deleted: 2,
+  files: 9,
+  outOfContract: 0,
+  failed: 0,
+  unrecorded: 0,
+  capped: false,
+  review: 'validated',
+};
 
 function build(options: { enabled?: boolean; locked?: boolean; outcome?: RetentionOutcome } = {}) {
   const retention = { purgeDue: vi.fn().mockResolvedValue(options.outcome ?? OUTCOME) };
@@ -94,14 +102,24 @@ describe('run', () => {
     expect(logger.loggedText()).toContain('2 journeys deleted (9 files)');
   });
 
-  it('warns when the source lists journeys that are not due, and errors on an unrecorded deletion', async () => {
+  it('warns when the source lists journeys outside its contract, when the run was capped, and errors on an unrecorded deletion', async () => {
     const logger = spyOnLogger();
-    const { job } = build({ outcome: { ...OUTCOME, notDue: 3, failed: 1, unrecorded: 1 } });
+    const { job } = build({
+      outcome: {
+        ...OUTCOME,
+        outOfContract: 3,
+        failed: 1,
+        unrecorded: 1,
+        capped: true,
+        review: 'lowered',
+      },
+    });
 
     await job.run();
 
     const logged = logger.loggedText();
-    expect(logged).toContain('listed 3 journeys that are not due yet');
+    expect(logged).toContain('listed 3 journeys outside its contract');
+    expect(logged).toContain('stopped at its cap (lowered)');
     expect(logged).toContain('1 journeys had their files deleted but no log row written');
   });
 

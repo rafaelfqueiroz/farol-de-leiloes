@@ -1,15 +1,19 @@
 // TS-03: a hand-written fake of the SPEC-017 seam the retention job reads (SPEC-010 BR-010-18..21). It
 // keeps closed journeys in memory with a file count each, lists them oldest first like the contract
 // says, and can be told to ignore the cutoff (a source that filters wrongly), to fail a journey, or
-// to wait inside `purgeFiles` (a run in progress, for the lock specs).
+// to wait inside `purgeFiles` (a run in progress, for the lock specs). It obeys the contract: a journey
+// stays listed until `acknowledgePurged`, `purgeFiles` is idempotent (a repeat answers 0) and the
+// ids a listing is told to exclude are left out.
 import type {
   ClosedJourneyFilesSource,
   ClosedJourneyRef,
   ClosedKind,
+  ListClosedJourneysOptions,
 } from '../../src/privacy/retention/closed-journey-files.source.js';
 
 export interface FakeJourney extends ClosedJourneyRef {
   files: number;
+  /** True once the service acknowledged it: only then is it not listed any more. */
   purged: boolean;
 }
 
@@ -22,8 +26,11 @@ export function hexId(): string {
 
 export class FakeClosedJourneyFilesSource implements ClosedJourneyFilesSource {
   readonly journeys: FakeJourney[] = [];
-  readonly listed: { cutoff: string; limit: number }[] = [];
+  readonly listed: { cutoff: string; limit: number; excluded: number }[] = [];
   readonly purgeCalls: string[] = [];
+  readonly acknowledged: string[] = [];
+  /** Journeys whose acknowledgement throws. */
+  readonly failingAcknowledge = new Set<string>();
   /** Lists every unpurged journey whatever the cutoff: a source that filters wrongly. */
   ignoreCutoff = false;
   /** Journeys whose purge throws (a storage fault). */
@@ -48,11 +55,21 @@ export class FakeClosedJourneyFilesSource implements ClosedJourneyFilesSource {
     return journey;
   }
 
-  listClosedJourneys(cutoffClosedOn: string, limit: number): Promise<ClosedJourneyRef[]> {
-    this.listed.push({ cutoff: cutoffClosedOn, limit });
+  listClosedJourneys(
+    cutoffClosedOn: string,
+    limit: number,
+    options: ListClosedJourneysOptions = {},
+  ): Promise<ClosedJourneyRef[]> {
+    const excluded = new Set(options.excludeJourneyIds ?? []);
+    this.listed.push({ cutoff: cutoffClosedOn, limit, excluded: excluded.size });
     return Promise.resolve(
       this.journeys
-        .filter((j) => !j.purged && (this.ignoreCutoff || j.closedOn <= cutoffClosedOn))
+        .filter(
+          (j) =>
+            !j.purged &&
+            !excluded.has(j.journeyId) &&
+            (this.ignoreCutoff || j.closedOn <= cutoffClosedOn),
+        )
         .sort((a, b) => a.closedOn.localeCompare(b.closedOn))
         .slice(0, limit)
         .map((j) => ({
@@ -73,7 +90,14 @@ export class FakeClosedJourneyFilesSource implements ClosedJourneyFilesSource {
     if (!journey) return { fileCount: 0 };
     const fileCount = journey.files;
     journey.files = 0;
-    journey.purged = true;
     return { fileCount };
+  }
+
+  acknowledgePurged(journeyId: string): Promise<void> {
+    if (this.failingAcknowledge.has(journeyId)) return Promise.reject(new Error('source down'));
+    const journey = this.journeys.find((j) => j.journeyId === journeyId);
+    if (journey) journey.purged = true;
+    this.acknowledged.push(journeyId);
+    return Promise.resolve();
   }
 }

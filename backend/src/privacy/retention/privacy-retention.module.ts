@@ -4,9 +4,14 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CommonModule } from '../../common/common.module.js';
 import businessConfig from '../../config/business.config.js';
 import schedulerConfig from '../../config/scheduler.config.js';
+import { LegalValidationsRepository } from '../legal-validation/legal-validations.repository.js';
 import { JobLockRepository } from '../rights/job-lock.repository.js';
 import { JobLockService } from '../rights/job-lock.service.js';
 import { JobLockEntity, JobLockSchema } from '../schemas/job-lock.schema.js';
+import {
+  LegalValidationEntity,
+  LegalValidationSchema,
+} from '../schemas/legal-validation.schema.js';
 import {
   RetentionDeletionEntity,
   RetentionDeletionSchema,
@@ -35,6 +40,8 @@ import { RetentionService } from './retention.service.js';
     MongooseModule.forFeature([
       { name: RetentionDeletionEntity.name, schema: RetentionDeletionSchema },
       { name: JobLockEntity.name, schema: JobLockSchema },
+      // Read only, for the safety brake: the period the lawyer's newest validation reviewed.
+      { name: LegalValidationEntity.name, schema: LegalValidationSchema },
     ]),
     ConfigModule.forFeature(businessConfig), // AR-43: DOCUMENT_RETENTION_YEARS
     ConfigModule.forFeature(schedulerConfig), // AR-04: DOCUMENT_RETENTION_ENABLED
@@ -44,6 +51,7 @@ import { RetentionService } from './retention.service.js';
     { provide: CLOSED_JOURNEY_FILES_SOURCE, useClass: NoClosedJourneyFilesSource },
     JobLockRepository,
     JobLockService,
+    LegalValidationsRepository,
     RetentionDeletionsRepository,
     RetentionService,
     DocumentRetentionJob,

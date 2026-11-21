@@ -3,10 +3,15 @@
 // the change of year and the setting moving from 5 to 6 years with no code change.
 import { describe, expect, it } from 'vitest';
 import {
+  CLOSED_KINDS,
   closedOnCutoff,
+  closingProblem,
+  EARLIEST_CLOSED_ON,
   InvalidRetentionInputError,
   isDueForPurge,
   lastDayKept,
+  retentionReview,
+  UNVALIDATED_RUN_CAP,
 } from './retention.js';
 
 describe('lastDayKept (BR-010-19): the Nth anniversary of the closing date', () => {
@@ -171,5 +176,59 @@ describe('validation: a malformed or impossible input is refused with a typed er
 
   it('names the error class, so a job record keeps a stable code', () => {
     expect(new InvalidRetentionInputError('x').name).toBe('InvalidRetentionInputError');
+  });
+});
+
+describe('closingProblem: a candidate outside the contract is never purged', () => {
+  const TODAY = '2032-03-16';
+
+  it('accepts every kind with a date from the floor to today', () => {
+    for (const kind of CLOSED_KINDS) {
+      expect(closingProblem('2027-03-15', kind, TODAY)).toBeNull();
+    }
+    // The floor and today themselves are inside.
+    expect(closingProblem(EARLIEST_CLOSED_ON, 'won', TODAY)).toBeNull();
+    expect(closingProblem(TODAY, 'lost', TODAY)).toBeNull();
+  });
+
+  it.each(['', 'open', 'in_progress', 'WON', 'won '])('refuses the kind %j', (kind) => {
+    expect(closingProblem('2027-03-15', kind, TODAY)).toBe('unknown-kind');
+  });
+
+  it.each(['0000-01-01', '1970-01-01', '2019-12-31'])(
+    'refuses %s: before the floor',
+    (closedOn) => {
+      expect(closingProblem(closedOn, 'won', TODAY)).toBe('before-floor');
+    },
+  );
+
+  it('refuses a date after today, even by a day', () => {
+    expect(closingProblem('2032-03-17', 'won', TODAY)).toBe('in-the-future');
+    expect(closingProblem('2999-01-01', 'cancelled', TODAY)).toBe('in-the-future');
+  });
+
+  it('refuses a malformed date or a malformed today with the typed error', () => {
+    expect(() => closingProblem('15/03/2027', 'won', TODAY)).toThrow(InvalidRetentionInputError);
+    expect(() => closingProblem('2027-03-15', 'won', 'today')).toThrow(InvalidRetentionInputError);
+  });
+});
+
+describe('retentionReview: lowering the period is braked, raising is not', () => {
+  it('is provisional without any validation', () => {
+    expect(retentionReview(5, undefined)).toBe('provisional');
+  });
+
+  it('is lowered when the setting is shorter than the period the lawyer reviewed', () => {
+    expect(retentionReview(5, 6)).toBe('lowered');
+  });
+
+  it('is validated when the setting equals, exceeds or the validation noted no period', () => {
+    expect(retentionReview(5, 5)).toBe('validated');
+    expect(retentionReview(6, 5)).toBe('validated');
+    expect(retentionReview(5, null)).toBe('validated');
+  });
+
+  it('caps an unvalidated run at a small number of journeys', () => {
+    expect(UNVALIDATED_RUN_CAP).toBe(25);
   });
 });
