@@ -33,6 +33,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import StarIcon from '@mui/icons-material/Star';
 import LoginIcon from '@mui/icons-material/Login';
 import Logo from '@/app/components/patterns/Logo';
+import SiteFooter from '@/app/components/patterns/SiteFooter';
 import { formatMoney, formatPercent } from '@/lib/money';
 import { formatCount } from '@/lib/numbers';
 
@@ -589,33 +590,8 @@ export default function LandingPage() {
         </Container>
       </Box>
 
-      {/* Footer: paper surface with a divider, matching the header in both schemes */}
-      <Box
-        sx={{
-          backgroundColor: 'background.paper',
-          color: 'text.primary',
-          borderTop: 1,
-          borderColor: 'divider',
-          py: 4,
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 2,
-            }}
-          >
-            <Logo variant="lockup" size={28} />
-            <Typography variant="body2" color="text.secondary">
-              {t('footer.rights')}
-            </Typography>
-          </Box>
-        </Container>
-      </Box>
+      {/* BR-010-02: the shared footer (terms, privacy, support) replaces the inline one */}
+      <SiteFooter />
     </Box>
   );
 }

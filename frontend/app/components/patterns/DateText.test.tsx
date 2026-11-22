@@ -34,6 +34,17 @@ describe('DateText', () => {
     },
   );
 
+  it('leaves the zone marker out only when the caller states the zone itself (BR-003-23)', () => {
+    const { container, rerender } = renderWithProviders(
+      <DateText value="2026-03-10T15:30:00Z" withTime />,
+    );
+    expect(container).toHaveTextContent('10/03/2026 12:30 (horário de Brasília)');
+
+    rerender(<DateText value="2026-03-10T15:30:00Z" withTime zoneMarker={false} />);
+    expect(container).toHaveTextContent('10/03/2026 12:30');
+    expect(container).not.toHaveTextContent('horário de Brasília');
+  });
+
   it('formats date and time in Brasília', () => {
     renderWithProviders(<DateText value="2026-03-10T15:30:00Z" withTime />);
 

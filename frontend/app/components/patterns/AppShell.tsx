@@ -43,6 +43,7 @@ import {
   type ReactNode,
 } from 'react';
 import Logo from '@/app/components/patterns/Logo';
+import SiteFooter from '@/app/components/patterns/SiteFooter';
 import {
   currentItemId,
   formatCount,
@@ -712,6 +713,8 @@ export default function AppShell({ children, banner }: AppShellProps) {
           <Box component="main" id={MAIN_CONTENT_ID} tabIndex={-1} sx={{ flex: 1, minWidth: 0 }}>
             {signingOut ? null : children}
           </Box>
+          {/* BR-010-02: the legal links end every page in the shell, at the end of the content */}
+          <SiteFooter />
         </Box>
       </Box>
 

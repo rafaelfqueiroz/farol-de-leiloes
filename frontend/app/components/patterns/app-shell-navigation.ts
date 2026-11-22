@@ -9,6 +9,8 @@ import Notifications from '@mui/icons-material/Notifications';
 import NotificationsOutlined from '@mui/icons-material/NotificationsOutlined';
 import Person from '@mui/icons-material/Person';
 import PersonOutlined from '@mui/icons-material/PersonOutlined';
+import PrivacyTip from '@mui/icons-material/PrivacyTip';
+import PrivacyTipOutlined from '@mui/icons-material/PrivacyTipOutlined';
 import Search from '@mui/icons-material/Search';
 import SearchOutlined from '@mui/icons-material/SearchOutlined';
 import SupportAgent from '@mui/icons-material/SupportAgent';
@@ -149,6 +151,17 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         CurrentIcon: WorkspacePremium,
         requires: { plan: 'free' },
         match: { paths: ['/plans'] },
+      },
+      {
+        // SPEC-010 BR-010-05, BR-010-08..13: the rights page. More specific than Perfil, so it
+        // wins the match for /profile/privacidade.
+        id: 'privacy',
+        labelKey: 'privacy',
+        href: '/profile/privacidade',
+        Icon: PrivacyTipOutlined,
+        CurrentIcon: PrivacyTip,
+        requires: { plan: 'free' },
+        match: { paths: ['/profile/privacidade'] },
       },
       {
         id: 'support',

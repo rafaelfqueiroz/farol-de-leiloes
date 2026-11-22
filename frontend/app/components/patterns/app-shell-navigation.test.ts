@@ -41,16 +41,16 @@ describe('app-shell navigation config', () => {
   });
 
   it.each([
-    ['free', ['search', 'account'], ['search', 'profile', 'subscription', 'support']],
+    ['free', ['search', 'account'], ['search', 'profile', 'subscription', 'privacy', 'support']],
     [
       'standard',
       ['search', 'tracking', 'account'],
-      ['search', 'favorites', 'reminders', 'profile', 'subscription', 'support'],
+      ['search', 'favorites', 'reminders', 'profile', 'subscription', 'privacy', 'support'],
     ],
     [
       'premium',
       ['search', 'tracking', 'account'],
-      ['search', 'favorites', 'reminders', 'profile', 'subscription', 'support'],
+      ['search', 'favorites', 'reminders', 'profile', 'subscription', 'privacy', 'support'],
     ],
   ])(
     'shows %s only its groups, in the fixed order, without the empty Escritório',
@@ -74,6 +74,7 @@ describe('app-shell navigation config', () => {
       'search',
       'profile',
       'subscription',
+      'privacy',
       'support',
       'coupons',
     ]);

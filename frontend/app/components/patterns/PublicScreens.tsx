@@ -13,17 +13,25 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import Logo from './Logo';
 import PageHeader from './PageHeader';
 import PageShell from './PageShell';
+import SiteFooter from './SiteFooter';
 
 // DS-14, DS-17 (frames 7 and 8): the three layouts of the pages outside the AppShell. Each is
 // a `narrow` PageShell that carries its own <main> (DS-21), centred in the viewport, on the
 // page background the body already paints (background.default).
 
-function Centered({ children }: { children: ReactNode }) {
-  return (
-    <Box sx={{ minHeight: '100dvh', display: 'flex', alignItems: 'center' }}>
+function Centered({ children, footer = false }: { children: ReactNode; footer?: boolean }) {
+  const centred = (
+    <Box sx={{ flex: 1, display: 'flex', alignItems: 'center' }}>
       <PageShell width="narrow" component="main">
         {children}
       </PageShell>
+    </Box>
+  );
+  // BR-010-02: the form screens (login, register, password reset) end with the legal links
+  return (
+    <Box sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+      {centred}
+      {footer ? <SiteFooter /> : null}
     </Box>
   );
 }
@@ -39,7 +47,7 @@ export interface AuthFormPageProps {
 /** Frame 7: logo lockup, then a card with the PageHeader and the form. */
 export function AuthFormPage({ title, summary, children }: AuthFormPageProps) {
   return (
-    <Centered>
+    <Centered footer>
       <Box sx={{ display: 'flex', justifyContent: 'center' }}>
         {/* the card is background.paper, so the mark's primary tower reads on it */}
         <Logo variant="lockup" size={40} />
