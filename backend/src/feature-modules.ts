@@ -12,6 +12,8 @@ import { AuthModule } from './auth/auth.module.js';
 import { UsersModule } from './users/users.module.js';
 import { PrivacyModule } from './privacy/privacy.module.js';
 import { PrivacyRightsModule } from './privacy/rights/privacy-rights.module.js';
+import { PrivacyRetentionModule } from './privacy/retention/privacy-retention.module.js';
+import { LegalValidationModule } from './privacy/legal-validation/legal-validation.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { CouponsModule } from './coupons/coupons.module.js';
 import { RemindersModule } from './reminders/reminders.module.js';
@@ -29,6 +31,8 @@ export const FEATURE_MODULES = [
   AuthModule,
   PrivacyModule,
   PrivacyRightsModule,
+  PrivacyRetentionModule,
+  LegalValidationModule,
   AuctionsModule,
   FavoritesModule,
   SavedFiltersModule,

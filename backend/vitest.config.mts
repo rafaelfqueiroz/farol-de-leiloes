@@ -55,7 +55,7 @@ export default defineConfig({
       provider: 'v8',
       include: ['src/**/*.ts'],
       // The process entry points: they only wire a Nest context and exit (main.ts, the run.ts of
-      // the migrations and of grant-admin), or initialise Sentry before it (instrument.ts, whose
+      // the migrations and of grant-admin and of legal:record-validation), or initialise Sentry before it (instrument.ts, whose
       // options are unit-tested).
       exclude: [
         'src/**/*.spec.ts',
@@ -63,6 +63,7 @@ export default defineConfig({
         'src/instrument.ts',
         'src/migrations/run.ts',
         'src/access/grant-admin/run.ts',
+        'src/privacy/legal-validation/record/run.ts',
       ],
       reporter: ['text-summary', 'text', 'lcov'],
       thresholds: {

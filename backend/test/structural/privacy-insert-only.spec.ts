@@ -47,12 +47,27 @@ describe('SPEC-010 BR-010-03 / AR-30: acceptances and consents are insert-only',
     expect(methodsOf(text)).toEqual(['insert', 'listForUser', 'latest']);
   });
 
-  it('only the two repositories touch the two models (AR-08)', () => {
+  it('the repositories of the insert-only records expose inserts and reads only', () => {
+    const text = (name: string) => sources.find(({ file }) => file === name)?.text ?? '';
+    // SPEC-010 part 3: the lawyer's validations (BR-010-26) and the retention log (BR-010-21).
+    expect(methodsOf(text('legal-validation/legal-validations.repository.ts'))).toEqual([
+      'insert',
+      'newestOfScope',
+    ]);
+    expect(methodsOf(text('retention/retention-deletions.repository.ts'))).toEqual(['insert']);
+  });
+
+  it('only the four repositories touch their models (AR-08)', () => {
     const users = sources
       .filter(({ text }) => /@InjectModel\(/.test(text))
-      .map(({ file }) => file)
+      .map(({ file }) => file.split('\\').join('/'))
       .sort();
-    expect(users).toEqual(['consents.repository.ts', 'whatsapp-consent.repository.ts']);
+    expect(users).toEqual([
+      'consents.repository.ts',
+      'legal-validation/legal-validations.repository.ts',
+      'retention/retention-deletions.repository.ts',
+      'whatsapp-consent.repository.ts',
+    ]);
   });
 });
 

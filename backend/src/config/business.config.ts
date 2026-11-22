@@ -27,6 +27,11 @@ export interface BusinessConfig {
     accountPurgeAlertDays: number;
     /** SPEC-010 BR-010-11: days an export stays downloadable after it became ready. */
     exportTtlDays: number;
+    /**
+     * SPEC-010 BR-010-18, BR-010-24: whole years a closed journey's documents are kept after its
+     * closing date. Provisional until the lawyer's validation is recorded (BR-010-26).
+     */
+    documentRetentionYears: number;
   };
 }
 
@@ -45,6 +50,7 @@ export function businessConfigFrom(env: Env): BusinessConfig {
       accountPurgeMaxDays: env.ACCOUNT_PURGE_MAX_DAYS,
       accountPurgeAlertDays: env.ACCOUNT_PURGE_ALERT_DAYS,
       exportTtlDays: env.EXPORT_TTL_DAYS,
+      documentRetentionYears: env.DOCUMENT_RETENTION_YEARS,
     },
   };
 }
