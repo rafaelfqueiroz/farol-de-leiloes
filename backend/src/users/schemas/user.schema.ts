@@ -91,6 +91,28 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: Date, required: false })
   purgeClaimUntil?: Date;
 
+  // SPEC-010 BR-010-15: durable fairness of the purge. Stamped in the same conditional update as the
+  // claim, at every attempt: the instant of the last one and how many there were. The job takes the
+  // never-attempted accounts first, then the longest-waiting attempt, so an account whose purge keeps
+  // failing goes to the back of the queue and can never starve a healthy one, run after run. Removed
+  // by the tombstone. Server-written only; instants and a count, no personal content.
+  @Prop({ type: Date, required: false })
+  lastPurgeAttemptAt?: Date;
+
+  @Prop({ type: Number, required: false, min: 0 })
+  purgeAttempts?: number;
+
+  // SPEC-010 BR-010-15: the residue sweep. The tombstone sets `residueSweepDueAt` (one day after
+  // `purgedAt`); the sweep re-runs the providers' purge for the account once, then replaces it by
+  // `residueSweptAt`. It catches a record an in-flight request (authenticated before the closure)
+  // wrote after the purge. A failing sweep moves the due instant a day on. Server-written only;
+  // instants, no personal content.
+  @Prop({ type: Date, required: false })
+  residueSweepDueAt?: Date;
+
+  @Prop({ type: Date, required: false })
+  residueSweptAt?: Date;
+
   // Legacy plan tier. SPEC-012 moved plans to the office (BR-012-06) and nothing writes this any
   // more (BR-012-14); it stays in the schema and in the auth answers (the frontend still reads
   // it) until the contract step removes it (AR-28, follow-up issue). `'admin'` is a legacy value
@@ -158,3 +180,8 @@ UserSchema.index({ role: 1 });
 // SPEC-010 AR-27: the purge job's scan (closed accounts, oldest closure first) and its alert count.
 // Built in production by migration 0009-privacy-rights-indexes (AR-29); the unit spec holds them equal.
 UserSchema.index({ status: 1, closedAt: 1 });
+// ... and its fair order: never-attempted first, then the least recently attempted, then the fewest attempts, then the oldest
+// closure (BR-010-15). The residue sweep's scan runs on a sparse index: only accounts still waiting
+// for it carry the field.
+UserSchema.index({ status: 1, lastPurgeAttemptAt: 1, purgeAttempts: 1, closedAt: 1 });
+UserSchema.index({ residueSweepDueAt: 1 }, { sparse: true });

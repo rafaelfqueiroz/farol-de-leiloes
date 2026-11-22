@@ -40,8 +40,13 @@ describe('BR-010-15: what the purge removes from the account document', () => {
     }
   });
 
-  it('names the two claim fields', () => {
-    expect([...PURGE_CLAIM_FIELDS]).toEqual(['purgeClaimToken', 'purgeClaimUntil']);
+  it('names the claim fields and the fairness stamp of the attempts, all removed with the tombstone', () => {
+    expect([...PURGE_CLAIM_FIELDS]).toEqual([
+      'purgeClaimToken',
+      'purgeClaimUntil',
+      'lastPurgeAttemptAt',
+      'purgeAttempts',
+    ]);
   });
 
   it('replaces the email with one on the reserved .invalid domain that carries the id', () => {

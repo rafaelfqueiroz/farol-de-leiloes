@@ -10,7 +10,8 @@ const ID = '64b000000000000000000001';
 function build(hooks: AccountClosureHook[] = []) {
   const state = { status: 'active' as string, closeOutcome: 'closed' as string };
   const auth = {
-    reauthenticate: vi.fn().mockResolvedValue(undefined),
+    // The credential version the proof was given for (DL-001-02): closure is fenced on it.
+    reauthenticate: vi.fn().mockResolvedValue({ credentialVersion: 3 }),
     endAllSessionsAndLinks: vi.fn().mockResolvedValue(undefined),
   };
   const users = {
@@ -39,7 +40,8 @@ describe('closeOwnAccount', () => {
     await service.closeOwnAccount(ID, { password: 'p' }, '203.0.113.1');
 
     expect(auth.reauthenticate).toHaveBeenCalledWith(ID, { password: 'p' }, '203.0.113.1');
-    expect(users.closeAccount).toHaveBeenCalledWith(ID, clock.now());
+    // Fenced on the version the proof was given for.
+    expect(users.closeAccount).toHaveBeenCalledWith(ID, clock.now(), 3);
     expect(auth.endAllSessionsAndLinks).toHaveBeenCalledWith(ID);
     expect(exports.cancelLiveOf).toHaveBeenCalledWith(ID);
     expect(reminders.cancelPendingOfAccount).toHaveBeenCalledWith(ID);
@@ -85,6 +87,21 @@ describe('closeOwnAccount', () => {
     await service.closeOwnAccount(ID, { password: 'p' }, 'ip');
 
     expect(auth.endAllSessionsAndLinks).not.toHaveBeenCalled();
+    expect(hook.onAccountClosed).not.toHaveBeenCalled();
+  });
+
+  it('DL-001-02: a proof of credentials that changed meanwhile closes nothing, runs no effect and is UNAUTHENTICATED', async () => {
+    const hook = { name: 'links', onAccountClosed: vi.fn() };
+    const { service, state, auth, exports, reminders } = build([hook]);
+    state.closeOutcome = 'stale_credentials';
+
+    await expect(service.closeOwnAccount(ID, { password: 'p' }, 'ip')).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+    });
+
+    expect(auth.endAllSessionsAndLinks).not.toHaveBeenCalled();
+    expect(exports.cancelLiveOf).not.toHaveBeenCalled();
+    expect(reminders.cancelPendingOfAccount).not.toHaveBeenCalled();
     expect(hook.onAccountClosed).not.toHaveBeenCalled();
   });
 

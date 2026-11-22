@@ -339,8 +339,18 @@ export class AuthService implements BeforeApplicationShutdown {
    * An account that cannot offer the proof asked for is refused with a stable code: a Google-only
    * account asked for a password is OAUTH_ACCOUNT_HAS_NO_PASSWORD; one with neither is
    * REAUTHENTICATION_UNAVAILABLE. Nothing is written beyond the attempt counters and the spent code.
+   *
+   * It answers the CREDENTIAL VERSION the proof was given for (DL-001-02), so the irreversible write
+   * that follows can be fenced on it: for the password, the version of the document whose hash was
+   * compared (the comparison takes time, and a reset or a Google takeover can land meanwhile); for
+   * the Google code, the account's version read right after the code was spent. A closure that
+   * carries a version the account no longer has closes nothing (`UsersService.closeAccount`).
    */
-  async reauthenticate(userId: string, proof: ReauthenticationProof, ip: string): Promise<void> {
+  async reauthenticate(
+    userId: string,
+    proof: ReauthenticationProof,
+    ip: string,
+  ): Promise<{ readonly credentialVersion: number }> {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new DomainError('USER_NOT_FOUND');
@@ -356,7 +366,11 @@ export class AuthService implements BeforeApplicationShutdown {
       if (!(await this.accountTokens.consume(proof.googleCode, 'google_exchange', userId))) {
         throw new DomainError('INVALID_GOOGLE_CODE');
       }
-      return;
+      // The version at the moment the code is spent for this account (read after, never before:
+      // a takeover that completed before the code was spent is part of what was proven).
+      const spentFor = await this.usersService.findById(userId);
+      if (!spentFor) throw new DomainError('USER_NOT_FOUND');
+      return { credentialVersion: credentialVersionOf(spentFor) };
     }
 
     if (!hasPassword) {
@@ -368,6 +382,8 @@ export class AuthService implements BeforeApplicationShutdown {
       throw new DomainError('CURRENT_PASSWORD_INCORRECT');
     }
     await this.loginAttempts.recordSuccess(user.email, ip, reservation);
+    // `verified` is the document whose hash matched: its version is the credential that was proven.
+    return { credentialVersion: credentialVersionOf(verified) };
   }
 
   /**

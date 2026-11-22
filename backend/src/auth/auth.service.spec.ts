@@ -1008,6 +1008,48 @@ describe('AuthService with fake collaborators', () => {
       expect(attemptRepo.released).toEqual([`ip:${IP}`]);
     });
 
+    it.each([
+      ['an account without the field is at 0', undefined, 0],
+      ['an account at version 3', 3, 3],
+    ])(
+      'DL-001-02: answers the credential version the password was verified against (%s)',
+      async (_label, stored, expected) => {
+        const { service, users } = build();
+        users.seed(localAccount({ credentialVersion: stored }));
+
+        await expect(
+          service.reauthenticate(ID, { password: 'correct-password' }, IP),
+        ).resolves.toEqual({ credentialVersion: expected });
+      },
+    );
+
+    it('DL-001-02: the version is the one of the document whose hash was compared, even if the account moves on while it waits', async () => {
+      const { service, users } = build();
+      users.seed(localAccount({ credentialVersion: 2 }));
+      const compare = users.validatePassword.bind(users);
+      vi.spyOn(users, 'validatePassword').mockImplementation(async (...args) => {
+        const verified = await compare(...args); // a snapshot at version 2
+        const account = users.accounts.get(ID);
+        if (account) account.credentialVersion = 3; // a reset lands during the comparison
+        return verified;
+      });
+
+      await expect(
+        service.reauthenticate(ID, { password: 'correct-password' }, IP),
+      ).resolves.toEqual({ credentialVersion: 2 });
+    });
+
+    it('DL-001-02: a Google code answers the version read right after it was spent for the account', async () => {
+      const { service, users, tokenRepo, clock } = build();
+      users.seed(localAccount({ providers: ['local', 'google'], credentialVersion: 5 }));
+      const tokens = new AccountTokenService(tokenRepo as unknown as AccountTokenRepository, clock);
+      const mine = await tokens.issue(ID, 'google_exchange');
+
+      await expect(service.reauthenticate(ID, { googleCode: mine }, IP)).resolves.toEqual({
+        credentialVersion: 5,
+      });
+    });
+
     it('refuses a wrong password with CURRENT_PASSWORD_INCORRECT and keeps the attempt counted', async () => {
       const { service, users, attemptRepo } = build();
       users.seed(localAccount());

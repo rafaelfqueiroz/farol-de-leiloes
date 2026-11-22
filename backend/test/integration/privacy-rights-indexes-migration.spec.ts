@@ -45,7 +45,13 @@ describe('0009-privacy-rights-indexes (integration)', () => {
         'pseudonyms_of_user',
       ].sort(),
     );
-    expect(await indexNames('users')).toContain('status_1_closedAt_1');
+    expect(await indexNames('users')).toEqual(
+      expect.arrayContaining([
+        'status_1_closedAt_1',
+        'status_1_lastPurgeAttemptAt_1_purgeAttempts_1_closedAt_1',
+        'residueSweepDueAt_1',
+      ]),
+    );
   });
 
   it('BR-010-11: refuses a second live export of one account, never a terminal one or another account', async () => {

@@ -40,6 +40,12 @@ export const PROTECTED = [
   'purgedAt',
   'purgeClaimToken',
   'purgeClaimUntil',
+  // SPEC-010 BR-010-15: the purge's fairness stamp and the residue sweep's instants, written by the
+  // claim and the tombstone (UsersService) only.
+  'lastPurgeAttemptAt',
+  'purgeAttempts',
+  'residueSweepDueAt',
+  'residueSweptAt',
 ] as const;
 
 /** Mongoose bookkeeping, not account attributes. */
@@ -77,4 +83,8 @@ export const HOSTILE_VALUES: Record<string, unknown> = {
   purgedAt: '2000-01-01T00:00:00.000Z',
   purgeClaimToken: 'hostile-claim',
   purgeClaimUntil: '2999-01-01T00:00:00.000Z',
+  lastPurgeAttemptAt: '2000-01-01T00:00:00.000Z',
+  purgeAttempts: 0,
+  residueSweepDueAt: '2000-01-01T00:00:00.000Z',
+  residueSweptAt: '2000-01-01T00:00:00.000Z',
 };

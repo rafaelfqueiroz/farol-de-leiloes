@@ -15,6 +15,7 @@ import {
   PURGE_REMOVED_FIELDS,
   purgedEmail,
   purgedEmailWithSuffix,
+  residueSweepDueAt,
 } from './domain/account-closure.js';
 import { abandonedPendingCutoff, isAccountActive } from './user-account.js';
 
@@ -41,6 +42,15 @@ const TOMBSTONE_EMAIL_ATTEMPTS = 3;
  */
 function activeStatusFilter() {
   return serverOperators({ $in: ['active' as const, null] });
+}
+
+/**
+ * SPEC-010 BR-010-01, BR-010-15: the filter of a write that belongs to the SIGN-UP as well as to a
+ * living account: `pending` (its consent records are still being written) or active. Never closed or
+ * deactivated: once an account is closed no request that was already in flight may write to it.
+ */
+function liveStatusFilter() {
+  return serverOperators({ $in: ['active' as const, 'pending' as const, null] });
 }
 
 /**
@@ -646,6 +656,8 @@ export class UsersService {
       .updateOne(
         {
           _id: { $eq: userId },
+          // BR-010-15: a late answer of a closed (or purged) account marks nothing.
+          status: liveStatusFilter(),
           whatsappPromptAnsweredAt: serverOperators({ $exists: false }),
           // The answer is for the consent generation it was given under: if the account was taken
           // over meanwhile (DL-001-02) it is not the owner's answer and marks nothing.
@@ -665,20 +677,32 @@ export class UsersService {
    * session survives the closure however it races. Revoking the sessions and the rest of the
    * clean-up is the caller's job.
    *
+   * The write is FENCED on the credential version the re-authentication verified
+   * (`expectedCredentialVersion`, a missing version is 0): a password reset or a Google takeover that
+   * changed the credentials while the proof was being checked (the bcrypt comparison takes time)
+   * makes the proof stale, and the closure matches nothing (`stale_credentials`, DL-001-02).
+   *
    * `closed`: this call closed it. `already_closed`: it was closed before (by a concurrent request
-   * or an earlier one): nothing was written, so the caller does nothing more. `not_found`: no such
-   * account. The conditional update decides a race between two closures: exactly one gets `closed`.
+   * or an earlier one): nothing was written, so the caller does nothing more. `stale_credentials`:
+   * the account exists and is not closed but its credentials are no longer the ones that were
+   * proven: nothing was written. `not_found`: no such account. The conditional update decides a race
+   * between two closures: exactly one gets `closed`.
    */
   async closeAccount(
     userId: string,
     now: Date,
-  ): Promise<'closed' | 'already_closed' | 'not_found'> {
+    expectedCredentialVersion: number,
+  ): Promise<'closed' | 'already_closed' | 'stale_credentials' | 'not_found'> {
     const closed = await this.userRepository
       .findOneAndUpdate(
         {
           _id: { $eq: userId },
           // SC-10: server-written operators; a missing or null status is active (AR-28).
           status: serverOperators({ $in: [...CLOSABLE_STATUSES, null] }),
+          // DL-001-02: the version the proof was given for; an account without the field is at 0.
+          credentialVersion: serverOperators({
+            $in: expectedCredentialVersion === 0 ? [0, null] : [expectedCredentialVersion],
+          }),
         },
         { $set: { status: 'closed', closedAt: now }, $inc: { credentialVersion: 1 } },
         { returnDocument: 'after' },
@@ -687,16 +711,27 @@ export class UsersService {
       .lean()
       .exec();
     if (closed) return 'closed';
-    // Nothing matched: either it does not exist or it is already closed.
-    const exists = await this.userRepository.exists({ _id: { $eq: userId } });
-    return exists ? 'already_closed' : 'not_found';
+    // Nothing matched: it does not exist, it is already closed, or its credentials moved on.
+    const current = await this.userRepository
+      .findOne({ _id: { $eq: userId } })
+      .select('status')
+      .lean()
+      .exec();
+    if (!current) return 'not_found';
+    return current.status === 'closed' ? 'already_closed' : 'stale_credentials';
   }
 
   /**
-   * SPEC-010 BR-010-15 / AR-12: the closed accounts whose personal data is still to be purged,
-   * oldest closure first (a missing `closedAt` first of all), with no live claim at `now`, leaving out
-   * `excludeIds`. A job
-   * method: it reads across accounts and answers ids only.
+   * SPEC-010 BR-010-15 / AR-12: the closed accounts whose personal data is still to be purged, with
+   * no live claim at `now`, leaving out `excludeIds`. FAIR order: the accounts never attempted first,
+   * then the least recently attempted (`lastPurgeAttemptAt`, stamped by every claim), then, among the
+   * accounts of one instant (a whole run stamps one `now`), the fewest attempts, then the oldest
+   * closure (a missing `closedAt` first of all). The attempt count is what keeps the rotation even
+   * when many accounts share an instant: with the closure alone as the tie-break, the oldest
+   * closures of the last run would be the first of the next one, run after run. An account whose purge keeps failing therefore goes
+   * to the back of the queue after every attempt, whatever the run's attempt budget, and can never
+   * starve a healthy account that closed later. A job method: it reads across accounts and answers
+   * ids only.
    */
   async findPurgeCandidates(
     now: Date,
@@ -715,7 +750,7 @@ export class UsersService {
         // head of the queue must not keep the others from being purged.
         ...(excludeIds.length > 0 ? { _id: serverOperators({ $nin: [...excludeIds] }) } : {}),
       })
-      .sort({ closedAt: 1, _id: 1 })
+      .sort({ lastPurgeAttemptAt: 1, purgeAttempts: 1, closedAt: 1, _id: 1 })
       .limit(limit)
       .select('_id')
       .lean()
@@ -726,7 +761,9 @@ export class UsersService {
   /**
    * The atomic claim of one closed, unpurged account for a purge worker: a random token and its
    * expiry, set only while the account is closed, not purged and has no live claim (one conditional
-   * update, so of two workers exactly one wins). True when this worker holds it.
+   * update, so of two workers exactly one wins). True when this worker holds it. The same write
+   * stamps the attempt (`lastPurgeAttemptAt` = `now`, `purgeAttempts` + 1), so it is conditional on
+   * the claim and cannot be lost or doubled: the fair order of `findPurgeCandidates` rests on it.
    */
   async claimForPurge(userId: string, token: string, now: Date, until: Date): Promise<boolean> {
     const result = await this.userRepository
@@ -740,7 +777,10 @@ export class UsersService {
             { purgeClaimUntil: serverOperators({ $lte: now }) },
           ],
         },
-        { $set: { purgeClaimToken: token, purgeClaimUntil: until } },
+        {
+          $set: { purgeClaimToken: token, purgeClaimUntil: until, lastPurgeAttemptAt: now },
+          $inc: { purgeAttempts: 1 },
+        },
       )
       .exec();
     return result.matchedCount > 0;
@@ -785,7 +825,11 @@ export class UsersService {
               purgeClaimToken: { $eq: token },
               purgedAt: serverOperators({ $exists: false }),
             },
-            { $set: { email, purgedAt: now }, $unset: removed },
+            // BR-010-15: the residue sweep is due a day later (see `sweepResidueOf`).
+            {
+              $set: { email, purgedAt: now, residueSweepDueAt: residueSweepDueAt(now) },
+              $unset: removed,
+            },
             // The tombstone is a controlled write of fields the schema requires (name) to be removed.
             { runValidators: false },
           )
@@ -796,6 +840,69 @@ export class UsersService {
       }
     }
     throw new Error('A tombstone address could not be found');
+  }
+
+  /**
+   * SPEC-010 BR-010-15, the RESIDUE SWEEP: the purged accounts whose sweep is due at `now`, the
+   * longest-waiting first, leaving out `excludeIds`. A request that passed authentication before the
+   * closure can write a record of the account after the purge deleted them; the job re-runs the
+   * providers' (idempotent) purge once for these. A job method: it answers ids only.
+   */
+  async findResidueSweepCandidates(
+    now: Date,
+    limit: number,
+    excludeIds: readonly string[] = [],
+  ): Promise<string[]> {
+    const rows = await this.userRepository
+      .find({
+        status: { $eq: 'closed' },
+        purgedAt: serverOperators({ $exists: true }),
+        residueSweepDueAt: serverOperators({ $lte: now }),
+        ...(excludeIds.length > 0 ? { _id: serverOperators({ $nin: [...excludeIds] }) } : {}),
+      })
+      .sort({ residueSweepDueAt: 1, _id: 1 })
+      .limit(limit)
+      .select('_id')
+      .lean()
+      .exec();
+    return rows.map((row) => row._id.toHexString());
+  }
+
+  /**
+   * The sweep of one account is done: `residueSweptAt` = `now` replaces the due instant, in one
+   * update conditional on the account still waiting for it (so it is set once, and never on an
+   * account that is not purged). True when this call marked it.
+   */
+  async markResidueSwept(userId: string, now: Date): Promise<boolean> {
+    const result = await this.userRepository
+      .updateOne(
+        {
+          _id: { $eq: userId },
+          status: { $eq: 'closed' },
+          residueSweepDueAt: serverOperators({ $exists: true }),
+        },
+        { $set: { residueSweptAt: now }, $unset: { residueSweepDueAt: '' } },
+      )
+      .exec();
+    return result.matchedCount > 0;
+  }
+
+  /**
+   * A sweep that failed is tried again later, not at the head of the queue every run: the due instant
+   * moves to `until` (conditional on the account still waiting), so a sweep that keeps failing never
+   * starves the others (the same fairness as the purge).
+   */
+  async deferResidueSweep(userId: string, until: Date): Promise<void> {
+    await this.userRepository
+      .updateOne(
+        {
+          _id: { $eq: userId },
+          status: { $eq: 'closed' },
+          residueSweepDueAt: serverOperators({ $exists: true }),
+        },
+        { $set: { residueSweepDueAt: until } },
+      )
+      .exec();
   }
 
   /**
@@ -819,7 +926,7 @@ export class UsersService {
       .select('status')
       .lean()
       .exec();
-    return !!user && (user.status ?? 'active') === 'active';
+    return !!user && isAccountActive(user);
   }
 
   async isEmailVerified(userId: string): Promise<boolean> {

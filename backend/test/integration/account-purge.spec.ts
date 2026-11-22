@@ -153,7 +153,15 @@ describe('SPEC-010 purging closed accounts (BR-010-15)', () => {
 
       const outcome = await app.purgeJob.run();
 
-      expect(outcome).toEqual({ purged: 1, skipped: 0, failed: 0, overdue: 0 });
+      expect(outcome).toEqual({
+        purged: 1,
+        skipped: 0,
+        failed: 0,
+        overdue: 0,
+        swept: 0,
+        residueDeleted: 0,
+        sweepFailed: 0,
+      });
       const last = await app.get(JobExecutionService).getLastOutcome('account-purge');
       expect(last).toMatchObject({ status: 'SUCCESS', runMode: 'AUTO' });
     });
@@ -179,6 +187,7 @@ describe('SPEC-010 purging closed accounts (BR-010-15)', () => {
           'status',
           'closedAt',
           'purgedAt',
+          'residueSweepDueAt', // when the one-day residue sweep may run (BR-010-15)
           'createdAt',
           'updatedAt',
           'credentialVersion',
@@ -255,7 +264,15 @@ describe('SPEC-010 purging closed accounts (BR-010-15)', () => {
     });
 
     it('is idempotent: running it again purges nothing', async () => {
-      expect(await app.purgeJob.run()).toEqual({ purged: 0, skipped: 0, failed: 0, overdue: 0 });
+      expect(await app.purgeJob.run()).toEqual({
+        purged: 0,
+        skipped: 0,
+        failed: 0,
+        overdue: 0,
+        swept: 0,
+        residueDeleted: 0,
+        sweepFailed: 0,
+      });
     });
   });
 
