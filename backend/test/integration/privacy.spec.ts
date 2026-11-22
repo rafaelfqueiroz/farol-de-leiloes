@@ -5,11 +5,13 @@
 // only the clock, the mailer, Google and the legal registry (to publish a v0.2) are replaced
 // (TS-03, TS-06, TS-07). Enforcement is ON here (TERMS_ENFORCEMENT_ENABLED); a second app proves
 // it off by default.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionContext } from '@nestjs/common';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import type { Connection, Model } from 'mongoose';
 import request from 'supertest';
+import { AuthService } from '../../src/auth/auth.service.js';
+import { UsersService } from '../../src/users/users.service.js';
 import { AuctionsModule } from '../../src/auctions/auctions.module.js';
 import { AuctionEntity } from '../../src/auctions/schemas/auction.schema.js';
 import type { GoogleIdentity } from '../../src/auth/google/google-identity.js';
@@ -449,6 +451,222 @@ describe('SPEC-010 privacy and consent (integration)', () => {
         '0.2',
         '0.2',
       ]);
+    });
+  });
+
+  // BR-010-01: the account is created `pending`, its consent records are written, and only then is it
+  // activated by one conditional update. These specs hold a sign-up INSIDE its consent write and run
+  // the other requests meanwhile, on the real database: the interleaving is the test, not a timing.
+  describe('a sign-up in flight is invisible to other requests (BR-010-01)', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    const sessions = () => connection.collection('sessions');
+    const stored = (email: string) => users.collection.findOne({ email });
+
+    /**
+     * Makes the consent write of the next sign-up wait; `finish` then lets it fail (the rollback
+     * case) or succeed. Mongoose stamps `createdAt` with the real time, so the fake clock is
+     * brought to it: a pending account is "abandoned" only 15 minutes of THIS clock after.
+     */
+    function holdConsentWrite() {
+      harness.clock.set(new Date());
+      const service = harness.moduleRef.get(ConsentsService);
+      const real = service.recordAcceptance.bind(service);
+      let reached!: () => void;
+      const reachedFirst = new Promise<void>((resolve) => (reached = resolve));
+      let go!: (outcome: 'fail' | 'succeed') => void;
+      const decision = new Promise<'fail' | 'succeed'>((resolve) => (go = resolve));
+      vi.spyOn(service, 'recordAcceptance').mockImplementation(async (...args) => {
+        reached();
+        if ((await decision) === 'fail') throw new Error('consent store down');
+        return real(...args);
+      });
+      return { reachedFirst, finish: go };
+    }
+
+    const login = (email: string) =>
+      request(server()).post('/api/auth/login').send({ email, password: PASSWORD });
+
+    it('e-mail sign-up: the right password, a Google sign-in and a reset are refused meanwhile, and a failed consent write leaves no account, session or acceptance', async () => {
+      const email = `inflight-${(counter += 1)}@example.test`;
+      const sessionsBefore = await sessions().countDocuments();
+      const consentsBefore = await consents.collection.countDocuments();
+      const gate = holdConsentWrite();
+
+      const original = register(email).then((response) => response);
+      await gate.reachedFirst;
+      expect(await stored(email)).toMatchObject({ status: 'pending' });
+
+      const refused = await login(email).expect(401);
+      expect(refused.body).toEqual({ code: 'INVALID_CREDENTIALS', context: {} });
+      const google = await request(server())
+        .get('/api/auth/google/callback')
+        .set(
+          IDENTITY_HEADER,
+          JSON.stringify({ googleId: `g-${counter}`, email, emailVerified: true, name: 'Ana' }),
+        )
+        .expect(302);
+      expect(google.headers['location']).toContain('error=GOOGLE_SIGN_IN_FAILED');
+      await request(server()).post('/api/auth/reset-password-request').send({ email }).expect(200);
+      await harness.moduleRef.get(AuthService).flushDeliveries();
+      expect(harness.mailbox.passwordResetEmails.map((mail) => mail.email)).not.toContain(email);
+      expect(await sessions().countDocuments()).toBe(sessionsBefore);
+
+      gate.finish('fail');
+      expect((await original).status).toBe(500);
+
+      expect(await stored(email)).toBeNull();
+      expect(await sessions().countDocuments()).toBe(sessionsBefore);
+      expect(await consents.collection.countDocuments()).toBe(consentsBefore);
+      expect(harness.mailbox.verificationEmails.map((mail) => mail.email)).not.toContain(email);
+      // The address is free: the same sign-up succeeds once the store is back.
+      vi.restoreAllMocks();
+      await register(email).expect(201);
+    });
+
+    it('Google sign-up: a second sign-in and a second code are refused meanwhile, and a failed consent write leaves no account or session', async () => {
+      const who = googleIdentity();
+      const first = await googleCode(who);
+      const second = await googleCode(who);
+      const sessionsBefore = await sessions().countDocuments();
+      const gate = holdConsentWrite();
+
+      const original = request(server())
+        .post('/api/auth/google/complete')
+        .send({ code: first, acceptTerms: true })
+        .then((response) => response);
+      await gate.reachedFirst;
+      expect(await stored(who.email)).toMatchObject({ status: 'pending', googleId: who.googleId });
+
+      // The second sign-in finds the pending account by Google id and by email: refused, no code.
+      const again = await request(server())
+        .get('/api/auth/google/callback')
+        .set(IDENTITY_HEADER, JSON.stringify(who))
+        .expect(302);
+      expect(again.headers['location']).toContain('error=GOOGLE_SIGN_IN_FAILED');
+      // The other tab's code is finished against the same pending account: refused too.
+      const finished = await request(server())
+        .post('/api/auth/google/complete')
+        .send({ code: second, acceptTerms: true })
+        .expect(401);
+      expect(finished.body).toEqual({ code: 'GOOGLE_SIGN_IN_FAILED', context: {} });
+      expect(await sessions().countDocuments()).toBe(sessionsBefore);
+      expect(
+        await connection
+          .collection('accountTokens')
+          .countDocuments({ purpose: 'google_exchange', userId: (await stored(who.email))?._id }),
+      ).toBe(0);
+
+      gate.finish('fail');
+      expect((await original).status).toBe(500);
+
+      expect(await stored(who.email)).toBeNull();
+      expect(await sessions().countDocuments()).toBe(sessionsBefore);
+      expect(
+        await consents.collection.countDocuments({ method: 'signup_google', userId: null }),
+      ).toBe(0);
+    });
+
+    it('a sign-up whose consent write succeeds is activated, and only then can anyone sign in', async () => {
+      const email = `activated-${(counter += 1)}@example.test`;
+      const gate = holdConsentWrite();
+
+      const original = register(email).then((response) => response);
+      await gate.reachedFirst;
+      await login(email).expect(401);
+      gate.finish('succeed');
+      const done = await original;
+
+      expect(done.status).toBe(201);
+      expect(await stored(email)).toMatchObject({ status: 'active' });
+      await login(email).expect(200);
+    });
+
+    it('activation failing leaves a pending account that cannot sign in, and the failure surfaces', async () => {
+      const email = `noactivate-${(counter += 1)}@example.test`;
+      const usersService = harness.moduleRef.get(UsersService);
+      vi.spyOn(usersService, 'activateAccount').mockRejectedValue(new Error('write failed'));
+      vi.spyOn(usersService, 'discardUnfinishedSignup').mockRejectedValue(
+        new Error('write failed'),
+      );
+      const sessionsBefore = await sessions().countDocuments();
+
+      await register(email).expect(500);
+
+      expect(await stored(email)).toMatchObject({ status: 'pending' });
+      await login(email).expect(401);
+      expect(await sessions().countDocuments()).toBe(sessionsBefore);
+    });
+
+    it('activation is one conditional update: it matches a pending account once, and never an active or missing one', async () => {
+      const email = `once-${(counter += 1)}@example.test`;
+      const usersService = harness.moduleRef.get(UsersService);
+      const created = await usersService.createLocalAccount(
+        { email, name: 'Ana', password: PASSWORD },
+        harness.clock.now(),
+      );
+      const id = created._id.toString();
+
+      expect(await usersService.activateAccount(id)).toBe(true);
+      expect(await usersService.activateAccount(id)).toBe(false);
+      expect(await usersService.discardUnfinishedSignup(id)).toBe(false); // active: never deleted
+      expect(await stored(email)).toMatchObject({ status: 'active' });
+      expect(await usersService.activateAccount('64b0000000000000000000ff')).toBe(false);
+    });
+
+    it('a pending account older than 15 minutes is replaced by a new sign-up; a younger one is a taken e-mail', async () => {
+      harness.clock.set(new Date());
+      const usersService = harness.moduleRef.get(UsersService);
+      const email = `stale-pending-${(counter += 1)}@example.test`;
+      const old = await usersService.createLocalAccount(
+        { email, name: 'Crashed', password: PASSWORD },
+        harness.clock.now(),
+      );
+
+      // 14 minutes later: still in flight as far as anyone can tell.
+      harness.clock.advance(14 * 60 * 1000);
+      const taken = await register(email).expect(409);
+      expect(taken.body.code).toBe('EMAIL_ALREADY_REGISTERED');
+      expect(await stored(email)).toMatchObject({ _id: old._id, status: 'pending' });
+
+      // 16 minutes after creation: abandoned. The new sign-up replaces it.
+      harness.clock.advance(2 * 60 * 1000);
+      const replaced = await register(email).expect(201);
+      const now = await stored(email);
+      expect(now).toMatchObject({ status: 'active' });
+      expect(String(now?._id)).toBe(replaced.body.user._id);
+      expect(String(now?._id)).not.toBe(old._id.toString());
+    });
+
+    it('an ACTIVE account is never deleted as abandoned, however old', async () => {
+      const ana = await account('old-active');
+      harness.clock.advance(365 * 24 * 60 * 60 * 1000);
+
+      const taken = await register(ana.email).expect(409);
+
+      expect(taken.body.code).toBe('EMAIL_ALREADY_REGISTERED');
+      expect(await stored(ana.email)).toMatchObject({ status: 'active' });
+    });
+
+    it('a Google sign-in replaces an abandoned pending account of its identity and completes', async () => {
+      harness.clock.set(new Date());
+      const usersService = harness.moduleRef.get(UsersService);
+      const who = googleIdentity();
+      await usersService.createGoogleAccount(
+        { googleId: who.googleId, email: who.email, name: 'Crashed' },
+        harness.clock.now(),
+      );
+      harness.clock.advance(16 * 60 * 1000);
+
+      const code = await googleCode(who);
+      const done = await request(server())
+        .post('/api/auth/google/complete')
+        .send({ code, acceptTerms: true })
+        .expect(200);
+
+      expect(await users.collection.countDocuments({ email: who.email })).toBe(1);
+      expect(await stored(who.email)).toMatchObject({ status: 'active' });
+      expect(String((await stored(who.email))?._id)).toBe(done.body.user._id);
     });
   });
 
