@@ -8,6 +8,7 @@ import { DomainError } from '../common/errors/domain-error.js';
 import { normalizeEmail } from '../common/normalize-email.js';
 import { serverOperators } from '../common/mongo/query-safety.js';
 import { decideGoogleLink } from './domain/google-link.js';
+import { abandonedPendingCutoff, isAccountActive } from './user-account.js';
 
 // SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34). Nothing that
 // decides how the account signs in is here (`password`, `providers`, `googleId`): those change only
@@ -22,6 +23,15 @@ const TEXT_FIELDS = ['name', 'phone'] as const;
 const BCRYPT_COST = 10;
 // 11000: MongoDB's duplicate-key error code.
 const DUPLICATE_KEY = 11000;
+
+/**
+ * SC-10, BR-001-16: the database-side twin of `isAccountActive` (a missing status is active,
+ * AR-28), for every conditional write that must not touch a `pending`, deactivated or closed
+ * account. Server-written operators, nothing here comes from a request.
+ */
+function activeStatusFilter() {
+  return serverOperators({ $in: ['active' as const, null] });
+}
 
 /**
  * What `linkGoogleIdentity` did (BR-001-10). `linked_*` carry the account after the write;
@@ -45,12 +55,13 @@ export class UsersService {
    * request; the provider, role, status and confirmation flag are fixed here, so nothing else a
    * caller sends can reach the account.
    */
-  async createLocalAccount(input: {
-    email: string;
-    name: string;
-    password: string;
-  }): Promise<UserDocument> {
+  async createLocalAccount(
+    input: { email: string; name: string; password: string },
+    now: Date,
+  ): Promise<UserDocument> {
     const email = normalizeEmail(input.email);
+    // SPEC-010 BR-010-01: an abandoned `pending` sign-up does not hold the address forever.
+    await this.discardAbandonedPending({ email }, now);
     // BR-001-01: unique without regard to case or surrounding spaces.
     if (await this.findByEmail(email)) {
       throw new DomainError('EMAIL_ALREADY_REGISTERED');
@@ -62,6 +73,8 @@ export class UsersService {
         password: await this.hashPassword(input.password),
         providers: ['local'],
         emailVerified: false,
+        // SPEC-010 BR-010-01: not usable until its consent records exist (`activateAccount`).
+        status: 'pending',
       }),
     );
   }
@@ -109,12 +122,12 @@ export class UsersService {
    * terms. Only these three values come from the caller; the provider, the confirmed email, the
    * role (searcher only, BR-001-03) and the status are fixed here, and no password is stored.
    */
-  async createGoogleAccount(input: {
-    googleId: string;
-    email: string;
-    name: string;
-  }): Promise<UserDocument> {
+  async createGoogleAccount(
+    input: { googleId: string; email: string; name: string },
+    now: Date,
+  ): Promise<UserDocument> {
     const email = normalizeEmail(input.email);
+    await this.discardAbandonedPending({ email, googleId: input.googleId }, now);
     // BR-001-01: unique without regard to case or surrounding spaces.
     if (await this.findByEmail(email)) {
       throw new DomainError('EMAIL_ALREADY_REGISTERED');
@@ -126,8 +139,54 @@ export class UsersService {
         googleId: input.googleId,
         providers: ['google'],
         emailVerified: true, // Google vouched for the address (BR-001-08, BR-001-09)
+        // SPEC-010 BR-010-01: `pending` even though the address is confirmed, so that a concurrent
+        // Google sign-in cannot find a usable account before the consent records exist.
+        status: 'pending',
       }),
     );
+  }
+
+  /**
+   * SPEC-010 BR-010-01: the one transition out of `pending`, a single conditional update
+   * `{ _id, status: 'pending' } → { status: 'active' }`. The caller writes the consent records
+   * first; until this write matches, the account can authenticate nothing and nothing has been
+   * issued for it. Returns whether it activated (false: the account is gone or not pending).
+   */
+  async activateAccount(userId: string): Promise<boolean> {
+    const result = await this.userRepository
+      .updateOne(
+        { _id: { $eq: userId }, status: { $eq: 'pending' } },
+        { $set: { status: 'active' } },
+      )
+      .exec();
+    return result.matchedCount > 0;
+  }
+
+  /**
+   * SPEC-010 BR-010-01: deletes `pending` accounts older than `PENDING_SIGNUP_TTL_MS` (injected
+   * "now", AR-24) that hold this email or Google identity, so a sign-up that crashed between
+   * creating the account and activating it cannot lock the address. Conditional on `pending` AND
+   * the age in the same delete: an account that was activated meanwhile, or is still being
+   * signed up, is never touched. Returns how many it deleted.
+   */
+  async discardAbandonedPending(
+    keys: { email?: string; googleId?: string },
+    now: Date,
+  ): Promise<number> {
+    const holders: QueryFilter<UserDocument>[] = [];
+    if (keys.email !== undefined) holders.push({ email: { $eq: normalizeEmail(keys.email) } });
+    if (keys.googleId !== undefined && typeof keys.googleId === 'string') {
+      holders.push({ googleId: { $eq: keys.googleId } });
+    }
+    if (holders.length === 0) return 0;
+    const result = await this.userRepository
+      .deleteMany({
+        status: { $eq: 'pending' },
+        createdAt: serverOperators({ $lt: abandonedPendingCutoff(now) }),
+        $or: holders,
+      })
+      .exec();
+    return result.deletedCount;
   }
 
   /**
@@ -141,19 +200,25 @@ export class UsersService {
    * - email not confirmed: the same, and the email becomes confirmed, the password is deleted,
    *   `local` leaves the providers (whoever set that password never proved they own the address)
    *   and the credential version goes up by one, which ends every session issued for the old
-   *   credential, even one a sign-in that already checked the password opens afterwards.
+   *   credential, even one a sign-in that already checked the password opens afterwards. The same
+   *   update moves `consentResetAt` to `now` and clears `whatsappPromptAnsweredAt`: what the
+   *   registrant accepted or consented to is not the owner's (SPEC-010).
    *
    * The unique index on `googleId` makes a second account unable to take the same identity even
    * under a race (DUPLICATE_KEY is a conflict). Ending the sessions and links of a taken-over
    * account is the caller's job (`linked_unconfirmed`).
    */
-  async linkGoogleIdentity(userId: string, googleId: string): Promise<GoogleLinkOutcome> {
+  async linkGoogleIdentity(
+    userId: string,
+    googleId: string,
+    now: Date,
+  ): Promise<GoogleLinkOutcome> {
     // Two attempts: the first can miss only because a concurrent write changed the account between
     // the filter and the explanation below (e.g. an unlinked-then-linked race); more is not needed.
     for (let attempt = 0; attempt < 2; attempt += 1) {
       let before;
       try {
-        before = await this.applyGoogleLink(userId, googleId);
+        before = await this.applyGoogleLink(userId, googleId, now);
       } catch (error) {
         if ((error as { code?: number }).code === DUPLICATE_KEY) {
           return { result: 'google_conflict' };
@@ -184,7 +249,7 @@ export class UsersService {
   }
 
   /** The conditional pipeline update of `linkGoogleIdentity`; the document as it was, or null. */
-  private applyGoogleLink(userId: string, googleId: string) {
+  private applyGoogleLink(userId: string, googleId: string, now: Date) {
     const confirmed = { $eq: ['$emailVerified', true] };
     const providersWithGoogle = (without: string[]) => ({
       $concatArrays: [
@@ -199,8 +264,8 @@ export class UsersService {
     });
     const filter: QueryFilter<UserDocument> = {
       _id: { $eq: userId },
-      // A missing status counts as active (BR-001-16, AR-28).
-      status: serverOperators({ $in: ['active' as const, null] }),
+      // A missing status counts as active (BR-001-16, AR-28); a `pending` account is not.
+      status: activeStatusFilter(),
       $or: [{ googleId: null }, { googleId: { $eq: googleId } }],
     };
     return this.userRepository
@@ -229,6 +294,16 @@ export class UsersService {
                   '$credentialVersion',
                   { $add: [{ $ifNull: ['$credentialVersion', 0] }, 1] },
                 ],
+              },
+              // SPEC-010: the same takeover makes the consent records of whoever registered the
+              // address count for nothing (consentResetAt moves to `now`, from the injected Clock)
+              // and asks the owner the one-time WhatsApp request again (the answer flag goes). A
+              // confirmed account keeps both. In this one update, so no write can fall in between.
+              consentResetAt: {
+                $cond: [confirmed, '$consentResetAt', { $literal: now }],
+              },
+              whatsappPromptAnsweredAt: {
+                $cond: [confirmed, '$whatsappPromptAnsweredAt', '$$REMOVE'],
               },
             },
           },
@@ -292,6 +367,8 @@ export class UsersService {
     const fence = expectedCredentialVersion !== undefined;
     const filter: QueryFilter<UserDocument> = {
       _id: { $eq: userId },
+      // BR-001-16, SPEC-010 BR-010-01: only an active account's credentials change.
+      status: activeStatusFilter(),
       // DL-001-02: the version the caller's decision was based on. An account without the field
       // is at 0 (the same rule as `credentialVersionOf`).
       ...(fence
@@ -342,7 +419,11 @@ export class UsersService {
     const fields = this.updatableFields(updateUserDto);
 
     const user = await this.userRepository
-      .findOneAndUpdate({ _id: { $eq: id } }, { $set: fields }, { returnDocument: 'after' })
+      .findOneAndUpdate(
+        { _id: { $eq: id }, status: activeStatusFilter() },
+        { $set: fields },
+        { returnDocument: 'after' },
+      )
       .select('-password')
       .exec();
 
@@ -385,10 +466,12 @@ export class UsersService {
 
     const query =
       Object.keys(update).length > 0
-        ? this.userRepository.findOneAndUpdate({ _id: { $eq: id } }, update, {
-            returnDocument: 'after',
-          })
-        : this.userRepository.findOne({ _id: { $eq: id } });
+        ? this.userRepository.findOneAndUpdate(
+            { _id: { $eq: id }, status: activeStatusFilter() },
+            update,
+            { returnDocument: 'after' },
+          )
+        : this.userRepository.findOne({ _id: { $eq: id }, status: activeStatusFilter() });
     const user = await query.select('-password').exec();
 
     if (!user) {
@@ -408,6 +491,22 @@ export class UsersService {
     }
 
     return fields;
+  }
+
+  /**
+   * Rolls back a sign-up that could not be finished (SPEC-010 BR-010-01: an account must not exist
+   * without its acceptance). It deletes the account CREATED BY THIS SAME REQUEST, and only while it
+   * is still `pending`: a pending account can authenticate nothing, so nothing was issued for it (no
+   * session, no email, no other data) and no concurrent request could have used it. It is the undo
+   * of a failed creation, not the deletion of a person's data (AR-31 does not apply: closure and
+   * purge are for accounts that lived). An account that became active in the meantime is never
+   * deleted. Returns whether it was deleted.
+   */
+  async discardUnfinishedSignup(userId: string): Promise<boolean> {
+    const result = await this.userRepository
+      .deleteOne({ _id: { $eq: userId }, status: { $eq: 'pending' } })
+      .exec();
+    return result.deletedCount > 0;
   }
 
   async remove(id: string): Promise<void> {
@@ -438,7 +537,7 @@ export class UsersService {
     const hash = user?.password ?? (await this.getDummyHash());
     const matches = await bcrypt.compare(password, hash);
     if (!user?.password || !matches) return null;
-    return (user.status ?? 'active') === 'active' ? user : null;
+    return isAccountActive(user) ? user : null;
   }
 
   private getDummyHash(): Promise<string> {
@@ -455,7 +554,12 @@ export class UsersService {
   async confirmEmail(userId: string, email: string): Promise<boolean> {
     const result = await this.userRepository
       .updateOne(
-        { _id: { $eq: userId }, email: { $eq: normalizeEmail(email) } },
+        {
+          _id: { $eq: userId },
+          email: { $eq: normalizeEmail(email) },
+          // BR-001-16, SPEC-010 BR-010-01: a pending, deactivated or closed account confirms nothing.
+          status: activeStatusFilter(),
+        },
         { $set: { emailVerified: true } },
       )
       .exec();
@@ -483,7 +587,7 @@ export class UsersService {
             // SC-10: server-written operators, nothing here comes from a request.
             isAdmin: serverOperators({ $ne: true }),
             emailVerified: { $eq: true },
-            status: serverOperators({ $in: ['active' as const, null] }),
+            status: activeStatusFilter(),
           },
           { $set: { isAdmin: true } },
         )
@@ -501,6 +605,31 @@ export class UsersService {
       .updateOne({ _id: { $eq: userId } }, { $set: { isAdmin: false } })
       .exec();
     return revoked.matchedCount > 0;
+  }
+
+  /**
+   * SPEC-010 BR-010-27: the one-time WhatsApp consent request is answered, whatever the answer. Set
+   * once: the first answer's instant stays, and only under the `consentResetAt` the answer was given
+   * under (null: never reset). Written only by the privacy module's
+   * WhatsappConsentService, never from a request (BR-001-30).
+   */
+  async markWhatsappPromptAnswered(
+    userId: string,
+    at: Date,
+    consentResetAt: Date | null,
+  ): Promise<void> {
+    await this.userRepository
+      .updateOne(
+        {
+          _id: { $eq: userId },
+          whatsappPromptAnsweredAt: serverOperators({ $exists: false }),
+          // The answer is for the consent generation it was given under: if the account was taken
+          // over meanwhile (DL-001-02) it is not the owner's answer and marks nothing.
+          consentResetAt: { $eq: consentResetAt },
+        },
+        { $set: { whatsappPromptAnsweredAt: at } },
+      )
+      .exec();
   }
 
   async isEmailVerified(userId: string): Promise<boolean> {

@@ -20,6 +20,7 @@ import type { LoginAttemptsRepository } from './login-attempts/login-attempts.re
 import { AccountTokenService } from './tokens/account-token.service.js';
 import { SessionsService } from './sessions/sessions.service.js';
 import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
+import { wirePrivacy } from '../../test/support/privacy-services.js';
 
 type ServiceDeps = ConstructorParameters<typeof AuthService>;
 
@@ -29,6 +30,7 @@ function wire(users: UsersService, email: EmailService, sign: (payload: never) =
   const tokenRepo = new FakeAccountTokenRepository();
   const sessionRepo = new FakeSessionsRepository();
   const attemptRepo = new FakeLoginAttemptsRepository();
+  const privacy = wirePrivacy(clock, users);
   const service = new AuthService(
     users,
     { sign } as unknown as ServiceDeps[1],
@@ -36,8 +38,11 @@ function wire(users: UsersService, email: EmailService, sign: (payload: never) =
     new AccountTokenService(tokenRepo as unknown as AccountTokenRepository, clock),
     new SessionsService(sessionRepo as unknown as SessionsRepository, clock),
     new LoginAttemptsService(attemptRepo as unknown as LoginAttemptsRepository, clock),
+    privacy.consents,
+    privacy.whatsapp,
+    clock,
   );
-  return { service, clock, tokenRepo, sessionRepo, attemptRepo };
+  return { service, clock, tokenRepo, sessionRepo, attemptRepo, privacy };
 }
 const ID = '64b000000000000000000001';
 const CREATED = new Date('2026-01-01T12:00:00.000Z');
@@ -298,6 +303,145 @@ describe('AuthService with fake collaborators', () => {
         subscriptionStatus: null,
       });
       expect(result.user).not.toHaveProperty('password');
+    });
+
+    it('BR-010-03: records the acceptance of both documents, by e-mail sign-up, with the account', async () => {
+      const { service, privacy } = build();
+
+      await service.register(registration);
+
+      expect(
+        privacy.consentsRepo.rows.map((r) => [r.userId, r.documentType, r.version, r.method]),
+      ).toEqual([
+        [ID, 'terms', '0.1', 'signup_email'],
+        [ID, 'privacy', '0.1', 'signup_email'],
+      ]);
+    });
+
+    it('BR-010-27: the WhatsApp checkbox left unticked is recorded as declined and the account is created', async () => {
+      const { service, users, privacy } = build();
+
+      await service.register(registration);
+
+      expect(users.accounts.size).toBe(1);
+      expect(privacy.whatsappRepo.rows.map((r) => [r.action, r.method])).toEqual([
+        ['declined', 'signup'],
+      ]);
+      expect(users.accounts.get(ID)?.whatsappPromptAnsweredAt).toBeInstanceOf(Date);
+    });
+
+    it('BR-010-27: a ticked WhatsApp checkbox is recorded as granted with the text version', async () => {
+      const { service, privacy } = build();
+
+      await service.register({ ...registration, whatsappConsent: true });
+
+      expect(privacy.whatsappRepo.rows).toMatchObject([
+        { action: 'granted', method: 'signup', textVersion: '0.1' },
+      ]);
+      expect(await privacy.whatsapp.hasConsent(ID)).toBe(true);
+    });
+
+    it('BR-010-01: versions that are the current ones are accepted as named', async () => {
+      const { service, privacy } = build();
+
+      await service.register({ ...registration, termsVersion: '0.1', privacyVersion: '0.1' });
+
+      expect(privacy.consentsRepo.rows).toHaveLength(2);
+    });
+
+    it('BR-010-01: a stale version is TERMS_VERSION_OUTDATED and NO account is created', async () => {
+      const { service, users, email, privacy } = build();
+
+      await expectDomainError(
+        service.register({ ...registration, termsVersion: '0.0' }),
+        'TERMS_VERSION_OUTDATED',
+      );
+
+      expect(users.accounts.size).toBe(0);
+      expect(email.verificationEmails).toEqual([]);
+      expect(privacy.consentsRepo.rows).toEqual([]);
+      expect(privacy.whatsappRepo.rows).toEqual([]);
+    });
+
+    it.each([
+      [
+        'the acceptance',
+        (privacy: ReturnType<typeof build>['privacy']) =>
+          (privacy.consentsRepo.failInsertsWith = new Error('db down')),
+      ],
+      [
+        'the WhatsApp answer',
+        (privacy: ReturnType<typeof build>['privacy']) =>
+          (privacy.whatsappRepo.failInsertsWith = new Error('db down')),
+      ],
+    ])(
+      'BR-010-01: when %s cannot be written the new account is rolled back, the failure surfaces and the address is free',
+      async (_what, breakIt) => {
+        const { service, users, email, sessionRepo, privacy } = build();
+        const logged = spyOnLogger();
+        breakIt(privacy);
+
+        await expect(service.register(registration)).rejects.toThrow('db down');
+
+        // No account, no confirmation e-mail, no session: nothing was issued for it.
+        expect(users.accounts.size).toBe(0);
+        expect(email.verificationEmails).toEqual([]);
+        expect(sessionRepo.stored).toEqual([]);
+        // SC-15: the log names the kind of failure and the outcome, never the address or the message.
+        const text = logged.loggedText();
+        expect(text).toContain(
+          'Sign-up consent records could not be written (Error); account rolled back',
+        );
+        expect(text).not.toContain('new@example.test');
+        expect(text).not.toContain('db down');
+        // The same address can sign up again once the database is back.
+        privacy.consentsRepo.failInsertsWith = undefined;
+        privacy.whatsappRepo.failInsertsWith = undefined;
+        await expect(service.register(registration)).resolves.toMatchObject({
+          user: { email: 'new@example.test' },
+        });
+        expect(users.accounts.size).toBe(1);
+      },
+    );
+
+    it('BR-010-01: a failure of the rollback itself is reported and the original error is what surfaces', async () => {
+      const { service, users, privacy } = build();
+      const logged = spyOnLogger();
+      privacy.consentsRepo.failInsertsWith = new Error('db down');
+      users.discardUnfinishedSignup = async () => {
+        throw new Error('delete failed');
+      };
+
+      await expect(service.register(registration)).rejects.toThrow('db down');
+
+      expect(logged.loggedText()).toContain('account NOT rolled back');
+    });
+
+    it('BR-010-01: an account that became active before the rollback is never deleted', async () => {
+      const { service, users, privacy } = build();
+      privacy.consentsRepo.failInsertsWith = new Error('db down');
+      const original = users.discardUnfinishedSignup.bind(users);
+      users.discardUnfinishedSignup = async (id: string) => {
+        const account = users.accounts.get(id);
+        if (account) account.status = 'active'; // something activated it first
+        return original(id);
+      };
+
+      await expect(service.register(registration)).rejects.toThrow('db down');
+
+      expect(users.accounts.size).toBe(1);
+    });
+
+    it('a sign-up refused for a taken address records no acceptance', async () => {
+      const { service, users, privacy } = build();
+      users.seed(localAccount());
+
+      await expectDomainError(
+        service.register({ ...registration, email: 'local@example.test' }),
+        'EMAIL_ALREADY_REGISTERED',
+      );
+
+      expect(privacy.consentsRepo.rows).toEqual([]);
     });
 
     it('BR-001-01: a second sign-up with the same email in another case is refused', async () => {

@@ -1,11 +1,16 @@
 import { normalizeEmail } from '../../src/common/normalize-email.js';
 import { DomainError } from '../../src/common/errors/domain-error.js';
 import {
+  consentResetAfterLink,
   credentialVersionAfterLink,
   decideGoogleLink,
 } from '../../src/users/domain/google-link.js';
 import { credentialVersionOf } from '../../src/users/domain/credential-version.js';
-import type { UserAccount } from '../../src/users/user-account.js';
+import {
+  abandonedPendingCutoff,
+  isAccountActive,
+  type UserAccount,
+} from '../../src/users/user-account.js';
 import type { UsersService } from '../../src/users/users.service.js';
 
 /** An account as the fake stores it: the public contract plus the secrets the real document holds. */
@@ -32,6 +37,10 @@ interface UsersPort {
   createLocalAccount(...args: Args<'createLocalAccount'>): Promise<FakeAccount>;
   changePassword(...args: Args<'changePassword'>): Promise<FakeAccount>;
   confirmEmail(...args: Args<'confirmEmail'>): Promise<boolean>;
+  markWhatsappPromptAnswered(...args: Args<'markWhatsappPromptAnswered'>): Promise<void>;
+  discardUnfinishedSignup(...args: Args<'discardUnfinishedSignup'>): Promise<boolean>;
+  activateAccount(...args: Args<'activateAccount'>): Promise<boolean>;
+  discardAbandonedPending(...args: Args<'discardAbandonedPending'>): Promise<number>;
 }
 
 /**
@@ -50,18 +59,30 @@ export class FakeUsersService implements UsersPort {
     return account;
   }
 
-  async createLocalAccount(input: Args<'createLocalAccount'>[0]): Promise<FakeAccount> {
-    return this.add({ ...input, providers: ['local'], emailVerified: false });
+  /** Like the real one: the account is created `pending` and an abandoned pending one is replaced. */
+  async createLocalAccount(
+    input: Args<'createLocalAccount'>[0],
+    now: Args<'createLocalAccount'>[1],
+  ): Promise<FakeAccount> {
+    await this.discardAbandonedPending({ email: input.email }, now);
+    return this.add({ ...input, providers: ['local'], emailVerified: false }, now);
   }
 
-  async createGoogleAccount(input: Args<'createGoogleAccount'>[0]): Promise<FakeAccount> {
-    return this.add({
-      email: input.email,
-      name: input.name,
-      googleId: input.googleId,
-      providers: ['google'],
-      emailVerified: true,
-    });
+  async createGoogleAccount(
+    input: Args<'createGoogleAccount'>[0],
+    now: Args<'createGoogleAccount'>[1],
+  ): Promise<FakeAccount> {
+    await this.discardAbandonedPending({ email: input.email, googleId: input.googleId }, now);
+    return this.add(
+      {
+        email: input.email,
+        name: input.name,
+        googleId: input.googleId,
+        providers: ['google'],
+        emailVerified: true,
+      },
+      now,
+    );
   }
 
   private async add(
@@ -69,14 +90,15 @@ export class FakeUsersService implements UsersPort {
       FakeAccount,
       'providers' | 'emailVerified' | 'googleId'
     >,
+    now: Date,
   ): Promise<FakeAccount> {
     if (await this.findByEmail(input.email)) throw new DomainError('EMAIL_ALREADY_REGISTERED');
-    const now = new Date('2026-01-15T12:00:00.000Z');
     return this.seed({
       ...input,
       _id: `64b0000000000000000000${String(this.nextId++).padStart(2, '0')}`,
       email: normalizeEmail(input.email),
       providers: [...input.providers],
+      status: 'pending', // SPEC-010 BR-010-01: usable only after `activateAccount`
       createdAt: now,
       updatedAt: now,
     });
@@ -87,12 +109,17 @@ export class FakeUsersService implements UsersPort {
   }
 
   /** The same table as `UsersService.linkGoogleIdentity`, read through `decideGoogleLink`. */
-  async linkGoogleIdentity(userId: string, googleId: string): Promise<FakeLinkOutcome> {
+  async linkGoogleIdentity(userId: string, googleId: string, now: Date): Promise<FakeLinkOutcome> {
     const account = this.accounts.get(userId);
     if (!account) return { result: 'not_found' };
     const decision = decideGoogleLink(account, googleId);
     if (decision === 'inactive' || decision === 'google_conflict') return { result: decision };
     account.credentialVersion = credentialVersionAfterLink(account.credentialVersion, decision);
+    // SPEC-010: the takeover of an unconfirmed account moves the consent generation and clears the
+    // one-time WhatsApp answer, as the real pipeline update does.
+    const reset = consentResetAfterLink(account.consentResetAt, decision, now);
+    if (reset) account.consentResetAt = reset;
+    if (decision === 'linked_unconfirmed') delete account.whatsappPromptAnsweredAt;
     account.googleId = googleId;
     account.emailVerified = true;
     if (decision === 'linked_unconfirmed') {
@@ -122,7 +149,7 @@ export class FakeUsersService implements UsersPort {
    */
   async validatePassword(email: string, password: string): Promise<FakeAccount | null> {
     const account = await this.findByEmail(email);
-    const active = (account?.status ?? 'active') === 'active';
+    const active = account !== null && isAccountActive(account);
     const signsInByPassword =
       account?.providers.includes('local') === true && account.password !== undefined;
     return active && signsInByPassword && account.password === password
@@ -180,9 +207,57 @@ export class FakeUsersService implements UsersPort {
 
   async confirmEmail(userId: string, email: string): Promise<boolean> {
     const account = this.accounts.get(userId);
-    if (account?.email !== normalizeEmail(email)) return false;
+    if (account?.email !== normalizeEmail(email) || !isAccountActive(account)) return false;
     account.emailVerified = true;
     return true;
+  }
+
+  /** Set once, like the real conditional update, and only under the generation it was given under. */
+  async markWhatsappPromptAnswered(
+    userId: string,
+    at: Date,
+    consentResetAt: Date | null,
+  ): Promise<void> {
+    const account = this.accounts.get(userId);
+    const sameGeneration =
+      (account?.consentResetAt?.getTime() ?? null) === (consentResetAt?.getTime() ?? null);
+    if (account && sameGeneration && account.whatsappPromptAnsweredAt === undefined) {
+      account.whatsappPromptAnsweredAt = at;
+    }
+  }
+
+  /** Like the real one: only a `pending` account is deleted. */
+  async discardUnfinishedSignup(userId: string): Promise<boolean> {
+    const account = this.accounts.get(userId);
+    if (account?.status !== 'pending') return false;
+    return this.accounts.delete(userId);
+  }
+
+  /** Like the real one: the one transition `pending` → `active`. */
+  async activateAccount(userId: string): Promise<boolean> {
+    const account = this.accounts.get(userId);
+    if (account?.status !== 'pending') return false;
+    account.status = 'active';
+    return true;
+  }
+
+  /** Like the real one: deletes `pending` accounts older than the abandonment window. */
+  async discardAbandonedPending(
+    keys: { email?: string; googleId?: string },
+    now: Date,
+  ): Promise<number> {
+    const cutoff = abandonedPendingCutoff(now).getTime();
+    let deleted = 0;
+    for (const [id, account] of this.accounts) {
+      const holds =
+        (keys.email !== undefined && account.email === normalizeEmail(keys.email)) ||
+        (keys.googleId !== undefined && account.googleId === keys.googleId);
+      if (holds && account.status === 'pending' && account.createdAt.getTime() < cutoff) {
+        this.accounts.delete(id);
+        deleted += 1;
+      }
+    }
+    return deleted;
   }
 }
 

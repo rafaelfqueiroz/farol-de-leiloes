@@ -5,7 +5,7 @@ import { EmailService } from '../email/email.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
-import type { UserAccount } from '../users/user-account.js';
+import { isAccountActive, type UserAccount } from '../users/user-account.js';
 import {
   UserProfile,
   AuthResult,
@@ -13,15 +13,28 @@ import {
   GoogleExchangeResult,
 } from './interfaces/auth.interface.js';
 import { DomainError } from '../common/errors/domain-error.js';
+import { Clock } from '../common/clock/clock.js';
 import { normalizeEmail } from '../common/normalize-email.js';
 import { AccountTokenService } from './tokens/account-token.service.js';
 import { SessionsService } from './sessions/sessions.service.js';
 import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
 import { credentialVersionOf } from '../users/domain/credential-version.js';
 import type { GoogleIdentity } from './google/google-identity.js';
+import { ConsentsService, type AcceptedVersions } from '../privacy/consents.service.js';
+import type { AcceptanceMethod } from '../privacy/domain/legal-versions.js';
+import { WhatsappConsentService } from '../privacy/whatsapp-consent.service.js';
 
 function idOf(user: UserAccount): string {
   return typeof user._id === 'string' ? user._id : user._id.toHexString();
+}
+
+/** SPEC-010: what a sign-up carries beside the accepted terms (RegisterDto, GoogleCompleteDto). */
+export interface SignupConsentInput {
+  /** The versions the person was shown; omitted means the current ones (BR-010-01). */
+  termsVersion?: string;
+  privacyVersion?: string;
+  /** The WhatsApp checkbox; omitted or false is recorded as declined (BR-010-27). */
+  whatsappConsent?: boolean;
 }
 
 @Injectable()
@@ -37,19 +50,94 @@ export class AuthService implements BeforeApplicationShutdown {
     private accountTokens: AccountTokenService,
     private sessions: SessionsService,
     private loginAttempts: LoginAttemptsService,
+    private consents: ConsentsService,
+    private whatsappConsent: WhatsappConsentService,
+    private clock: Clock, // AR-24: the instant of a takeover's consent reset
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResult> {
+    // BR-010-01: the versions the person was shown must be the current ones, checked BEFORE the
+    // account exists so that a stale form creates nothing (TERMS_VERSION_OUTDATED, 409).
+    const versions = this.consents.resolveVersions({
+      terms: registerDto.termsVersion,
+      privacy: registerDto.privacyVersion,
+    });
+
     // BR-001-31: only email, name and password cross into the account; acceptTerms is checked by
     // the DTO (BR-001-02) and is not an account attribute.
-    const user = await this.usersService.createLocalAccount({
-      email: registerDto.email,
-      name: registerDto.name,
-      password: registerDto.password,
-    });
+    // SPEC-010 BR-010-01: the account is created `pending`: it authenticates nothing until it is
+    // activated below, so no sign-in can find it before its consent records exist.
+    const user = await this.usersService.createLocalAccount(
+      {
+        email: registerDto.email,
+        name: registerDto.name,
+        password: registerDto.password,
+      },
+      this.clock.now(),
+    );
+
+    // BR-010-03, BR-010-27: then the acceptance and the WhatsApp answer, then the activation; if
+    // any step fails the pending account is rolled back (see finishSignup).
+    await this.finishSignup(user, versions, 'signup_email', registerDto);
 
     await this.sendConfirmationEmail(user);
     return this.startSession(user);
+  }
+
+  /**
+   * Finishes the sign-up of an account this request just created `pending`: writes its consent
+   * records, then activates it with ONE conditional update (`UsersService.activateAccount`). Until
+   * that update the account authenticates nothing (every sign-in path treats `pending` as not
+   * active, `isAccountActive`), so no session, link or favourite can exist for it, however a
+   * concurrent request interleaves. When a step fails the account is deleted, and only while it is
+   * still `pending` (`discardUnfinishedSignup`): an account must not exist without its acceptance
+   * (BR-010-01), nothing was issued for it, and the address is free to try again. The deletion is
+   * the undo of a failed creation, not an AR-31 deletion of a person's data. When even the deletion
+   * fails the account stays `pending`, still unable to sign in, and the next sign-up for the
+   * address replaces it once it is older than the abandonment window. The log names the kind of
+   * failure only (SC-15). For Google the one-time code is already spent: the person signs in with
+   * Google again and is asked again.
+   */
+  private async finishSignup(
+    account: UserAccount,
+    versions: AcceptedVersions,
+    method: Extract<AcceptanceMethod, 'signup_email' | 'signup_google'>,
+    input: SignupConsentInput,
+  ): Promise<void> {
+    let step = 'Sign-up consent records could not be written';
+    try {
+      await this.recordSignupConsents(idOf(account), versions, method, input);
+      step = 'Sign-up activation could not be completed';
+      if (!(await this.usersService.activateAccount(idOf(account)))) {
+        throw new Error('The pending account was not found');
+      }
+    } catch (error) {
+      let rolledBack = false;
+      try {
+        rolledBack = await this.usersService.discardUnfinishedSignup(idOf(account));
+      } catch {
+        // Reported below with the original failure; the original error is what is rethrown.
+      }
+      this.logger.error(
+        `${step} (${error instanceof Error ? error.name : 'error'}); ` +
+          `account ${rolledBack ? 'rolled back' : 'NOT rolled back'}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * BR-010-03: the acceptance of the terms and the privacy policy, and BR-010-27: the WhatsApp
+   * checkbox (an answer either way; it never stops the account from existing).
+   */
+  private async recordSignupConsents(
+    userId: string,
+    versions: AcceptedVersions,
+    method: Extract<AcceptanceMethod, 'signup_email' | 'signup_google'>,
+    input: SignupConsentInput,
+  ): Promise<void> {
+    await this.consents.recordAcceptance(userId, versions, method);
+    await this.whatsappConsent.recordAtSignup(userId, input.whatsappConsent === true);
   }
 
   async login(loginDto: LoginDto, ip: string): Promise<AuthResult> {
@@ -108,7 +196,7 @@ export class AuthService implements BeforeApplicationShutdown {
     if (record) {
       const user = await this.usersService.findById(record.userId);
       // BR-001-16: closed or deactivated between the redirect and the exchange.
-      if (!user || (user.status ?? 'active') !== 'active') {
+      if (!user || !isAccountActive(user)) {
         throw new DomainError('GOOGLE_SIGN_IN_FAILED');
       }
       return { status: 'signed_in', ...(await this.startSession(user)) };
@@ -123,14 +211,19 @@ export class AuthService implements BeforeApplicationShutdown {
   /**
    * POST /auth/google/complete: the person accepted the terms (the DTO requires `true`). The code
    * is spent atomically, then the account is created: searcher only, email already confirmed, no
-   * password (BR-001-03, BR-001-09).
+   * password (BR-001-03, BR-001-09), and the acceptance is recorded with it (BR-010-03,
+   * `signup_google`). The versions are checked BEFORE the code is spent, so a stale screen keeps
+   * the pending sign-up (TERMS_VERSION_OUTDATED, 409) and nothing is stored.
    */
-  async completeGoogleSignup(code: string): Promise<AuthResult> {
+  async completeGoogleSignup(code: string, consent: SignupConsentInput = {}): Promise<AuthResult> {
+    const versions = this.consents.resolveVersions({
+      terms: consent.termsVersion,
+      privacy: consent.privacyVersion,
+    });
     const profile = await this.accountTokens.consumeGoogleSignup(code);
     if (!profile) {
       throw new DomainError('INVALID_GOOGLE_CODE');
     }
-    // TODO(#10): SPEC-010 records the acceptance (versions, time, method) with the account.
     const identity: GoogleIdentity = { ...profile, emailVerified: true };
 
     // Someone may have registered this email, or linked this Google identity, since the redirect:
@@ -138,14 +231,19 @@ export class AuthService implements BeforeApplicationShutdown {
     let account = await this.resolveGoogleAccount(identity);
     if (!account) {
       try {
-        account = await this.usersService.createGoogleAccount(profile);
+        account = await this.usersService.createGoogleAccount(profile, this.clock.now());
       } catch (error) {
         if (!(error instanceof DomainError) || error.code !== 'EMAIL_ALREADY_REGISTERED') {
           throw error;
         }
         account = await this.resolveGoogleAccount(identity);
         if (!account) throw error;
+        // Not created by this request: the account's own sign-up recorded its acceptance.
+        return this.startSession(account);
       }
+      // BR-010-03, BR-010-27: only an account this request created records the acceptance and
+      // activates it (it was created `pending`, BR-010-01).
+      await this.finishSignup(account, versions, 'signup_google', consent);
     }
     return this.startSession(account);
   }
@@ -158,12 +256,20 @@ export class AuthService implements BeforeApplicationShutdown {
   /**
    * The existing account a verified Google identity signs in to, or null when there is none:
    * matched by Google's permanent id first (BR-001-11), then by email, linking Google (BR-001-10).
-   * An account that is not active is refused by any route (BR-001-16).
+   * An account that is not active (pending, deactivated or closed) is refused by any route
+   * (BR-001-16, SPEC-010 BR-010-01).
    */
   private async resolveGoogleAccount(identity: GoogleIdentity): Promise<UserAccount | null> {
+    // SPEC-010 BR-010-01: a `pending` account older than the abandonment window is a sign-up that
+    // never finished; it must not make this person's Google sign-in fail for ever. A younger one
+    // is a sign-up still in flight: it falls through to the refusal below like any inactive account.
+    await this.usersService.discardAbandonedPending(
+      { email: identity.email, googleId: identity.googleId },
+      this.clock.now(),
+    );
     const linked = await this.usersService.findByGoogleId(identity.googleId);
     if (linked) {
-      if ((linked.status ?? 'active') !== 'active') {
+      if (!isAccountActive(linked)) {
         throw new DomainError('GOOGLE_SIGN_IN_FAILED');
       }
       return linked;
@@ -173,7 +279,11 @@ export class AuthService implements BeforeApplicationShutdown {
     if (!existing) return null;
 
     const userId = idOf(existing);
-    const outcome = await this.usersService.linkGoogleIdentity(userId, identity.googleId);
+    const outcome = await this.usersService.linkGoogleIdentity(
+      userId,
+      identity.googleId,
+      this.clock.now(),
+    );
     if (outcome.result !== 'linked_confirmed' && outcome.result !== 'linked_unconfirmed') {
       // Not active (BR-001-16), another Google identity already linked (BR-001-11), or gone.
       throw new DomainError('GOOGLE_SIGN_IN_FAILED');
@@ -215,7 +325,7 @@ export class AuthService implements BeforeApplicationShutdown {
     const user = await this.usersService.findByEmail(email);
     // BR-001-21: the same visible response whether or not an account exists, and no email unless
     // one does. A deactivated or closed account is treated as absent (BR-001-16).
-    if (!user || (user.status ?? 'active') !== 'active') return;
+    if (!user || !isAccountActive(user)) return;
 
     // Everything after the lookup runs detached: the token's writes and the real send would
     // otherwise tell a known address from an unknown one by their delay (SC-05). A failure is

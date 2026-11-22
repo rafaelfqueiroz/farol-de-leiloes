@@ -2,6 +2,7 @@
 // whatever implementation the specs that own them (SPEC-011, SPEC-016) have bound.
 import { Inject, Injectable } from '@nestjs/common';
 import { UsersService } from '../../users/users.service.js';
+import { isAccountActive } from '../../users/user-account.js';
 import { CLIENT_LINK_SOURCE, type ClientLinkSource } from '../sources/client-link.source.js';
 import { MEMBERSHIP_SOURCE, type MembershipSource } from '../sources/membership.source.js';
 import { SELF_ADVISED_SOURCE, type SelfAdvisedSource } from '../sources/self-advised.source.js';
@@ -36,7 +37,7 @@ export class GrantAdminCommand implements GrantAdminPorts {
       legacyAdminRole: account.role === 'admin',
       emailVerified: account.emailVerified === true,
       // BR-001-16 / AR-28: a document without a status predates the field and is active.
-      active: (account.status ?? 'active') === 'active',
+      active: isAccountActive(account),
     };
   }
 

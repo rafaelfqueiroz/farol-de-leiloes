@@ -27,6 +27,8 @@ import { LoginAttemptsRepository } from './login-attempts/login-attempts.reposit
 import { LoginAttemptsService } from './login-attempts/login-attempts.service.js';
 import { AccessModule } from '../access/access.module.js';
 import { AccessContextGuard } from '../access/guards/access-context.guard.js';
+import { PrivacyModule } from '../privacy/privacy.module.js';
+import { CurrentTermsGuard } from '../privacy/guards/current-terms.guard.js';
 
 @Module({
   imports: [
@@ -36,6 +38,7 @@ import { AccessContextGuard } from '../access/guards/access-context.guard.js';
     CommonModule, // AR-24: the Clock
     AuthThrottlerModule, // SC-04
     AccessModule, // SPEC-002: the AccessContextFactory behind the second global guard
+    PrivacyModule, // SPEC-010: sign-up records the acceptance; the third global guard reads it
     MongooseModule.forFeature([
       { name: AccountTokenEntity.name, schema: AccountTokenSchema },
       { name: SessionEntity.name, schema: SessionSchema },
@@ -75,6 +78,11 @@ import { AccessContextGuard } from '../access/guards/access-context.guard.js';
     // global guards of one module in the order they are listed, which is what puts `request.user`
     // in place before it (jwt-auth.guard.spec.ts holds this order).
     { provide: APP_GUARD, useClass: AccessContextGuard },
+    // SPEC-010 BR-010-05: refuses the account features until the current terms and privacy policy
+    // are accepted (behind TERMS_ENFORCEMENT_ENABLED). It reads the user JwtAuthGuard set, so it
+    // stays AFTER JwtAuthGuard and, for a deterministic order, after AccessContextGuard
+    // (jwt-auth.guard.spec.ts holds this order).
+    { provide: APP_GUARD, useClass: CurrentTermsGuard },
   ],
   exports: [AuthService],
 })

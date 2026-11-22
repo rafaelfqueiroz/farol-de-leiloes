@@ -51,6 +51,23 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: Number, required: false, default: 0, min: 0 })
   credentialVersion?: number;
 
+  // SPEC-010 BR-010-27: when the account first answered the one-time WhatsApp consent request
+  // (granted, declined or withdrawn; the answers themselves are in `whatsappConsents`). Absent =
+  // not asked yet: the next sign-in of an account that predates the channel is asked once. Set by
+  // sign-up (the checkbox is an answer) and by the privacy routes only (BR-001-30). An instant, no
+  // personal content; inventoried in SECURITY.md §9.
+  @Prop({ type: Date, required: false })
+  whatsappPromptAnsweredAt?: Date;
+
+  // SPEC-010 BR-010-03, BR-010-27 / DL-001-02: set, in the same atomic update that takes over an
+  // unconfirmed account at Google link, to the instant of the takeover. The acceptances and WhatsApp
+  // answers written before it were made by whoever registered the address and never proved owning
+  // it, so they are not the owner's: every consent row carries the `consentResetAt` in force when it
+  // was written and only rows of the account's current value count. Absent = never reset. Server
+  // written only (BR-001-30); an instant, no personal content, inventoried in SECURITY.md §9.
+  @Prop({ type: Date, required: false })
+  consentResetAt?: Date;
+
   // Legacy plan tier. SPEC-012 moved plans to the office (BR-012-06) and nothing writes this any
   // more (BR-012-14); it stays in the schema and in the auth answers (the frontend still reads
   // it) until the contract step removes it (AR-28, follow-up issue). `'admin'` is a legacy value

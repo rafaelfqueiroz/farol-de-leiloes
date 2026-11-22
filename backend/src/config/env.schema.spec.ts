@@ -97,6 +97,7 @@ describe('validateEnv', () => {
       UNAVAILABLE_AUCTION_RETENTION_DAYS: 14,
       SUBSCRIPTION_GRACE_DAYS: 10,
       REFUND_WINDOW_DAYS: 7,
+      TERMS_ENFORCEMENT_ENABLED: false,
     });
   });
 
@@ -268,6 +269,13 @@ describe('namespaced configs built from the validated environment', () => {
       schedulerConfigFrom(testEnv({ SUBSCRIPTIONS_RECONCILE_ENABLED: 'false' }))
         .subscriptionsReconcile,
     ).toEqual({ enabled: false });
+  });
+
+  it('SPEC-010 BR-010-05: terms enforcement is a flag, off by default, read as a boolean', () => {
+    expect(testEnv().TERMS_ENFORCEMENT_ENABLED).toBe(false);
+    expect(testEnv({ TERMS_ENFORCEMENT_ENABLED: 'true' }).TERMS_ENFORCEMENT_ENABLED).toBe(true);
+    // z.stringbool(): the string "false" is false (z.coerce.boolean would read it as true).
+    expect(testEnv({ TERMS_ENFORCEMENT_ENABLED: 'false' }).TERMS_ENFORCEMENT_ENABLED).toBe(false);
   });
 
   it('SPEC-012: the Billing Portal configuration id is optional and read as is', () => {

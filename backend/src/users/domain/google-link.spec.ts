@@ -3,6 +3,7 @@
 // test/integration/auth-google.spec.ts, which runs the real conditional update.
 import { describe, expect, it } from 'vitest';
 import {
+  consentResetAfterLink,
   credentialVersionAfterLink,
   decideGoogleLink,
   type GoogleLinkDecision,
@@ -45,6 +46,7 @@ describe('decideGoogleLink', () => {
     ],
     ['deactivated', { emailVerified: true, status: 'deactivated' }, 'inactive'],
     ['closed', { emailVerified: false, status: 'closed' }, 'inactive'],
+    ['pending (SPEC-010 BR-010-01)', { emailVerified: true, status: 'pending' }, 'inactive'],
     ['inactive wins over a conflict', { status: 'closed', googleId: 'g-other' }, 'inactive'],
   ])('%s', (_label, subject, expected) => {
     expect(decideGoogleLink(subject, 'g-1')).toBe(expected);
@@ -62,4 +64,24 @@ describe('credentialVersionAfterLink (DL-001-02)', () => {
   ])('%s', (_label, current, decision, expected) => {
     expect(credentialVersionAfterLink(current, decision)).toBe(expected);
   });
+});
+
+describe('consentResetAfterLink (SPEC-010, DL-001-02)', () => {
+  const NOW = new Date('2026-06-02T09:00:00.000Z');
+  const EARLIER = new Date('2026-05-01T00:00:00.000Z');
+
+  it('taking over an unconfirmed account starts a new consent generation at the takeover instant', () => {
+    expect(consentResetAfterLink(undefined, 'linked_unconfirmed', NOW)).toEqual(NOW);
+    expect(consentResetAfterLink(null, 'linked_unconfirmed', NOW)).toEqual(NOW);
+    expect(consentResetAfterLink(EARLIER, 'linked_unconfirmed', NOW)).toEqual(NOW);
+  });
+
+  it.each<[GoogleLinkDecision]>([['linked_confirmed'], ['inactive'], ['google_conflict']])(
+    'leaves the generation as it was for %s',
+    (decision) => {
+      expect(consentResetAfterLink(EARLIER, decision, NOW)).toEqual(EARLIER);
+      expect(consentResetAfterLink(undefined, decision, NOW)).toBeNull();
+      expect(consentResetAfterLink(null, decision, NOW)).toBeNull();
+    },
+  );
 });

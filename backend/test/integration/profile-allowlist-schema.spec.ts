@@ -31,11 +31,17 @@ describe('profile allowlist over the user schema (integration)', () => {
   async function seed(): Promise<{ id: string; email: string }> {
     counter += 1;
     const email = `walk-${counter}@example.test`;
-    const user = await service.createLocalAccount({
-      email,
-      name: 'Ana Original',
-      password: 'a password for the walk',
-    });
+    const user = await service.createLocalAccount(
+      {
+        email,
+        name: 'Ana Original',
+        password: 'a password for the walk',
+      },
+      new Date(),
+    );
+    // Sign-up leaves the account `pending` until its consent records exist (SPEC-010 BR-010-01);
+    // the walk is about an account that lives, so it is activated as the sign-up flow does.
+    await service.activateAccount(user._id.toString());
     return { id: user._id.toString(), email };
   }
 

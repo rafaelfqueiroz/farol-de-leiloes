@@ -7,7 +7,11 @@ import type { ErrorCode } from './codes.js';
  * AR-40: ids, counts, limits and enum values only. Never a name, an email, a phone, free text the
  * user typed or anything else that identifies a person or a client.
  */
-export type ErrorContext = Record<string, string | number | boolean | string[]>;
+export type ErrorContextEntry = Readonly<Record<string, string | number | boolean>>;
+export type ErrorContext = Record<
+  string,
+  string | number | boolean | string[] | readonly ErrorContextEntry[]
+>;
 
 export class DomainError extends Error {
   constructor(

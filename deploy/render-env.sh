@@ -84,6 +84,7 @@ readonly ENTRIES=(
   "UNAVAILABLE_AUCTION_RETENTION_DAYS variable backend optional"
   "SUBSCRIPTION_GRACE_DAYS      variable  backend  optional"
   "REFUND_WINDOW_DAYS           variable  backend  optional"
+  "TERMS_ENFORCEMENT_ENABLED    variable  backend  optional"
   "LOG_LEVEL                    variable  backend  optional"
   "LOG_HASH_SECRET              secret    backend  required"
   "SENTRY_DSN                   secret    backend  optional"

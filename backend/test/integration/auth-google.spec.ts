@@ -645,7 +645,11 @@ describe('SPEC-001 Google sign-in (integration)', () => {
         mine,
       );
 
-      const outcome = await usersService.linkGoogleIdentity(insertedId.toHexString(), mine);
+      const outcome = await usersService.linkGoogleIdentity(
+        insertedId.toHexString(),
+        mine,
+        harness.clock.now(),
+      );
 
       expect(outcome.result).toBe(expected);
       const after = await collection('users').findOne({ _id: insertedId });
@@ -677,8 +681,16 @@ describe('SPEC-001 Google sign-in (integration)', () => {
       const who = identity();
       const registration = await registerLocal(who.email, true);
 
-      await usersService.linkGoogleIdentity(registration.user._id, who.googleId);
-      const again = await usersService.linkGoogleIdentity(registration.user._id, who.googleId);
+      await usersService.linkGoogleIdentity(
+        registration.user._id,
+        who.googleId,
+        harness.clock.now(),
+      );
+      const again = await usersService.linkGoogleIdentity(
+        registration.user._id,
+        who.googleId,
+        harness.clock.now(),
+      );
 
       expect(again.result).toBe('linked_confirmed');
       expect((await users.findById(registration.user._id).lean())?.providers).toEqual([
@@ -692,7 +704,11 @@ describe('SPEC-001 Google sign-in (integration)', () => {
       await signUpWithGoogle(owner);
       const other = await registerLocal(`other-${owner.googleId}@example.test`, true);
 
-      const outcome = await usersService.linkGoogleIdentity(other.user._id, owner.googleId);
+      const outcome = await usersService.linkGoogleIdentity(
+        other.user._id,
+        owner.googleId,
+        harness.clock.now(),
+      );
 
       expect(outcome).toEqual({ result: 'google_conflict' });
       expect((await users.findById(other.user._id).lean())?.googleId).toBeUndefined();
@@ -701,7 +717,7 @@ describe('SPEC-001 Google sign-in (integration)', () => {
 
     it('answers not_found for an account that does not exist', async () => {
       await expect(
-        usersService.linkGoogleIdentity('64b0000000000000000000ff', 'nobody'),
+        usersService.linkGoogleIdentity('64b0000000000000000000ff', 'nobody', harness.clock.now()),
       ).resolves.toEqual({ result: 'not_found' });
     });
 
@@ -710,8 +726,8 @@ describe('SPEC-001 Google sign-in (integration)', () => {
       const registration = await registerLocal(who.email, false);
 
       const outcomes = await Promise.all([
-        usersService.linkGoogleIdentity(registration.user._id, who.googleId),
-        usersService.linkGoogleIdentity(registration.user._id, who.googleId),
+        usersService.linkGoogleIdentity(registration.user._id, who.googleId, harness.clock.now()),
+        usersService.linkGoogleIdentity(registration.user._id, who.googleId, harness.clock.now()),
       ]);
 
       // Whichever ran first took the account over; the second finds it confirmed and linked.
