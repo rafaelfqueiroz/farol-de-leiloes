@@ -29,7 +29,7 @@ A validation is never edited or deleted; record a new one.
 
 The job has a brake against accidents. Before deleting it compares the setting with the `retentionYears` of the newest `retention-periods` validation:
 
-- the setting is **lower** than the validated period, or **no validation is recorded** (the period is provisional): the run deletes **at most 25 journeys**, logs a `warn` ("... shorter than the period the lawyer validated ..." or "... not validated yet (provisional) ...") and, when it stopped at the cap, a second `warn` ("stopped at its cap"); the rest waits for the next days' runs, so someone notices before everything goes;
+- the setting is **lower** than the validated period, or **no validation is recorded** (the period is provisional): the run deletes **at most 25 journeys** (counted as attempts, before the files are touched, whether or not the log row or the acknowledgement then succeed; the log line reports `attempted`), logs a `warn` ("... shorter than the period the lawyer validated ..." or "... not validated yet (provisional) ...") and, when it stopped at the cap, a second `warn` ("stopped at its cap"); the rest waits for the next days' runs, so someone notices before everything goes;
 - the newest validation names the same period, a shorter one, or no period (or a later validation names the new value): no cap.
 
 So before launch, while nothing is validated, the job deletes at most 25 journeys a day. To lift the brake, restore the validated period or record the lawyer's validation of the new one. The cap only slows a deletion down: it is never a reason to ignore the warning.

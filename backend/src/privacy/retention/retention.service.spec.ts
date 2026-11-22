@@ -368,6 +368,7 @@ describe('batches', () => {
   it('lists nothing and does nothing with the default source (before SPEC-017)', async () => {
     const { service, source } = build(noonOn('2032-03-16'));
     expect(await service.purgeDue()).toEqual({
+      attempted: 0,
       deleted: 0,
       files: 0,
       outOfContract: 0,
@@ -445,6 +446,93 @@ describe('BR-010-24: lowering the period is braked until the lawyer validated it
       review: 'validated',
     });
     expect(six.source.purgeCalls).toEqual([]);
+  });
+
+  // BR-010-24 (owner review of #180): the brake bounds what a run DESTROYS, not what it manages to
+  // log. A journey is counted before `purgeFiles`, whatever becomes of its log row afterwards.
+  describe('the cap counts destructive attempts, not logged successes', () => {
+    it('a deletion log that is permanently down: 110 due journeys, no validation: exactly 25 file sets are deleted, the 26th is untouched', async () => {
+      const { service, source, deletions } = build(noonOn('2032-03-16'), {}, null);
+      deletions.failures = Number.MAX_SAFE_INTEGER; // the log never comes back
+      addDue(source, 110);
+
+      const outcome = await service.purgeDue();
+
+      expect(source.purgeCalls).toHaveLength(UNVALIDATED_RUN_CAP);
+      expect(new Set(source.purgeCalls).size).toBe(UNVALIDATED_RUN_CAP); // each once
+      expect(source.journeys[UNVALIDATED_RUN_CAP]?.files).toBe(1); // the 26th still has its files
+      expect(outcome).toMatchObject({
+        attempted: UNVALIDATED_RUN_CAP,
+        deleted: 0,
+        unrecorded: UNVALIDATED_RUN_CAP,
+        failed: UNVALIDATED_RUN_CAP,
+        capped: true,
+        review: 'provisional',
+      });
+      expect(deletions.rows).toEqual([]);
+      expect(source.acknowledged).toEqual([]);
+    });
+
+    it('an acknowledgement that always fails still spends the budget', async () => {
+      const { service, source, deletions } = build(noonOn('2032-03-16'), {}, null);
+      addDue(source, 110);
+      for (const journey of source.journeys) source.failingAcknowledge.add(journey.journeyId);
+
+      const outcome = await service.purgeDue();
+
+      expect(source.purgeCalls).toHaveLength(UNVALIDATED_RUN_CAP);
+      expect(outcome).toMatchObject({
+        attempted: UNVALIDATED_RUN_CAP,
+        deleted: UNVALIDATED_RUN_CAP, // the rows were written
+        failed: UNVALIDATED_RUN_CAP,
+        capped: true,
+      });
+      expect(deletions.rows).toHaveLength(UNVALIDATED_RUN_CAP);
+    });
+
+    it('a purge that throws (it may have deleted part of the files) still spends the budget', async () => {
+      const { service, source } = build(noonOn('2032-03-16'), {}, null);
+      addDue(source, 110);
+      for (const journey of source.journeys) source.failing.add(journey.journeyId);
+
+      const outcome = await service.purgeDue();
+
+      expect(source.purgeCalls).toHaveLength(UNVALIDATED_RUN_CAP);
+      expect(outcome).toMatchObject({ attempted: UNVALIDATED_RUN_CAP, deleted: 0, capped: true });
+    });
+
+    it('a journey the service refuses before any file goes (outside the source contract) spends nothing', async () => {
+      const { service, source } = build(noonOn('2032-03-16'), {}, null);
+      // Listed first (oldest), refused for its unknown closing kind: no file is touched.
+      for (let i = 0; i < UNVALIDATED_RUN_CAP; i += 1) {
+        source.add('2026-01-01', { kind: 'unknown' as never });
+      }
+      addDue(source, UNVALIDATED_RUN_CAP);
+
+      const outcome = await service.purgeDue();
+
+      expect(outcome).toMatchObject({
+        attempted: UNVALIDATED_RUN_CAP,
+        outOfContract: UNVALIDATED_RUN_CAP,
+        capped: false,
+      });
+      expect(source.purgeCalls).toHaveLength(UNVALIDATED_RUN_CAP);
+    });
+
+    it('the normal path is unchanged: attempted equals deleted, and a validated period has no cap', async () => {
+      const { service, source, deletions } = build(noonOn('2032-03-16'));
+      addDue(source, UNVALIDATED_RUN_CAP + 10);
+
+      const outcome = await service.purgeDue();
+
+      expect(outcome).toMatchObject({
+        attempted: UNVALIDATED_RUN_CAP + 10,
+        deleted: UNVALIDATED_RUN_CAP + 10,
+        capped: false,
+        review: 'validated',
+      });
+      expect(deletions.rows).toHaveLength(UNVALIDATED_RUN_CAP + 10);
+    });
   });
 
   it('with no validation (provisional) the run is capped too, and warns', async () => {

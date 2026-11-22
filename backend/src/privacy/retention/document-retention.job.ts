@@ -58,7 +58,7 @@ export class DocumentRetentionJob {
     }
     const outcome = locked.result;
     this.logger.log(
-      `Document retention: ${outcome.deleted} journeys deleted (${outcome.files} files), ` +
+      `Document retention: ${outcome.attempted} attempted, ${outcome.deleted} journeys deleted (${outcome.files} files), ` +
         `${outcome.outOfContract} out of contract, ${outcome.failed} failed, ${outcome.unrecorded} unrecorded`,
     );
     if (outcome.outOfContract > 0) {

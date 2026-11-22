@@ -16,7 +16,10 @@
 // SAFETY BRAKE: lowering DOCUMENT_RETENTION_YEARS deletes irreversibly at the next run. When the
 // setting is shorter than the period the lawyer's newest retention validation reviewed, or no
 // validation exists yet (provisional), a run deletes at most UNVALIDATED_RUN_CAP journeys and warns,
-// so an operator notices before everything goes. Raising the period never needs it.
+// so an operator notices before everything goes. Raising the period never needs it. The budget counts
+// DESTRUCTIVE ATTEMPTS, not logged successes: a journey is counted BEFORE `purgeFiles` runs, whatever
+// happens to its log row or its acknowledgement afterwards, so a log that is down (or a source that
+// cannot acknowledge) can never turn a cap of 25 into an unbounded deletion.
 //
 // Logs and results are counts only (SC-15, BR-010-21), except that a journey outside the source's
 // contract is named by its id so the source's defect can be found.
@@ -54,6 +57,11 @@ export const RETENTION_LOG_ATTEMPTS = 3;
 
 /** What one run did, as counts. */
 export interface RetentionOutcome {
+  /**
+   * Journeys whose files this run set out to delete (`purgeFiles` was called): the number the safety
+   * brake counts, whatever became of the log row or the acknowledgement afterwards (BR-010-24).
+   */
+  readonly attempted: number;
   /** Journeys whose files were deleted this run and whose deletion is logged. */
   readonly deleted: number;
   /** Files those deletions removed. */
@@ -97,6 +105,7 @@ export class RetentionService {
     const cutoff = closedOnCutoff(today, years);
     const review = await this.review(years);
     const cap = review === 'validated' ? Number.POSITIVE_INFINITY : UNVALIDATED_RUN_CAP;
+    let attempted = 0;
     let deleted = 0;
     let files = 0;
     let unrecorded = 0;
@@ -125,7 +134,8 @@ export class RetentionService {
         );
       }
       for (const journey of fresh) {
-        if (deleted >= cap) {
+        // The brake spends on attempts, never on logged successes (BR-010-24).
+        if (attempted >= cap) {
           capped = true;
           break batches;
         }
@@ -149,6 +159,9 @@ export class RetentionService {
           if (!OBJECT_ID.test(journey.journeyId) || !OBJECT_ID.test(journey.ownerId)) {
             throw new InvalidRetentionInputError('a journey or owner id is not an ObjectId');
           }
+          // Counted BEFORE the call: the files may be gone even when the call, the log row or the
+          // acknowledgement then fails, and the cap exists to bound exactly that.
+          attempted += 1;
           const { fileCount } = await this.source.purgeFiles(journey.journeyId);
           if (!(await this.logDeletion(journey, fileCount))) {
             failed.add(journey.journeyId);
@@ -178,6 +191,7 @@ export class RetentionService {
       if (candidates.length < RETENTION_BATCH_SIZE) break;
     }
     return {
+      attempted,
       deleted,
       files,
       outOfContract: outOfContract.size,

@@ -9,6 +9,7 @@ import { DOCUMENT_RETENTION_JOB, DocumentRetentionJob } from './document-retenti
 import type { RetentionOutcome } from './retention.service.js';
 
 const OUTCOME: RetentionOutcome = {
+  attempted: 2,
   deleted: 2,
   files: 9,
   outOfContract: 0,
@@ -99,7 +100,7 @@ describe('run', () => {
       RunMode.AUTO,
       'PARTIAL_FAILURE',
     );
-    expect(logger.loggedText()).toContain('2 journeys deleted (9 files)');
+    expect(logger.loggedText()).toContain('2 attempted, 2 journeys deleted (9 files)');
   });
 
   it('warns when the source lists journeys outside its contract, when the run was capped, and errors on an unrecorded deletion', async () => {
