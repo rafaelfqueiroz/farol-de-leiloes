@@ -58,6 +58,7 @@ describe('GrantAdminCommand (SPEC-002 DL-002-05)', () => {
     ['refused_unconfirmed_email', { emailVerified: false }],
     ['refused_inactive', { emailVerified: true, status: 'deactivated' }],
     ['refused_inactive', { emailVerified: true, status: 'closed' }],
+    ['refused_inactive', { emailVerified: true, status: 'pending' }],
   ])('SC-09: answers %s for %j and writes nothing', async (outcome, stored) => {
     const { command, users } = commandFor(stored);
 

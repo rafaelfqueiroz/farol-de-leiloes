@@ -379,11 +379,17 @@ describe('SC-10: Mongo operator injection (integration)', () => {
 
   describe('UsersService', () => {
     it('findByEmail and findByGoogleId never match an operator object', async () => {
-      await users.createLocalAccount({
-        email: 'ana.teste@example.test',
-        name: 'Ana Teste',
-        password: 'senha-de-teste-1',
-      });
+      const created = await users.createLocalAccount(
+        {
+          email: 'ana.teste@example.test',
+          name: 'Ana Teste',
+          password: 'senha-de-teste-1',
+        },
+        new Date(),
+      );
+      // The sign-up flow activates the account once its consent records exist (BR-010-01); the
+      // specs below write to a living account.
+      await users.activateAccount(created._id.toString());
 
       await expect(users.findByGoogleId(NE_NULL)).resolves.toBeNull();
       await expect(users.findByEmail('ana.teste@example.test')).resolves.toMatchObject({

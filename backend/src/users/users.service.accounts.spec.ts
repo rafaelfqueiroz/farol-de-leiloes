@@ -37,6 +37,9 @@ function aModel(returns: Record<string, unknown> = {}) {
     static updateOne = vi
       .fn()
       .mockReturnValue(new FakeQuery(returns['updateOne'] ?? { matchedCount: 1 }));
+    static deleteMany = vi
+      .fn()
+      .mockReturnValue(new FakeQuery(returns['deleteMany'] ?? { deletedCount: 0 }));
     static deleteOne = vi
       .fn()
       .mockReturnValue(new FakeQuery(returns['deleteOne'] ?? { deletedCount: 1 }));
@@ -62,13 +65,17 @@ describe('UsersService.createGoogleAccount', () => {
   it('BR-001-09, BR-001-03, BR-001-31: a confirmed Google-only account with exactly these fields', async () => {
     const { Model, created } = aModel();
 
-    await aService(Model).createGoogleAccount({
-      googleId: 'g-1',
-      email: ' Ana@Example.test ',
-      name: ' Ana ',
-    });
+    await aService(Model).createGoogleAccount(
+      {
+        googleId: 'g-1',
+        email: ' Ana@Example.test ',
+        name: ' Ana ',
+      },
+      NOW,
+    );
 
-    // No password, no role, no plan, no status: the schema defaults make it a free searcher.
+    // No password, no role, no plan: the schema defaults make it a free searcher. The status is
+    // `pending` until the consent records exist (SPEC-010 BR-010-01).
     expect(created).toEqual([
       {
         email: 'ana@example.test',
@@ -76,6 +83,7 @@ describe('UsersService.createGoogleAccount', () => {
         googleId: 'g-1',
         providers: ['google'],
         emailVerified: true,
+        status: 'pending',
       },
     ]);
     expect(bcrypt.hash).not.toHaveBeenCalled();
@@ -85,11 +93,14 @@ describe('UsersService.createGoogleAccount', () => {
     const { Model, created } = aModel({ findOne: { _id: 'u1' } });
 
     await expect(
-      aService(Model).createGoogleAccount({
-        googleId: 'g-1',
-        email: 'Ana@Example.test',
-        name: 'Ana',
-      }),
+      aService(Model).createGoogleAccount(
+        {
+          googleId: 'g-1',
+          email: 'Ana@Example.test',
+          name: 'Ana',
+        },
+        NOW,
+      ),
     ).rejects.toEqual(new DomainError('EMAIL_ALREADY_REGISTERED'));
     expect(Model.findOne).toHaveBeenCalledWith({ email: { $eq: 'ana@example.test' } });
     expect(created).toEqual([]);
@@ -279,7 +290,8 @@ describe('UsersService.setPassword and changePassword', () => {
     await aService(Model).setPassword('u1', 'newsecret');
 
     expect(Model.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: { $eq: 'u1' } }, // unfenced: a spent recovery token is the authority
+      // unfenced: a spent recovery token is the authority; but only an active account changes
+      { _id: { $eq: 'u1' }, status: expect.objectContaining({ $in: ['active', null] }) as unknown },
       {
         $set: { password: 'hashed:newsecret' },
         $inc: { credentialVersion: 1 },
@@ -313,6 +325,7 @@ describe('UsersService.setPassword and changePassword', () => {
     const [filter, update, options] = plain(Model.findOneAndUpdate.mock.calls[0]) as unknown[];
     expect(filter).toEqual({
       _id: { $eq: 'u1' },
+      status: { $in: ['active', null] },
       credentialVersion: { $in: [2] },
       providers: { $eq: 'local' },
     });
@@ -422,11 +435,14 @@ describe('UsersService.createLocalAccount (BR-001-01, BR-001-03, BR-001-31)', ()
   it('normalises the email, hashes the password and fixes provider and confirmation', async () => {
     const { Model, created } = aModel();
 
-    await aService(Model).createLocalAccount({
-      email: '  Ana@Example.TEST ',
-      name: '  Ana  ',
-      password: 'secret12',
-    });
+    await aService(Model).createLocalAccount(
+      {
+        email: '  Ana@Example.TEST ',
+        name: '  Ana  ',
+        password: 'secret12',
+      },
+      NOW,
+    );
 
     expect(created).toEqual([
       {
@@ -435,6 +451,7 @@ describe('UsersService.createLocalAccount (BR-001-01, BR-001-03, BR-001-31)', ()
         password: 'hashed:secret12',
         providers: ['local'],
         emailVerified: false,
+        status: 'pending',
       },
     ]);
   });
@@ -443,7 +460,10 @@ describe('UsersService.createLocalAccount (BR-001-01, BR-001-03, BR-001-31)', ()
     const { Model, created } = aModel({ findOne: { _id: 'u1' } });
 
     await expect(
-      aService(Model).createLocalAccount({ email: 'ANA@example.test', name: 'Ana', password: 'x' }),
+      aService(Model).createLocalAccount(
+        { email: 'ANA@example.test', name: 'Ana', password: 'x' },
+        NOW,
+      ),
     ).rejects.toEqual(new DomainError('EMAIL_ALREADY_REGISTERED'));
     expect(Model.findOne).toHaveBeenCalledWith({ email: { $eq: 'ana@example.test' } });
     expect(created).toEqual([]);
@@ -455,7 +475,10 @@ describe('UsersService.createLocalAccount (BR-001-01, BR-001-03, BR-001-31)', ()
     Model.prototype.save = () => Promise.reject(Object.assign(new Error('dup'), { code: 11000 }));
 
     await expect(
-      aService(Model).createLocalAccount({ email: 'a@example.test', name: 'Ana', password: 'x' }),
+      aService(Model).createLocalAccount(
+        { email: 'a@example.test', name: 'Ana', password: 'x' },
+        NOW,
+      ),
     ).rejects.toEqual(new DomainError('EMAIL_ALREADY_REGISTERED'));
   });
 
@@ -465,7 +488,10 @@ describe('UsersService.createLocalAccount (BR-001-01, BR-001-03, BR-001-31)', ()
     Model.prototype.save = () => Promise.reject(failure);
 
     await expect(
-      aService(Model).createLocalAccount({ email: 'a@example.test', name: 'Ana', password: 'x' }),
+      aService(Model).createLocalAccount(
+        { email: 'a@example.test', name: 'Ana', password: 'x' },
+        NOW,
+      ),
     ).rejects.toBe(failure);
   });
 });
@@ -475,7 +501,11 @@ describe('UsersService.confirmEmail and isEmailVerified', () => {
     const { Model } = aModel();
     await expect(aService(Model).confirmEmail('u1', ' Ana@Example.TEST ')).resolves.toBe(true);
     expect(Model.updateOne).toHaveBeenCalledWith(
-      { _id: { $eq: 'u1' }, email: { $eq: 'ana@example.test' } },
+      {
+        _id: { $eq: 'u1' },
+        email: { $eq: 'ana@example.test' },
+        status: expect.objectContaining({ $in: ['active', null] }) as unknown,
+      },
       { $set: { emailVerified: true } },
     );
   });
@@ -521,19 +551,90 @@ describe('UsersService.markWhatsappPromptAnswered (SPEC-010 BR-010-27, DL-001-02
 });
 
 describe('UsersService.discardUnfinishedSignup (SPEC-010 BR-010-01)', () => {
-  it('deletes only an account still at credential version 0, and says whether it did', async () => {
+  it('deletes the account only while it is still pending, and says whether it did', async () => {
     const { Model } = aModel();
 
     await expect(aService(Model).discardUnfinishedSignup('u1')).resolves.toBe(true);
 
-    const [filter] = Model.deleteOne.mock.calls[0] as [Record<string, unknown>];
-    expect(filter['_id']).toEqual({ $eq: 'u1' });
-    // An account that was taken over or had its password changed (version above 0) is never deleted.
-    expect(Object.keys(filter['credentialVersion'] as object)).toEqual(['$in']);
+    // Nothing could have been issued for a pending account; an active one is never deleted.
+    expect(Model.deleteOne).toHaveBeenCalledWith({
+      _id: { $eq: 'u1' },
+      status: { $eq: 'pending' },
+    });
   });
 
-  it('answers false when nothing matched (the account moved on, DL-001-02)', async () => {
+  it('answers false when nothing matched (the account was activated or is gone)', async () => {
     const { Model } = aModel({ deleteOne: { deletedCount: 0 } });
     await expect(aService(Model).discardUnfinishedSignup('u1')).resolves.toBe(false);
+  });
+});
+
+describe('UsersService.activateAccount (SPEC-010 BR-010-01)', () => {
+  it('is ONE conditional update from pending to active', async () => {
+    const { Model } = aModel();
+
+    await expect(aService(Model).activateAccount('u1')).resolves.toBe(true);
+
+    expect(Model.updateOne).toHaveBeenCalledTimes(1);
+    expect(Model.updateOne).toHaveBeenCalledWith(
+      { _id: { $eq: 'u1' }, status: { $eq: 'pending' } },
+      { $set: { status: 'active' } },
+    );
+  });
+
+  it('answers false when no pending account matched', async () => {
+    const { Model } = aModel({ updateOne: { matchedCount: 0 } });
+    await expect(aService(Model).activateAccount('u1')).resolves.toBe(false);
+  });
+});
+
+describe('UsersService.discardAbandonedPending (SPEC-010 BR-010-01)', () => {
+  it('deletes only pending accounts older than 15 minutes that hold the email or the Google identity', async () => {
+    const { Model } = aModel({ deleteMany: { deletedCount: 2 } });
+
+    await expect(
+      aService(Model).discardAbandonedPending(
+        { email: ' Ana@Example.TEST ', googleId: 'g-1' },
+        NOW,
+      ),
+    ).resolves.toBe(2);
+
+    const [filter] = plain(Model.deleteMany.mock.calls[0]) as [Record<string, unknown>];
+    expect(filter).toEqual({
+      status: { $eq: 'pending' },
+      createdAt: { $lt: new Date(NOW.getTime() - 15 * 60 * 1000).toISOString() },
+      $or: [{ email: { $eq: 'ana@example.test' } }, { googleId: { $eq: 'g-1' } }],
+    });
+  });
+
+  it('with no key it deletes nothing and does not query', async () => {
+    const { Model } = aModel();
+    await expect(aService(Model).discardAbandonedPending({}, NOW)).resolves.toBe(0);
+    expect(Model.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('SC-10: a Google id that is not text is never a query', async () => {
+    const { Model } = aModel();
+    const forged = { $ne: null } as unknown as string;
+    await expect(aService(Model).discardAbandonedPending({ googleId: forged }, NOW)).resolves.toBe(
+      0,
+    );
+    expect(Model.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('sign-up deletes an abandoned pending account first (SPEC-010 BR-010-01)', () => {
+  it('createLocalAccount clears an abandoned pending holder of the email before it looks', async () => {
+    const { Model } = aModel();
+
+    await aService(Model).createLocalAccount(
+      { email: 'a@example.test', name: 'Ana', password: 'x' },
+      NOW,
+    );
+
+    expect(Model.deleteMany).toHaveBeenCalledTimes(1);
+    expect(Model.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+      Model.findOne.mock.invocationCallOrder[0] ?? 0,
+    );
   });
 });

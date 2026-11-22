@@ -9,6 +9,7 @@ import { AuthenticatedUser, JwtPayload } from '../interfaces/auth.interface.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import { setLogUserHash } from '../../common/observability/log-context.js';
 import { credentialVersionOf } from '../../users/domain/credential-version.js';
+import { isAccountActive } from '../../users/user-account.js';
 import { hashUserId } from '../../common/observability/user-hash.js';
 
 @Injectable()
@@ -67,7 +68,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     // BR-001-16: a deactivated or closed account is refused on its next request. An account
     // without a status predates the field and is active (AR-28).
-    if ((user.status ?? 'active') !== 'active') {
+    if (!isAccountActive(user)) {
       this.logger.warn('JWT validation - account not active');
       throw new DomainError('UNAUTHENTICATED');
     }

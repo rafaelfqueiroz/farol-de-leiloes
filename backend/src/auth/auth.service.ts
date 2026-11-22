@@ -5,7 +5,7 @@ import { EmailService } from '../email/email.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
-import type { UserAccount } from '../users/user-account.js';
+import { isAccountActive, type UserAccount } from '../users/user-account.js';
 import {
   UserProfile,
   AuthResult,
@@ -65,37 +65,52 @@ export class AuthService implements BeforeApplicationShutdown {
 
     // BR-001-31: only email, name and password cross into the account; acceptTerms is checked by
     // the DTO (BR-001-02) and is not an account attribute.
-    const user = await this.usersService.createLocalAccount({
-      email: registerDto.email,
-      name: registerDto.name,
-      password: registerDto.password,
-    });
+    // SPEC-010 BR-010-01: the account is created `pending`: it authenticates nothing until it is
+    // activated below, so no sign-in can find it before its consent records exist.
+    const user = await this.usersService.createLocalAccount(
+      {
+        email: registerDto.email,
+        name: registerDto.name,
+        password: registerDto.password,
+      },
+      this.clock.now(),
+    );
 
-    // BR-010-03, BR-010-27: then the acceptance and the WhatsApp answer, with the account; if they
-    // cannot be written the account is rolled back (see recordOrRollBack).
-    await this.recordOrRollBack(user, versions, 'signup_email', registerDto);
+    // BR-010-03, BR-010-27: then the acceptance and the WhatsApp answer, then the activation; if
+    // any step fails the pending account is rolled back (see finishSignup).
+    await this.finishSignup(user, versions, 'signup_email', registerDto);
 
     await this.sendConfirmationEmail(user);
     return this.startSession(user);
   }
 
   /**
-   * Records the consents of an account this request just created and, when that fails, deletes the
-   * account and rethrows: an account must not exist without its acceptance (BR-010-01), and nothing
-   * has been issued for it yet (no session, no email), so a failed sign-up leaves nothing behind
-   * and the address is free to try again. The deletion is the undo of a failed creation, not an
-   * AR-31 deletion of a person's data (see UsersService.discardUnfinishedSignup). The log names the
-   * kind of failure only (SC-15). For Google the one-time code is already spent: the person signs
-   * in with Google again and is asked again.
+   * Finishes the sign-up of an account this request just created `pending`: writes its consent
+   * records, then activates it with ONE conditional update (`UsersService.activateAccount`). Until
+   * that update the account authenticates nothing (every sign-in path treats `pending` as not
+   * active, `isAccountActive`), so no session, link or favourite can exist for it, however a
+   * concurrent request interleaves. When a step fails the account is deleted, and only while it is
+   * still `pending` (`discardUnfinishedSignup`): an account must not exist without its acceptance
+   * (BR-010-01), nothing was issued for it, and the address is free to try again. The deletion is
+   * the undo of a failed creation, not an AR-31 deletion of a person's data. When even the deletion
+   * fails the account stays `pending`, still unable to sign in, and the next sign-up for the
+   * address replaces it once it is older than the abandonment window. The log names the kind of
+   * failure only (SC-15). For Google the one-time code is already spent: the person signs in with
+   * Google again and is asked again.
    */
-  private async recordOrRollBack(
+  private async finishSignup(
     account: UserAccount,
     versions: AcceptedVersions,
     method: Extract<AcceptanceMethod, 'signup_email' | 'signup_google'>,
     input: SignupConsentInput,
   ): Promise<void> {
+    let step = 'Sign-up consent records could not be written';
     try {
       await this.recordSignupConsents(idOf(account), versions, method, input);
+      step = 'Sign-up activation could not be completed';
+      if (!(await this.usersService.activateAccount(idOf(account)))) {
+        throw new Error('The pending account was not found');
+      }
     } catch (error) {
       let rolledBack = false;
       try {
@@ -104,7 +119,7 @@ export class AuthService implements BeforeApplicationShutdown {
         // Reported below with the original failure; the original error is what is rethrown.
       }
       this.logger.error(
-        `Sign-up consent records could not be written (${error instanceof Error ? error.name : 'error'}); ` +
+        `${step} (${error instanceof Error ? error.name : 'error'}); ` +
           `account ${rolledBack ? 'rolled back' : 'NOT rolled back'}`,
       );
       throw error;
@@ -181,7 +196,7 @@ export class AuthService implements BeforeApplicationShutdown {
     if (record) {
       const user = await this.usersService.findById(record.userId);
       // BR-001-16: closed or deactivated between the redirect and the exchange.
-      if (!user || (user.status ?? 'active') !== 'active') {
+      if (!user || !isAccountActive(user)) {
         throw new DomainError('GOOGLE_SIGN_IN_FAILED');
       }
       return { status: 'signed_in', ...(await this.startSession(user)) };
@@ -216,7 +231,7 @@ export class AuthService implements BeforeApplicationShutdown {
     let account = await this.resolveGoogleAccount(identity);
     if (!account) {
       try {
-        account = await this.usersService.createGoogleAccount(profile);
+        account = await this.usersService.createGoogleAccount(profile, this.clock.now());
       } catch (error) {
         if (!(error instanceof DomainError) || error.code !== 'EMAIL_ALREADY_REGISTERED') {
           throw error;
@@ -226,8 +241,9 @@ export class AuthService implements BeforeApplicationShutdown {
         // Not created by this request: the account's own sign-up recorded its acceptance.
         return this.startSession(account);
       }
-      // BR-010-03, BR-010-27: only an account this request created records the acceptance.
-      await this.recordOrRollBack(account, versions, 'signup_google', consent);
+      // BR-010-03, BR-010-27: only an account this request created records the acceptance and
+      // activates it (it was created `pending`, BR-010-01).
+      await this.finishSignup(account, versions, 'signup_google', consent);
     }
     return this.startSession(account);
   }
@@ -240,12 +256,20 @@ export class AuthService implements BeforeApplicationShutdown {
   /**
    * The existing account a verified Google identity signs in to, or null when there is none:
    * matched by Google's permanent id first (BR-001-11), then by email, linking Google (BR-001-10).
-   * An account that is not active is refused by any route (BR-001-16).
+   * An account that is not active (pending, deactivated or closed) is refused by any route
+   * (BR-001-16, SPEC-010 BR-010-01).
    */
   private async resolveGoogleAccount(identity: GoogleIdentity): Promise<UserAccount | null> {
+    // SPEC-010 BR-010-01: a `pending` account older than the abandonment window is a sign-up that
+    // never finished; it must not make this person's Google sign-in fail for ever. A younger one
+    // is a sign-up still in flight: it falls through to the refusal below like any inactive account.
+    await this.usersService.discardAbandonedPending(
+      { email: identity.email, googleId: identity.googleId },
+      this.clock.now(),
+    );
     const linked = await this.usersService.findByGoogleId(identity.googleId);
     if (linked) {
-      if ((linked.status ?? 'active') !== 'active') {
+      if (!isAccountActive(linked)) {
         throw new DomainError('GOOGLE_SIGN_IN_FAILED');
       }
       return linked;
@@ -301,7 +325,7 @@ export class AuthService implements BeforeApplicationShutdown {
     const user = await this.usersService.findByEmail(email);
     // BR-001-21: the same visible response whether or not an account exists, and no email unless
     // one does. A deactivated or closed account is treated as absent (BR-001-16).
-    if (!user || (user.status ?? 'active') !== 'active') return;
+    if (!user || !isAccountActive(user)) return;
 
     // Everything after the lookup runs detached: the token's writes and the real send would
     // otherwise tell a known address from an unknown one by their delay (SC-05). A failure is

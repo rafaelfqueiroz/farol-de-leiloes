@@ -46,6 +46,7 @@ describe('decideGoogleLink', () => {
     ],
     ['deactivated', { emailVerified: true, status: 'deactivated' }, 'inactive'],
     ['closed', { emailVerified: false, status: 'closed' }, 'inactive'],
+    ['pending (SPEC-010 BR-010-01)', { emailVerified: true, status: 'pending' }, 'inactive'],
     ['inactive wins over a conflict', { status: 'closed', googleId: 'g-other' }, 'inactive'],
   ])('%s', (_label, subject, expected) => {
     expect(decideGoogleLink(subject, 'g-1')).toBe(expected);

@@ -417,13 +417,13 @@ describe('AuthService with fake collaborators', () => {
       expect(logged.loggedText()).toContain('account NOT rolled back');
     });
 
-    it('DL-001-02: an account that moved on (taken over) before the rollback is not deleted', async () => {
+    it('BR-010-01: an account that became active before the rollback is never deleted', async () => {
       const { service, users, privacy } = build();
       privacy.consentsRepo.failInsertsWith = new Error('db down');
       const original = users.discardUnfinishedSignup.bind(users);
       users.discardUnfinishedSignup = async (id: string) => {
         const account = users.accounts.get(id);
-        if (account) account.credentialVersion = 1; // a Google takeover bumped it
+        if (account) account.status = 'active'; // something activated it first
         return original(id);
       };
 
