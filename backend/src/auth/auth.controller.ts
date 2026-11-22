@@ -45,10 +45,11 @@ import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
 import { GoogleAuthGuard } from './guards/google-auth.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import { AuthenticatedUser } from './interfaces/auth.interface.js';
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import type { Env } from '../config/env.js';
 import { GoogleCallbackRedirectFilter } from './google/google-callback-redirect.filter.js';
 import type { GoogleIdentity } from './google/google-identity.js';
+import type { GoogleFlowRequest } from './google/google-oauth-state.store.js';
 import { GoogleCodeDto, GoogleCompleteDto } from './dto/google-code.dto.js';
 import { Access } from '../access/decorators/access.decorator.js';
 import type { AccessContext } from '../access/access-context.js';
@@ -57,7 +58,7 @@ import { AllowWithoutTerms } from '../privacy/decorators/allow-without-terms.dec
 
 // GoogleStrategy.validate hands the verified Google identity to passport, which sets it on the
 // request.
-type GoogleCallbackRequest = Request & { user: GoogleIdentity };
+type GoogleCallbackRequest = GoogleFlowRequest & { user: GoogleIdentity };
 
 @ApiTags('auth')
 @ApiErrorResponses()
@@ -116,7 +117,9 @@ export class AuthController {
     description:
       'Sends OAuth `state` and a PKCE (S256) challenge to Google and keeps the state and the code ' +
       'verifier in a signed, HttpOnly, SameSite=Lax cookie (10 minutes, Path /api/auth/google), ' +
-      'so the callback only goes on in the browser that started the flow (issue #152).',
+      'so the callback only goes on in the browser that started the flow (issue #152). ' +
+      '`?intent=reauth` starts a re-authentication, sealed into the same cookie (SPEC-010 ' +
+      'BR-010-13); any other `intent` is refused.',
   })
   @ApiFoundResponse({ description: 'Redirect to Google consent' })
   async googleAuth() {
@@ -132,16 +135,27 @@ export class AuthController {
     description:
       'Never answers JSON and never puts a session in the URL (BR-001-20). Success redirects to ' +
       '{FRONTEND_URL}/auth/callback?code=<one-time code>, which POST /auth/google/exchange trades ' +
-      'for a session. A refusal (GOOGLE_EMAIL_NOT_VERIFIED, GOOGLE_SIGN_IN_FAILED...) redirects to ' +
-      '{FRONTEND_URL}/login?error=<CODE>. A callback whose state is missing, different, expired ' +
-      'or without the cookie of the start is refused as GOOGLE_SIGN_IN_FAILED.',
+      'for a session. A flow started with `?intent=reauth` is a re-authentication (SPEC-010 ' +
+      'BR-010-13): it starts no session and redirects to ' +
+      '{FRONTEND_URL}/profile/privacidade?reauth=<one-time code>, or ?reauthError=<CODE>, for ' +
+      'POST /privacy/delete-account. A refusal (GOOGLE_EMAIL_NOT_VERIFIED, GOOGLE_SIGN_IN_FAILED...) ' +
+      'redirects to {FRONTEND_URL}/login?error=<CODE>. A callback whose state is missing, different, ' +
+      'expired or without the cookie of the start is refused as GOOGLE_SIGN_IN_FAILED.',
   })
   @ApiFoundResponse({
     description: 'Redirect to the frontend with a one-time code or an error code',
   })
   async googleAuthRedirect(@Req() req: GoogleCallbackRequest, @Res() res: Response) {
-    const code = await this.authService.beginGoogleSignIn(req.user);
     const frontendUrl = this.config.get('FRONTEND_URL', { infer: true }); // AR-42
+    // The intent comes from the sealed state cookie of the start, never from the URL.
+    if (req.googleFlowIntent === 'reauth') {
+      // SPEC-010 BR-010-13: a re-authentication starts no session and no sign-up: the code goes
+      // back to the privacy page, which hands it to POST /privacy/delete-account.
+      const code = await this.authService.beginGoogleReauthentication(req.user);
+      res.redirect(`${frontendUrl}/profile/privacidade?reauth=${code}`);
+      return;
+    }
+    const code = await this.authService.beginGoogleSignIn(req.user);
     res.redirect(`${frontendUrl}/auth/callback?code=${code}`);
   }
 

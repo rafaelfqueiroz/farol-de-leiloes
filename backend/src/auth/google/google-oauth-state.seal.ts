@@ -16,11 +16,28 @@ export const GOOGLE_STATE_TTL_MS = 10 * 60 * 1000;
 // else made from the same JWT_SECRET.
 const KEY_LABEL = 'google-oauth-state';
 
+/**
+ * What the person is doing with Google. Sealed with the state, so only the browser that STARTED a
+ * flow for an intent can finish it as that intent (SPEC-010 BR-010-13): a sign-in flow can never
+ * be turned into a re-authentication, nor the other way round, by editing a URL.
+ */
+export const GOOGLE_FLOW_INTENTS = ['reauth'] as const;
+export type GoogleFlowIntent = (typeof GOOGLE_FLOW_INTENTS)[number];
+
+export function isGoogleFlowIntent(value: unknown): value is GoogleFlowIntent {
+  return GOOGLE_FLOW_INTENTS.includes(value as GoogleFlowIntent);
+}
+
 export interface GoogleOAuthState {
   /** The random value sent to Google as `state`. */
   state: string;
   /** The PKCE code verifier whose S256 challenge was sent to Google. */
   verifier: string;
+  /**
+   * `reauth`: the signed-in account proves again that it is the holder (it does NOT start a
+   * session, SPEC-010 BR-010-13). Absent: the ordinary sign-in.
+   */
+  intent?: GoogleFlowIntent;
 }
 
 /** HKDF-SHA256 of the signing secret under this module's own label (no new env variable). */
@@ -54,11 +71,13 @@ export function openState(key: Buffer, sealed: string, now: Date): GoogleOAuthSt
     return null; // signed by us but not JSON: cannot happen unless the key leaked
   }
   if (typeof payload !== 'object' || payload === null) return null;
-  const { state, verifier, expiresAt } = payload as Record<string, unknown>;
+  const { state, verifier, expiresAt, intent } = payload as Record<string, unknown>;
   if (typeof state !== 'string' || state === '') return null;
   if (typeof verifier !== 'string' || verifier === '') return null;
   if (typeof expiresAt !== 'number' || now.getTime() >= expiresAt) return null;
-  return { state, verifier };
+  // An intent this server does not know is not an ordinary sign-in: refuse it.
+  if (intent !== undefined && !isGoogleFlowIntent(intent)) return null;
+  return intent === undefined ? { state, verifier } : { state, verifier, intent };
 }
 
 /** Whether two strings are equal, in time that does not depend on where they differ. */

@@ -9,12 +9,16 @@ import { DomainError } from '../../common/errors/domain-error.js';
 import type { Env } from '../../config/env.js';
 import { expectNoneLogged, spyOnLogger } from '../../../test/support/logger-spy.js';
 
-function run(exception: unknown) {
+function run(exception: unknown, googleFlowIntent?: 'reauth') {
   const redirect = vi.fn();
   const config = { get: () => 'https://app.example.test' } as unknown as ConfigService<Env, true>;
   const host = {
     switchToHttp: () => ({
-      getRequest: () => ({ method: 'GET', route: { path: '/auth/google/callback' } }),
+      getRequest: () => ({
+        method: 'GET',
+        route: { path: '/auth/google/callback' },
+        googleFlowIntent,
+      }),
       getResponse: () => ({ redirect }),
     }),
   } as unknown as ArgumentsHost;
@@ -49,6 +53,12 @@ describe('GoogleCallbackRedirectFilter', () => {
   it('keeps the code of any other client error', () => {
     expect(run(new HttpException('no', HttpStatus.TOO_MANY_REQUESTS))).toHaveBeenCalledWith(
       'https://app.example.test/login?error=TOO_MANY_REQUESTS',
+    );
+  });
+
+  it('SPEC-010 BR-010-13: a failed re-authentication goes back to the privacy page, not to the sign-in', () => {
+    expect(run(new DomainError('GOOGLE_SIGN_IN_FAILED'), 'reauth')).toHaveBeenCalledWith(
+      'https://app.example.test/profile/privacidade?reauthError=GOOGLE_SIGN_IN_FAILED',
     );
   });
 

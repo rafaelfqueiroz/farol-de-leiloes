@@ -96,6 +96,30 @@ describe('sealState / openState', () => {
   });
 });
 
+describe('the sealed intent (SPEC-010 BR-010-13)', () => {
+  it('opens a re-authentication as `reauth`, and an ordinary flow with no intent at all', () => {
+    expect(openState(key, sealState(key, { ...value, intent: 'reauth' }, NOW), NOW)).toEqual({
+      ...value,
+      intent: 'reauth',
+    });
+    expect(openState(key, sealState(key, value, NOW), NOW)).not.toHaveProperty('intent');
+  });
+
+  it('refuses an intent this server does not know, even correctly signed', () => {
+    const body = bodyOf({ ...value, intent: 'admin', expiresAt: NOW.getTime() + 1000 });
+
+    expect(openState(key, signed(key, body), NOW)).toBeNull();
+  });
+
+  it('refuses a body whose intent was added or changed after sealing (the signature breaks)', () => {
+    const [body = '', signature] = sealState(key, value, NOW).split('.');
+    const decoded = JSON.parse(Buffer.from(body, 'base64url').toString()) as object;
+    const forged = bodyOf({ ...decoded, intent: 'reauth' });
+
+    expect(openState(key, `${forged}.${signature}`, NOW)).toBeNull();
+  });
+});
+
 describe('sameState', () => {
   it('compares by content', () => {
     expect(sameState('abc', 'abc')).toBe(true);

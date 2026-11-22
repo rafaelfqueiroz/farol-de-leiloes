@@ -5,6 +5,7 @@ import { ApiExceptionFilter } from '../../common/errors/api-exception.filter.js'
 import type { ErrorCode } from '../../common/errors/codes.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import type { Env } from '../../config/env.js';
+import type { GoogleFlowRequest } from './google-oauth-state.store.js';
 
 // What passport raises when Google refuses or rejects the exchange (the person said no, or the
 // authorisation code was already used): the person's problem, not a fault of ours.
@@ -24,9 +25,16 @@ export class GoogleCallbackRedirectFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
-    const code = this.codeFor(exception, http.getRequest<Request>());
+    const request = http.getRequest<GoogleFlowRequest>();
+    const code = this.codeFor(exception, request);
     const frontendUrl = this.config.get('FRONTEND_URL', { infer: true }); // AR-42
-    http.getResponse<Response>().redirect(`${frontendUrl}/login?error=${encodeURIComponent(code)}`);
+    // SPEC-010 BR-010-13: a failed re-authentication goes back to the privacy page the person was
+    // on, not to the sign-in (they are signed in). Only the sealed cookie of the start says so.
+    const target =
+      request.googleFlowIntent === 'reauth'
+        ? `/profile/privacidade?reauthError=${encodeURIComponent(code)}`
+        : `/login?error=${encodeURIComponent(code)}`;
+    http.getResponse<Response>().redirect(`${frontendUrl}${target}`);
   }
 
   private codeFor(exception: unknown, request: Request): ErrorCode {

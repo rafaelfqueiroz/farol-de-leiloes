@@ -8,7 +8,9 @@ import type { Env } from '../../config/env.js';
 import { readCookie } from './cookie-header.js';
 import {
   GOOGLE_STATE_TTL_MS,
+  type GoogleFlowIntent,
   deriveStateKey,
+  isGoogleFlowIntent,
   openState,
   sameState,
   sealState,
@@ -18,6 +20,15 @@ export const GOOGLE_FLOW_COOKIE = 'farol_google_flow';
 // The cookie goes to Google's return (a top-level GET navigation, which SameSite=Lax cookies
 // accompany) and to nothing else of the site: /api is AR-32's prefix.
 export const GOOGLE_FLOW_COOKIE_PATH = '/api/auth/google/callback'; // only the callback needs it
+
+/**
+ * The callback request once `verify` accepted it: what the flow that STARTED in this browser was
+ * for. Set from the sealed cookie only (never from the query), so it cannot be forged.
+ */
+export type GoogleFlowRequest = Request & { googleFlowIntent?: GoogleFlowIntent };
+
+/** The query parameter that starts a re-authentication instead of a sign-in. */
+export const GOOGLE_INTENT_PARAM = 'intent';
 
 type StoreCallback = (error: Error | null, state?: string) => void;
 type VerifyCallback = (error: Error | null, verifier?: string | false, info?: unknown) => void;
@@ -68,8 +79,19 @@ export class GoogleOAuthStateStore {
     if (typeof verifier !== 'string' || !req.res) {
       return callback(new Error('Google sign-in state could not be stored'));
     }
+    // No `intent` is the ordinary sign-in; `reauth` is the only other one. Anything else is a
+    // mistyped or hostile start, not a sign-in in disguise.
+    const requested: unknown = req.query?.[GOOGLE_INTENT_PARAM];
+    if (requested !== undefined && !isGoogleFlowIntent(requested)) {
+      return callback(new DomainError('GOOGLE_SIGN_IN_FAILED'));
+    }
     const state = randomBytes(32).toString('base64url');
-    req.res.cookie(GOOGLE_FLOW_COOKIE, sealState(this.key, { state, verifier }, this.clock.now()), {
+    const sealed = sealState(
+      this.key,
+      requested === undefined ? { state, verifier } : { state, verifier, intent: requested },
+      this.clock.now(),
+    );
+    req.res.cookie(GOOGLE_FLOW_COOKIE, sealed, {
       ...this.cookieOptions,
       maxAge: GOOGLE_STATE_TTL_MS,
     });
@@ -86,6 +108,8 @@ export class GoogleOAuthStateStore {
     if (!opened || typeof providedState !== 'string' || !sameState(opened.state, providedState)) {
       return callback(new DomainError('GOOGLE_SIGN_IN_FAILED'));
     }
+    // The intent travels from the cookie of the start to the callback handler, never via the URL.
+    (req as GoogleFlowRequest).googleFlowIntent = opened.intent;
     callback(null, opened.verifier);
   }
 }

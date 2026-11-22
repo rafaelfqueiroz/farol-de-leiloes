@@ -101,6 +101,8 @@ export interface RightsApp extends IsolationApp {
   signIn(email: string, password?: string, origin?: string): request.Test;
   /** A one-time Google code the callback would have issued for the account's identity. */
   googleCodeFor(email: string, googleId: string): Promise<string>;
+  /** The one-time code the callback of a RE-AUTHENTICATION (intent `reauth`) would have issued. */
+  googleReauthCodeFor(email: string, googleId: string): Promise<string>;
 }
 
 export async function createRightsApp(
@@ -175,6 +177,13 @@ export async function createRightsApp(
         .send({ email, password }),
     googleCodeFor: (email, googleId) =>
       authService.beginGoogleSignIn({
+        googleId,
+        email,
+        name: 'Google Name',
+        emailVerified: true,
+      }),
+    googleReauthCodeFor: (email, googleId) =>
+      authService.beginGoogleReauthentication({
         googleId,
         email,
         name: 'Google Name',

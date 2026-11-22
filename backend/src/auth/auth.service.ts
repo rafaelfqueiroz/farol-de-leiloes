@@ -195,6 +195,25 @@ export class AuthService implements BeforeApplicationShutdown {
   }
 
   /**
+   * The return from Google of a RE-AUTHENTICATION (SPEC-010 BR-010-13, the state cookie's intent
+   * `reauth`): the person already has an account and only proves, again, that the Google identity
+   * on it is theirs before an irreversible step. It answers the same one-time `google_exchange`
+   * code, which `reauthenticate` spends for exactly that account; it never starts a session and
+   * never creates, links or changes anything: an identity that is not already linked to an active
+   * account is GOOGLE_SIGN_IN_FAILED, with no sign-up record left behind.
+   */
+  async beginGoogleReauthentication(identity: GoogleIdentity): Promise<string> {
+    if (!identity.emailVerified) {
+      throw new DomainError('GOOGLE_EMAIL_NOT_VERIFIED');
+    }
+    const account = await this.usersService.findByGoogleId(identity.googleId);
+    if (!account || !isAccountActive(account)) {
+      throw new DomainError('GOOGLE_SIGN_IN_FAILED');
+    }
+    return this.accountTokens.issue(idOf(account), 'google_exchange');
+  }
+
+  /**
    * POST /auth/google/exchange: trades the code of the redirect for a session, or says the terms
    * must be accepted first. An existing account's code is spent here (single use, BR-001-20); a
    * signup code is only looked at, because `completeGoogleSignup` spends it.
