@@ -30,6 +30,17 @@ import { POST as cancelSubscription } from './office/subscription/cancel/route';
 import { POST as changePlan } from './office/subscription/change/route';
 import { POST as changePreview } from './office/subscription/change-preview/route';
 import { POST as startCheckout } from './office/subscription/checkout/route';
+import { GET as currentLegal } from './legal/current/route';
+import { POST as acceptTerms } from './privacy/accept/route';
+import { GET as acceptances } from './privacy/acceptances/route';
+import { POST as deleteAccount } from './privacy/delete-account/route';
+import { GET as downloadExport } from './privacy/exports/[id]/download/route';
+import { GET as listExports, POST as requestExport } from './privacy/exports/route';
+import { GET as myData } from './privacy/my-data/route';
+import {
+  GET as whatsappConsent,
+  POST as answerWhatsappConsent,
+} from './privacy/whatsapp-consent/route';
 import { POST as undoCancel } from './office/subscription/undo-cancel/route';
 import { GET as plans } from './plans/route';
 import { GET as checkoutStatus } from './subscriptions/checkout/[ref]/status/route';
@@ -156,6 +167,19 @@ const routes: RouteCase[] = [
   signedInRoute('POST', '/api/saved-filters', createSavedFilter),
   signedInRoute('DELETE', '/api/saved-filters/f1', deleteSavedFilter, { id: 'f1' }),
   signedInRoute('POST', '/api/support', sendSupport),
+  // SPEC-010: the legal texts are public; everything about an account's rights needs a session
+  publicRoute('GET', '/api/legal/current', currentLegal),
+  signedInRoute('POST', '/api/privacy/accept', acceptTerms),
+  signedInRoute('GET', '/api/privacy/acceptances', acceptances),
+  signedInRoute('GET', '/api/privacy/whatsapp-consent', whatsappConsent),
+  signedInRoute('POST', '/api/privacy/whatsapp-consent', answerWhatsappConsent),
+  signedInRoute('GET', '/api/privacy/my-data', myData),
+  signedInRoute('POST', '/api/privacy/exports', requestExport),
+  signedInRoute('GET', '/api/privacy/exports', listExports),
+  signedInRoute('GET', '/api/privacy/exports/64b7f0000000000000000a01/download', downloadExport, {
+    id: '64b7f0000000000000000a01',
+  }),
+  signedInRoute('POST', '/api/privacy/delete-account', deleteAccount),
 ];
 
 const hasBody = (method: string) => method !== 'GET' && method !== 'DELETE';
@@ -520,5 +544,109 @@ describe('GET /api/subscriptions/checkout/[ref]/status refuses a ref that is not
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ code: 'NOT_FOUND', context: {} });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// SPEC-010 BR-010-11: the export id goes into the backend path, so only the shape of a real one (24
+// hex characters) is proxied; everything else is the backend's own NOT_FOUND, answered here with no
+// backend call.
+describe('GET /api/privacy/exports/[id]/download refuses an id that is not an ObjectId', () => {
+  it.each([
+    ['..'],
+    ['.'],
+    ['%2e%2e'],
+    ['%2E%2E%2Fadmin'],
+    [''],
+    ['a'.repeat(65)],
+    ['64b7f0000000000000000a0'],
+    ['64b7f0000000000000000a011'],
+    ['a/b'],
+    ['64B7F0000000000000000A01'],
+    ['..%2f..%2fauth%2fme'],
+  ])('answers 404 NOT_FOUND for %j without calling the backend', async (id) => {
+    const response = await downloadExport(
+      new NextRequest('http://localhost:3001/api/privacy/exports/x/download', {
+        headers: signedIn,
+      }),
+      { params: Promise.resolve({ id }) } as never,
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ code: 'NOT_FOUND', context: {} });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('hands the 60-second link to the browser as JSON, and never follows it itself', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ url: 'https://files.example.test/x?sig=1', expiresInSeconds: 60 }),
+    );
+
+    const response = await downloadExport(
+      new NextRequest('http://localhost:3001/api/privacy/exports/x/download', {
+        headers: signedIn,
+      }),
+      { params: Promise.resolve({ id: '64b7f0000000000000000a01' }) } as never,
+    );
+
+    expect(await response.json()).toEqual({
+      url: 'https://files.example.test/x?sig=1',
+      expiresInSeconds: 60,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('POST /api/privacy/delete-account (BR-010-13, BR-010-14, SC-02)', () => {
+  const closeRequest = (headers: Record<string, string>, body: unknown = { confirm: true }) =>
+    post('/api/privacy/delete-account', headers, body);
+
+  it('clears the session cookie with the answer that says the account is closed', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ closed: true }));
+
+    const response = await deleteAccount(closeRequest(signedIn, { password: 'p', confirm: true }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ closed: true });
+    expect(setCookies(response).join(';')).toMatch(
+      new RegExp(`${PLAIN_SESSION_COOKIE}=;.*Max-Age=0`, 'i'),
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://backend:3000/api/privacy/delete-account');
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer token-a' });
+    expect(init.body).toBe(JSON.stringify({ password: 'p', confirm: true }));
+  });
+
+  it.each([
+    ['a wrong password', 'CURRENT_PASSWORD_INCORRECT', 401],
+    ['too many attempts', 'TOO_MANY_ATTEMPTS', 429],
+    ['a stale Google code', 'INVALID_GOOGLE_CODE', 400],
+    ['an account with no way to prove it', 'REAUTHENTICATION_UNAVAILABLE', 409],
+  ])('keeps the session cookie on a refusal: %s', async (_label, code, status) => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ code, context: {} }, status));
+
+    const response = await deleteAccount(closeRequest(signedIn));
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ code, context: {} });
+    expect(setCookies(response)).toEqual([]);
+  });
+
+  it('keeps the cookie when the backend cannot be reached', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+
+    const response = await deleteAccount(closeRequest(signedIn));
+
+    expect(response.status).toBe(502);
+    expect(setCookies(response)).toEqual([]);
+  });
+
+  it('is refused from another origin and keeps the cookie (SC-02)', async () => {
+    const response = await deleteAccount(
+      closeRequest({ ...sessionCookie(), Origin: 'https://evil.example' }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(setCookies(response)).toEqual([]);
   });
 });
