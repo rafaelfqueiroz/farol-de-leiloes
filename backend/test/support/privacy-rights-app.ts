@@ -11,6 +11,10 @@ import { AuctionsModule } from '../../src/auctions/auctions.module.js';
 import { AuctionEntity } from '../../src/auctions/schemas/auction.schema.js';
 import { AuthService } from '../../src/auth/auth.service.js';
 import { FavoritesModule } from '../../src/favorites/favorites.module.js';
+import {
+  ACCOUNT_PURGE_LIMITS,
+  type AccountPurgeLimits,
+} from '../../src/privacy/domain/account-purge.js';
 import { AccountPurgeJob } from '../../src/privacy/rights/account-purge.job.js';
 import {
   type AccountClosureHook,
@@ -60,6 +64,13 @@ export class RecordingClosureHook implements AccountClosureHook {
   }
 }
 
+/**
+ * The purge job's limits as the liveness specs run them: a batch of 5 and 12 attempts a run instead of
+ * 100 and 500 (the defaults, proven in domain/account-purge.spec.ts), so "more failing accounts than a
+ * batch / than a run's budget" is 7 / 14 accounts, not hundreds, and the specs take seconds on CI.
+ */
+export const SMALL_PURGE_LIMITS: AccountPurgeLimits = { batchSize: 5, maxAttemptsPerRun: 12 };
+
 export interface ScanHit {
   readonly collection: string;
   readonly marker: string;
@@ -96,6 +107,8 @@ export async function createRightsApp(
   db: TestDatabase,
   env: Record<string, string> = {},
   prepareApp?: (app: INestApplication) => void,
+  /** Overrides the purge job's two limits (batch size, attempts a run) so a liveness spec stays small. */
+  purgeLimits?: AccountPurgeLimits,
 ): Promise<RightsApp> {
   const storage = new FakeStorage();
   const hook = new RecordingClosureHook();
@@ -104,12 +117,16 @@ export async function createRightsApp(
     [AuctionsModule, FavoritesModule, SavedFiltersModule, RemindersModule, PrivacyRightsModule],
     { REMINDERS_ENABLED: 'true', R2_PRIVATE_BUCKET: 'test-private-bucket', ...env },
     prepareApp,
-    (builder) =>
-      builder
+    (builder) => {
+      const withHook = builder
         .overrideProvider(StorageService)
         .useValue(storage)
         .overrideProvider(ACCOUNT_CLOSURE_HOOKS)
-        .useValue([hook]),
+        .useValue([hook]);
+      return purgeLimits
+        ? withHook.overrideProvider(ACCOUNT_PURGE_LIMITS).useValue(purgeLimits)
+        : withHook;
+    },
   );
   const moduleRef = app.harness.moduleRef;
   const auctions = moduleRef.get<Model<unknown>>(getModelToken(AuctionEntity.name));

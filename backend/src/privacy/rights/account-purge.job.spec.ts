@@ -5,12 +5,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { RunMode } from '../../common/job-execution.js';
 import { currentLogContext } from '../../common/observability/log-context.js';
 import { spyOnLogger } from '../../../test/support/logger-spy.js';
+import { DEFAULT_ACCOUNT_PURGE_LIMITS } from '../domain/account-purge.js';
 import { FakeClock, DAY } from '../../../test/fakes/fake-clock.js';
 import { testBusinessConfig } from '../../../test/support/test-env.js';
 import {
   ACCOUNT_PURGE_JOB,
   AccountPurgeJob,
-  PURGE_MAX_ATTEMPTS_PER_RUN,
   RESIDUE_SWEEP_MAX_PER_RUN,
 } from './account-purge.job.js';
 
@@ -48,6 +48,7 @@ function build(options: { enabled?: boolean; locked?: boolean; overdue?: number 
     clock,
     { accountPurge: { enabled: options.enabled ?? true } } as never,
     testBusinessConfig(),
+    DEFAULT_ACCOUNT_PURGE_LIMITS,
   );
   return { job, users, registry, closure, locks, jobs, clock };
 }
@@ -257,7 +258,7 @@ describe('a bad head of the queue never stalls the rest', () => {
 
     const outcome = await job.run();
 
-    expect(outcome?.purged).toBe(PURGE_MAX_ATTEMPTS_PER_RUN);
+    expect(outcome?.purged).toBe(DEFAULT_ACCOUNT_PURGE_LIMITS.maxAttemptsPerRun);
   });
 });
 

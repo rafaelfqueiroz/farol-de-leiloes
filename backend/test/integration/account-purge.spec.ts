@@ -16,6 +16,7 @@ import { UsersService } from '../../src/users/users.service.js';
 import { DAY, MINUTE } from '../fakes/fake-clock.js';
 import {
   createRightsApp,
+  SMALL_PURGE_LIMITS,
   nextOrigin,
   oid,
   PASSWORD,
@@ -78,7 +79,7 @@ describe('SPEC-010 purging closed accounts (BR-010-15)', () => {
   const markersOf = (who: SeededAccount) => [who.name, who.email, who.phone, '11987654321'];
 
   beforeAll(async () => {
-    app = await createRightsApp(db);
+    app = await createRightsApp(db, {}, undefined, SMALL_PURGE_LIMITS); // 5 per batch, 12 per run
   });
 
   afterAll(async () => {
@@ -568,7 +569,7 @@ describe('SPEC-010 purging closed accounts (BR-010-15)', () => {
     beforeEach(drain);
 
     it('more than a batch of permanently failing accounts do not keep a later account from being purged', async () => {
-      const stuckCount = 105; // more than one batch of 100
+      const stuckCount = SMALL_PURGE_LIMITS.batchSize + 2; // more than one batch (7 > 5), within a run's budget
       const closedLongAgo = new Date(app.harness.clock.now().getTime() - 40 * DAY);
       const stuck = await app.collection('users').insertMany(
         Array.from({ length: stuckCount }, (_, n) => ({
@@ -603,7 +604,7 @@ describe('SPEC-010 purging closed accounts (BR-010-15)', () => {
       expect(await app.purgeJob.checkOverdue()).toBe(stuckCount);
       fault.mockRestore();
       expect(await app.purgeJob.run()).toMatchObject({ purged: stuckCount, failed: 0 });
-    });
+    }, 60_000);
   });
 
   describe('closure hooks must have ended before the tombstone (BR-010-17)', () => {
