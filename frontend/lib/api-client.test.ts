@@ -6,6 +6,7 @@ import {
   bumpAuthGeneration,
   currentAuthGeneration,
   onSessionEnded,
+  onTermsAcceptanceRequired,
 } from './api-client';
 
 // SC-02: browser code calls the same-origin BFF with the session cookie and never builds an
@@ -89,6 +90,74 @@ describe('apiFetch', () => {
 
     expect(ended).not.toHaveBeenCalled();
     unsubscribe();
+  });
+
+  describe('SPEC-010 BR-010-05: TERMS_ACCEPTANCE_REQUIRED, the one place that notices it', () => {
+    const refused = () =>
+      answer({ code: 'TERMS_ACCEPTANCE_REQUIRED', context: { documents: ['terms'] } }, 403);
+
+    it('tells the app on a 403 TERMS_ACCEPTANCE_REQUIRED, and still returns the body to the caller', async () => {
+      vi.stubGlobal('fetch', fetchMock);
+      fetchMock.mockResolvedValue(refused());
+      const required = vi.fn();
+      const ended = vi.fn();
+      const unsubscribe = onTermsAcceptanceRequired(required);
+      const endedUnsubscribe = onSessionEnded(ended);
+
+      const response = await apiFetch('/api/favorites');
+
+      expect(required).toHaveBeenCalledTimes(1);
+      expect(ended).not.toHaveBeenCalled();
+      expect((await response.json()).code).toBe('TERMS_ACCEPTANCE_REQUIRED');
+      unsubscribe();
+      endedUnsubscribe();
+    });
+
+    it.each([
+      ['another 403', answer({ code: 'FORBIDDEN', context: {} }, 403)],
+      ['a 403 that is not an API body', new Response('<html>', { status: 403 })],
+      [
+        'the code under another status',
+        answer({ code: 'TERMS_ACCEPTANCE_REQUIRED', context: {} }, 400),
+      ],
+    ])('does not open the dialog for %s', async (_label, response) => {
+      vi.stubGlobal('fetch', fetchMock);
+      fetchMock.mockResolvedValue(response);
+      const required = vi.fn();
+      const unsubscribe = onTermsAcceptanceRequired(required);
+
+      await apiFetch('/api/x');
+
+      expect(required).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it('ignores an answer that belongs to an older session (BR-001-18)', async () => {
+      vi.stubGlobal('fetch', fetchMock);
+      let release: (value: Response) => void = () => undefined;
+      fetchMock.mockReturnValue(new Promise<Response>((resolve) => (release = resolve)));
+      const required = vi.fn();
+      const unsubscribe = onTermsAcceptanceRequired(required);
+
+      const pending = apiFetch('/api/favorites');
+      bumpAuthGeneration(); // the session changed while the call was in flight
+      release(refused());
+      await pending;
+
+      expect(required).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it('stops notifying a listener once it unsubscribed', async () => {
+      vi.stubGlobal('fetch', fetchMock);
+      fetchMock.mockImplementation(async () => refused());
+      const required = vi.fn();
+      onTermsAcceptanceRequired(required)();
+
+      await apiFetch('/api/x');
+
+      expect(required).not.toHaveBeenCalled();
+    });
   });
 
   it('stops notifying a listener once it unsubscribed', async () => {

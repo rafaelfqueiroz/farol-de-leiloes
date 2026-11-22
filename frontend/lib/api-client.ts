@@ -48,14 +48,31 @@ export function onSessionEnded(listener: SessionEndedListener): () => void {
   };
 }
 
-async function isUnauthenticated(response: Response): Promise<boolean> {
+type TermsRequiredListener = () => void;
+const termsRequiredListeners = new Set<TermsRequiredListener>();
+
+/**
+ * Subscribes to "a newer version of the terms or the privacy policy must be accepted first"
+ * (SPEC-010 BR-010-05): any call the BFF forwards that the API answers with 403
+ * TERMS_ACCEPTANCE_REQUIRED, made under the current session. This is the one place that notices it,
+ * so no screen handles it on its own; `AuthContext` listens and the one re-acceptance dialog opens.
+ * Returns the unsubscribe function.
+ */
+export function onTermsAcceptanceRequired(listener: TermsRequiredListener): () => void {
+  termsRequiredListeners.add(listener);
+  return () => {
+    termsRequiredListeners.delete(listener);
+  };
+}
+
+/** The `code` of an error answer's JSON body, or null for anything else. */
+async function errorCodeOf(response: Response): Promise<string | null> {
   try {
     const body: unknown = await response.clone().json();
-    return (
-      typeof body === 'object' && body !== null && Reflect.get(body, 'code') === 'UNAUTHENTICATED'
-    );
+    const code = typeof body === 'object' && body !== null ? Reflect.get(body, 'code') : null;
+    return typeof code === 'string' ? code : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -77,12 +94,16 @@ export async function apiFetch(
       ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(json) }
       : {}),
   });
-  if (
-    response.status === 401 &&
-    (await isUnauthenticated(response)) &&
-    currentAuthGeneration() === generation
-  ) {
-    for (const listener of [...sessionEndedListeners]) listener();
+  if (response.status === 401 || response.status === 403) {
+    const code = await errorCodeOf(response);
+    if (currentAuthGeneration() === generation) {
+      if (response.status === 401 && code === 'UNAUTHENTICATED') {
+        for (const listener of [...sessionEndedListeners]) listener();
+      }
+      if (response.status === 403 && code === 'TERMS_ACCEPTANCE_REQUIRED') {
+        for (const listener of [...termsRequiredListeners]) listener();
+      }
+    }
   }
   return response;
 }

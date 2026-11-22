@@ -173,7 +173,13 @@ describe('AuthProvider and answers that arrive late', () => {
     act(() => {
       late = result.current.checkVerificationStatus();
     });
-    await act(() => result.current.register('u3@b.com', 'secret1', 'U3'));
+    await act(() =>
+      result.current.register('u3@b.com', 'secret1', 'U3', {
+        termsVersion: '0.2',
+        privacyVersion: '0.2',
+        whatsappConsent: false,
+      }),
+    );
     await act(async () => {
       slow.release(unauthenticated());
       await late;
