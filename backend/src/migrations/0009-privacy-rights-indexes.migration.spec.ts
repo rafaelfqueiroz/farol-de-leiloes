@@ -33,7 +33,11 @@ describe('createPrivacyRightsIndexes', () => {
         'one_person_per_pseudonym_in_journey',
         'pseudonyms_of_user',
       ],
-      users: ['status_closedAt'],
+      users: [
+        'status_closedAt',
+        'status_lastPurgeAttemptAt_purgeAttempts_closedAt',
+        'residueSweepDueAt',
+      ],
     });
 
     expect(collection.mock.calls).toEqual([['dataExports'], ['actorPseudonyms'], ['users']]);
@@ -66,7 +70,11 @@ describe('createPrivacyRightsIndexes', () => {
         partialFilterExpression: { userId: { $type: 'objectId' } },
       },
     ]);
-    expect(createIndexes).toHaveBeenNthCalledWith(3, [{ key: { status: 1, closedAt: 1 } }]);
+    expect(createIndexes).toHaveBeenNthCalledWith(3, [
+      { key: { status: 1, closedAt: 1 } },
+      { key: { status: 1, lastPurgeAttemptAt: 1, purgeAttempts: 1, closedAt: 1 } },
+      { key: { residueSweepDueAt: 1 }, sparse: true },
+    ]);
   });
 
   it('fails the run when the driver refuses an index (the deploy stops, DV-34)', async () => {

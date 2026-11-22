@@ -11,12 +11,16 @@ import {
   ACCOUNT_PURGE_JOB,
   AccountPurgeJob,
   PURGE_MAX_ATTEMPTS_PER_RUN,
+  RESIDUE_SWEEP_MAX_PER_RUN,
 } from './account-purge.job.js';
 
 function build(options: { enabled?: boolean; locked?: boolean; overdue?: number } = {}) {
   const clock = new FakeClock();
   const users = {
     findPurgeCandidates: vi.fn().mockResolvedValue([]),
+    findResidueSweepCandidates: vi.fn().mockResolvedValue([]),
+    markResidueSwept: vi.fn().mockResolvedValue(true),
+    deferResidueSweep: vi.fn().mockResolvedValue(undefined),
     claimForPurge: vi.fn().mockResolvedValue(true),
     completePurge: vi.fn().mockResolvedValue(true),
     releasePurgeClaim: vi.fn().mockResolvedValue(undefined),
@@ -78,7 +82,15 @@ describe('run', () => {
 
     const outcome = await job.run();
 
-    expect(outcome).toEqual({ purged: 2, skipped: 0, failed: 0, overdue: 0 });
+    expect(outcome).toEqual({
+      purged: 2,
+      skipped: 0,
+      failed: 0,
+      overdue: 0,
+      swept: 0,
+      residueDeleted: 0,
+      sweepFailed: 0,
+    });
     expect(closure.applyClosureEffects.mock.calls).toEqual([['a'], ['b']]);
     expect(registry.purge.mock.calls).toEqual([['a'], ['b']]);
     expect(users.completePurge).toHaveBeenCalledTimes(2);
@@ -270,5 +282,85 @@ describe('closure hooks must have ended before the tombstone', () => {
       'PARTIAL_FAILURE',
     );
     expect(logger.loggedText()).toContain('ClosureHookFailedError');
+  });
+});
+
+describe('BR-010-15: the residue sweep', () => {
+  it('runs every provider again for each account whose sweep is due, marks it, and reports counts only', async () => {
+    const { job, users, registry, jobs } = build();
+    users.findResidueSweepCandidates.mockResolvedValueOnce(['a', 'b']).mockResolvedValue([]);
+    registry.purge
+      .mockResolvedValueOnce({ favorites: 1, reminders: 2 })
+      .mockResolvedValueOnce({ favorites: 0 });
+
+    const outcome = await job.run();
+
+    expect(outcome).toMatchObject({ swept: 2, residueDeleted: 3, sweepFailed: 0 });
+    expect(registry.purge.mock.calls).toEqual([['a'], ['b']]);
+    expect(users.markResidueSwept.mock.calls.map(([id]) => id)).toEqual(['a', 'b']);
+    expect(jobs.recordExecution).toHaveBeenCalledWith(ACCOUNT_PURGE_JOB, RunMode.AUTO);
+  });
+
+  it('asks for the sweeps due at the start of the run, so an account purged in this very run waits a day', async () => {
+    const { job, users, clock } = build();
+
+    await job.run();
+
+    expect(users.findResidueSweepCandidates).toHaveBeenCalledWith(clock.now(), 100, []);
+  });
+
+  it('a failing sweep moves its due instant a day on, is counted, and the others are still swept', async () => {
+    const logger = spyOnLogger();
+    const { job, users, registry, jobs, clock } = build();
+    users.findResidueSweepCandidates.mockResolvedValueOnce(['bad', 'good']).mockResolvedValue([]);
+    registry.purge.mockRejectedValueOnce(new TypeError('quotes ana@example.test'));
+
+    const outcome = await job.run();
+
+    expect(outcome).toMatchObject({ swept: 1, sweepFailed: 1 });
+    expect(users.deferResidueSweep).toHaveBeenCalledWith(
+      'bad',
+      new Date(clock.now().getTime() + DAY),
+    );
+    expect(users.markResidueSwept).toHaveBeenCalledTimes(1);
+    expect(jobs.recordFailure).toHaveBeenCalledWith(
+      ACCOUNT_PURGE_JOB,
+      RunMode.AUTO,
+      'PARTIAL_FAILURE',
+    );
+    expect(logger.loggedText()).toContain('TypeError');
+    expect(logger.loggedText()).not.toContain('ana@example.test');
+  });
+
+  it('a deferral that fails too does not hide the failure or stop the run', async () => {
+    const { job, users, registry } = build();
+    users.findResidueSweepCandidates.mockResolvedValueOnce(['bad']).mockResolvedValue([]);
+    registry.purge.mockRejectedValue(new Error('x'));
+    users.deferResidueSweep.mockRejectedValue(new Error('y'));
+
+    expect(await job.run()).toMatchObject({ sweepFailed: 1 });
+  });
+
+  it('stops after its own attempts budget, each account asked for once per run', async () => {
+    const { job, users } = build();
+    let n = 0;
+    users.findResidueSweepCandidates.mockImplementation(
+      (_now: Date, _limit: number, excluded: readonly string[]) => {
+        expect(new Set(excluded).size).toBe(excluded.length);
+        return Promise.resolve(Array.from({ length: 100 }, () => `id-${(n += 1)}`));
+      },
+    );
+
+    const outcome = await job.run();
+
+    expect(outcome?.swept).toBe(RESIDUE_SWEEP_MAX_PER_RUN);
+  });
+
+  it('an account another run already marked is not counted as swept', async () => {
+    const { job, users } = build();
+    users.findResidueSweepCandidates.mockResolvedValueOnce(['a']).mockResolvedValue([]);
+    users.markResidueSwept.mockResolvedValue(false);
+
+    expect(await job.run()).toMatchObject({ swept: 0, sweepFailed: 0 });
   });
 });

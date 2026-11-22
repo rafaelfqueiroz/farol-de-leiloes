@@ -37,9 +37,15 @@ export class FakeConsentsRepository implements Port<ConsentsRepository> {
   finds = 0;
   /** Makes every insert fail, as an unreachable database would (the sign-up rollback specs). */
   failInsertsWith: Error | undefined;
+  /**
+   * Runs at the start of every insert, before it fails or succeeds: a spec makes it wait on a gate
+   * to hold the sign-up inside its consent write while another request runs (SPEC-010 BR-010-01).
+   */
+  beforeInsert: (() => Promise<void>) | undefined;
 
   /** Like the unique index {userId, consentResetAt, documentType, version}. */
   async insert(entry: NewAcceptance): Promise<boolean> {
+    await this.beforeInsert?.();
     if (this.failInsertsWith) throw this.failInsertsWith;
     const exists = this.rows.some(
       (row) =>

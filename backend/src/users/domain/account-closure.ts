@@ -34,8 +34,31 @@ export const PURGE_REMOVED_FIELDS = [
   'subscriptionStatus',
 ] as const;
 
-/** The claim fields the purge writes while it works and removes when it finishes. */
-export const PURGE_CLAIM_FIELDS = ['purgeClaimToken', 'purgeClaimUntil'] as const;
+/**
+ * The fields the purge writes while it works and removes when it finishes: the claim (a token and its
+ * lease) and the fairness stamp of the attempts (`lastPurgeAttemptAt`, `purgeAttempts`, BR-010-15:
+ * an account that keeps failing goes to the back of the queue, so it never starves a healthy one).
+ * None names a person.
+ */
+export const PURGE_CLAIM_FIELDS = [
+  'purgeClaimToken',
+  'purgeClaimUntil',
+  'lastPurgeAttemptAt',
+  'purgeAttempts',
+] as const;
+
+/**
+ * BR-010-15: how long after the tombstone the RESIDUE SWEEP re-runs the providers' `purge` for the
+ * account, once. A request that passed authentication before the closure can still write a record
+ * of the account (a favourite, a reminder, a session) after the purge deleted them; the sweep
+ * deletes it at most a day later. Every provider's purge is idempotent, so the repeat is safe.
+ */
+export const RESIDUE_SWEEP_DELAY_MS = 24 * 60 * 60 * 1000;
+
+/** The instant from which the residue sweep may run for an account purged at `purgedAt`. */
+export function residueSweepDueAt(purgedAt: Date): Date {
+  return new Date(purgedAt.getTime() + RESIDUE_SWEEP_DELAY_MS);
+}
 
 /**
  * The address a purged account keeps (BR-010-15): unique per account (it carries the `_id`), on the

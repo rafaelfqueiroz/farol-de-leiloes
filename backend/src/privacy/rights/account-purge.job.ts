@@ -15,7 +15,17 @@
 // purged. A closed account unpurged ACCOUNT_PURGE_ALERT_DAYS after closure raises an error log (a
 // count, never an id) from its own daily check (checkOverdue), which runs even with the job switched
 // off. An account that fails is left out of the rest of the run, so a bad head of the queue never
-// stalls the others. Every run is recorded in `jobexecutions` (AR-03); the logs carry counts only
+// stalls the others, and ACROSS runs too: every attempt is stamped on the account in the same conditional
+// update as its claim and the queue is ordered never-attempted first, then least recently attempted
+// (UsersService.findPurgeCandidates), so a permanently failing account goes to the back of the queue
+// after each run and the per-run attempt budget can never be spent on the same failing head for ever.
+//
+// RESIDUE SWEEP (BR-010-15): a request that passed authentication before the closure can still write a
+// record of the account (a favourite, a reminder, a session...) after the purge deleted them. The
+// tombstone schedules a sweep one day later (`residueSweepDueAt`); the run re-runs every provider's
+// (idempotent) `purge(userId)` once for the accounts whose sweep is due, then marks them
+// (`residueSweptAt`, conditional). A late record therefore lives at most a day after the tombstone.
+// A sweep that fails moves its due instant a day on instead of blocking the queue. Every run is recorded in `jobexecutions` (AR-03); the logs carry counts only
 // (SC-15). AR-04: switched off by ACCOUNT_PURGE_ENABLED. AR-25: the cron states its zone.
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -30,6 +40,7 @@ import { jobErrorCode } from '../../common/services/job-error-code.js';
 import businessConfig from '../../config/business.config.js';
 import schedulerConfig, { type SchedulerConfig } from '../../config/scheduler.config.js';
 import { UsersService } from '../../users/users.service.js';
+import { residueSweepDueAt } from '../../users/domain/account-closure.js';
 import { claimExpiry, overdueClosedBefore } from '../domain/account-purge.js';
 import { PersonalDataRegistry } from '../registry/personal-data-registry.js';
 import { AccountClosureService, ClosureHookFailedError } from './account-closure.service.js';
@@ -48,6 +59,8 @@ export const PURGE_BATCH_SIZE = 100;
  * of them, say) never keeps the later accounts from being purged.
  */
 export const PURGE_MAX_ATTEMPTS_PER_RUN = 500;
+/** Bounds the residue sweep of one run, the same way (the rest waits for the next run). */
+export const RESIDUE_SWEEP_MAX_PER_RUN = 500;
 
 /** What one run did, as counts. */
 export interface PurgeOutcome {
@@ -58,6 +71,12 @@ export interface PurgeOutcome {
   readonly failed: number;
   /** Closed accounts still unpurged ACCOUNT_PURGE_ALERT_DAYS or more after their closure. */
   readonly overdue: number;
+  /** Purged accounts whose residue sweep ran and was marked done (BR-010-15). */
+  readonly swept: number;
+  /** Records the sweeps deleted: what in-flight requests wrote after a purge. Counts only. */
+  readonly residueDeleted: number;
+  /** Sweeps that failed this time; moved a day on, repeated by a later run. */
+  readonly sweepFailed: number;
 }
 
 @Injectable()
@@ -104,9 +123,10 @@ export class AccountPurgeJob {
     const outcome = locked.result;
     this.logger.log(
       `Account purge: ${outcome.purged} purged, ${outcome.skipped} skipped, ${outcome.failed} failed, ` +
-        `${outcome.overdue} overdue`,
+        `${outcome.overdue} overdue; residue sweep: ${outcome.swept} swept, ` +
+        `${outcome.residueDeleted} record(s) deleted, ${outcome.sweepFailed} failed`,
     );
-    if (outcome.failed > 0) {
+    if (outcome.failed > 0 || outcome.sweepFailed > 0) {
       await this.jobs.recordFailure(ACCOUNT_PURGE_JOB, RunMode.AUTO, 'PARTIAL_FAILURE');
     } else {
       await this.jobs.recordExecution(ACCOUNT_PURGE_JOB, RunMode.AUTO);
@@ -150,7 +170,48 @@ export class AccountPurgeJob {
         }
       }
     }
-    return { purged, skipped, failed, overdue: await this.countOverdue() };
+    const sweep = await this.sweepResidue(now);
+    return { purged, skipped, failed, overdue: await this.countOverdue(), ...sweep };
+  }
+
+  /**
+   * BR-010-15: the residue sweep. For each purged account whose sweep is due, runs every provider's
+   * `purge(userId)` again (idempotent: with nothing left it deletes nothing) and marks the account
+   * swept, once. A failing account moves its due instant a day on (never the head of the queue again
+   * today) and is counted; the run goes on. Touches only accounts the tombstone scheduled, so a live
+   * account is never swept.
+   */
+  private async sweepResidue(
+    now: Date,
+  ): Promise<Pick<PurgeOutcome, 'swept' | 'residueDeleted' | 'sweepFailed'>> {
+    let swept = 0;
+    let residueDeleted = 0;
+    let sweepFailed = 0;
+    let attempts = 0;
+    const leftOut: string[] = [];
+    while (attempts < RESIDUE_SWEEP_MAX_PER_RUN) {
+      const candidates = await this.users.findResidueSweepCandidates(
+        now,
+        PURGE_BATCH_SIZE,
+        leftOut,
+      );
+      if (candidates.length === 0) break;
+      for (const userId of candidates) {
+        if (attempts >= RESIDUE_SWEEP_MAX_PER_RUN) break;
+        attempts += 1;
+        leftOut.push(userId);
+        try {
+          const deleted = await this.registry.purge(userId);
+          residueDeleted += Object.values(deleted).reduce((sum, count) => sum + count, 0);
+          if (await this.users.markResidueSwept(userId, this.clock.now())) swept += 1;
+        } catch (error) {
+          sweepFailed += 1;
+          this.logger.warn(`An account residue sweep failed this time: ${jobErrorCode(error)}`);
+          await this.users.deferResidueSweep(userId, residueSweepDueAt(now)).catch(() => undefined);
+        }
+      }
+    }
+    return { swept, residueDeleted, sweepFailed };
   }
 
   /**

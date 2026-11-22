@@ -4,8 +4,10 @@
 //
 //   1. proof of identity again: the current password (counted like a sign-in attempt, SC-04) or a
 //      fresh Google sign-in's one-time code, of THIS account (BR-010-13);
-//   2. ONE conditional update `active | deactivated -> closed` that also sets `closedAt` (Clock) and
-//      bumps the credential version (UsersService.closeAccount, SC-03): from this write on every
+//   2. ONE conditional update `active | deactivated -> closed`, fenced on the credential version the
+//      proof was given for (a reset or takeover that landed meanwhile makes the request stale: it
+//      closes nothing and answers UNAUTHENTICATED, DL-001-02), that also sets `closedAt` (Clock)
+//      and bumps the credential version (UsersService.closeAccount, SC-03): from this write on every
 //      sign-in method is refused, a session is refused on its next request (status AND credential
 //      version, so a sign-in that passed its checks a moment before cannot keep one), and a second
 //      closure is not a transition. Of two closures at once exactly one wins this update;
@@ -78,8 +80,9 @@ export class AccountClosureService {
   async closeOwnAccount(userId: string, proof: ReauthenticationProof, ip: string): Promise<void> {
     if (await this.isClosed(userId)) return;
 
+    let proven;
     try {
-      await this.auth.reauthenticate(userId, proof, ip);
+      proven = await this.auth.reauthenticate(userId, proof, ip);
     } catch (error) {
       // A closure racing this one may have closed the account while the proof was being checked
       // (a closed account's password no longer verifies): that is success, not a refusal. Any
@@ -88,9 +91,17 @@ export class AccountClosureService {
       throw error;
     }
 
-    const outcome = await this.users.closeAccount(userId, this.clock.now());
+    // DL-001-02: fenced on the credential version the proof was given for. A password reset or a
+    // Google takeover that completed while the proof was being checked leaves a stale request that
+    // closes nothing: the proof was of credentials the account no longer has.
+    const outcome = await this.users.closeAccount(
+      userId,
+      this.clock.now(),
+      proven.credentialVersion,
+    );
     if (outcome === 'already_closed') return; // lost the race: the winner runs the effects
     if (outcome === 'not_found') throw new DomainError('USER_NOT_FOUND');
+    if (outcome === 'stale_credentials') throw new DomainError('UNAUTHENTICATED');
 
     const { failedSteps, failedHooks } = await this.applyClosureEffects(userId);
     const failed = [...failedSteps, ...failedHooks];

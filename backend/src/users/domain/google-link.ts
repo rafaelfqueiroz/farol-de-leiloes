@@ -3,6 +3,8 @@
 // update, so this function is how the table is read, tested and explained, and the integration
 // spec holds the database to it.
 
+import { isAccountActive } from '../user-account.js';
+
 export type GoogleLinkDecision =
   /** Email was confirmed: Google is added, the password and the local provider stay. */
   | 'linked_confirmed'
@@ -37,7 +39,7 @@ export function credentialVersionAfterLink(
 }
 
 export function decideGoogleLink(subject: GoogleLinkSubject, googleId: string): GoogleLinkDecision {
-  if ((subject.status ?? 'active') !== 'active') return 'inactive';
+  if (!isAccountActive(subject)) return 'inactive';
   if (subject.googleId != null && subject.googleId !== googleId) return 'google_conflict';
   return subject.emailVerified === true ? 'linked_confirmed' : 'linked_unconfirmed';
 }

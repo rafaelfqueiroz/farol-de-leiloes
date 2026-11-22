@@ -63,7 +63,8 @@ describe('UsersService.update (SC-10)', () => {
     await service.update('u1', { name: 'Ana', phone: '11999999999' });
 
     expect(model.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: { $eq: 'u1' } },
+      // BR-001-16, SPEC-010 BR-010-01: only an active account is written
+      { _id: { $eq: 'u1' }, status: expect.objectContaining({ $in: ['active', null] }) as unknown },
       { $set: { name: 'Ana', phone: '11999999999' } },
       { returnDocument: 'after' },
     );
@@ -180,7 +181,7 @@ describe('UsersService.updateProfile', () => {
     await service.updateProfile('u1', { name: '  Ana Teste ', phone: '+5584999991234' });
 
     expect(model.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: { $eq: 'u1' } },
+      { _id: { $eq: 'u1' }, status: expect.objectContaining({ $in: ['active', null] }) as unknown },
       { $set: { name: 'Ana Teste', phone: '+5584999991234' } },
       { returnDocument: 'after' },
     );
@@ -220,7 +221,10 @@ describe('UsersService.updateProfile', () => {
     await service.updateProfile('u1', odd);
 
     expect(model.findOneAndUpdate).not.toHaveBeenCalled(); // nothing to write: a read only
-    expect(model.findOne).toHaveBeenCalledWith({ _id: { $eq: 'u1' } });
+    expect(model.findOne).toHaveBeenCalledWith({
+      _id: { $eq: 'u1' },
+      status: expect.objectContaining({ $in: ['active', null] }) as unknown,
+    });
   });
 
   it('reports USER_NOT_FOUND when the account is gone', async () => {

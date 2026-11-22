@@ -10,7 +10,18 @@ describe('the users index of migration 0009 mirrors the schema (no drift)', () =
     const declared = UserSchema.indexes().map(([key]) => JSON.stringify(key));
 
     expect(declared).toContain(JSON.stringify({ status: 1, closedAt: 1 }));
-    expect(PRIVACY_RIGHTS_INDEXES['users']).toEqual([{ key: { status: 1, closedAt: 1 } }]);
+    expect(declared).toContain(
+      JSON.stringify({ status: 1, lastPurgeAttemptAt: 1, purgeAttempts: 1, closedAt: 1 }),
+    );
+    expect(declared).toContain(JSON.stringify({ residueSweepDueAt: 1 }));
+    expect(PRIVACY_RIGHTS_INDEXES['users']).toEqual([
+      { key: { status: 1, closedAt: 1 } },
+      { key: { status: 1, lastPurgeAttemptAt: 1, purgeAttempts: 1, closedAt: 1 } },
+      { key: { residueSweepDueAt: 1 }, sparse: true },
+    ]);
+    // The sparse flag is part of the index: the schema declares the same option.
+    const sweep = UserSchema.indexes().find(([key]) => 'residueSweepDueAt' in key);
+    expect(sweep?.[1]).toMatchObject({ sparse: true });
     expect(declared).toContain(JSON.stringify({ role: 1 }));
   });
 });

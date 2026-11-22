@@ -25,6 +25,7 @@ import {
 import { Clock } from '../common/clock/clock.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { UsersService } from '../users/users.service.js';
+import { isAccountActive } from '../users/user-account.js';
 import { grantExpiresAt, grantValidity } from './domain/grant-validity.js';
 import { sealGrantContext } from './grant-context.js';
 import {
@@ -208,6 +209,6 @@ export class SupportGrantService {
     if (!isObjectIdString(userId)) return false;
     const user = await this.users.findById(userId);
     if (!user) return false;
-    return user.isAdmin !== true && (user.status ?? 'active') === 'active';
+    return user.isAdmin !== true && isAccountActive(user);
   }
 }

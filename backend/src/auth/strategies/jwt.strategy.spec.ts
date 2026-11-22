@@ -117,7 +117,7 @@ describe('JwtStrategy.validate', () => {
     );
   });
 
-  it.each(['deactivated', 'closed'])(
+  it.each(['deactivated', 'closed', 'pending'])(
     'BR-001-16: refuses a session of a %s account on its next request',
     async (status) => {
       await expect(build({ ...base, status }).validate(payload)).rejects.toEqual(
