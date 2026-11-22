@@ -832,7 +832,7 @@ describe('SPEC-010 privacy and consent (integration)', () => {
   });
 
   describe('TERMS_ENFORCEMENT_ENABLED off, the default', () => {
-    it('records acceptances and reports the pending state, but refuses nothing', async () => {
+    it('records acceptances, refuses nothing and reports no pending state', async () => {
       const ana = await account('lenient', {}, lenient);
       expect((await consentRows(ana.id)).map((r) => r.method)).toEqual([
         'signup_email',
@@ -846,7 +846,10 @@ describe('SPEC-010 privacy and consent (integration)', () => {
         .send({ code: 'PRIV0001' })
         .expect(201);
       const me = await request(server(lenient)).get('/api/auth/me').set(as(ana.token)).expect(200);
-      expect(me.body.termsAcceptanceRequired).toBe(true);
+      // enforcement off: nothing is required, so /auth/me asks for nothing (the dialog stays closed)
+      expect(me.body).toMatchObject({ termsAcceptanceRequired: false, documents: [] });
+      // the one-time WhatsApp question is its own state, answered by the sign-up (BR-010-27)
+      expect(me.body.whatsappPromptPending).toBe(false);
     });
   });
 

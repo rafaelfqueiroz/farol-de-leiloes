@@ -167,8 +167,8 @@ export class CurrentUserResponseDto {
     type: Boolean,
     description:
       'True when the account has not accepted the current terms of use and privacy policy ' +
-      '(SPEC-010 BR-010-05): the interface asks for the acceptance. Reported whether or not the ' +
-      'server already refuses the account features (TERMS_ENFORCEMENT_ENABLED).',
+      '(SPEC-010 BR-010-05): the interface asks for the acceptance. Always false while ' +
+      'TERMS_ENFORCEMENT_ENABLED is off: the server then requires nothing, so nothing is asked.',
   })
   termsAcceptanceRequired: boolean;
 

@@ -137,8 +137,9 @@ async function upsertAccounts(model: Model<UserEntity>, at: Date): Promise<numbe
 
 /**
  * SPEC-010 BR-010-03, BR-010-05: the seeded accounts have accepted the documents in force, so the
- * re-acceptance dialog does not cover the pages the E2E specs check (`/api/auth/me` reports a
- * pending version whether or not the server enforces it). Written through the native collection
+ * re-acceptance dialog does not cover the pages the E2E specs check if the stack ever turns
+ * TERMS_ENFORCEMENT_ENABLED on (`/api/auth/me` reports a pending version only while it is on; the
+ * WhatsApp question, answered above, does not depend on it). Written through the native collection
  * (the schema is insert-only, AR-30) and idempotent: one row per account, document and version.
  */
 async function acceptCurrentDocuments(

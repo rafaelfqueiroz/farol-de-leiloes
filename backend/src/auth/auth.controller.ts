@@ -64,11 +64,16 @@ type GoogleCallbackRequest = GoogleFlowRequest & { user: GoogleIdentity };
 @ApiErrorResponses()
 @Controller('auth')
 export class AuthController {
+  /** TERMS_ENFORCEMENT_ENABLED, read once from the typed config (AR-42), as CurrentTermsGuard does. */
+  private readonly termsEnforced: boolean;
+
   constructor(
     private authService: AuthService,
     private readonly config: ConfigService<Env, true>,
     private readonly consents: ConsentsService,
-  ) {}
+  ) {
+    this.termsEnforced = config.get('TERMS_ENFORCEMENT_ENABLED', { infer: true });
+  }
 
   @Public()
   @Post('register')
@@ -257,7 +262,9 @@ export class AuthController {
       'isAdmin and personas are read and derived on this request (SPEC-002 BR-002-14, ' +
       'BR-002-15); they tell the interface what to show and authorize nothing by themselves. ' +
       'termsAcceptanceRequired is true, with the `documents` still to accept, when the account has ' +
-      'not accepted the current terms and privacy policy (SPEC-010 BR-010-05); whatsappPromptPending ' +
+      'not accepted the current terms and privacy policy AND TERMS_ENFORCEMENT_ENABLED is on ' +
+      '(SPEC-010 BR-010-05): with enforcement off it is false and `documents` is empty, so the ' +
+      'interface asks for nothing the server does not require; whatsappPromptPending ' +
       'is true until the account answers the one-time WhatsApp consent request (BR-010-27). ' +
       'Answered without accepting anything first.',
   })
@@ -266,11 +273,12 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
     @Access() access: AccessContext,
   ): Promise<CurrentUserResponseDto> {
-    return new CurrentUserResponseDto(
-      user,
-      access,
-      await this.consents.pendingFor(user.userId, user.consentResetAt),
-    );
+    // Enforcement off: nothing is required, so nothing is reported (and nothing is read). The
+    // whatsappPromptPending question is independent of it (BR-010-27).
+    const pending = this.termsEnforced
+      ? await this.consents.pendingFor(user.userId, user.consentResetAt)
+      : [];
+    return new CurrentUserResponseDto(user, access, pending);
   }
 
   @Post('logout')
