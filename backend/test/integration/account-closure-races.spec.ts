@@ -6,12 +6,12 @@
 //  (1) a closure whose proof was checked against credentials that changed meanwhile closes nothing;
 //  (2) a profile write that passed authentication before the closure, resumed after the purge, restores
 //      nothing; a favourite or a saved filter written that late is removed by the residue sweep;
-//  (3) 600 permanently failing accounts cannot starve a healthy one across daily runs.
+//  (3) more permanently failing accounts than a run's attempt budget cannot starve a healthy one
+//      across daily runs (the job's limits are injected small here: 12 attempts a run, not 500).
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FavoritesService } from '../../src/favorites/favorites.service.js';
 import { PersonalDataRegistry } from '../../src/privacy/registry/personal-data-registry.js';
 import { AccountClosureService } from '../../src/privacy/rights/account-closure.service.js';
-import { PURGE_MAX_ATTEMPTS_PER_RUN } from '../../src/privacy/rights/account-purge.job.js';
 import { SavedFiltersService } from '../../src/saved-filters/saved-filters.service.js';
 import { UsersService } from '../../src/users/users.service.js';
 import { DAY, MINUTE } from '../fakes/fake-clock.js';
@@ -22,6 +22,7 @@ import {
   PASSWORD,
   type RightsApp,
   seedAccount,
+  SMALL_PURGE_LIMITS,
   type SeededAccount,
 } from '../support/privacy-rights-app.js';
 import { useTestDatabase } from '../support/test-database.js';
@@ -64,7 +65,7 @@ describe('SPEC-010 races the owner found in review (#178)', () => {
   };
 
   beforeAll(async () => {
-    app = await createRightsApp(db);
+    app = await createRightsApp(db, {}, undefined, SMALL_PURGE_LIMITS); // 5 per batch, 12 per run
     await app.collection('auctions').insertOne({
       code: 'RIGHTS002',
       available: true,
@@ -385,9 +386,11 @@ describe('SPEC-010 races the owner found in review (#178)', () => {
   });
 
   describe('(3) durable fairness: failing accounts never starve a healthy one (BR-010-15)', () => {
-    const FAILING = 600;
+    const { maxAttemptsPerRun } = SMALL_PURGE_LIMITS;
+    const FAILING = maxAttemptsPerRun + 2; // more than one run can even try
+    const RUNS = 8;
 
-    it(`${FAILING} accounts that always fail, then one healthy one: it is purged in the first runs, the failing ones keep being retried`, async () => {
+    it(`${FAILING} accounts (more than a run's budget) that always fail, then one healthy one: it is purged in the first runs, the failing ones keep being retried`, async () => {
       await purgeAll();
       const base = app.harness.clock.now();
       const closedAt = (index: number) => new Date(base.getTime() - 26 * DAY + index * 1000);
@@ -415,21 +418,21 @@ describe('SPEC-010 races the owner found in review (#178)', () => {
         if (failingIds.has(userId)) throw new Error('permanent failure');
         return realPurge(userId);
       });
-      expect(FAILING).toBeGreaterThan(PURGE_MAX_ATTEMPTS_PER_RUN); // one run cannot even try them all
+      expect(FAILING).toBeGreaterThan(maxAttemptsPerRun); // one run cannot even try them all
 
       const purgedAtRun: Array<number | null> = [];
-      for (let run = 1; run <= 31; run += 1) {
+      for (let run = 1; run <= RUNS; run += 1) {
         app.harness.clock.advance(DAY);
         const outcome = await app.purgeJob.run();
         expect(outcome?.purged, `run ${run}`).toBeLessThanOrEqual(1);
         purgedAtRun.push(outcome?.purged ?? null);
         if (run === 1) {
-          // Run 1 spends its whole budget on the oldest 500: the healthy one is not reached yet.
-          expect(outcome).toMatchObject({ purged: 0, failed: PURGE_MAX_ATTEMPTS_PER_RUN });
+          // Run 1 spends its whole budget on the oldest ones: the healthy one is not reached yet.
+          expect(outcome).toMatchObject({ purged: 0, failed: maxAttemptsPerRun });
         }
       }
 
-      // Run 2 takes the 100 never-attempted failing accounts, then the healthy one (never attempted).
+      // Run 2 takes the never-attempted failing accounts left, then the healthy one (never attempted).
       expect(purgedAtRun.indexOf(1)).toBeLessThanOrEqual(2);
       expect(
         (await app.collection('users').findOne({ _id: oid(healthy) }))?.['purgedAt'],
@@ -442,10 +445,10 @@ describe('SPEC-010 races the owner found in review (#178)', () => {
       expect(failing).toHaveLength(FAILING);
       expect(failing.every((doc) => doc['purgedAt'] === undefined)).toBe(true);
       const attempts = failing.map((doc) => doc['purgeAttempts'] as number);
-      expect(Math.min(...attempts)).toBeGreaterThanOrEqual(20); // 31 runs x 500 attempts / 600 accounts
+      expect(Math.min(...attempts)).toBeGreaterThanOrEqual(5); // 8 runs x 12 attempts / 14 accounts, about 6.8 each
       expect(Math.max(...attempts) - Math.min(...attempts)).toBeLessThanOrEqual(2); // evenly, in turn
       // The alert still counts them by closure, not by attempt.
       expect(await app.purgeJob.checkOverdue()).toBe(FAILING);
-    }, 240_000);
+    }, 60_000);
   });
 });

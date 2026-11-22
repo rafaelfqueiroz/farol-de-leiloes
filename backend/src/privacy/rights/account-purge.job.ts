@@ -41,7 +41,12 @@ import businessConfig from '../../config/business.config.js';
 import schedulerConfig, { type SchedulerConfig } from '../../config/scheduler.config.js';
 import { UsersService } from '../../users/users.service.js';
 import { residueSweepDueAt } from '../../users/domain/account-closure.js';
-import { claimExpiry, overdueClosedBefore } from '../domain/account-purge.js';
+import {
+  ACCOUNT_PURGE_LIMITS,
+  type AccountPurgeLimits,
+  claimExpiry,
+  overdueClosedBefore,
+} from '../domain/account-purge.js';
 import { PersonalDataRegistry } from '../registry/personal-data-registry.js';
 import { AccountClosureService, ClosureHookFailedError } from './account-closure.service.js';
 import { JobLockService } from './job-lock.service.js';
@@ -50,15 +55,6 @@ export const ACCOUNT_PURGE_JOB = 'account-purge';
 export const ACCOUNT_PURGE_ALERT_JOB = 'account-purge-alert';
 export const ACCOUNT_PURGE_LOCK = 'job:account-purge';
 export const ACCOUNT_PURGE_LOCK_MS = 2 * 60 * 60 * 1000;
-/** How many candidates one query reads. */
-export const PURGE_BATCH_SIZE = 100;
-/**
- * Bounds one run: at most this many accounts are attempted (purged or failed), oldest closure first;
- * the rest waits for the next run and the overdue alert watches it. An account that fails or is
- * skipped is left out of the rest of the run, so a permanently failing head of the queue (a hundred
- * of them, say) never keeps the later accounts from being purged.
- */
-export const PURGE_MAX_ATTEMPTS_PER_RUN = 500;
 /** Bounds the residue sweep of one run, the same way (the rest waits for the next run). */
 export const RESIDUE_SWEEP_MAX_PER_RUN = 500;
 
@@ -92,6 +88,8 @@ export class AccountPurgeJob {
     private readonly clock: Clock, // AR-24
     @Inject(schedulerConfig.KEY) private readonly scheduler: SchedulerConfig,
     @Inject(businessConfig.KEY) private readonly config: ConfigType<typeof businessConfig>,
+    // 100 per query and 500 attempts a run (DEFAULT_ACCOUNT_PURGE_LIMITS); only a test overrides it.
+    @Inject(ACCOUNT_PURGE_LIMITS) private readonly limits: AccountPurgeLimits,
   ) {}
 
   // AR-25: the zone is explicit. 04:10 in Brasília, away from the Caixa import (03:00) and the
@@ -149,11 +147,12 @@ export class AccountPurgeJob {
     // Accounts not to ask for again in this run: the ones that failed and the ones we did not get.
     const leftOut: string[] = [];
     let attempts = 0;
-    while (attempts < PURGE_MAX_ATTEMPTS_PER_RUN) {
-      const candidates = await this.users.findPurgeCandidates(now, PURGE_BATCH_SIZE, leftOut);
+    const { batchSize, maxAttemptsPerRun } = this.limits;
+    while (attempts < maxAttemptsPerRun) {
+      const candidates = await this.users.findPurgeCandidates(now, batchSize, leftOut);
       if (candidates.length === 0) break;
       for (const userId of candidates) {
-        if (attempts >= PURGE_MAX_ATTEMPTS_PER_RUN) break;
+        if (attempts >= maxAttemptsPerRun) break;
         attempts += 1;
         try {
           if ((await this.purgeAccount(userId)) === 'purged') {
@@ -192,7 +191,7 @@ export class AccountPurgeJob {
     while (attempts < RESIDUE_SWEEP_MAX_PER_RUN) {
       const candidates = await this.users.findResidueSweepCandidates(
         now,
-        PURGE_BATCH_SIZE,
+        this.limits.batchSize,
         leftOut,
       );
       if (candidates.length === 0) break;

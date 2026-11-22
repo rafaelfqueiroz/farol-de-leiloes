@@ -1,12 +1,20 @@
 // SPEC-010 BR-010-15: the purge schedule, with hand-computed instants (TS-04).
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_ACCOUNT_PURGE_LIMITS,
   PURGE_CLAIM_LEASE_MS,
   claimExpiry,
   isClaimLive,
   overdueClosedBefore,
   purgeDeadline,
 } from './account-purge.js';
+
+describe('the limits of one purge run', () => {
+  it('default to a batch of 100 and 500 attempts a run (production never overrides them)', () => {
+    expect(DEFAULT_ACCOUNT_PURGE_LIMITS).toEqual({ batchSize: 100, maxAttemptsPerRun: 500 });
+    expect(Object.isFrozen(DEFAULT_ACCOUNT_PURGE_LIMITS)).toBe(true);
+  });
+});
 
 const NOW = new Date('2026-04-30T12:00:00.000Z');
 

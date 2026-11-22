@@ -12,6 +12,7 @@ import {
   PrivacyThrottlerModule,
   PrivacyAccountThrottlerGuard,
 } from '../privacy-throttler.module.js';
+import { ACCOUNT_PURGE_LIMITS, DEFAULT_ACCOUNT_PURGE_LIMITS } from '../domain/account-purge.js';
 import { PersonalDataRegistryModule } from '../registry/personal-data-registry.module.js';
 import { ActorPseudonymEntity, ActorPseudonymSchema } from '../schemas/actor-pseudonym.schema.js';
 import { DataExportEntity, DataExportSchema } from '../schemas/data-export.schema.js';
@@ -64,6 +65,7 @@ import { PrivacyRightsController } from './privacy-rights.controller.js';
   controllers: [PrivacyRightsController],
   providers: [
     { provide: ACCOUNT_CLOSURE_HOOKS, useValue: [] },
+    { provide: ACCOUNT_PURGE_LIMITS, useValue: DEFAULT_ACCOUNT_PURGE_LIMITS }, // a test overrides it
     PrivacyAccountThrottlerGuard,
     JobLockRepository,
     JobLockService,
