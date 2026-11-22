@@ -52,6 +52,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'weekly',
       priority: 0.7,
     },
+    // SPEC-010 BR-010-02: the legal documents are public pages
+    ...['termos', 'privacidade'].map((path) => ({
+      url: `${SITE_URL}/${path}`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.3,
+    })),
   ];
 
   return [...staticPages, ...auctionUrls];

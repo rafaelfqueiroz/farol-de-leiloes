@@ -28,6 +28,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// SPEC-010 BR-010-02: the legal documents are public pages
+const STATIC_URLS = [SITE, `${SITE}/plans`, `${SITE}/termos`, `${SITE}/privacidade`];
+
 describe('robots', () => {
   it('allows the site, keeps crawlers out of private areas and names the sitemap', () => {
     expect(robots()).toEqual({
@@ -42,7 +45,7 @@ describe('robots', () => {
 });
 
 describe('sitemap', () => {
-  it('lists the home and plans pages, then each auction with its last update', async () => {
+  it('lists the home, plans and legal pages, then each auction with its last update', async () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -63,6 +66,8 @@ describe('sitemap', () => {
     expect(entries).toEqual([
       { url: SITE, lastModified: NOW, changeFrequency: 'daily', priority: 1 },
       { url: `${SITE}/plans`, lastModified: NOW, changeFrequency: 'weekly', priority: 0.7 },
+      { url: `${SITE}/termos`, lastModified: NOW, changeFrequency: 'monthly', priority: 0.3 },
+      { url: `${SITE}/privacidade`, lastModified: NOW, changeFrequency: 'monthly', priority: 0.3 },
       {
         url: `${SITE}/auction/1444400000001`,
         lastModified: new Date('2026-03-01T08:00:00.000Z'),
@@ -83,7 +88,7 @@ describe('sitemap', () => {
 
     const entries = await sitemap();
 
-    expect(entries.map((entry) => entry.url)).toEqual([SITE, `${SITE}/plans`]);
+    expect(entries.map((entry) => entry.url)).toEqual(STATIC_URLS);
   });
 
   it('keeps the static pages and reports the status when the API answers an error', async () => {
@@ -91,7 +96,7 @@ describe('sitemap', () => {
 
     const entries = await sitemap();
 
-    expect(entries.map((entry) => entry.url)).toEqual([SITE, `${SITE}/plans`]);
+    expect(entries.map((entry) => entry.url)).toEqual(STATIC_URLS);
     expect(report).toHaveBeenCalledWith(new Error('Backend returned 503'), { where: 'sitemap' });
   });
 
@@ -101,7 +106,7 @@ describe('sitemap', () => {
 
     const entries = await sitemap();
 
-    expect(entries.map((entry) => entry.url)).toEqual([SITE, `${SITE}/plans`]);
+    expect(entries.map((entry) => entry.url)).toEqual(STATIC_URLS);
     expect(report).toHaveBeenCalledWith(failure, { where: 'sitemap' });
   });
 });
