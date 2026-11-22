@@ -9,6 +9,7 @@ import { adminAccessIndexes } from './0005-admin-access-indexes.migration.js';
 import { subscriptionIndexes } from './0006-subscription-indexes.migration.js';
 import { billingIndexes } from './0007-billing-indexes.migration.js';
 import { consentIndexes } from './0008-consent-indexes.migration.js';
+import { privacyRightsIndexes } from './0009-privacy-rights-indexes.migration.js';
 import type { Migration } from './migration.js';
 
 export const MIGRATIONS: readonly Migration[] = [
@@ -20,4 +21,5 @@ export const MIGRATIONS: readonly Migration[] = [
   subscriptionIndexes,
   billingIndexes,
   consentIndexes,
+  privacyRightsIndexes,
 ];

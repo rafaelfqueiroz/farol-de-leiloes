@@ -11,6 +11,7 @@
 - **No restore drill has run yet.** Until one does, this runbook is untested and a backup is a hope, not a fact. It must run before the first external user. Until Flex, the drill runs from a `mongodump` into a temporary cluster, since there is no snapshot to restore.
 - Flex's policy is fixed: **8 daily snapshots**, no on-demand snapshot and no point-in-time restore. Up to **24 hours of data can be lost**.
 - Where Flex snapshots are stored is not verified (ADR-002).
+- **Deleted personal data survives in backups until they rotate (SPEC-010 BR-010-15).** The purge job erases a closed account's data from the live database only. The legal ceiling is 30 days (`ACCOUNT_PURGE_MAX_DAYS`), so **backup retention must stay at 30 days or less** (Flex keeps 8 daily snapshots, about 8 days, which is within it; a longer-lived dump, such as the one taken before a migration, must be deleted within the ceiling too). A snapshot or dump older than a purge is replayed with the procedure in [Restore: replay the purges](#restore-replay-the-purges); a restore is not finished until it is done.
 
 ## Do not
 
@@ -37,6 +38,17 @@ Atlas cannot snapshot on demand, so dump first.
 3. Check the temporary cluster: collection counts against production, the latest `jobexecutions` rows, a few known documents, and the `migrations` collection.
 4. Bring back only what is needed (copy the lost documents), or, if the whole database is bad, repoint production at the new cluster: change the `MONGODB_URI` secret of the `deploy-production` environment (`gh secret set MONGODB_URI --env deploy-production`) and redeploy ([deploy-and-rollback.md](deploy-and-rollback.md), Change a setting or a secret). Tell the owner what up to 24 hours of data may be gone.
 5. If personal data was lost or exposed, follow [incident-response.md](incident-response.md).
+
+### Restore: replay the purges
+
+**When:** any time data came back from a snapshot or a dump (a restore into a new cluster that production is repointed to, or documents copied back): accounts that were purged after that backup was taken are back with their personal data, and the law says they must stay erased (BR-010-15, LGPD).
+
+1. Before the restored database serves requests, take from the **live (or last known) production database** the list of purged accounts, with the instants: in `mongosh` against it, `db.users.find({ purgedAt: { $exists: true } }, { _id: 1, purgedAt: 1 })`. Keep only ids and instants in a file in the private bucket or a local file you delete afterwards (SC-15); the list names no one.
+2. If production is lost and cannot be read, take the list from the most recent copy of the `users` collection you have **taken after the purges** (a dump of `users` only), or, failing that, from the ids closed accounts had in the restored database: every account with `status: 'closed'` in the restored database was closed by its holder, so purge them all (step 4 does it safely for ones already purged).
+3. In the restored database, for each id of the list that is still not tombstoned there (`db.users.find({ _id: { $in: <ids> }, purgedAt: { $exists: false } })`), set it closed again if the backup predates its closure (`status: 'closed'` and `closedAt` to the restore instant: the real instant is not in the restored data), so that the purge job picks it up. Do not hand-edit any other field.
+4. Start the API with `ACCOUNT_PURGE_ENABLED=true` (the default): the daily job (04:10 Brasília time) purges every closed, unpurged account, oldest first (100 a run), and its alert fires if one is still there after `ACCOUNT_PURGE_ALERT_DAYS`. For a run before that, see [account-purge.md](account-purge.md#run-it-now).
+5. Check as in [account-purge.md](account-purge.md#check-a-purge): the account has `purgedAt`, an `@removed.invalid` address, and no name or phone.
+6. Record in the incident or restore notes that the purges were replayed, with the count (never the ids).
 
 ### Restore drill
 

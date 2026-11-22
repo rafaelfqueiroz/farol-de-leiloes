@@ -50,6 +50,9 @@ type Filter = Record<string, unknown>;
 
 const PROTECTED_FIELDS = ['_id', 'userId'];
 
+/** SPEC-010: the export reads an account's records in pages of this size, never in one query. */
+export const EXPORT_PAGE_SIZE = 500;
+
 /** BR-002-25: a read-only context (a grant's view) writes no account data (FORBIDDEN). */
 function assertMayWrite(ctx: AccessContext): void {
   if (ctx.readOnly) throw new DomainError('FORBIDDEN');
@@ -95,6 +98,32 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
     if (options.skip !== undefined) query = query.skip(options.skip);
     if (options.limit !== undefined) query = query.limit(options.limit);
     return (await query.lean().exec()) as TRecord[];
+  }
+
+  /**
+   * SPEC-010 BR-010-08, BR-010-09: all of the account's records for the export, read in pages of
+   * EXPORT_PAGE_SIZE in the given (stable) order so no single query is unbounded; or, with `limit`,
+   * just the first `limit` and how many there are (the "my data" view).
+   */
+  protected async findPagedForExport(
+    ctx: AccessContext,
+    sort: Record<string, 1 | -1>,
+    limit?: number,
+  ): Promise<{ items: TRecord[]; total: number }> {
+    if (limit !== undefined) {
+      const [items, total] = await Promise.all([
+        this.find(ctx, {}, { sort, limit }),
+        this.count(ctx),
+      ]);
+      return { items, total };
+    }
+    const items: TRecord[] = [];
+    for (let skip = 0; ; skip += EXPORT_PAGE_SIZE) {
+      const page = await this.find(ctx, {}, { sort, skip, limit: EXPORT_PAGE_SIZE });
+      items.push(...page);
+      if (page.length < EXPORT_PAGE_SIZE) break;
+    }
+    return { items, total: items.length };
   }
 
   /** How many of the account's records match `filter` (counts leak like lists, TS-15). */
@@ -211,6 +240,16 @@ export abstract class AccountScopedRepository<TRecord extends AccountRecord> {
     assertNoProtectedFields(changes, 'A job update of an account record');
     const result = await this.records.updateMany(filter, { $set: changes }).exec();
     return result.modifiedCount;
+  }
+
+  /**
+   * AR-12 / AR-31: UNSCOPED delete of EVERY record of ONE closed account, for the purge job only
+   * (SPEC-010 BR-010-15), never from a request handler. A subclass exposes it under a name that says
+   * so. Idempotent: with nothing left it deletes nothing. Answers how many it deleted.
+   */
+  protected async deleteAllOfAccountByJob(accountId: string): Promise<number> {
+    const result = await this.records.deleteMany({ userId: { $eq: accountId } }).exec();
+    return result.deletedCount;
   }
 
   /**

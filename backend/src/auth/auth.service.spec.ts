@@ -736,6 +736,23 @@ describe('AuthService with fake collaborators', () => {
       expect(ctx.email.passwordResetEmails).toEqual([]);
     });
 
+    it.each(['closed', 'deactivated'] as const)(
+      'SPEC-010 BR-010-14: a link spent after the account became %s changes nothing and answers the generic invalid-token',
+      async (status) => {
+        const ctx = build();
+        ctx.users.seed(localAccount());
+        const token = await requestToken(ctx); // issued while the account was active
+        ctx.users.accounts.set(ID, { ...localAccount(), status });
+
+        await expectDomainError(
+          ctx.service.resetPassword(token, 'brand-new-password'),
+          'INVALID_RESET_TOKEN',
+        );
+
+        expect(ctx.users.accounts.get(ID)?.password).toBe('correct-password');
+      },
+    );
+
     it('BR-001-24: works for a Google-only account and adds email-and-password sign-in', async () => {
       const ctx = build();
       ctx.users.seed(localAccount({ providers: ['google'], password: undefined }));
@@ -977,6 +994,159 @@ describe('AuthService with fake collaborators', () => {
 
       expect(compared).not.toHaveBeenCalled();
       expect(users.accounts.get(ID)?.password).toBe('correct-password');
+    });
+  });
+
+  describe('reauthenticate (SPEC-010 BR-010-13)', () => {
+    it('accepts the current password, counted like a sign-in: the attempt is reserved then given back', async () => {
+      const { service, users, attemptRepo } = build();
+      users.seed(localAccount());
+
+      await service.reauthenticate(ID, { password: 'correct-password' }, IP);
+
+      expect(attemptRepo.cleared).toEqual(['email:local@example.test']);
+      expect(attemptRepo.released).toEqual([`ip:${IP}`]);
+    });
+
+    it.each([
+      ['an account without the field is at 0', undefined, 0],
+      ['an account at version 3', 3, 3],
+    ])(
+      'DL-001-02: answers the credential version the password was verified against (%s)',
+      async (_label, stored, expected) => {
+        const { service, users } = build();
+        users.seed(localAccount({ credentialVersion: stored }));
+
+        await expect(
+          service.reauthenticate(ID, { password: 'correct-password' }, IP),
+        ).resolves.toEqual({ credentialVersion: expected });
+      },
+    );
+
+    it('DL-001-02: the version is the one of the document whose hash was compared, even if the account moves on while it waits', async () => {
+      const { service, users } = build();
+      users.seed(localAccount({ credentialVersion: 2 }));
+      const compare = users.validatePassword.bind(users);
+      vi.spyOn(users, 'validatePassword').mockImplementation(async (...args) => {
+        const verified = await compare(...args); // a snapshot at version 2
+        const account = users.accounts.get(ID);
+        if (account) account.credentialVersion = 3; // a reset lands during the comparison
+        return verified;
+      });
+
+      await expect(
+        service.reauthenticate(ID, { password: 'correct-password' }, IP),
+      ).resolves.toEqual({ credentialVersion: 2 });
+    });
+
+    it('DL-001-02: a Google code answers the version read right after it was spent for the account', async () => {
+      const { service, users, tokenRepo, clock } = build();
+      users.seed(localAccount({ providers: ['local', 'google'], credentialVersion: 5 }));
+      const tokens = new AccountTokenService(tokenRepo as unknown as AccountTokenRepository, clock);
+      const mine = await tokens.issue(ID, 'google_exchange');
+
+      await expect(service.reauthenticate(ID, { googleCode: mine }, IP)).resolves.toEqual({
+        credentialVersion: 5,
+      });
+    });
+
+    it('refuses a wrong password with CURRENT_PASSWORD_INCORRECT and keeps the attempt counted', async () => {
+      const { service, users, attemptRepo } = build();
+      users.seed(localAccount());
+
+      await expectDomainError(
+        service.reauthenticate(ID, { password: 'wrong' }, IP),
+        'CURRENT_PASSWORD_INCORRECT',
+      );
+      expect(attemptRepo.reserved.get('email:local@example.test')).toBe(1);
+    });
+
+    it('is TOO_MANY_ATTEMPTS before any comparison once the origin is over the limit', async () => {
+      const { service, users, attemptRepo } = build();
+      users.seed(localAccount());
+      attemptRepo.block(`ip:${IP}`);
+      const compared = vi.spyOn(users, 'validatePassword');
+
+      await expectDomainError(
+        service.reauthenticate(ID, { password: 'correct-password' }, IP),
+        'TOO_MANY_ATTEMPTS',
+      );
+      expect(compared).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an unknown account', undefined, { password: 'x' }, 'USER_NOT_FOUND'],
+      [
+        'a Google-only account asked for a password',
+        localAccount({ providers: ['google'], password: undefined }),
+        { password: 'x' },
+        'OAUTH_ACCOUNT_HAS_NO_PASSWORD',
+      ],
+      [
+        'an account with no way to prove it, by password',
+        localAccount({ providers: [], password: undefined }),
+        { password: 'x' },
+        'REAUTHENTICATION_UNAVAILABLE',
+      ],
+      [
+        'an account with no way to prove it, by Google',
+        localAccount({ providers: [], password: undefined }),
+        { googleCode: 'code' },
+        'REAUTHENTICATION_UNAVAILABLE',
+      ],
+    ])('refuses %s', async (_label, seeded, proof, code) => {
+      const { service, users } = build();
+      if (seeded) users.seed(seeded);
+
+      await expectDomainError(service.reauthenticate(ID, proof, IP), code);
+    });
+
+    it('accepts a fresh Google code of the same account, once; another account’s or a reused code is INVALID_GOOGLE_CODE', async () => {
+      const { service, users, tokenRepo, clock } = build();
+      users.seed(localAccount({ providers: ['local', 'google'] }));
+      const tokens = new AccountTokenService(tokenRepo as unknown as AccountTokenRepository, clock);
+      const mine = await tokens.issue(ID, 'google_exchange');
+      const theirs = await tokens.issue('64b000000000000000000002', 'google_exchange');
+
+      await expectDomainError(
+        service.reauthenticate(ID, { googleCode: theirs }, IP),
+        'INVALID_GOOGLE_CODE',
+      );
+      await service.reauthenticate(ID, { googleCode: mine }, IP);
+      await expectDomainError(
+        service.reauthenticate(ID, { googleCode: mine }, IP),
+        'INVALID_GOOGLE_CODE',
+      );
+      // The other account's code was not burned by the refusal.
+      expect(await tokens.consume(theirs, 'google_exchange')).toMatchObject({
+        userId: '64b000000000000000000002',
+      });
+    });
+  });
+
+  describe('endAllSessionsAndLinks (SPEC-010 BR-010-14)', () => {
+    it('revokes the sessions and removes the unused links', async () => {
+      const { service, users, sessionRepo, tokenRepo, clock } = build();
+      users.seed(localAccount());
+      await service.login({ email: 'local@example.test', password: 'correct-password' }, IP);
+      await new AccountTokenService(tokenRepo as unknown as AccountTokenRepository, clock).issue(
+        ID,
+        'account_recovery',
+      );
+
+      await service.endAllSessionsAndLinks(ID);
+
+      expect(sessionRepo.stored.every((s) => s.revokedAt instanceof Date)).toBe(true);
+      expect(tokenRepo.stored.filter((t) => t.userId === ID && !t.usedAt)).toEqual([]);
+    });
+
+    it('attempts both steps and rethrows the failure', async () => {
+      const { service, sessionRepo, tokenRepo } = build();
+      vi.spyOn(sessionRepo, 'revokeAllForUser').mockRejectedValueOnce(new Error('db down'));
+      const links = vi.spyOn(tokenRepo, 'deleteAllUnusedForUser');
+
+      await expect(service.endAllSessionsAndLinks(ID)).rejects.toThrow('db down');
+      expect(links).toHaveBeenCalledWith(ID);
     });
   });
 

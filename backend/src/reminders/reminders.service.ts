@@ -172,6 +172,19 @@ export class RemindersService {
     return this.reminders.findDueAcrossAccounts(this.clock.now(), limit);
   }
 
+  /**
+   * SPEC-010 BR-010-14 (closure effect, repeated by the purge): the closed account's pending
+   * reminders are cancelled so the scheduler never selects them. Idempotent; answers how many.
+   */
+  cancelPendingOfAccount(userId: string): Promise<number> {
+    return this.reminders.cancelPendingOfAccountByJob(userId);
+  }
+
+  /** Scheduler (AR-12): the reminder's account is closed; it will never be sent. */
+  async markAsCancelled(reminderId: string): Promise<void> {
+    await this.reminders.markCancelledAcrossAccounts(reminderId);
+  }
+
   /** Scheduler (AR-12): the reminder it just delivered is sent. */
   async markAsSent(reminderId: string): Promise<void> {
     await this.reminders.markSentAcrossAccounts(reminderId);

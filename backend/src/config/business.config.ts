@@ -20,6 +20,14 @@ export interface BusinessConfig {
     /** SPEC-012 BR-012-29: days after the first confirmed payment with a full refund. */
     refundWindowDays: number;
   };
+  privacy: {
+    /** SPEC-010 BR-010-15: the legal ceiling for deleting a closed account's personal data. */
+    accountPurgeMaxDays: number;
+    /** SPEC-010 BR-010-15: days after closure at which an unpurged account raises an alert. */
+    accountPurgeAlertDays: number;
+    /** SPEC-010 BR-010-11: days an export stays downloadable after it became ready. */
+    exportTtlDays: number;
+  };
 }
 
 export const KEY = 'BusinessConfig';
@@ -32,6 +40,11 @@ export function businessConfigFrom(env: Env): BusinessConfig {
     subscriptions: {
       graceDays: env.SUBSCRIPTION_GRACE_DAYS,
       refundWindowDays: env.REFUND_WINDOW_DAYS,
+    },
+    privacy: {
+      accountPurgeMaxDays: env.ACCOUNT_PURGE_MAX_DAYS,
+      accountPurgeAlertDays: env.ACCOUNT_PURGE_ALERT_DAYS,
+      exportTtlDays: env.EXPORT_TTL_DAYS,
     },
   };
 }

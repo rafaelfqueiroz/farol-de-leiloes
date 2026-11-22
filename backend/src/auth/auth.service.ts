@@ -28,6 +28,14 @@ function idOf(user: UserAccount): string {
   return typeof user._id === 'string' ? user._id : user._id.toHexString();
 }
 
+/**
+ * SPEC-010 BR-010-13: the proof of identity that an irreversible request carries again: the current
+ * password, or the one-time code of a fresh Google sign-in (never both: the DTO refuses that).
+ */
+export type ReauthenticationProof =
+  | { readonly password: string; readonly googleCode?: undefined }
+  | { readonly googleCode: string; readonly password?: undefined };
+
 /** SPEC-010: what a sign-up carries beside the accepted terms (RegisterDto, GoogleCompleteDto). */
 export interface SignupConsentInput {
   /** The versions the person was shown; omitted means the current ones (BR-010-01). */
@@ -316,6 +324,84 @@ export class AuthService implements BeforeApplicationShutdown {
     }
   }
 
+  /**
+   * SPEC-010 BR-010-13: proves again that whoever holds the session is the account holder, before
+   * the account is closed. Two ways, as at sign-in:
+   *
+   * - the current password, counted like a sign-in attempt (SC-04: a stolen session must not guess
+   *   it at bcrypt speed; the attempt is reserved first, a wrong password keeps it and is refused
+   *   with CURRENT_PASSWORD_INCORRECT, past 10 in 15 minutes TOO_MANY_ATTEMPTS);
+   * - a fresh `google_exchange` code (60 s, single use) that the Google callback issued for an
+   *   existing account: it is spent atomically and only if it belongs to THIS account; unknown,
+   *   used, expired or another account's code is the same INVALID_GOOGLE_CODE, and another
+   *   account's code is left unspent.
+   *
+   * An account that cannot offer the proof asked for is refused with a stable code: a Google-only
+   * account asked for a password is OAUTH_ACCOUNT_HAS_NO_PASSWORD; one with neither is
+   * REAUTHENTICATION_UNAVAILABLE. Nothing is written beyond the attempt counters and the spent code.
+   *
+   * It answers the CREDENTIAL VERSION the proof was given for (DL-001-02), so the irreversible write
+   * that follows can be fenced on it: for the password, the version of the document whose hash was
+   * compared (the comparison takes time, and a reset or a Google takeover can land meanwhile); for
+   * the Google code, the account's version read right after the code was spent. A closure that
+   * carries a version the account no longer has closes nothing (`UsersService.closeAccount`).
+   */
+  async reauthenticate(
+    userId: string,
+    proof: ReauthenticationProof,
+    ip: string,
+  ): Promise<{ readonly credentialVersion: number }> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new DomainError('USER_NOT_FOUND');
+    }
+    const providers = Array.from(user.providers ?? []);
+    const hasPassword = providers.includes('local');
+    const hasGoogle = providers.includes('google');
+    if (!hasPassword && !hasGoogle) {
+      throw new DomainError('REAUTHENTICATION_UNAVAILABLE');
+    }
+
+    if (proof.googleCode !== undefined) {
+      if (!(await this.accountTokens.consume(proof.googleCode, 'google_exchange', userId))) {
+        throw new DomainError('INVALID_GOOGLE_CODE');
+      }
+      // The version at the moment the code is spent for this account (read after, never before:
+      // a takeover that completed before the code was spent is part of what was proven).
+      const spentFor = await this.usersService.findById(userId);
+      if (!spentFor) throw new DomainError('USER_NOT_FOUND');
+      return { credentialVersion: credentialVersionOf(spentFor) };
+    }
+
+    if (!hasPassword) {
+      throw new DomainError('OAUTH_ACCOUNT_HAS_NO_PASSWORD');
+    }
+    const reservation = await this.loginAttempts.reserve(user.email, ip);
+    const verified = await this.usersService.validatePassword(user.email, proof.password);
+    if (!verified) {
+      throw new DomainError('CURRENT_PASSWORD_INCORRECT');
+    }
+    await this.loginAttempts.recordSuccess(user.email, ip, reservation);
+    // `verified` is the document whose hash matched: its version is the credential that was proven.
+    return { credentialVersion: credentialVersionOf(verified) };
+  }
+
+  /**
+   * SPEC-010 BR-010-14: after an account was closed, ends every session it has and every one-time
+   * link it still holds (confirmation, recovery, Google exchange). Idempotent; both steps are
+   * attempted even if one fails, then the first failure is rethrown. A session the account still
+   * had would be refused anyway (the account is no longer active, and its credential version moved
+   * with the closure): this is the tidy-up on top.
+   */
+  async endAllSessionsAndLinks(userId: string): Promise<void> {
+    const results = await Promise.allSettled([
+      this.sessions.revokeAllForUser(userId),
+      this.accountTokens.revokeAllUnused(userId),
+    ]);
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed) throw failed.reason;
+  }
+
   /** BR-001-18: sign-out ends this session on the server, so a copy of the token stops working. */
   async logout(sessionId: string): Promise<void> {
     await this.sessions.revoke(sessionId);
@@ -344,8 +430,24 @@ export class AuthService implements BeforeApplicationShutdown {
       throw new DomainError('INVALID_RESET_TOKEN');
     }
 
+    // SPEC-010 BR-010-14: a link that outlived the account (spent after its closure, or issued by a
+    // request that raced it) rewrites nothing: the answer is the generic invalid-token one, and the
+    // write itself is conditional on the account being active, so a closure between this check and
+    // the write cannot be overtaken either.
+    const holder = await this.usersService.findById(record.userId);
+    if (!holder || (holder.status ?? 'active') !== 'active') {
+      throw new DomainError('INVALID_RESET_TOKEN');
+    }
+
     // BR-001-24: finishing recovery adds email-and-password sign-in to a Google-only account.
-    await this.usersService.setPassword(record.userId, newPassword);
+    try {
+      await this.usersService.setPassword(record.userId, newPassword);
+    } catch (error) {
+      if (error instanceof DomainError && error.code === 'USER_NOT_FOUND') {
+        throw new DomainError('INVALID_RESET_TOKEN');
+      }
+      throw error;
+    }
     // BR-001-22: a successful reset kills every outstanding recovery link.
     await this.accountTokens.revokeUnused(record.userId, 'account_recovery');
     // BR-001-19: and every session; the reset does not sign anyone in.

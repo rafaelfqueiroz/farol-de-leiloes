@@ -225,7 +225,8 @@ describe('SPEC-001 credential writes are fenced (integration)', () => {
       const response = await setPassword(owner.accessToken, SET_BY_SESSION);
       vi.restoreAllMocks();
 
-      expect(calls).toBe(2);
+      // The two above, plus the reset's own check that the account is still active (SPEC-010).
+      expect(calls).toBe(3);
       expect(response.status).toBe(401);
       expect(response.body.code).toBe('UNAUTHENTICATED');
       const account = await stored(who.email);

@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { type Model, Types } from 'mongoose';
 import { AccountScopedRepository } from '../access/account-scoped.repository.js';
+import type { AccessContext } from '../access/access-context.js';
 import type { ReminderChannel } from './schemas/reminder.schema.js';
 import { NotificationLog } from './schemas/notification-log.schema.js';
 
@@ -17,6 +18,7 @@ export interface NotificationLogRecord {
   recipient: string;
   success: boolean;
   errorMessage?: string;
+  createdAt?: Date;
 }
 
 /** What the scheduler records for one attempt. */
@@ -32,6 +34,22 @@ export interface DeliveryAttempt {
 export class NotificationLogsRepository extends AccountScopedRepository<NotificationLogRecord> {
   constructor(@InjectModel(NotificationLog.name) model: Model<NotificationLog>) {
     super(model as unknown as Model<NotificationLogRecord>);
+  }
+
+  /** SPEC-010 BR-010-08: every delivery attempt to the account, newest first, for the export. */
+  findAllForExport(
+    ctx: AccessContext,
+    limit?: number,
+  ): Promise<{ items: NotificationLogRecord[]; total: number }> {
+    return this.findPagedForExport(ctx, { createdAt: -1, _id: -1 }, limit);
+  }
+
+  /**
+   * AR-12 / AR-31 / SPEC-010 BR-010-15: JOB ONLY. Deletes every delivery log of one closed account
+   * (each holds the address or phone the message went to); idempotent. Never from a request.
+   */
+  purgeAccountByJob(accountId: string): Promise<number> {
+    return this.deleteAllOfAccountByJob(accountId);
   }
 
   /**

@@ -65,6 +65,8 @@ export interface UserAccount {
    */
   consentResetAt?: Date;
   phone?: string;
+  /** SPEC-010 BR-010-14: when the account was closed; absent while it is not. Server-written. */
+  closedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -289,16 +289,18 @@ describe('UsersService.setPassword and changePassword', () => {
 
     await aService(Model).setPassword('u1', 'newsecret');
 
-    expect(Model.findOneAndUpdate).toHaveBeenCalledWith(
-      // unfenced: a spent recovery token is the authority; but only an active account changes
-      { _id: { $eq: 'u1' }, status: expect.objectContaining({ $in: ['active', null] }) as unknown },
+    const [filter, update, options] = plain(Model.findOneAndUpdate.mock.calls[0]) as unknown[];
+    // Unfenced on the version (a spent recovery token is the authority), but only an ACTIVE account's
+    // credentials are ever rewritten (SPEC-010 BR-010-14).
+    expect(filter).toEqual({ _id: { $eq: 'u1' }, status: { $in: ['active', null] } });
+    expect([update, options]).toEqual([
       {
         $set: { password: 'hashed:newsecret' },
         $inc: { credentialVersion: 1 },
         $addToSet: { providers: 'local' },
       },
       { returnDocument: 'after' },
-    );
+    ]);
     expect(query.calls['select']).toEqual([['-password']]);
   });
 
@@ -569,6 +571,26 @@ describe('UsersService.discardUnfinishedSignup (SPEC-010 BR-010-01)', () => {
   });
 });
 
+describe('SPEC-010 BR-010-15: no account under the reserved .invalid domain', () => {
+  it.each(['purged-64b7f00000000000000ffff1@removed.invalid', 'x@Removed.INVALID', 'x@a.invalid.'])(
+    'createLocalAccount and createGoogleAccount refuse %s, and nothing is looked up or stored',
+    async (email) => {
+      const { Model, created } = aModel();
+      const service = aService(Model);
+
+      await expect(
+        service.createLocalAccount({ email, name: 'N', password: 'password-1234' }, NOW),
+      ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', context: { fields: ['email'] } });
+      await expect(
+        service.createGoogleAccount({ email, name: 'N', googleId: 'g-1' }, NOW),
+      ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', context: { fields: ['email'] } });
+
+      expect(created).toEqual([]);
+      expect(Model.findOne).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('UsersService.activateAccount (SPEC-010 BR-010-01)', () => {
   it('is ONE conditional update from pending to active', async () => {
     const { Model } = aModel();
@@ -636,5 +658,172 @@ describe('sign-up deletes an abandoned pending account first (SPEC-010 BR-010-01
     expect(Model.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
       Model.findOne.mock.invocationCallOrder[0] ?? 0,
     );
+  });
+});
+
+describe('UsersService.closeAccount is fenced on the credential version (SPEC-010 BR-010-14, DL-001-02)', () => {
+  const closing = (Model: ReturnType<typeof aModel>['Model']) =>
+    plain(Model.findOneAndUpdate.mock.calls[0]) as [Record<string, unknown>, unknown];
+
+  it.each([
+    [0, [0, null]], // an account without the field is at 0
+    [4, [4]],
+  ])(
+    'closes only while the credential version is the one proven (%i matches %j)',
+    async (version, accepted) => {
+      const { Model } = aModel({ findOneAndUpdate: { _id: 'u1' } });
+
+      await expect(aService(Model).closeAccount('u1', NOW, version)).resolves.toBe('closed');
+
+      const [filter, update] = closing(Model);
+      expect(filter).toEqual({
+        _id: { $eq: 'u1' },
+        status: { $in: ['active', 'deactivated', null] },
+        credentialVersion: { $in: accepted },
+      });
+      expect(update).toEqual({
+        $set: { status: 'closed', closedAt: NOW.toISOString() },
+        $inc: { credentialVersion: 1 },
+      });
+    },
+  );
+
+  it.each([
+    ['closed', 'already_closed'],
+    ['active', 'stale_credentials'],
+    ['deactivated', 'stale_credentials'],
+    ['pending', 'stale_credentials'],
+  ])('when nothing matched, an account that is %s is %s', async (status, outcome) => {
+    const { Model } = aModel({ findOne: { status } });
+
+    await expect(aService(Model).closeAccount('u1', NOW, 0)).resolves.toBe(outcome);
+  });
+
+  it('when nothing matched and there is no such account it is not_found', async () => {
+    const { Model } = aModel();
+    await expect(aService(Model).closeAccount('u1', NOW, 0)).resolves.toBe('not_found');
+  });
+});
+
+describe('the purge queue is fair and the tombstone schedules the residue sweep (SPEC-010 BR-010-15)', () => {
+  it('orders the candidates never-attempted first, then by last attempt, attempts and closure', async () => {
+    const query = new FakeQuery([{ _id: { toHexString: () => 'a' } }]);
+    const { Model } = aModel();
+    Model.find.mockReturnValue(query);
+
+    await expect(aService(Model).findPurgeCandidates(NOW, 100, ['x'])).resolves.toEqual(['a']);
+
+    expect(query.calls['sort']).toEqual([
+      [{ lastPurgeAttemptAt: 1, purgeAttempts: 1, closedAt: 1, _id: 1 }],
+    ]);
+    expect(query.calls['limit']).toEqual([[100]]);
+  });
+
+  it('the claim stamps the attempt in the same conditional update (instant and count)', async () => {
+    const { Model } = aModel();
+    const until = new Date(NOW.getTime() + 600_000);
+
+    await expect(aService(Model).claimForPurge('u1', 'tok', NOW, until)).resolves.toBe(true);
+
+    const [filter, update] = plain(Model.updateOne.mock.calls[0]) as [
+      Record<string, unknown>,
+      unknown,
+    ];
+    expect(filter).toMatchObject({ _id: { $eq: 'u1' }, status: { $eq: 'closed' } });
+    expect(update).toEqual({
+      $set: {
+        purgeClaimToken: 'tok',
+        purgeClaimUntil: until.toISOString(),
+        lastPurgeAttemptAt: NOW.toISOString(),
+      },
+      $inc: { purgeAttempts: 1 },
+    });
+  });
+
+  it('a lost claim stamps nothing (nothing matched)', async () => {
+    const { Model } = aModel({ updateOne: { matchedCount: 0 } });
+    await expect(aService(Model).claimForPurge('u1', 't', NOW, NOW)).resolves.toBe(false);
+  });
+
+  it('the tombstone schedules the sweep one day after purgedAt and removes the fairness stamp', async () => {
+    const { Model } = aModel();
+
+    await expect(aService(Model).completePurge('u1', 'tok', NOW)).resolves.toBe(true);
+
+    const [, update] = plain(Model.updateOne.mock.calls[0]) as [
+      unknown,
+      { $set: Record<string, unknown>; $unset: Record<string, unknown> },
+    ];
+    expect(update.$set['purgedAt']).toBe(NOW.toISOString());
+    expect(update.$set['residueSweepDueAt']).toBe(
+      new Date(NOW.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    );
+    expect(Object.keys(update.$unset)).toEqual(
+      expect.arrayContaining(['purgeClaimToken', 'lastPurgeAttemptAt', 'purgeAttempts']),
+    );
+  });
+});
+
+describe('the residue sweep queries (SPEC-010 BR-010-15)', () => {
+  it('lists the purged accounts whose sweep is due, longest waiting first', async () => {
+    const query = new FakeQuery([{ _id: { toHexString: () => 'a' } }]);
+    const { Model } = aModel();
+    Model.find.mockReturnValue(query);
+
+    await expect(aService(Model).findResidueSweepCandidates(NOW, 50, ['x'])).resolves.toEqual([
+      'a',
+    ]);
+
+    const [filter] = plain(Model.find.mock.calls[0]) as [Record<string, unknown>];
+    expect(filter).toMatchObject({
+      status: { $eq: 'closed' },
+      purgedAt: { $exists: true },
+      residueSweepDueAt: { $lte: NOW.toISOString() },
+      _id: { $nin: ['x'] },
+    });
+    expect(query.calls['sort']).toEqual([[{ residueSweepDueAt: 1, _id: 1 }]]);
+  });
+
+  it('marks the sweep done once, only for a closed account still waiting for it', async () => {
+    const { Model } = aModel();
+
+    await expect(aService(Model).markResidueSwept('u1', NOW)).resolves.toBe(true);
+
+    const [filter, update] = plain(Model.updateOne.mock.calls[0]) as [unknown, unknown];
+    expect(filter).toEqual({
+      _id: { $eq: 'u1' },
+      status: { $eq: 'closed' },
+      residueSweepDueAt: { $exists: true },
+    });
+    expect(update).toEqual({
+      $set: { residueSweptAt: NOW.toISOString() },
+      $unset: { residueSweepDueAt: '' },
+    });
+  });
+
+  it('a failed sweep moves the due instant on, conditional on still waiting', async () => {
+    const { Model } = aModel();
+    const next = new Date(NOW.getTime() + 86_400_000);
+
+    await aService(Model).deferResidueSweep('u1', next);
+
+    const [filter, update] = plain(Model.updateOne.mock.calls[0]) as [unknown, unknown];
+    expect(filter).toEqual({
+      _id: { $eq: 'u1' },
+      status: { $eq: 'closed' },
+      residueSweepDueAt: { $exists: true },
+    });
+    expect(update).toEqual({ $set: { residueSweepDueAt: next.toISOString() } });
+  });
+});
+
+describe('a late WhatsApp answer needs a live account (SPEC-010 BR-010-15)', () => {
+  it('matches active, pending or status-less accounts only, never a closed one', async () => {
+    const { Model } = aModel();
+
+    await aService(Model).markWhatsappPromptAnswered('u1', NOW, null);
+
+    const [filter] = plain(Model.updateOne.mock.calls[0]) as [Record<string, unknown>];
+    expect(filter['status']).toEqual({ $in: ['active', 'pending', null] });
   });
 });

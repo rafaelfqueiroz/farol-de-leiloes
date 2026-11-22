@@ -61,6 +61,15 @@ export class LoginAttemptsService {
   }
 
   /**
+   * SPEC-010 BR-010-15 / AR-31: JOB ONLY. The counter of an email is a row keyed by the address
+   * itself, so the purge of the account that owned it removes the row too (it would expire within
+   * 15 minutes on its own, but a database search for the address must find nothing).
+   */
+  async forgetEmail(email: string): Promise<void> {
+    await this.attempts.clear(emailKey(email));
+  }
+
+  /**
    * A successful sign-in clears the email's counter and removes its own reservation from the
    * origin's attempts, so successes never build towards a ban (BR-001-15).
    */

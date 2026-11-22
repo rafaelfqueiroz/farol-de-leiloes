@@ -94,6 +94,15 @@ export class StorageService {
   }
 
   /**
+   * SC-18: whether files under PRIVATE_FILE_PREFIX can be written, read and deleted: R2 is
+   * configured AND R2_PRIVATE_BUCKET is set. A caller that must never fall back to the public bucket
+   * (the data export, SPEC-010) asks this first and fails with a stable code of its own.
+   */
+  isPrivateStorageConfigured(): boolean {
+    return this.s3Client !== null && this.privateBucket !== undefined;
+  }
+
+  /**
    * Upload an image from a URL to R2
    * Images are stored publicly for direct frontend access
    */

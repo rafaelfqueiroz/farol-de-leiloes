@@ -68,6 +68,51 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: Date, required: false })
   consentResetAt?: Date;
 
+  // SPEC-010 BR-010-14: the instant the account was closed (from the injected Clock). Written in the
+  // same single conditional update that sets `status: 'closed'` (UsersService.closeAccount), never
+  // from a request; absent on every other account. Starts the 30-day purge window (BR-010-15). An
+  // instant, no personal content; inventoried in SECURITY.md §9.
+  @Prop({ type: Date, required: false })
+  closedAt?: Date;
+
+  // SPEC-010 BR-010-15: the instant the purge job removed the personal data of the closed account
+  // (the tombstone: name, phone, sign-in methods and legacy fields gone, email replaced). Absent
+  // until then; a purged account is never picked up again. Server-written only.
+  @Prop({ type: Date, required: false })
+  purgedAt?: Date;
+
+  // SPEC-010 BR-010-15: the claim a purge worker holds on this closed account while it works, a
+  // random token and its expiry (a lease): the tombstone write is conditional on the token, so two
+  // workers never both finish one account and a crashed worker's claim just expires. Both are
+  // removed by the tombstone. Server-written only; random and an instant, no personal content.
+  @Prop({ type: String, required: false })
+  purgeClaimToken?: string;
+
+  @Prop({ type: Date, required: false })
+  purgeClaimUntil?: Date;
+
+  // SPEC-010 BR-010-15: durable fairness of the purge. Stamped in the same conditional update as the
+  // claim, at every attempt: the instant of the last one and how many there were. The job takes the
+  // never-attempted accounts first, then the longest-waiting attempt, so an account whose purge keeps
+  // failing goes to the back of the queue and can never starve a healthy one, run after run. Removed
+  // by the tombstone. Server-written only; instants and a count, no personal content.
+  @Prop({ type: Date, required: false })
+  lastPurgeAttemptAt?: Date;
+
+  @Prop({ type: Number, required: false, min: 0 })
+  purgeAttempts?: number;
+
+  // SPEC-010 BR-010-15: the residue sweep. The tombstone sets `residueSweepDueAt` (one day after
+  // `purgedAt`); the sweep re-runs the providers' purge for the account once, then replaces it by
+  // `residueSweptAt`. It catches a record an in-flight request (authenticated before the closure)
+  // wrote after the purge. A failing sweep moves the due instant a day on. Server-written only;
+  // instants, no personal content.
+  @Prop({ type: Date, required: false })
+  residueSweepDueAt?: Date;
+
+  @Prop({ type: Date, required: false })
+  residueSweptAt?: Date;
+
   // Legacy plan tier. SPEC-012 moved plans to the office (BR-012-06) and nothing writes this any
   // more (BR-012-14); it stays in the schema and in the auth answers (the frontend still reads
   // it) until the contract step removes it (AR-28, follow-up issue). `'admin'` is a legacy value
@@ -132,3 +177,11 @@ markIsolation(UserSchema, {
 // email, googleId and stripeCustomerId are indexed by their `unique` @Prop options; declaring them
 // again here makes Mongoose 9 warn about duplicate indexes (TESTING §2: stray output is a defect).
 UserSchema.index({ role: 1 });
+// SPEC-010 AR-27: the purge job's scan (closed accounts, oldest closure first) and its alert count.
+// Built in production by migration 0009-privacy-rights-indexes (AR-29); the unit spec holds them equal.
+UserSchema.index({ status: 1, closedAt: 1 });
+// ... and its fair order: never-attempted first, then the least recently attempted, then the fewest attempts, then the oldest
+// closure (BR-010-15). The residue sweep's scan runs on a sparse index: only accounts still waiting
+// for it carry the field.
+UserSchema.index({ status: 1, lastPurgeAttemptAt: 1, purgeAttempts: 1, closedAt: 1 });
+UserSchema.index({ residueSweepDueAt: 1 }, { sparse: true });

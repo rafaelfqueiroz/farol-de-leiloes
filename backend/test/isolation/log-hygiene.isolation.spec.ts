@@ -6,7 +6,9 @@
 // description, a saved filter's name, a reminder's note, an owned (probe) record's name, the name and
 // address of an office member who gets the payment-failed email, the name of a buyer whose
 // customer the payment provider is told about (SPEC-012) and the name and e-mail of accounts that
-// sign up with an acceptance and a WhatsApp answer (SPEC-010) — and the flows run end to end: success
+// sign up with an acceptance and a WhatsApp answer (SPEC-010), and the name, e-mail and phone of an
+// account that asks for its data export, downloads it, is refused, deletes itself and is purged
+// (SPEC-010 part 2; the export's content and link are never logged) — and the flows run end to end: success
 // paths, refusals, a read under a support grant, a fault (the admin access log refusing its
 // insert, BR-002-27), the reminders scheduler once and the subscriptions reconcile job (FakeClock). No
 // marker may appear in any of three captures:
@@ -35,6 +37,9 @@ import { Decimal } from '../../src/common/money/money.js';
 import { loggerParams } from '../../src/common/observability/logger-options.js';
 import { PaymentGateway } from '../../src/payments/payment-gateway.js';
 import { PlansService } from '../../src/plans/plans.service.js';
+import { AccountPurgeJob } from '../../src/privacy/rights/account-purge.job.js';
+import { DataExportJob } from '../../src/privacy/rights/data-export.job.js';
+import { PrivacyRightsModule } from '../../src/privacy/rights/privacy-rights.module.js';
 import { RemindersModule } from '../../src/reminders/reminders.module.js';
 import { RemindersScheduler } from '../../src/reminders/reminders.scheduler.js';
 import { SavedFiltersModule } from '../../src/saved-filters/saved-filters.module.js';
@@ -44,11 +49,13 @@ import { SubscriptionsBillingModule } from '../../src/subscriptions/subscription
 import { SubscriptionsReconcileJob } from '../../src/subscriptions/subscriptions-reconcile.job.js';
 import { SubscriptionsRepository } from '../../src/subscriptions/subscriptions.repository.js';
 import { SubscriptionsService } from '../../src/subscriptions/subscriptions.service.js';
+import { StorageService } from '../../src/storage/storage.service.js';
 import { SupportModule } from '../../src/support/support.module.js';
 import { aProviderSubscription } from '../builders/provider-subscription.builder.js';
 import { DAY } from '../fakes/fake-clock.js';
 import { FakeOfficeProvisioner } from '../fakes/fake-office-provisioner.js';
 import { FakePaymentGateway } from '../fakes/fake-payment-gateway.js';
+import { FakeStorage } from '../fakes/fake-storage.js';
 import { captureAllLogOutput } from '../support/logger-spy.js';
 import { useTestDatabase } from '../support/test-database.js';
 import {
@@ -85,6 +92,9 @@ const MARKERS = {
   memberContactName: 'MKR-MEMBER-CONTACT-NAME-QX7',
   buyerName: 'MKR-BUYER-NAME-QX7',
   consentName: 'MKR-CONSENT-NAME-QX7',
+  exportName: 'MKR-EXPORT-NAME-QX7',
+  // The digits of the phone the rights account gives (+55 11 91234-9999, stored as +5511912349999).
+  exportPhone: '5511912349999',
 } as const;
 /** SPEC-012 BR-012-20: an office member the payment-failed email is addressed to. */
 const MEMBER_CONTACT = {
@@ -107,6 +117,7 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
   const errorBodies: unknown[] = [];
   const emails: string[] = [MEMBER_CONTACT.email];
   const gateway = new FakePaymentGateway();
+  const storage = new FakeStorage();
 
   /** Runs a request; keeps its body when it is an error answer. */
   async function call(test: Parameters<typeof answerOf>[0]) {
@@ -129,14 +140,18 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
         RemindersModule,
         SupportModule,
         SubscriptionsBillingModule,
+        PrivacyRightsModule,
       ],
-      { REMINDERS_ENABLED: 'true' }, // the scheduler runs only when this spec calls it
+      // The reminders scheduler runs only when this spec calls it; exports go to a fake private bucket.
+      { REMINDERS_ENABLED: 'true', R2_PRIVATE_BUCKET: 'mkr-private-bucket' },
       // As main.ts does: every Nest Logger line goes through pino from here on.
       (nest) => nest.useLogger(nest.get(PinoLogger)),
       (builder) =>
         builder
           .overrideProvider(PaymentGateway)
           .useValue(gateway)
+          .overrideProvider(StorageService)
+          .useValue(storage)
           .overrideProvider(OFFICE_PROVISIONER)
           .useValue(new FakeOfficeProvisioner())
           // SPEC-011's source: the member contacts the payment-failed email goes to.
@@ -144,6 +159,10 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
           .useValue({ memberContacts: () => Promise.resolve([MEMBER_CONTACT]) }),
     );
     const { moduleRef, clock } = app.harness;
+    // The unique acceptance index (migration 0008 in production) must exist before the first sign-up:
+    // autoIndex builds it in the background, and under load a repeated accept could otherwise slip
+    // in a duplicate row before it is there.
+    await moduleRef.get<Connection>(getConnectionToken()).syncIndexes();
     const auctions = moduleRef.get<Model<unknown>>(getModelToken(AuctionEntity.name));
     const phase = { modality: 'ONLINE_SALES', minimumPrice: null, phaseDates: [AUCTION_START] };
     await auctions.collection.insertOne({
@@ -203,6 +222,41 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
       await call(consentSession.post('/api/privacy/whatsapp-consent').send({ action: 'maybe' }));
       await call(consentSession.get('/api/privacy/whatsapp-consent'));
       await call(consentSession.get('/api/auth/me'));
+
+      // SPEC-010 part 2: the data-subject rights. An account (name, e-mail and phone are markers)
+      // asks for its data, sees it, downloads the export, is refused another account's, fails and
+      // then passes the re-authentication, is closed and purged, and the export files expire.
+      const rights = await app.signUp('marker-rights', MARKERS.exportName);
+      emails.push(rights.email);
+      const rightsSession = app.as(rights);
+      await call(rightsSession.patch('/api/auth/profile').send({ phone: '+55 11 91234-9999' }));
+      await call(
+        rightsSession
+          .post('/api/saved-filters')
+          .send({ name: MARKERS.filterName, filters: { state: 'RN' } }),
+      );
+      await call(rightsSession.get('/api/privacy/my-data'));
+      const queued = await call(rightsSession.post('/api/privacy/exports'));
+      await moduleRef.get(DataExportJob).runBuild();
+      const exportId = (queued.body as { id: string }).id;
+      await call(rightsSession.get(`/api/privacy/exports/${exportId}/download`));
+      await call(rightsSession.get('/api/privacy/exports'));
+      await call(as.get(`/api/privacy/exports/${exportId}/download`)); // another account's: 404
+      await call(as.get(`/api/privacy/exports/${RANDOM_ID}/download`));
+      await call(rightsSession.post('/api/privacy/delete-account').send({ confirm: true }));
+      await call(
+        rightsSession
+          .post('/api/privacy/delete-account')
+          .send({ password: 'a wrong password', confirm: true }),
+      );
+      await call(
+        rightsSession
+          .post('/api/privacy/delete-account')
+          .send({ password: 'correct horse battery', confirm: true }),
+      );
+      await call(rightsSession.get('/api/privacy/my-data')); // refused: the account is closed
+      await moduleRef.get(AccountPurgeJob).run();
+      await moduleRef.get(DataExportJob).runExpiry();
 
       await call(as.patch('/api/auth/profile').send({ name: MARKERS.profileName }));
       await call(
@@ -388,6 +442,10 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
     ]);
     expect(logged).toContain('Payment failed email sent to 1 of 1 members');
     expect(logged).toContain('Subscriptions reconciled');
+    // SPEC-010 part 2: the export was built and the account purged, by counts.
+    expect(logged).toContain('Data exports: 1 ready, 0 failed, 0 discarded');
+    expect(logged).toContain('Account purge: 1 purged, 0 skipped, 0 failed, 0 overdue');
+    expect(storage.files.size).toBe(0); // the closed account's export file was deleted
     // SPEC-010: the consent flows ran, including their refusals.
     expect(errorBodies).toContainEqual({
       code: 'TERMS_VERSION_OUTDATED',
@@ -399,7 +457,7 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
       },
     });
     expect(gateway.customers).toHaveLength(1); // the provider was told the buyer, not the log
-    expect(errorBodies.length).toBeGreaterThanOrEqual(6);
+    expect(errorBodies.length).toBeGreaterThanOrEqual(10);
   });
 
   it.each(Object.entries(MARKERS))('no log line holds the %s marker', (_field, marker) => {

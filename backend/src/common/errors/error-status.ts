@@ -56,6 +56,14 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   TERMS_ACCEPTANCE_REQUIRED: HttpStatus.FORBIDDEN,
   // BR-010-01, BR-010-05: the version the request names is not the current one; ask again.
   TERMS_VERSION_OUTDATED: HttpStatus.CONFLICT,
+  // BR-010-13: deleting the account needs a current password or a fresh Google sign-in, and the
+  // account has neither to give (no password and no Google identity).
+  REAUTHENTICATION_UNAVAILABLE: HttpStatus.CONFLICT,
+  // BR-010-11: the export the owner asked for is still being built.
+  EXPORT_NOT_READY: HttpStatus.CONFLICT,
+  // BR-010-11: the owner's export is past its 7 days (or was deleted); ask for another. Only the
+  // owner ever sees it: another account's id is the same 404 as a missing one (AR-14).
+  EXPORT_EXPIRED: HttpStatus.GONE,
 
   PLAN_NOT_ALLOWED: HttpStatus.FORBIDDEN,
   INVALID_PLAN: HttpStatus.BAD_REQUEST,

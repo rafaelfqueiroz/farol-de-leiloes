@@ -29,6 +29,8 @@ import { AccessModule } from '../access/access.module.js';
 import { AccessContextGuard } from '../access/guards/access-context.guard.js';
 import { PrivacyModule } from '../privacy/privacy.module.js';
 import { CurrentTermsGuard } from '../privacy/guards/current-terms.guard.js';
+import { PersonalDataRegistryModule } from '../privacy/registry/personal-data-registry.module.js';
+import { AccountTokensPersonalData, SessionsPersonalData } from './auth.personal-data.js';
 
 @Module({
   imports: [
@@ -39,6 +41,7 @@ import { CurrentTermsGuard } from '../privacy/guards/current-terms.guard.js';
     AuthThrottlerModule, // SC-04
     AccessModule, // SPEC-002: the AccessContextFactory behind the second global guard
     PrivacyModule, // SPEC-010: sign-up records the acceptance; the third global guard reads it
+    PersonalDataRegistryModule, // SPEC-010: sessions and tokens are registered for export and purge
     MongooseModule.forFeature([
       { name: AccountTokenEntity.name, schema: AccountTokenSchema },
       { name: SessionEntity.name, schema: SessionSchema },
@@ -67,6 +70,8 @@ import { CurrentTermsGuard } from '../privacy/guards/current-terms.guard.js';
     SessionsService,
     LoginAttemptsRepository,
     LoginAttemptsService,
+    SessionsPersonalData,
+    AccountTokensPersonalData,
     JwtStrategy,
     GoogleOAuthStateStore,
     GoogleStrategy,

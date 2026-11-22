@@ -71,6 +71,11 @@ const NAME_ALLOWED = [
   'admin-access/schemas/admin-access-log.schema.ts',
   'admin-access/schemas/support-access-grant.schema.ts',
   'migrations/0005-admin-access-indexes.migration.ts',
+  // SPEC-010 BR-010-23: the purge's declared list of RETAINED models names both, as strings, to say
+  // they are kept; it never reads or writes them. The registry reads a provider's own `models` list
+  // (model NAMES it purges), which is not Mongoose's `connection.models` registry.
+  'privacy/registry/retained-models.ts',
+  'privacy/registry/personal-data-registry.ts',
 ];
 /** Aggregation stages that write a collection, refused everywhere in src/ (5). */
 const WRITING_STAGES = ['$merge', '$out'];
@@ -96,13 +101,15 @@ const REGISTRY_MEMBERS = new Set(['models', 'collections', 'modelNames']);
  * Files outside admin-access allowed a `.collection(<non-literal>)` that cannot be resolved
  * statically (6). 0001 iterates a fixed list of money collections, 0006 a fixed record of the
  * plans, subscriptions and paymentEvents indexes, 0007 one of the subscriptions and ownerCounters
- * indexes and 0008 one of the consents and whatsappConsents indexes, none of the two protected ones.
+ * indexes, 0008 one of the consents and whatsappConsents indexes and 0009 one of the dataExports,
+ * actorPseudonyms and users indexes, none of the two protected ones.
  */
 const UNRESOLVED_ALLOWED = [
   'migrations/0001-money-decimal128.migration.ts',
   'migrations/0006-subscription-indexes.migration.ts',
   'migrations/0007-billing-indexes.migration.ts',
   'migrations/0008-consent-indexes.migration.ts',
+  'migrations/0009-privacy-rights-indexes.migration.ts',
 ];
 
 const PRIVATE_PATHS = [
