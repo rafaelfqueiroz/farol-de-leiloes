@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe, renderWithProviders } from '@/test/render';
 import DeleteAccountSection from './DeleteAccountSection';
+import { captureReauthReturn, clearReauthReturn } from '@/lib/reauth-return';
 import { json } from './privacy-test-support';
 
 const env = vi.hoisted(() => ({
@@ -28,8 +29,15 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   window.history.replaceState(null, '', '/profile/privacidade');
+  clearReauthReturn();
 });
 afterEach(() => vi.unstubAllGlobals());
+
+/** What ReauthReturnCapture does in the root layout, before the page renders. */
+const comeBackFromGoogle = (query: string) => {
+  window.history.replaceState(null, '', `/profile/privacidade${query}`);
+  captureReauthReturn(window.location, window.history);
+};
 
 const OPEN = 'Excluir minha conta';
 const DIALOG = 'Excluir sua conta?';
@@ -241,7 +249,7 @@ describe('DeleteAccountSection', () => {
     );
 
     it('coming back with the code: reopens the dialog, takes the code out of the address, and deletes with it', async () => {
-      window.history.replaceState(null, '', '/profile/privacidade?reauth=one-time-code');
+      comeBackFromGoogle('?reauth=one-time-code');
       fetchMock.mockResolvedValue(json({ closed: true }));
       const user = userEvent.setup();
       renderWithProviders(<DeleteAccountSection />);
@@ -265,7 +273,7 @@ describe('DeleteAccountSection', () => {
     });
 
     it('a code that is no longer valid (single use, 60 seconds) is dropped, said, and Google is asked again', async () => {
-      window.history.replaceState(null, '', '/profile/privacidade?reauth=stale');
+      comeBackFromGoogle('?reauth=stale');
       fetchMock.mockResolvedValue(json({ code: 'INVALID_GOOGLE_CODE', context: {} }, 400));
       const user = userEvent.setup();
       renderWithProviders(<DeleteAccountSection />);
@@ -283,11 +291,7 @@ describe('DeleteAccountSection', () => {
     });
 
     it('coming back from a refused re-authentication reopens the dialog with the reason and no code', async () => {
-      window.history.replaceState(
-        null,
-        '',
-        '/profile/privacidade?reauthError=GOOGLE_SIGN_IN_FAILED',
-      );
+      comeBackFromGoogle('?reauthError=GOOGLE_SIGN_IN_FAILED');
       renderWithProviders(<DeleteAccountSection />);
 
       const dialog = await screen.findByRole('alertdialog', { name: DIALOG });
@@ -300,7 +304,7 @@ describe('DeleteAccountSection', () => {
     });
 
     it('an empty code is no confirmation', async () => {
-      window.history.replaceState(null, '', '/profile/privacidade?reauth=');
+      comeBackFromGoogle('?reauth=');
       renderWithProviders(<DeleteAccountSection />);
 
       const dialog = await screen.findByRole('alertdialog', { name: DIALOG });
@@ -309,11 +313,40 @@ describe('DeleteAccountSection', () => {
   });
 
   it('opens nothing by itself on an ordinary visit, and leaves the address alone', () => {
-    window.history.replaceState(null, '', '/profile/privacidade?x=1');
+    comeBackFromGoogle('?x=1');
     renderWithProviders(<DeleteAccountSection />);
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(window.location.search).toBe('?x=1');
+  });
+
+  it('closes the account ONLY on 200 with closed: true: a 200 with another body is no closure, says so and stays', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json({})));
+    const { user, dialog } = await openDialog();
+    await user.type(within(dialog).getByLabelText('Sua senha atual'), 'x');
+    await user.click(within(dialog).getByRole('checkbox', { name: ACK }));
+
+    await user.click(confirmButton(dialog));
+
+    expect(await within(dialog).findByRole('alert')).toBeVisible();
+    expect(env.replace).not.toHaveBeenCalled();
+    expect(confirmButton(dialog)).toBeEnabled();
+  });
+
+  it('a 204, or a 200 that is not JSON, is no closure either', async () => {
+    fetchMock
+      .mockImplementationOnce(() => Promise.resolve(new Response(null, { status: 204 })))
+      .mockImplementationOnce(() => Promise.resolve(new Response('<html>', { status: 200 })));
+    const { user, dialog } = await openDialog();
+    await user.type(within(dialog).getByLabelText('Sua senha atual'), 'x');
+    await user.click(within(dialog).getByRole('checkbox', { name: ACK }));
+
+    await user.click(confirmButton(dialog));
+    await within(dialog).findByRole('alert');
+    await user.click(confirmButton(dialog));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    expect(env.replace).not.toHaveBeenCalled();
   });
 
   it('an account with no password and no Google cannot confirm: the deletion stays off', async () => {

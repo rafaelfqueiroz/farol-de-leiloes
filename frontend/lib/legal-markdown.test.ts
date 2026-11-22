@@ -156,3 +156,72 @@ describe('parseMarkdown', () => {
     expect(parseMarkdown('# a\r\n\r\ntexto\r\n')).toEqual(parseMarkdown('# a\n\ntexto\n'));
   });
 });
+
+// SC-20 (CodeQL js/polynomial-redos): no input of any length may make the renderer slow. The bound is
+// generous (500 ms); the shapes below took seconds with the first version's regular expressions.
+describe('adversarial input is parsed in linear time', () => {
+  const BOUND_MS = 500;
+  const spaces = (n: number) => ' '.repeat(n);
+  const timed = (input: string) => {
+    const started = performance.now();
+    const blocks = parseMarkdown(input);
+    const elapsed = performance.now() - started;
+    return { blocks, elapsed };
+  };
+
+  it.each([
+    ['a table separator of spaces around one pipe', `| a |\n${spaces(80_000)}|${spaces(80_000)}`],
+    ['a separator that is dashes and spaces, then text', `| a |\n${'- '.repeat(80_000)}x`],
+    ['a separator of dashes with one wrong cell', `| a |\n${'|---'.repeat(50_000)}|x`],
+    ['a rule that is spaces and one marker, then text', `${'- '.repeat(100_000)}x`],
+    ['a rule of underscores and spaces, then text', `${'_ '.repeat(100_000)}x`],
+    [
+      'a heading with a long run of spaces and hashes',
+      `# ${spaces(100_000)}${'#'.repeat(1000)}${spaces(100_000)}x`,
+    ],
+    ['a heading of only hashes and spaces', `#${spaces(150_000)}`],
+    ['200k opening brackets', '['.repeat(200_000)],
+    ['brackets, then "](" and no ")"', `${'['.repeat(100_000)}](x`],
+    ['brackets with a ")" far after', `${'[a'.repeat(50_000)}](${'x'.repeat(50_000)})`],
+    ['a long run of pipes', '|'.repeat(200_000)],
+    ['pipes and spaces', '| '.repeat(100_000)],
+    ['100k asterisks', '*'.repeat(100_000)],
+    ['100k "**"', '**'.repeat(100_000)],
+    ['100k backticks', '`'.repeat(100_000)],
+    ['100k backslashes', '\\'.repeat(100_000)],
+    ['100k "> "', '> '.repeat(100_000)],
+    ['100k list markers', '- '.repeat(100_000)],
+    ['a list item with a long continuation', `- a\n${'  b\n'.repeat(50_000)}`],
+    ['a long numbered marker run', `${'1'.repeat(100_000)}. x`],
+    ['100k short lines', 'a\n'.repeat(100_000)],
+    ['100k table rows', `| a |\n| - |\n${'| x |\n'.repeat(50_000)}`],
+  ])('%s', (_label, input) => {
+    const { blocks, elapsed } = timed(input);
+
+    expect(blocks.length).toBeGreaterThan(0);
+    expect(elapsed).toBeLessThan(BOUND_MS);
+  });
+
+  it('shows a paragraph or a line past the bound as plain text, never parsed', () => {
+    const long = `**${'a'.repeat(25_000)}**`;
+    const [paragraph] = parseMarkdown(long);
+
+    expect(paragraph).toEqual({ kind: 'paragraph', children: [text(long)] });
+    expect(parseMarkdown(`# ${'a'.repeat(3000)}`)[0]).toMatchObject({ kind: 'paragraph' });
+  });
+
+  it('still reads the shapes it reads when they are normal: the rewritten scans keep their meaning', () => {
+    expect(parseMarkdown('## Título ##')[0]).toMatchObject({ kind: 'heading', level: 2 });
+    expect(parseMarkdown('#semespaço')[0]).toMatchObject({ kind: 'paragraph' });
+    expect(parseMarkdown('####### sete')[0]).toMatchObject({ kind: 'paragraph' });
+    expect(parseMarkdown('* * *')[0]).toEqual({ kind: 'rule' });
+    expect(parseMarkdown('- - -')[0]).toEqual({ kind: 'rule' });
+    expect(parseMarkdown('--')[0]).toMatchObject({ kind: 'paragraph' });
+    expect(parseMarkdown('| a |\n|:--|--:|:-:|\n| b |')[0]).toMatchObject({ kind: 'table' });
+    expect(parseMarkdown('| a |\n| -x- |\n| b |')[0]).toMatchObject({ kind: 'paragraph' });
+    expect(parseMarkdown('a\n---')[1]).toEqual({ kind: 'rule' });
+    expect(parseMarkdown('12) item')[0]).toMatchObject({ kind: 'list', ordered: true });
+    expect(parseMarkdown('1234567890. item')[0]).toMatchObject({ kind: 'paragraph' });
+    expect(parseMarkdown('-sem espaço')[0]).toMatchObject({ kind: 'paragraph' });
+  });
+});

@@ -15,7 +15,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState, useSyncExternalStore } from 'react';
 import GoogleSignInButton from '@/app/components/account/GoogleSignInButton';
 import ConfirmDialog from '@/app/components/patterns/ConfirmDialog';
 import { useAuth } from '@/app/contexts/AuthContext';
@@ -23,36 +23,17 @@ import { apiFetch } from '@/lib/api-client';
 import { ApiError, readApiError, useApiErrorMessage } from '@/lib/api-error';
 import { deleteAccountBody } from '@/lib/forms/delete-account-form';
 import { reportClientError } from '@/lib/report-client-error';
+import {
+  clearReauthReturn,
+  currentReauthReturn,
+  subscribeReauthReturn,
+  type ReauthReturn,
+} from '@/lib/reauth-return';
 import { PRIVACY_API } from './privacy-api';
 import PrivacySection from './PrivacySection';
 
 /** Where the browser goes once the account is closed (public, outside the shell). */
 export const ACCOUNT_CLOSED_PATH = '/conta-encerrada';
-
-/** What the return from Google puts in the address: the code, or why there is none. */
-interface ReauthReturn {
-  code: string | null;
-  error: string | null;
-}
-
-/**
- * Reads the return of a Google re-authentication from the address and takes it out at once: the code
- * is a credential (single use, 60 seconds), so it is kept only in this component's state, replaced in
- * the history entry, and never logged or sent anywhere but the delete-account call (SC-02, SC-15).
- */
-function useReauthReturn(): ReauthReturn | null {
-  const [returned, setReturned] = useState<ReauthReturn | null>(null);
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('reauth');
-    const error = params.get('reauthError');
-    if (code === null && error === null) return;
-    window.history.replaceState(null, '', window.location.pathname);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the address is an external system, readable only after mount
-    setReturned({ code: code === '' ? null : code, error });
-  }, []);
-  return returned;
-}
 
 /**
  * SPEC-010 BR-010-13, BR-010-14 (frame "Excluir minha conta"): the danger zone, last on the page, and
@@ -67,7 +48,8 @@ export default function DeleteAccountSection() {
   const apiErrorMessage = useApiErrorMessage();
   const router = useRouter();
   const { user } = useAuth();
-  const returned = useReauthReturn();
+  // taken out of the address by ReauthReturnCapture before anything else ran; held in memory only
+  const returned = useSyncExternalStore(subscribeReauthReturn, currentReauthReturn, () => null);
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [googleCode, setGoogleCode] = useState<string | null>(null);
@@ -95,6 +77,7 @@ export default function DeleteAccountSection() {
   const close = () => {
     if (deleting) return;
     setOpen(false);
+    clearReauthReturn();
     setPassword('');
     setAcknowledged(false);
     setWrongPassword(false);
@@ -118,9 +101,22 @@ export default function DeleteAccountSection() {
         json: request.body,
       });
       if (response.ok) {
-        // closed: the session is already dead and the BFF cleared its cookie. Stay busy while the
-        // browser moves on, so a second click cannot repeat it.
-        router.replace(ACCOUNT_CLOSED_PATH);
+        // closed ONLY on the exact answer (200 with `closed: true`): the session is dead and the BFF
+        // cleared its cookie. Anything else that merely looks like success is no closure.
+        const answer: unknown = await response.json().catch(() => null);
+        if (
+          response.status === 200 &&
+          typeof answer === 'object' &&
+          answer !== null &&
+          Reflect.get(answer, 'closed') === true
+        ) {
+          // stay busy while the browser moves on, so a second click cannot repeat it
+          clearReauthReturn();
+          router.replace(ACCOUNT_CLOSED_PATH);
+          return;
+        }
+        setFailure(apiErrorMessage(new ApiError('BACKEND_UNAVAILABLE')));
+        setDeleting(false);
         return;
       }
       const error = await readApiError(response);
@@ -129,6 +125,7 @@ export default function DeleteAccountSection() {
       } else if (error.code === 'INVALID_GOOGLE_CODE') {
         // single use and 60 seconds: it is gone either way, confirm with Google again
         setGoogleCode(null);
+        clearReauthReturn();
         setFailure(t('googleExpired'));
       } else if (error.code === 'REAUTHENTICATION_UNAVAILABLE') {
         setFailure(t('unavailable'));

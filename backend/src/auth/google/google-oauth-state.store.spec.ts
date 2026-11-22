@@ -311,3 +311,36 @@ describe('the intent of the flow (SPEC-010 BR-010-13)', () => {
     expect(req.googleFlowIntent).toBeUndefined();
   });
 });
+
+describe('flowIntentOf: the intent of a flow whose callback failed before verify ran', () => {
+  const read = (store: GoogleOAuthStateStore, cookieHeader: string | undefined) => {
+    const { req, clearCookie } = exchange(cookieHeader);
+    return { intent: store.flowIntentOf(req), clearCookie };
+  };
+
+  it('reads reauth from an intact cookie, and clears the single-use cookie', () => {
+    const { store } = setup();
+    const started = start(store, { intent: 'reauth' });
+
+    const { intent, clearCookie } = read(store, `${GOOGLE_FLOW_COOKIE}=${started.value}`);
+
+    expect(intent).toBe('reauth');
+    expect(clearCookie).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['an ordinary sign-in cookie', 'ordinary'],
+    ['no cookie', 'none'],
+    ['an altered cookie', 'altered'],
+    ['an expired cookie', 'expired'],
+  ])('says nothing for %s', (_label, kind) => {
+    const { store, clock } = setup();
+    const started = start(store, kind === 'ordinary' ? {} : { intent: 'reauth' });
+    let header: string | undefined = `${GOOGLE_FLOW_COOKIE}=${started.value}`;
+    if (kind === 'none') header = undefined;
+    if (kind === 'altered') header = `${GOOGLE_FLOW_COOKIE}=${started.value.slice(0, -3)}AAA`;
+    if (kind === 'expired') clock.advance(10 * MINUTE);
+
+    expect(read(store, header).intent).toBeUndefined();
+  });
+});

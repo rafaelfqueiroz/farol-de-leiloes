@@ -5,11 +5,17 @@ import { HttpException, HttpStatus, UnauthorizedException } from '@nestjs/common
 import type { ArgumentsHost } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { GoogleCallbackRedirectFilter } from './google-callback-redirect.filter.js';
+import type { GoogleOAuthStateStore } from './google-oauth-state.store.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import type { Env } from '../../config/env.js';
 import { expectNoneLogged, spyOnLogger } from '../../../test/support/logger-spy.js';
 
-function run(exception: unknown, googleFlowIntent?: 'reauth') {
+function run(
+  exception: unknown,
+  googleFlowIntent?: 'reauth',
+  /** What the sealed cookie says when `verify` never ran (the callback failed before it). */
+  cookieIntent?: 'reauth',
+) {
   const redirect = vi.fn();
   const config = { get: () => 'https://app.example.test' } as unknown as ConfigService<Env, true>;
   const host = {
@@ -22,7 +28,8 @@ function run(exception: unknown, googleFlowIntent?: 'reauth') {
       getResponse: () => ({ redirect }),
     }),
   } as unknown as ArgumentsHost;
-  new GoogleCallbackRedirectFilter(config).catch(exception, host);
+  const flows = { flowIntentOf: () => cookieIntent } as unknown as GoogleOAuthStateStore;
+  new GoogleCallbackRedirectFilter(config, flows).catch(exception, host);
   return redirect;
 }
 
@@ -59,6 +66,23 @@ describe('GoogleCallbackRedirectFilter', () => {
   it('SPEC-010 BR-010-13: a failed re-authentication goes back to the privacy page, not to the sign-in', () => {
     expect(run(new DomainError('GOOGLE_SIGN_IN_FAILED'), 'reauth')).toHaveBeenCalledWith(
       'https://app.example.test/profile/privacidade?reauthError=GOOGLE_SIGN_IN_FAILED',
+    );
+  });
+
+  it('SPEC-010 BR-010-13: Google refusing a re-authentication (access_denied) goes back to the privacy page, told by the sealed cookie', () => {
+    const denied = Object.assign(new Error('access_denied'), { name: 'AuthorizationError' });
+
+    // `verify` never ran, so only the cookie of the start knows it was a re-authentication
+    expect(run(denied, undefined, 'reauth')).toHaveBeenCalledWith(
+      'https://app.example.test/profile/privacidade?reauthError=GOOGLE_SIGN_IN_FAILED',
+    );
+  });
+
+  it('a refusal with no re-authentication cookie (an ordinary sign-in, or a cookie that is not ours) still goes to the login', () => {
+    const denied = Object.assign(new Error('access_denied'), { name: 'AuthorizationError' });
+
+    expect(run(denied)).toHaveBeenCalledWith(
+      'https://app.example.test/login?error=GOOGLE_SIGN_IN_FAILED',
     );
   });
 

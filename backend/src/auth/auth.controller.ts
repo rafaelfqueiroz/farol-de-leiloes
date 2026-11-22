@@ -121,10 +121,10 @@ export class AuthController {
     summary: 'Start Google sign-in (browser redirect to Google)',
     description:
       'Sends OAuth `state` and a PKCE (S256) challenge to Google and keeps the state and the code ' +
-      'verifier in a signed, HttpOnly, SameSite=Lax cookie (10 minutes, Path /api/auth/google), ' +
+      'verifier in a signed, HttpOnly, SameSite=Lax cookie (10 minutes, Path /api/auth/google/callback), ' +
       'so the callback only goes on in the browser that started the flow (issue #152). ' +
       '`?intent=reauth` starts a re-authentication, sealed into the same cookie (SPEC-010 ' +
-      'BR-010-13); any other `intent` is refused.',
+      'BR-010-13), and asks Google for an interactive login (`prompt=login`); any other `intent` is refused.',
   })
   @ApiFoundResponse({ description: 'Redirect to Google consent' })
   async googleAuth() {

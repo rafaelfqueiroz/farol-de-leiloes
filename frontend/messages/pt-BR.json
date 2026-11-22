@@ -1148,7 +1148,9 @@
       "note": "Dizer sim não liga nenhum aviso por si só: você ainda escolhe, aviso a aviso, o canal, e confirma seu telefone. Você pode cancelar quando quiser na página de privacidade.",
       "later": "Agora não",
       "accept": "Aceito receber",
-      "saving": "Salvando"
+      "saving": "Salvando",
+      "signOut": "Sair da conta",
+      "rights": "Seus direitos continuam disponíveis: <link>ver meus dados, exportar ou excluir a conta</link>."
     }
   },
   "privacy": {

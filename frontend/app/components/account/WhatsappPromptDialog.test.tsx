@@ -4,9 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe, renderWithProviders as render } from '@/test/render';
 import WhatsappPromptDialog from './WhatsappPromptDialog';
 
-const env = vi.hoisted(() => ({ refreshUser: vi.fn(), report: vi.fn() }));
+const env = vi.hoisted(() => ({
+  refreshUser: vi.fn(),
+  logout: vi.fn(),
+  replace: vi.fn(),
+  report: vi.fn(),
+}));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: env.replace }) }));
+vi.mock('next/link', () => ({
+  default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('@/app/contexts/AuthContext', () => ({
-  useAuth: () => ({ refreshUser: env.refreshUser }),
+  useAuth: () => ({ refreshUser: env.refreshUser, logout: env.logout }),
 }));
 vi.mock('@/lib/report-client-error', () => ({ reportClientError: env.report }));
 
@@ -16,6 +29,8 @@ const json = (body: unknown, status = 200) =>
 
 beforeEach(() => {
   env.refreshUser.mockReset().mockResolvedValue(undefined);
+  env.logout.mockReset().mockResolvedValue(undefined);
+  env.replace.mockReset();
   env.report.mockReset();
   fetchMock.mockReset().mockResolvedValue(json({ state: 'granted', at: null, textVersion: '1' }));
   vi.stubGlobal('fetch', fetchMock);
@@ -125,5 +140,44 @@ describe('WhatsappPromptDialog', () => {
 
     expect(await screen.findByRole('alert')).toBeVisible();
     expect(env.report).toHaveBeenCalledWith(failure, { where: 'WhatsappPromptDialog' });
+  });
+
+  it('is never a trap: while the answer keeps failing the dialog stays, says so, and the person can sign out or go to their rights', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(json({ code: 'TOO_MANY_REQUESTS', context: {} }, 429)),
+    );
+    render(<WhatsappPromptDialog />);
+
+    await user.click(screen.getByRole('button', { name: 'Agora não' }));
+    await screen.findByRole('alert');
+    await user.click(screen.getByRole('button', { name: 'Aceito receber' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Muitas solicitações em pouco tempo',
+    );
+    expect(screen.getByRole('dialog', { name: 'Avisos por WhatsApp' })).toBeVisible();
+    expect(env.refreshUser).not.toHaveBeenCalled();
+    // the rights page is one click away ...
+    expect(
+      screen.getByRole('link', { name: 'ver meus dados, exportar ou excluir a conta' }),
+    ).toHaveAttribute('href', '/profile/privacidade');
+    // ... and so is the way out
+    await user.click(screen.getByRole('button', { name: 'Sair da conta' }));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledWith('/login'));
+    expect(env.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('locks "Sair da conta" with the other actions while an answer is being saved', async () => {
+    const user = userEvent.setup();
+    let release: (response: Response) => void = () => undefined;
+    fetchMock.mockReturnValue(new Promise<Response>((resolve) => (release = resolve)));
+    render(<WhatsappPromptDialog />);
+
+    await user.click(screen.getByRole('button', { name: 'Aceito receber' }));
+
+    expect(screen.getByRole('button', { name: 'Sair da conta' })).toBeDisabled();
+    release(json({}));
+    await waitFor(() => expect(env.refreshUser).toHaveBeenCalled());
   });
 });

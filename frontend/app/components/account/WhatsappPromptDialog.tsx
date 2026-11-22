@@ -8,6 +8,9 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import MuiLink from '@mui/material/Link';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useId, useState } from 'react';
 import BusyButton from '@/app/components/patterns/BusyButton';
@@ -15,6 +18,7 @@ import InlineAlert from '@/app/components/patterns/InlineAlert';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { apiFetch } from '@/lib/api-client';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
+import { PRIVACY_PAGE_PATH } from '@/lib/legal';
 import { reportClientError } from '@/lib/report-client-error';
 
 type Answer = 'granted' | 'declined';
@@ -29,7 +33,8 @@ type Answer = 'granted' | 'declined';
 export default function WhatsappPromptDialog() {
   const t = useTranslations('consentDialogs.whatsapp');
   const apiErrorMessage = useApiErrorMessage();
-  const { refreshUser } = useAuth();
+  const router = useRouter();
+  const { refreshUser, logout } = useAuth();
   const [saving, setSaving] = useState<Answer | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const titleId = useId();
@@ -58,6 +63,12 @@ export default function WhatsappPromptDialog() {
     }
   };
 
+  // never a trap: if the answer keeps failing (a 429, the API down) the person can still sign out
+  const signOut = async () => {
+    await logout();
+    router.replace('/login');
+  };
+
   return (
     <Dialog
       open
@@ -80,6 +91,15 @@ export default function WhatsappPromptDialog() {
             {t('note')}
           </Typography>
         </Box>
+        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 1.5 }}>
+          {t.rich('rights', {
+            link: (chunks) => (
+              <MuiLink component={Link} href={PRIVACY_PAGE_PATH} underline="always">
+                {chunks}
+              </MuiLink>
+            ),
+          })}
+        </Typography>
         {failure ? (
           <Box sx={{ mt: 2 }}>
             <InlineAlert severity="error" role="alert">
@@ -88,7 +108,10 @@ export default function WhatsappPromptDialog() {
           </Box>
         ) : null}
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
+      <DialogActions sx={{ px: 3, pb: 2, flexWrap: 'wrap' }}>
+        <Button variant="text" disabled={saving !== null} onClick={() => void signOut()}>
+          {t('signOut')}
+        </Button>
         <Button
           variant="outlined"
           disabled={saving !== null}

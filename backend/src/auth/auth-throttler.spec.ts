@@ -10,6 +10,7 @@ import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { ConsentsService } from '../privacy/consents.service.js';
 import { AUTH_RATE_LIMIT, AuthThrottlerModule } from './auth-throttler.module.js';
+import { GoogleOAuthStateStore } from './google/google-oauth-state.store.js';
 
 let app: INestApplication | undefined;
 
@@ -33,6 +34,7 @@ async function boot(nodeEnv: string, trustProxyHops = '0') {
       providers: [
         { provide: AuthService, useValue: {} },
         { provide: ConsentsService, useValue: {} },
+        { provide: GoogleOAuthStateStore, useValue: {} },
       ],
     },
     { env: { NODE_ENV: nodeEnv, TRUST_PROXY_HOPS: trustProxyHops } },

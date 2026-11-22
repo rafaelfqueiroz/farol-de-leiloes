@@ -5,7 +5,7 @@ import { ApiExceptionFilter } from '../../common/errors/api-exception.filter.js'
 import type { ErrorCode } from '../../common/errors/codes.js';
 import { DomainError } from '../../common/errors/domain-error.js';
 import type { Env } from '../../config/env.js';
-import type { GoogleFlowRequest } from './google-oauth-state.store.js';
+import { GoogleOAuthStateStore, type GoogleFlowRequest } from './google-oauth-state.store.js';
 
 // What passport raises when Google refuses or rejects the exchange (the person said no, or the
 // authorisation code was already used): the person's problem, not a fault of ours.
@@ -21,7 +21,10 @@ const OAUTH_REFUSALS = new Set(['AuthorizationError', 'TokenError']);
 export class GoogleCallbackRedirectFilter implements ExceptionFilter {
   private readonly api = new ApiExceptionFilter();
 
-  constructor(private readonly config: ConfigService<Env, true>) {}
+  constructor(
+    private readonly config: ConfigService<Env, true>,
+    private readonly flows: GoogleOAuthStateStore,
+  ) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
@@ -30,8 +33,11 @@ export class GoogleCallbackRedirectFilter implements ExceptionFilter {
     const frontendUrl = this.config.get('FRONTEND_URL', { infer: true }); // AR-42
     // SPEC-010 BR-010-13: a failed re-authentication goes back to the privacy page the person was
     // on, not to the sign-in (they are signed in). Only the sealed cookie of the start says so.
+    // `googleFlowIntent` is set once `verify` accepted the state; a refusal before that (Google's own
+    // `error=access_denied`, a state that does not match) is told by the sealed cookie itself.
+    const intent = request.googleFlowIntent ?? this.flows.flowIntentOf(request);
     const target =
-      request.googleFlowIntent === 'reauth'
+      intent === 'reauth'
         ? `/profile/privacidade?reauthError=${encodeURIComponent(code)}`
         : `/login?error=${encodeURIComponent(code)}`;
     http.getResponse<Response>().redirect(`${frontendUrl}${target}`);

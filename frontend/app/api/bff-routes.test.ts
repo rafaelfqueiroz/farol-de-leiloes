@@ -60,6 +60,7 @@ import { sameSite, sessionCookie } from '@/test/bff-requests';
 // answers 401 UNAUTHENTICATED itself, without calling the backend, when a signed-in route gets no
 // cookie. The paged list handlers (GET) have their own spec, pagination-routes.test.ts; login,
 // register, the Google exchange and logout, which set or clear the cookie, are at the end.
+// `closed: true` is the one answer delete-account takes for "the account is closed"; the others ignore it
 const fetchMock = vi.fn();
 
 beforeEach(() => {
@@ -67,7 +68,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
   fetchMock.mockImplementation(
     async () =>
-      new Response(JSON.stringify({ ok: true }), {
+      new Response(JSON.stringify({ ok: true, closed: true }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),
@@ -204,7 +205,7 @@ describe.each(routes)('$name', (route) => {
     const response = await call(route, requestFor(route, signedIn));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true });
+    expect(await response.json()).toEqual({ ok: true, closed: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`http://backend:3000/api${route.backendPath}`);
@@ -630,6 +631,33 @@ describe('POST /api/privacy/delete-account (BR-010-13, BR-010-14, SC-02)', () =>
     expect(await response.json()).toEqual({ code, context: {} });
     expect(setCookies(response)).toEqual([]);
   });
+
+  it.each([
+    [
+      '200 with an HTML page',
+      new Response('<html>gateway</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      }),
+    ],
+    ['200 with {}', jsonResponse({})],
+    ['200 with closed: false', jsonResponse({ closed: false })],
+    ['200 with closed as text', jsonResponse({ closed: 'true' })],
+    ['200 with null', jsonResponse(null)],
+    ['204 with no body', new Response(null, { status: 204 })],
+    ['201 with the right body', jsonResponse({ closed: true }, 201)],
+  ])(
+    'answers 502 and keeps the cookie for %s: nothing says the account was closed',
+    async (_label, answer) => {
+      fetchMock.mockResolvedValueOnce(answer);
+
+      const response = await deleteAccount(closeRequest(signedIn));
+
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({ code: 'BACKEND_UNAVAILABLE', context: {} });
+      expect(setCookies(response)).toEqual([]);
+    },
+  );
 
   it('keeps the cookie when the backend cannot be reached', async () => {
     fetchMock.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));

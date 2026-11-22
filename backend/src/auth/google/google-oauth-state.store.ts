@@ -68,6 +68,19 @@ export class GoogleOAuthStateStore {
     };
   }
 
+  /**
+   * The intent of the flow that started in this browser, read from its sealed cookie, for a callback
+   * that failed BEFORE `verify` ran (Google answering `error=access_denied` never reaches it). Only an
+   * intact, unexpired cookie says anything; the cookie is single use, so it is cleared here too.
+   * `undefined` for an ordinary sign-in and for anything that is not a cookie this server sealed.
+   */
+  flowIntentOf(req: Request): GoogleFlowIntent | undefined {
+    const sealed = readCookie(req.headers.cookie, GOOGLE_FLOW_COOKIE);
+    const opened = sealed === undefined ? null : openState(this.key, sealed, this.clock.now());
+    req.res?.clearCookie(GOOGLE_FLOW_COOKIE, this.cookieOptions);
+    return opened?.intent;
+  }
+
   /** Called by passport when the person starts the flow. */
   store(
     req: Request,
