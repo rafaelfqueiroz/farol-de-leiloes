@@ -1156,7 +1156,8 @@
     "summary": "Veja o que aceitou, o que guardamos e exerça seus direitos sobre seus dados.",
     "loading": "Carregando",
     "loadFailed": {
-      "title": "Não foi possível carregar suas informações"
+      "title": "Não foi possível carregar suas informações",
+      "text": "Tente de novo em instantes."
     },
     "acceptances": {
       "title": "Aceites",
@@ -1222,7 +1223,8 @@
       "requesting": "Pedindo",
       "queued": {
         "title": "Preparando seu arquivo",
-        "text": "Pedido em <date></date>. Você pode sair desta página; o arquivo aparece aqui."
+        "text": "Pedido em <date></date>. Você pode sair desta página; o arquivo aparece aqui.",
+        "slow": "Está demorando mais que o normal. Você pode voltar mais tarde: o arquivo aparece aqui quando estiver pronto."
       },
       "ready": {
         "title": "Arquivo pronto",
