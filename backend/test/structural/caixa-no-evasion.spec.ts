@@ -1,24 +1,69 @@
 // SC-24 / SPEC-004 D-50, BR-004-20, DL-004-11: scraping Caixa is polite and undisguised, so "a
-// review of the collection code must find none" of: a stealth plugin, a spoofed browser identity,
-// a CAPTCHA-solving service, or a shell that works around the site's protection. This is that
-// review as a test: it fails the build if one comes back. The rules themselves are in
-// docs/guidelines/SECURITY.md; changing them takes a new ADR (ADR-003 is only Proposed).
+// review of the collection code must find none" of: a stealth plugin or fingerprint patch, a
+// spoofed browser identity, a CAPTCHA-solving service, a rotating-proxy library, or a shell that
+// works around the site's protection. This is that review as a test: it fails the build if one
+// comes back. The rules themselves are in docs/guidelines/SECURITY.md; changing them takes a new
+// ADR (ADR-003 is only Proposed). Scope: backend/src, backend/scripts, deploy/ and
+// .github/workflows/ (the specs are exempt: they name these things to prove the detectors).
 import { describe, expect, it } from 'vitest';
-import { readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, relative } from 'path';
 
 const BACKEND = join(import.meta.dirname, '..', '..');
+const REPO = join(BACKEND, '..');
 const SRC = join(BACKEND, 'src');
 
-function sourceFiles(): string[] {
-  return (readdirSync(SRC, { recursive: true }) as string[])
-    .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts'))
-    .map((file) => relative(SRC, join(SRC, file)).split('\\').join('/'));
+const SCANNED = [
+  { dir: SRC, prefix: 'backend/src' },
+  { dir: join(BACKEND, 'scripts'), prefix: 'backend/scripts' },
+  { dir: join(REPO, 'deploy'), prefix: 'deploy' },
+  { dir: join(REPO, '.github', 'workflows'), prefix: '.github/workflows' },
+];
+const EXTENSIONS = /\.(ts|js|mjs|cjs|sh|ya?ml)$/;
+
+interface ScannedFile {
+  /** Path from the repository root. */
+  file: string;
+  source: string;
 }
 
-// Packages that patch headless traces or solve the challenge for us.
-const EVASION_PACKAGE =
-  /^(puppeteer-extra(-.*)?|playwright-extra|.*stealth.*|.*2captcha.*|.*anti-?captcha.*|.*capsolver.*|.*capmonster.*)$/i;
+function scannedFiles(): ScannedFile[] {
+  return SCANNED.filter(({ dir }) => existsSync(dir)).flatMap(({ dir, prefix }) =>
+    (readdirSync(dir, { recursive: true }) as string[])
+      .filter((file) => EXTENSIONS.test(file) && !/\.spec\.ts$/.test(file))
+      .map((file) => {
+        const path = join(dir, file);
+        return {
+          file: `${prefix}/${relative(dir, path).split('\\').join('/')}`,
+          source: readFileSync(path, 'utf8'),
+        };
+      }),
+  );
+}
+
+// --- Dependencies -----------------------------------------------------------------------------
+
+// Packages that patch headless traces, fake a fingerprint, solve the challenge, or rotate
+// addresses for us.
+const EVASION_PACKAGE = new RegExp(
+  [
+    '^puppeteer-extra(-.*)?$',
+    '^playwright-extra(-.*)?$',
+    '^rebrowser-.*$',
+    '^patchright(-.*)?$',
+    '^undetected-.*$',
+    '^proxy-chain$',
+    '^proxy-pool$',
+    '^got-scraping$',
+    'stealth',
+    'fingerprint',
+    '2captcha',
+    'anti-?captcha',
+    'capsolver',
+    'capmonster',
+  ].join('|'),
+  'i',
+);
 
 /** The banned dependencies a package.json declares, in any dependency section. */
 export function evasionDependencies(packageJson: string): string[] {
@@ -28,18 +73,45 @@ export function evasionDependencies(packageJson: string): string[] {
     .filter((name) => EVASION_PACKAGE.test(name));
 }
 
-/** A browser's user agent in code: `Mozilla/5.0`, or a call that overrides the browser's own. */
-const SPOOFED_IDENTITY = /Mozilla\/\d|setUserAgent\s*\(|--user-agent|userAgent\s*:/;
+// --- Identity ---------------------------------------------------------------------------------
 
-export function spoofsBrowserIdentity(source: string): boolean {
-  return SPOOFED_IDENTITY.test(source);
-}
+const COMMENT_LINE = /^\s*(\/\/|\/\*|\*|#)/;
 
-/** A `User-Agent` header must carry the product's own constant, never a literal. */
-export function setsForeignUserAgentHeader(source: string): boolean {
+/**
+ * A line that mentions a user agent in any spelling (`User-Agent`, `user-agent`, `userAgent`,
+ * `USER_AGENT`, in any quote style or as a flag, `set(`, `append(`, `setHeader(`, `new Headers`,
+ * `setUserAgent`, `--user-agent`) must be carrying the product's constant. Comments are skipped.
+ */
+export function setsForeignUserAgent(source: string): boolean {
   return source
     .split('\n')
-    .some((line) => /['"]user-agent['"]\s*:/i.test(line) && !line.includes('CAIXA_USER_AGENT'));
+    .some(
+      (line) =>
+        !COMMENT_LINE.test(line) &&
+        /user[-_]?agent/i.test(line) &&
+        !line.includes('CAIXA_USER_AGENT'),
+    );
+}
+
+/** Strings and calls whose only use is to look like a person's browser, or to hide the robot. */
+const BROWSER_DISGUISE = new RegExp(
+  [
+    'Mozilla\\/\\d',
+    'AppleWebKit',
+    'Chrome\\/\\d',
+    'Safari\\/\\d',
+    'Gecko\\/\\d',
+    'navigator\\.webdriver',
+    'evaluateOnNewDocument',
+    'setExtraHTTPHeaders',
+    'AutomationControlled',
+    'disable-blink-features',
+    'puppeteer\\.use\\s*\\(',
+  ].join('|'),
+);
+
+export function disguisesBrowser(source: string): boolean {
+  return BROWSER_DISGUISE.test(source);
 }
 
 /** Comments or strings that describe getting around the site's bot protection as a goal. */
@@ -50,20 +122,62 @@ export function talksOfBypassingProtection(source: string): boolean {
   return BYPASS_TALK.test(source);
 }
 
-/** The shell: a child process is how `curl | iconv` got around what Node's client could not. */
-const SPAWNS_PROCESS = /(?:from\s+|require\(\s*|import\(\s*)['"](?:node:)?child_process['"]/;
+// --- Reaching out -----------------------------------------------------------------------------
 
-export function spawnsProcess(source: string): boolean {
-  return SPAWNS_PROCESS.test(source);
+const QUOTE = '[\'"`]';
+
+/** A module specifier in any import form and any quote style, type-only imports excluded. */
+function importsModule(source: string, modules: string): boolean {
+  const withoutTypeImports = source.replace(/import\s+type\s[^;]*;/g, '');
+  const specifier = `${QUOTE}(?:node:)?(?:${modules})(?:\\/[^'"\`]*)?${QUOTE}`;
+  return new RegExp(`(?:from\\s+|require\\(\\s*|import\\(\\s*|import\\s+)${specifier}`).test(
+    withoutTypeImports,
+  );
 }
 
-describe('SC-24: the collection code carries no evasion', () => {
-  const files = sourceFiles().map((file) => ({
-    file,
-    source: readFileSync(join(SRC, file), 'utf8'),
-  }));
+/** Code that opens a connection of its own: an HTTP client, node:http(s), a browser, `fetch`. */
+export function reachesOut(source: string): boolean {
+  return (
+    importsModule(
+      source,
+      'undici|axios|node-fetch|got|superagent|request|http|https|http2|net|tls|puppeteer(?:-core)?|playwright(?:-core)?',
+    ) ||
+    source.split('\n').some((line) => !COMMENT_LINE.test(line) && /(?<![\w.])fetch\s*\(/.test(line))
+  );
+}
 
-  it('has no stealth plugin or CAPTCHA solver among the dependencies', () => {
+/** The shell: a child process is how `curl | iconv` got around what Node's client could not. */
+export function spawnsProcess(source: string): boolean {
+  return importsModule(source, 'child_process|execa|shelljs|cross-spawn');
+}
+
+// The three files that predate the CaixaAccess port still reach out on their own (the detail
+// scraper drives puppeteer, the storage copies fetch a Caixa URL, the LLM adapter fetches the model
+// provider), plus the adapter itself. SPEC-004 part 3 moves the Caixa ones behind the port. This
+// list is exact: a new file that reaches out fails until it is added here on purpose.
+const KNOWN_REACHING_OUT = [
+  'backend/src/ai/adapters/llm.adapter.ts',
+  'backend/src/auctions/caixa/http-caixa-access.ts',
+  'backend/src/auctions/scraper/details-scraper.ts',
+  'backend/src/storage/storage.service.ts',
+];
+
+describe('SC-24: the collection code carries no evasion', () => {
+  const files = scannedFiles();
+  const src = files.filter(({ file }) => file.startsWith('backend/src/'));
+  const names = (found: ScannedFile[]) => found.map((f) => f.file);
+
+  it('scans the code it claims to (a guard that finds no files guards nothing)', () => {
+    expect(names(files)).toEqual(
+      expect.arrayContaining([
+        'backend/src/auctions/caixa/http-caixa-access.ts',
+        'deploy/render-env.sh',
+        '.github/workflows/deploy.yml',
+      ]),
+    );
+  });
+
+  it('has no stealth plugin, fingerprint patch, CAPTCHA solver or proxy pool among the dependencies', () => {
     expect(evasionDependencies(readFileSync(join(BACKEND, 'package.json'), 'utf8'))).toEqual([]);
   });
 
@@ -78,84 +192,101 @@ describe('SC-24: the collection code carries no evasion', () => {
     expect(installed).toEqual([]);
   });
 
-  it('presents no browser identity in any source file', () => {
-    expect(files.filter(({ source }) => spoofsBrowserIdentity(source)).map((f) => f.file)).toEqual(
-      [],
-    );
+  it('sets a user agent only from CAIXA_USER_AGENT', () => {
+    expect(names(files.filter(({ source }) => setsForeignUserAgent(source)))).toEqual([]);
   });
 
-  it('sets a User-Agent header only from CAIXA_USER_AGENT', () => {
-    expect(
-      files.filter(({ source }) => setsForeignUserAgentHeader(source)).map((f) => f.file),
-    ).toEqual([]);
+  it('presents no browser identity and hides no automation', () => {
+    expect(names(files.filter(({ source }) => disguisesBrowser(source)))).toEqual([]);
   });
 
   it('never describes getting around bot protection', () => {
-    expect(
-      files.filter(({ source }) => talksOfBypassingProtection(source)).map((f) => f.file),
-    ).toEqual([]);
+    expect(names(files.filter(({ source }) => talksOfBypassingProtection(source)))).toEqual([]);
   });
 
-  it('runs no shell command in the Caixa modules (no curl, no child_process)', () => {
-    expect(
-      files
-        .filter(({ file }) => file.startsWith('auctions/') || file.startsWith('storage/'))
-        .filter(({ source }) => spawnsProcess(source))
-        .map((f) => f.file),
-    ).toEqual([]);
+  it('runs no shell command and spawns no process anywhere in src', () => {
+    expect(names(src.filter(({ source }) => spawnsProcess(source)))).toEqual([]);
   });
 
-  it('keeps Caixa requests in the port: only known files still reach Caixa on their own', () => {
-    // The detail scraper (puppeteer) and the storage copies (fetch of a Caixa URL) are the two
-    // that predate the CaixaAccess port; they move behind it with SPEC-004 part 3. This list may
-    // only shrink. The LLM adapter's fetch goes to the model provider, not to Caixa.
-    const KNOWN_DIRECT = [
-      'ai/adapters/llm.adapter.ts',
-      'auctions/scraper/details-scraper.ts',
-      'storage/storage.service.ts',
-    ];
-    const reachingOut = files
-      .filter(({ file }) => !file.startsWith('auctions/caixa/'))
-      .filter(({ source }) => /\bfetch\(|from 'puppeteer'|from 'undici'|from 'axios'/.test(source))
-      .map((f) => f.file)
-      .sort();
-
-    expect(reachingOut).toEqual(KNOWN_DIRECT);
+  it('keeps outbound requests in known places: only these files reach out on their own', () => {
+    expect(names(src.filter(({ source }) => reachesOut(source))).sort()).toEqual(
+      KNOWN_REACHING_OUT,
+    );
   });
 });
 
 describe('the detectors', () => {
-  it('see a stealth or CAPTCHA package', () => {
+  it('see a stealth, fingerprint, solver or proxy-pool package, in any section', () => {
     const json = (deps: Record<string, string>) => JSON.stringify({ dependencies: deps });
-    expect(evasionDependencies(json({ 'puppeteer-extra-plugin-stealth': '^2.0.0' }))).toEqual([
+    for (const name of [
       'puppeteer-extra-plugin-stealth',
-    ]);
-    expect(evasionDependencies(json({ '2captcha': '1.0.0', puppeteer: '^25' }))).toEqual([
+      'puppeteer-extra',
+      'playwright-extra',
+      'rebrowser-puppeteer',
+      'patchright',
+      'undetected-chromedriver',
+      'fingerprint-generator',
+      'proxy-chain',
+      'proxy-pool',
       '2captcha',
-    ]);
+      'capsolver',
+    ]) {
+      expect(evasionDependencies(json({ [name]: '1.0.0' }))).toEqual([name]);
+    }
     expect(
       evasionDependencies(JSON.stringify({ devDependencies: { 'puppeteer-extra': '3' } })),
     ).toEqual(['puppeteer-extra']);
-    expect(evasionDependencies(json({ puppeteer: '^25', cheerio: '^1' }))).toEqual([]);
+    expect(
+      evasionDependencies(json({ puppeteer: '^25', cheerio: '^1', undici: '7.30.1' })),
+    ).toEqual([]);
     expect(evasionDependencies('{}')).toEqual([]);
   });
 
   it.each([
-    "headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64)' }",
-    "await page.setUserAgent('whatever');",
+    "headers: { 'User-Agent': 'FarolDosLeiloes/1.0' }",
+    'headers: { "user-agent": ua }',
+    'headers: { `User-Agent`: ua }',
+    'headers: { userAgent: ua }',
+    "headers.set('User-Agent', ua);",
+    "headers.append('user-agent', ua);",
+    "response.setHeader('User-Agent', ua);",
+    "new Headers({ 'User-Agent': ua })",
+    "await page.setUserAgent('x');",
     "args: ['--user-agent=Foo']",
-    "{ userAgent: 'x' }",
-  ])('see a browser identity in %s', (line) => {
-    expect(spoofsBrowserIdentity(line)).toBe(true);
+    'curl --user-agent "$UA" https://example.test',
+    'USER_AGENT: ${{ secrets.UA }}',
+  ])('see a user agent set from anything but the constant in %s', (line) => {
+    expect(setsForeignUserAgent(line)).toBe(true);
   });
 
-  it('see the honest identity as honest', () => {
-    expect(spoofsBrowserIdentity("headers: { 'User-Agent': CAIXA_USER_AGENT }")).toBe(false);
-    expect(setsForeignUserAgentHeader("headers: { 'User-Agent': CAIXA_USER_AGENT }")).toBe(false);
-    expect(setsForeignUserAgentHeader("headers: { 'User-Agent': 'FarolDosLeiloes/1.0' }")).toBe(
-      true,
-    );
-    expect(setsForeignUserAgentHeader("headers: { 'user-agent': ua }")).toBe(true);
+  it.each([
+    "headers: { 'User-Agent': CAIXA_USER_AGENT }",
+    "import { CAIXA_USER_AGENT } from '../common/caixa-user-agent.js';",
+    '// SC-24: no user-agent spoofing, an honest user agent',
+    ' * the user agent the product presents',
+    '# a user-agent in a shell comment',
+  ])('let %s pass', (line) => {
+    expect(setsForeignUserAgent(line)).toBe(false);
+  });
+
+  it.each([
+    "'Mozilla/5.0 (X11; Linux x86_64)'",
+    'Mozilla/5.0',
+    'Chrome/120.0.0.0',
+    'AppleWebKit/537.36',
+    'Safari/537.36',
+    'Object.defineProperty(navigator.webdriver, 1)',
+    'await page.evaluateOnNewDocument(() => {});',
+    'await page.setExtraHTTPHeaders({});',
+    "args: ['--disable-blink-features=AutomationControlled']",
+    'puppeteer.use(StealthPlugin());',
+  ])('see a browser disguise in %s', (line) => {
+    expect(disguisesBrowser(line)).toBe(true);
+  });
+
+  it('does not take the honest identity for a disguise', () => {
+    expect(disguisesBrowser("{ 'User-Agent': CAIXA_USER_AGENT }")).toBe(false);
+    expect(disguisesBrowser('FarolDosLeiloes/1.0')).toBe(false);
   });
 
   it.each([
@@ -177,9 +308,52 @@ describe('the detectors', () => {
     expect(talksOfBypassingProtection(line)).toBe(false);
   });
 
-  it('see a child_process import', () => {
-    expect(spawnsProcess("import { exec } from 'child_process';")).toBe(true);
-    expect(spawnsProcess("const cp = require('node:child_process');")).toBe(true);
+  it.each([
+    "import { exec } from 'child_process';",
+    "import { exec } from 'node:child_process';",
+    'import { exec } from "child_process";',
+    'import { exec } from `child_process`;',
+    "const cp = require('node:child_process');",
+    "const cp = await import('child_process');",
+    "import { execa } from 'execa';",
+    "import shell from 'shelljs';",
+    "import spawn from 'cross-spawn';",
+  ])('see a process spawned in %s', (line) => {
+    expect(spawnsProcess(line)).toBe(true);
+  });
+
+  it('does not take a lookalike for a spawn', () => {
     expect(spawnsProcess("import { x } from './process.js';")).toBe(false);
+    expect(spawnsProcess("import type { ChildProcess } from 'child_process';")).toBe(false);
+  });
+
+  it.each([
+    "import { fetch } from 'undici';",
+    'import axios from "axios";',
+    "import got from 'got';",
+    "import fetch from 'node-fetch';",
+    "import superagent from 'superagent';",
+    "import https from 'node:https';",
+    "import http from 'http';",
+    "const https = require('https');",
+    "const lib = await import('node:http');",
+    'import axios from `axios`;',
+    "import puppeteer from 'puppeteer';",
+    "const response = await fetch('https://example.test');",
+    'const response = await fetch(url, { headers });',
+  ])('see an outbound request in %s', (line) => {
+    expect(reachesOut(line)).toBe(true);
+  });
+
+  it.each([
+    "import type { IncomingMessage } from 'node:http';",
+    "import { HttpException } from '@nestjs/common';",
+    "import { gotoPage } from './got-helper.js';",
+    'const prefetch = 1; refetch();',
+    'client.fetch();',
+    '// a failed fetch (DV-03) is retried',
+    "import { x } from './http-caixa-access.js';",
+  ])('let %s pass', (line) => {
+    expect(reachesOut(line)).toBe(false);
   });
 });
