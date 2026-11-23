@@ -442,9 +442,8 @@ export class UsersService {
   /**
    * Internal writes by named server flows. It is never reached from a request body: the profile
    * goes through `updateProfile` (BR-001-29, BR-001-31). The email is not here at all: it cannot
-   * be changed (BR-001-26, D-63). Neither are the legacy cpf, dateOfBirth, sex and address: stored,
-   * unused and written by nothing until SPEC-010 decides their fate (BR-010-06). And no plan or
-   * subscription field: those are an office's and follow the provider (SPEC-012 BR-012-14).
+   * be changed (BR-001-26, D-63). A CPF, date of birth, sex or address is not stored at all (erased
+   * by migration 0011, BR-010-06, SC-26). And no plan or subscription field: those are an office's and follow the provider (SPEC-012 BR-012-14).
    */
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserDocument> {
     // SC-10: the update is built field by field from a whitelist, never the DTO object itself, so

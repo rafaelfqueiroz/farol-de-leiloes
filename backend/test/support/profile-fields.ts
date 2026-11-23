@@ -10,11 +10,13 @@ export const PROFILE_EDITABLE = ['name', 'phone'] as const;
 export const EMAIL_READ_ONLY = ['email'] as const;
 
 /**
- * Legacy, stored and unused until SPEC-010 (issue #1 owner decision, 16/11/2026): the profile no
- * longer shows or collects them and no path writes them, `UsersService.update` included. Data
- * already stored stays as it is (no migration, no deletion); SPEC-010 BR-010-06 decides its fate.
+ * Personal fields that are NOT part of the user schema and must never be again (SC-26, SPEC-010
+ * BR-010-06): erased from the collection by migration 0011-erase-legacy-profile-fields (owner decision
+ * on issue #10, 2026-11-23). They are deliberately outside `ALL_CLASSIFIED`: a schema path with one of
+ * these names fails test/structural/no-erased-personal-fields.spec.ts. They stay here only so the
+ * hostile-input tests keep proving that no write path can put them back.
  */
-export const LEGACY_UNUSED = ['cpf', 'dateOfBirth', 'sex', 'address'] as const;
+export const ERASED_PERSONAL = ['cpf', 'dateOfBirth', 'sex', 'address'] as const;
 
 /** Written only by the server flow that owns them, never from a profile request (BR-001-30). */
 export const PROTECTED = [
@@ -54,7 +56,6 @@ export const BOOKKEEPING = ['_id', '__v', 'createdAt', 'updatedAt'] as const;
 export const ALL_CLASSIFIED: readonly string[] = [
   ...PROFILE_EDITABLE,
   ...EMAIL_READ_ONLY,
-  ...LEGACY_UNUSED,
   ...PROTECTED,
   ...BOOKKEEPING,
 ];

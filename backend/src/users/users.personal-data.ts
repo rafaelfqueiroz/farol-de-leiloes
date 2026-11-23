@@ -1,10 +1,11 @@
 // SPEC-010 BR-010-08, BR-010-09, BR-010-15 / SC-27: what the account document holds about the person,
 // for the export, the "my data" view and the purge.
 //
-// collect: the profile, how the account signs in and the legacy fields still stored (CPF, date of
-// birth, sex, address, the legacy billing ids: nothing reads them, but they ARE personal data held
-// about the person, so the access right shows them, SECURITY §9). Never the password hash. It reads
-// the account of `ctx.accountId` only.
+// collect: the profile, how the account signs in and the legacy billing ids still stored (nothing
+// reads them, but they ARE personal data held about the person, so the access right shows them,
+// SECURITY §9). CPF, date of birth, sex and address are not here: they were erased (migration
+// 0011-erase-legacy-profile-fields, BR-010-06) and are not stored. Never the password hash. It
+// reads the account of `ctx.accountId` only.
 //
 // purge: the document is not deleted by a provider: its tombstone is the purge job's LAST step,
 // conditional on the claim it holds (UsersService.completePurge), so a crash never leaves a
@@ -53,13 +54,6 @@ export class UsersPersonalData implements PersonalDataProvider {
       // BR-010-27, DL-001-02: instants about the consent records, not their content.
       whatsappPromptAnsweredAt: user.whatsappPromptAnsweredAt ?? null,
       consentResetAt: user.consentResetAt ?? null,
-      // Stored and unused since SPEC-001 BR-001-25 (SECURITY §9): shown because they are held.
-      legacyProfile: {
-        cpf: user.cpf ?? null,
-        dateOfBirth: user.dateOfBirth ?? null,
-        sex: user.sex ?? null,
-        address: user.address ?? null,
-      },
       // Superseded by the office subscription (SPEC-012 BR-012-14); stored, never written now.
       legacyBilling: {
         role: user.role ?? null,

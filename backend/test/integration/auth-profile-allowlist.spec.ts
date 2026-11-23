@@ -240,7 +240,7 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
     expect(await stored(email)).toEqual(before);
   });
 
-  it('PATCH /auth/profile refuses the legacy cpf, birth date, sex and address as a whole', async () => {
+  it('PATCH /auth/profile refuses cpf, birth date, sex and address (erased, BR-010-06) as a whole', async () => {
     const { email, token } = await account();
     const before = await stored(email);
 
@@ -256,19 +256,8 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
     expect(await stored(email)).toEqual(before);
   });
 
-  it('GET /auth/profile/full does not return the legacy details a stored account still holds', async () => {
+  it('GET /auth/profile/full returns and the store holds no cpf, date of birth, sex or address (SC-26)', async () => {
     const { email, token } = await account();
-    await users.collection.updateOne(
-      { email },
-      {
-        $set: {
-          cpf: '00000000000',
-          dateOfBirth: new Date('1990-01-01T00:00:00.000Z'),
-          sex: 'female',
-          address: { city: 'Natal' },
-        },
-      },
-    );
     const before = await stored(email);
 
     const response = await request(server())
@@ -276,8 +265,9 @@ describe('PATCH /api/auth/profile allowlist (integration)', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
-    for (const legacy of ['cpf', 'dateOfBirth', 'sex', 'address']) {
-      expect(response.body).not.toHaveProperty(legacy);
+    for (const erased of ['cpf', 'dateOfBirth', 'sex', 'address']) {
+      expect(response.body).not.toHaveProperty(erased);
+      expect(before).not.toHaveProperty(erased);
     }
     expect(await stored(email)).toEqual(before);
   });
