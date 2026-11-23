@@ -105,6 +105,11 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   SAVED_FILTER_LIMIT_REACHED: HttpStatus.CONFLICT,
   SAVED_FILTER_NAME_TAKEN: HttpStatus.CONFLICT,
 
+  // SPEC-009 BR-009-08: the requester's own request is closed; its permission can no longer be
+  // withdrawn because there is nothing left to withdraw. Only the owner ever sees it: another
+  // account's id is the same 404 as a missing one (AR-14).
+  SUPPORT_REQUEST_CLOSED: HttpStatus.CONFLICT,
+
   REMINDER_ALREADY_SENT: HttpStatus.CONFLICT,
   REMINDER_DATE_IN_PAST: HttpStatus.BAD_REQUEST,
   REMINDER_AFTER_AUCTION_START: HttpStatus.BAD_REQUEST,

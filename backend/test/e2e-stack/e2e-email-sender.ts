@@ -4,7 +4,8 @@ type EmailPort = Pick<
   EmailService,
   | 'sendVerificationEmail'
   | 'sendPasswordResetEmail'
-  | 'sendSupportEmail'
+  | 'sendSupportConfirmationEmail'
+  | 'sendSupportNoticeEmail'
   | 'sendReminderEmail'
   | 'sendPaymentFailedEmail'
 >;
@@ -29,8 +30,12 @@ export class E2eEmailSender implements EmailPort {
     this.sent.push({ kind: 'sendPasswordResetEmail', to: email });
   }
 
-  async sendSupportEmail(to: string): Promise<void> {
-    this.sent.push({ kind: 'sendSupportEmail', to });
+  async sendSupportConfirmationEmail({ to }: { to: string }): Promise<void> {
+    this.sent.push({ kind: 'sendSupportConfirmationEmail', to });
+  }
+
+  async sendSupportNoticeEmail({ to }: { to: string }): Promise<void> {
+    this.sent.push({ kind: 'sendSupportNoticeEmail', to });
   }
 
   async sendReminderEmail(email: string): Promise<void> {

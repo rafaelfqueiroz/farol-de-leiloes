@@ -19,9 +19,10 @@ import { SupportGrantService } from './support-grant.service.js';
  * could read in production; SPEC-009 (support requests and the open/end routes), SPEC-016 and
  * SPEC-021 (the read services) add routes under `/api/admin/support-grants/:grantId/...`, each
  * `@AdminOnly()`, built on `SupportGrantService.contextForRead` and `GrantReadLogger`. Until then the
- * service is exercised by the isolation suite's probe (test/isolation/support/probe.module.ts), and
- * the support request source (AccessModule's SUPPORT_REQUEST_SOURCE) knows no request, so no grant
- * can be opened (BR-002-24).
+ * service is exercised by the isolation suite's probe (test/isolation/support/probe.module.ts). The
+ * support request source (AccessModule's SUPPORT_REQUEST_SOURCE) is SPEC-009's real one since its part
+ * 1, so a grant can be opened on a real request through the service; SPEC-009's part 2 adds the
+ * admin's routes (BR-002-24).
  *
  * In the API (FEATURE_MODULES) so the isolation gate classifies its two collections. Their indexes,
  * the one-open-grant-per-request index the open race relies on included, are built by migration

@@ -8,9 +8,36 @@ import {
 } from './templates/verification.template.js';
 import { getPaymentFailedEmailTemplate } from './templates/payment-failed.template.js';
 import {
+  getSupportConfirmationEmail,
+  getSupportNoticeEmail,
+  type SupportConfirmationInput,
+  type SupportNoticeInput,
+} from './templates/support.template.js';
+import {
   getAuctionReminderEmailTemplate,
   ReminderEmailPayload,
 } from '../reminders/templates/reminder.template.js';
+
+/** SPEC-009 BR-009-07: what the confirmation to a requester is made of (`requestId` keys its Message-ID). */
+export interface SupportConfirmationMail extends SupportConfirmationInput {
+  readonly to: string;
+  readonly requestId: string;
+}
+
+/** SPEC-009 BR-009-10: what the notice to the support team is made of. */
+export interface SupportNoticeMail extends SupportNoticeInput {
+  readonly to: string;
+}
+
+/**
+ * BR-009-07: the Message-ID of the confirmation of a request: stable, so a duplicate send of the
+ * same confirmation carries the same id. Its domain is the sender's (EMAIL_FROM, with or without a
+ * display name), `localhost` when none can be read.
+ */
+export function supportConfirmationMessageId(requestId: string, emailFrom: string): string {
+  const domain = /@([^\s<>@]+)>?\s*$/.exec(emailFrom)?.[1] ?? 'localhost';
+  return `<support-confirmation-${requestId}@${domain}>`;
+}
 
 // SC-15 / SC-16 / AR-46: no recipient address, name, message content or token link is logged,
 // including when SMTP is unavailable in development.
@@ -92,39 +119,56 @@ export class EmailService {
     this.logger.log('Password reset email sent');
   }
 
-  async sendSupportEmail(
-    to: string,
-    userEmail: string,
-    userName: string,
-    title: string,
-    description: string,
-  ): Promise<void> {
-    const subject = `[Suporte] ${title}`;
-    const html = `
-      <h2>Nova solicitação de suporte</h2>
-      <p><strong>Usuário:</strong> ${userName} (${userEmail})</p>
-      <p><strong>Título:</strong> ${title}</p>
-      <hr />
-      <p><strong>Descrição:</strong></p>
-      <p>${description.replace(/\n/g, '<br />')}</p>
-    `;
-
+  /**
+   * SPEC-009 BR-009-07: the confirmation to the requester, at the account's current address. The
+   * Subject is fixed text plus the protocol, never the requester's words (no header injection, and
+   * nothing typed by a person in a header). The Message-ID is stable per request, so a mail
+   * provider or client can drop the rare duplicate a crash between "sent" and "marked" can cause.
+   * Throws when the send fails; the caller (the outbox) retries. SC-15: nothing is logged but the kind.
+   */
+  async sendSupportConfirmationEmail(input: SupportConfirmationMail): Promise<void> {
     if (!this.transporter) {
-      this.logger.log('Support request email simulated (development mode, SMTP not configured)');
+      this.logSimulatedEmail('Support confirmation email');
       return;
     }
-
     const emailFrom = this.configService.get('EMAIL_FROM', { infer: true });
+    const { html, text } = getSupportConfirmationEmail(input);
 
     await this.transporter.sendMail({
       from: emailFrom,
-      to,
-      replyTo: userEmail,
-      subject,
+      to: input.to,
+      messageId: supportConfirmationMessageId(input.requestId, emailFrom),
+      subject: `Recebemos sua solicitação de suporte ${input.protocol} - Farol dos Leilões`,
       html,
+      text,
     });
 
-    this.logger.log('Support request email sent'); // SC-15: no recipient, no content
+    this.logger.log('Support confirmation email sent');
+  }
+
+  /**
+   * SPEC-009 BR-009-10: the notice to the support team's mailbox (`to`, from SUPPORT_EMAIL). Reply-To
+   * is the requester as a structured address, so answering the notice answers the person. The
+   * Subject is fixed text plus the protocol (see above).
+   */
+  async sendSupportNoticeEmail(input: SupportNoticeMail): Promise<void> {
+    if (!this.transporter) {
+      this.logSimulatedEmail('Support notice email');
+      return;
+    }
+    const emailFrom = this.configService.get('EMAIL_FROM', { infer: true });
+    const { html, text } = getSupportNoticeEmail(input);
+
+    await this.transporter.sendMail({
+      from: emailFrom,
+      to: input.to,
+      replyTo: { name: '', address: input.requesterEmail },
+      subject: `[Suporte] Nova solicitação ${input.protocol}`,
+      html,
+      text,
+    });
+
+    this.logger.log('Support notice email sent'); // SC-15: no recipient, no content
   }
 
   async sendReminderEmail(email: string, payload: ReminderEmailPayload): Promise<void> {

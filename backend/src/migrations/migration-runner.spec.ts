@@ -169,6 +169,7 @@ describe('assertMigrationOrder', () => {
       '0009-privacy-rights-indexes',
       '0010-retention-legal-indexes',
       '0011-erase-legacy-profile-fields',
+      '0012-support-requests-indexes',
     ]);
   });
 });
