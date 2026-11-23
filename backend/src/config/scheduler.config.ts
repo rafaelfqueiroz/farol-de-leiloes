@@ -14,6 +14,7 @@ export interface SchedulerConfig {
   accountPurge: SchedulerAccountPurgeConfig;
   dataExport: SchedulerDataExportConfig;
   documentRetention: SchedulerDocumentRetentionConfig;
+  supportMail: SchedulerSupportMailConfig;
   cleanup: SchedulerCleanupConfig;
 }
 
@@ -34,6 +35,10 @@ export interface SchedulerDataExportConfig {
 }
 
 export interface SchedulerDocumentRetentionConfig {
+  enabled: boolean;
+}
+
+export interface SchedulerSupportMailConfig {
   enabled: boolean;
 }
 
@@ -68,6 +73,7 @@ export function schedulerConfigFrom(env: Env): SchedulerConfig {
     accountPurge: { enabled: env.ACCOUNT_PURGE_ENABLED },
     dataExport: { enabled: env.DATA_EXPORT_ENABLED },
     documentRetention: { enabled: env.DOCUMENT_RETENTION_ENABLED },
+    supportMail: { enabled: env.SUPPORT_MAIL_JOB_ENABLED },
     cleanup: { onStartup: env.CLEANUP_ON_STARTUP },
   };
 }

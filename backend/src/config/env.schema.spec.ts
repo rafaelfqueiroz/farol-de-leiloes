@@ -31,6 +31,22 @@ describe('validateEnv', () => {
     },
   );
 
+  it('SPEC-009 BR-009-03: SUPPORT_EMAIL has no default: missing, empty or malformed stops the boot', () => {
+    for (const NODE_ENV of ['development', 'test', 'production']) {
+      expect(errorOf({ ...TEST_ENV, NODE_ENV, SUPPORT_EMAIL: undefined })).toContain(
+        'SUPPORT_EMAIL:',
+      );
+    }
+    expect(errorOf({ ...TEST_ENV, SUPPORT_EMAIL: '' })).toContain('SUPPORT_EMAIL:');
+    expect(errorOf({ ...TEST_ENV, SUPPORT_EMAIL: 'nao-e-um-email' })).toContain('SUPPORT_EMAIL:');
+    expect(errorOf({ ...TEST_ENV, SUPPORT_EMAIL: 'nao-e-um-email' })).not.toContain(
+      'nao-e-um-email',
+    );
+    expect(testEnv({ SUPPORT_EMAIL: 'equipe-ficticia@example.test' }).SUPPORT_EMAIL).toBe(
+      'equipe-ficticia@example.test',
+    );
+  });
+
   it('treats an empty value as missing (`KEY=` in a .env file)', () => {
     expect(errorOf({ ...TEST_ENV, JWT_SECRET: '' })).toContain('JWT_SECRET: missing');
   });
@@ -93,6 +109,7 @@ describe('validateEnv', () => {
       ACCOUNT_PURGE_ENABLED: true,
       DATA_EXPORT_ENABLED: true,
       DOCUMENT_RETENTION_ENABLED: true,
+      SUPPORT_MAIL_JOB_ENABLED: true,
       CLEANUP_ON_STARTUP: false,
       NEIGHBORHOODS_CACHE_ENABLED: false,
       NEIGHBORHOODS_CACHE_TTL: 600_000,
@@ -277,6 +294,7 @@ describe('namespaced configs built from the validated environment', () => {
       accountPurge: { enabled: true },
       dataExport: { enabled: true },
       documentRetention: { enabled: true },
+      supportMail: { enabled: true },
       cleanup: { onStartup: false },
     });
     expect(
@@ -287,6 +305,11 @@ describe('namespaced configs built from the validated environment', () => {
     expect(
       schedulerConfigFrom(testEnv({ DOCUMENT_RETENTION_ENABLED: 'false' })).documentRetention,
     ).toEqual({ enabled: false });
+    expect(schedulerConfigFrom(testEnv({ SUPPORT_MAIL_JOB_ENABLED: 'false' })).supportMail).toEqual(
+      {
+        enabled: false,
+      },
+    );
     expect(
       schedulerConfigFrom(testEnv({ SUBSCRIPTIONS_RECONCILE_ENABLED: 'false' }))
         .subscriptionsReconcile,

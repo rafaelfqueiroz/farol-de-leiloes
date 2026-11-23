@@ -20,6 +20,7 @@ export const TEST_ENV = {
   SMTP_HOST: 'smtp.example.test',
   SMTP_USER: 'test-smtp-user',
   SMTP_PASS: 'test-smtp-pass',
+  SUPPORT_EMAIL: 'suporte-ficticio@example.test',
   SMS_PROVIDER_API_KEY: 'test-sms-key',
   WHATSAPP_API_KEY: 'test-whatsapp-key',
   CLOUDFLARE_ACCOUNT_ID: 'test-account',
