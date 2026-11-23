@@ -15,6 +15,22 @@ interface EmailPort {
   sendPaymentFailedEmail(...args: Args<'sendPaymentFailedEmail'>): Promise<void>;
 }
 
+interface Deferred {
+  promise: Promise<void>;
+  resolve(): void;
+  reject(error: Error): void;
+}
+
+function deferred(): Deferred {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 /**
  * TS-03 / TS-07: records the emails instead of sending them; nothing reaches SMTP. Inject it
  * with `fake as unknown as EmailService`.
@@ -32,6 +48,33 @@ export class FakeEmailSender implements EmailPort {
   readonly failFor = new Set<string>();
   /** Makes every support email (confirmation and notice) fail, as an SMTP server that is down would. */
   supportMailDown = false;
+  private heldSupportSends: Array<Deferred> = [];
+  /** How many support sends are waiting on a `holdNextSupportSend()`. */
+  waitingSupportSends = 0;
+
+  /**
+   * Makes the NEXT support send (confirmation or notice) wait until the test says how it ends, like an
+   * SMTP server that stalls: `succeed()` records it as delivered, `fail()` rejects it (the transport's
+   * timeout). Later sends are not held.
+   */
+  holdNextSupportSend(): { succeed(): void; fail(): void } {
+    const held = deferred();
+    this.heldSupportSends.push(held);
+    return { succeed: () => held.resolve(), fail: () => held.reject(new Error('smtp timeout')) };
+  }
+
+  private async passSupportGate(to: string): Promise<void> {
+    const held = this.heldSupportSends.shift();
+    if (held) {
+      this.waitingSupportSends += 1;
+      try {
+        await held.promise;
+      } finally {
+        this.waitingSupportSends -= 1;
+      }
+    }
+    if (this.supportMailDown || this.failFor.has(to)) throw new Error('mail server unreachable');
+  }
 
   async sendVerificationEmail(email: string, token: string, name: string): Promise<void> {
     this.verificationEmails.push({ email, token, name });
@@ -53,14 +96,12 @@ export class FakeEmailSender implements EmailPort {
   async sendSupportConfirmationEmail(
     ...[mail]: Args<'sendSupportConfirmationEmail'>
   ): Promise<void> {
-    if (this.supportMailDown || this.failFor.has(mail.to))
-      throw new Error('mail server unreachable');
+    await this.passSupportGate(mail.to);
     this.supportConfirmations.push(mail);
   }
 
   async sendSupportNoticeEmail(...[mail]: Args<'sendSupportNoticeEmail'>): Promise<void> {
-    if (this.supportMailDown || this.failFor.has(mail.to))
-      throw new Error('mail server unreachable');
+    await this.passSupportGate(mail.to);
     this.supportNotices.push(mail);
   }
 }

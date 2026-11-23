@@ -52,6 +52,29 @@ export const MAIL_RETRY_DELAYS_MINUTES = [1, 2, 5, 15, 60, 180] as const;
 /** How long a delivery may hold a request before another may take it over (a crashed worker's lease). */
 export const MAIL_CLAIM_LEASE_MS = 2 * 60 * 1000;
 
+/**
+ * The longest one send may take before the worker counts it as failed and goes on. Two sends of one
+ * round (40 s) end well inside the lease (2 minutes), so a worker that is working normally never has
+ * its claim taken over; the transport's own timeouts (EmailService.SMTP_TIMEOUTS, 35 s at the very
+ * most for one send) bound the send underneath.
+ */
+export const MAIL_SEND_TIMEOUT_MS = 20 * 1000;
+
+/**
+ * How long the request that creates a support request waits for its own first delivery before it
+ * answers `confirmationSent: false` and leaves the rest to the background (and then the job): the
+ * requester is never held on SMTP.
+ */
+export const MAIL_INLINE_BUDGET_MS = 6 * 1000;
+
+/**
+ * The lease is over at its end instant, half-open like the claim's own query (a claim whose
+ * `mailClaimUntil` is <= now is free to take): a worker past it may not start another mail.
+ */
+export function isLeaseOver(claimUntil: Date | undefined, now: Date): boolean {
+  return claimUntil !== undefined && now.getTime() >= claimUntil.getTime();
+}
+
 const MINUTE_MS = 60 * 1000;
 
 export type NextMailAttempt =

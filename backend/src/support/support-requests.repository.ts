@@ -62,7 +62,7 @@ export interface NewSupportRequest {
   readonly openedAt: Date;
 }
 
-/** How a delivery round ends (see `releaseClaim`). */
+/** How a delivery round ends (see `releaseClaimByJob`). */
 export type ClaimRelease =
   /** Nothing is owed any more. */
   | { readonly kind: 'done' }
@@ -180,7 +180,7 @@ export class SupportRequestsRepository extends AccountScopedRepository<SupportRe
    * a lease that ran out). So two workers, or a worker and the request's own first attempt, never both
    * send: whoever's update matches holds the claim until `until`. Null when there is nothing to take.
    */
-  async claimForDelivery(
+  async claimDeliveryByJob(
     id: string | undefined,
     token: string,
     now: Date,
@@ -209,7 +209,7 @@ export class SupportRequestsRepository extends AccountScopedRepository<SupportRe
    * Records that a mail was delivered or skipped on purpose, only for the worker that still holds the
    * claim (a lease that ran out and was taken over matches nothing). True when it was recorded.
    */
-  async markMailSettled(
+  async markMailSettledByJob(
     id: string,
     token: string,
     kind: MailKind,
@@ -226,7 +226,7 @@ export class SupportRequestsRepository extends AccountScopedRepository<SupportRe
   }
 
   /** Ends the delivery round of the worker holding `token`: nothing owed, a retry, or the end of retries. */
-  async releaseClaim(id: string, token: string, release: ClaimRelease): Promise<boolean> {
+  async releaseClaimByJob(id: string, token: string, release: ClaimRelease): Promise<boolean> {
     const changes =
       release.kind === 'done'
         ? { $unset: { ...CLEAR_CLAIM, mailNextAttemptAt: '' } }

@@ -4,6 +4,7 @@
 // ours (domain/protocol.ts) and the address is escaped like any other value. The text part carries
 // the same words with no markup at all.
 import { escapeHtml, escapeHtmlWithLineBreaks } from '../../common/html/escape-html.js';
+import { singleLine } from '../../common/text/single-line.js';
 
 export interface SupportMailContent {
   readonly html: string;
@@ -50,7 +51,9 @@ ${body}
 }
 
 /** BR-009-07: to the requester, at the account's current address: protocol, subject, a copy of the message. */
-export function getSupportConfirmationEmail(input: SupportConfirmationInput): SupportMailContent {
+export function getSupportConfirmationEmail(raw: SupportConfirmationInput): SupportMailContent {
+  // The subject is one line: a line break in it would forge a line of the text part.
+  const input = { ...raw, subject: singleLine(raw.subject) };
   const html = page(`      <h2>Recebemos sua solicitação de suporte</h2>
       <p>Seu número de protocolo é <strong>${escapeHtml(input.protocol)}</strong>. Guarde-o para qualquer acompanhamento.</p>
       <p><strong>Assunto:</strong> ${escapeHtml(input.subject)}</p>
@@ -79,7 +82,13 @@ export function getSupportConfirmationEmail(input: SupportConfirmationInput): Su
  * BR-009-10: to the support team: protocol, the requester's name and email, subject and message and
  * nothing else; nothing from the requester's data in the product is added.
  */
-export function getSupportNoticeEmail(input: SupportNoticeInput): SupportMailContent {
+export function getSupportNoticeEmail(raw: SupportNoticeInput): SupportMailContent {
+  // The subject and the name are one line each (see above): the notice is what the team reads.
+  const input = {
+    ...raw,
+    subject: singleLine(raw.subject),
+    requesterName: singleLine(raw.requesterName),
+  };
   const html = page(`      <h2>Nova solicitação de suporte</h2>
       <p><strong>Protocolo:</strong> ${escapeHtml(input.protocol)}</p>
       <p><strong>Solicitante:</strong> ${escapeHtml(input.requesterName)} (${escapeHtml(input.requesterEmail)})</p>

@@ -3,7 +3,7 @@
 // SUPPORT_REQUEST_SOURCE bound in AccessModule, and the indexes built from the schemas; only the clock
 // and the mailer are fakes (TS-06, TS-07). Each test opens its own accounts and leaves nothing owed in
 // the outbox, so one test's retries never reach another. Fake names and texts only (TS-27).
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { type Connection, type Model, Types } from 'mongoose';
 import request from 'supertest';
@@ -24,6 +24,7 @@ import { PersonalDataRegistry } from '../../src/privacy/registry/personal-data-r
 import { SupportRequestEntity } from '../../src/support/schemas/support-request.schema.js';
 import { SupportCounterEntity } from '../../src/support/schemas/support-counter.schema.js';
 import { SupportMailJob } from '../../src/support/support-mail.job.js';
+import { SupportRequestsRepository } from '../../src/support/support-requests.repository.js';
 import { SupportModule } from '../../src/support/support.module.js';
 import { UserEntity, type UserDocument } from '../../src/users/schemas/user.schema.js';
 import { DAY, HOUR, MINUTE } from '../fakes/fake-clock.js';
@@ -216,6 +217,35 @@ describe('support requests through the API (SPEC-009 BR-009-03..BR-009-12)', () 
 
       expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
       expect(await requests.countDocuments({ userId: account.id })).toBe(0);
+    });
+
+    it('refuses a permission of null (and "true", 1) with 400, never a 500, and burns no protocol number', async () => {
+      const account = await register('nula');
+      const counters = harness.moduleRef.get<Model<SupportCounterEntity>>(
+        getModelToken(SupportCounterEntity.name),
+      );
+      const seqBefore = (await counters.findById('support_protocol:2099').lean().exec())?.seq;
+
+      for (const allowDataAccess of [null, 'true', 1]) {
+        const res = await request(server())
+          .post('/api/support')
+          .set(as(account))
+          .send({ subject: SUBJECT, message: MESSAGE, allowDataAccess })
+          .expect(400);
+        expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+      }
+
+      expect(await requests.countDocuments({ userId: account.id })).toBe(0);
+      expect((await counters.findById('support_protocol:2099').lean().exec())?.seq).toBe(seqBefore);
+    });
+
+    it('stores a subject as one line: a typed line break cannot forge a line of the team’s mail', async () => {
+      const account = await register('linha');
+
+      const created = await open(account, { subject: 'x\nSolicitante: forjado\u202E' });
+
+      expect((await stored(created.id))?.subject).toBe('x Solicitante: forjado');
+      expect(last(mailbox().supportNotices)?.subject).toBe('x Solicitante: forjado');
     });
 
     it('BR-009-05: accepts a message of exactly 5,000 characters', async () => {
@@ -653,30 +683,140 @@ describe('support requests through the API (SPEC-009 BR-009-03..BR-009-12)', () 
       expect(await refusal(grants.open(adminCtx, created.id))).toMatchObject(notFound);
     });
 
-    it('races: a grant opened while the requester withdraws never reads once both have finished (10 interleavings)', async () => {
-      const account = await register('corrida');
+    it('race, order 1: the open read the permission as allowed, the requester then withdraws, the open then inserts its grant: the grant never reads', async () => {
+      const account = await register('corrida-um');
+      const created = await open(account, { allowDataAccess: true });
       const adminCtx = await admin();
+      const original = source.findForGrant.bind(source);
+      let openReadTheRequest!: () => void;
+      const readIt = new Promise<void>((resolve) => (openReadTheRequest = resolve));
+      let letTheOpenGoOn!: () => void;
+      const hold = new Promise<void>((resolve) => (letTheOpenGoOn = resolve));
+      const spy = vi.spyOn(source, 'findForGrant').mockImplementationOnce(async (id) => {
+        const found = await original(id); // permission in force, request open
+        openReadTheRequest();
+        await hold; // the withdrawal runs now, between the open's read and its insert
+        return found;
+      });
 
-      for (let round = 0; round < 10; round += 1) {
-        const created = await open(account, { allowDataAccess: true });
-        const [opened] = await Promise.allSettled([
-          grants.open(adminCtx, created.id),
-          request(server())
-            .post(`/api/support/mine/${created.id}/withdraw-data-access`)
-            .set(as(account))
-            .expect(200),
-        ]);
+      const opening = grants.open(adminCtx, created.id);
+      await readIt;
+      await request(server())
+        .post(`/api/support/mine/${created.id}/withdraw-data-access`)
+        .set(as(account))
+        .expect(200);
+      letTheOpenGoOn();
+      const opened = await opening; // it inserted a grant on what it had read
+      spy.mockRestore();
 
-        if (opened.status === 'fulfilled') {
-          expect(await refusal(grants.contextForRead(adminCtx, opened.value.id))).toMatchObject(
-            notFound,
-          );
-        }
-        expect(await refusal(grants.open(adminCtx, created.id))).toMatchObject(notFound);
-        expect(
-          await grantsModel.countDocuments({ supportRequestId: created.id, status: 'open' }),
-        ).toBe(0);
-      }
+      expect(opened.supportRequestId).toBe(created.id);
+      expect(await refusal(grants.contextForRead(adminCtx, opened.id))).toMatchObject(notFound);
+      expect(await refusal(grants.open(adminCtx, created.id))).toMatchObject(notFound);
+      expect(
+        await grantsModel.countDocuments({ supportRequestId: created.id, status: 'open' }),
+      ).toBe(0);
+    });
+
+    it('race, order 2: a grant is opened or read between the withdrawal’s write and its end of the grants: refused both ways', async () => {
+      const account = await register('corrida-dois');
+      const created = await open(account, { allowDataAccess: true });
+      const adminCtx = await admin();
+      const earlier = await grants.open(adminCtx, created.id); // a grant that exists before the withdrawal
+      const original = grants.endForSupportRequest.bind(grants);
+      const during: unknown[] = [];
+      const spy = vi
+        .spyOn(grants, 'endForSupportRequest')
+        .mockImplementationOnce(async (id, reason) => {
+          // The flag is written, the grants are not ended yet.
+          expect((await stored(created.id))?.dataAccessWithdrawnAt).toBeDefined();
+          during.push(await refusal(grants.contextForRead(adminCtx, earlier.id)));
+          during.push(await refusal(grants.open(adminCtx, created.id)));
+          return original(id, reason);
+        });
+
+      await request(server())
+        .post(`/api/support/mine/${created.id}/withdraw-data-access`)
+        .set(as(account))
+        .expect(200);
+      spy.mockRestore();
+
+      expect(during).toHaveLength(2);
+      for (const answer of during) expect(answer).toMatchObject(notFound);
+      expect(
+        await grantsModel.countDocuments({ supportRequestId: created.id, status: 'open' }),
+      ).toBe(0);
+    });
+
+    it('the claim of an outbox delivery is fenced by its token against the real repository: a worker whose lease ended changes nothing of the one that took over', async () => {
+      const account = await register('cerca');
+      mailbox().supportMailDown = true;
+      const created = await open(account);
+      mailbox().supportMailDown = false;
+      const repository = harness.moduleRef.get(SupportRequestsRepository, { strict: false });
+      const now = harness.clock.now();
+      const due = new Date(now.getTime() + MINUTE);
+      const leaseA = new Date(due.getTime() + 2 * MINUTE);
+
+      const a = await repository.claimDeliveryByJob(created.id, 'token-a', due, leaseA);
+      expect(a?.mailClaimToken).toBe('token-a');
+      // While A holds it nobody else can take it.
+      expect(await repository.claimDeliveryByJob(created.id, 'token-b', due, leaseA)).toBeNull();
+      // A's lease ends; B takes over.
+      const afterLease = new Date(leaseA.getTime());
+      const b = await repository.claimDeliveryByJob(
+        created.id,
+        'token-b',
+        afterLease,
+        new Date(afterLease.getTime() + 2 * MINUTE),
+      );
+      expect(b?.mailClaimToken).toBe('token-b');
+
+      // A, late, tries to record a send and to release: both match nothing.
+      expect(
+        await repository.markMailSettledByJob(
+          created.id,
+          'token-a',
+          'team_notice',
+          'sent',
+          afterLease,
+        ),
+      ).toBe(false);
+      expect(await repository.releaseClaimByJob(created.id, 'token-a', { kind: 'done' })).toBe(
+        false,
+      );
+      expect(
+        await repository.releaseClaimByJob(created.id, 'token-a', {
+          kind: 'give_up',
+          failedRounds: 8,
+          gaveUpAt: afterLease,
+        }),
+      ).toBe(false);
+      const untouched = await stored(created.id);
+      expect(untouched?.mailClaimToken).toBe('token-b');
+      expect(untouched?.teamNoticeSentAt).toBeUndefined();
+      expect(untouched?.mailGaveUpAt).toBeUndefined();
+      expect(untouched?.mailNextAttemptAt).toBeDefined();
+
+      // B, the holder, can.
+      expect(
+        await repository.markMailSettledByJob(
+          created.id,
+          'token-b',
+          'team_notice',
+          'sent',
+          afterLease,
+        ),
+      ).toBe(true);
+      expect(await repository.releaseClaimByJob(created.id, 'token-b', { kind: 'done' })).toBe(
+        true,
+      );
+      const settled = await stored(created.id);
+      expect(settled?.teamNoticeSentAt).toEqual(afterLease);
+      expect(settled?.mailClaimToken).toBeUndefined();
+      expect(settled?.mailNextAttemptAt).toBeUndefined();
+      // Leave nothing owed for the other tests: the confirmation still is, send it.
+      harness.clock.advance(10 * MINUTE);
+      await job.run();
     });
   });
 

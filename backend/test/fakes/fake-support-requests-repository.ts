@@ -12,9 +12,9 @@ import type { MailKind } from '../../src/support/domain/mail-outbox.js';
 type Port = Pick<
   SupportRequestsRepository,
   | 'createFor'
-  | 'claimForDelivery'
-  | 'markMailSettled'
-  | 'releaseClaim'
+  | 'claimDeliveryByJob'
+  | 'markMailSettledByJob'
+  | 'releaseClaimByJob'
   | 'findByIdAcrossAccounts'
   | 'findById'
   | 'pageOf'
@@ -48,7 +48,7 @@ export class FakeSupportRequestsRepository implements Port {
     return Promise.resolve({ ...row });
   };
 
-  claimForDelivery: Port['claimForDelivery'] = (id, token, now, until) => {
+  claimDeliveryByJob: Port['claimDeliveryByJob'] = (id, token, now, until) => {
     const row = this.rows
       .filter(
         (candidate) =>
@@ -66,14 +66,14 @@ export class FakeSupportRequestsRepository implements Port {
     return Promise.resolve({ ...row });
   };
 
-  markMailSettled: Port['markMailSettled'] = (id, token, kind: MailKind, outcome, at) => {
+  markMailSettledByJob: Port['markMailSettledByJob'] = (id, token, kind: MailKind, outcome, at) => {
     const row = this.byId(id);
     if (!row || row.mailClaimToken !== token) return Promise.resolve(false);
     row[SETTLED[kind][outcome]] = at;
     return Promise.resolve(true);
   };
 
-  releaseClaim: Port['releaseClaim'] = (id, token, release) => {
+  releaseClaimByJob: Port['releaseClaimByJob'] = (id, token, release) => {
     const row = this.byId(id);
     if (!row || row.mailClaimToken !== token) return Promise.resolve(false);
     delete row.mailClaimToken;

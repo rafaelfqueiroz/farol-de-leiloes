@@ -113,7 +113,7 @@ describe('SupportMailService.deliverNow (BR-009-07, BR-009-10)', () => {
 
   it('answers confirmationSent false, and sends nothing, when another sender holds the request', async () => {
     const { mail, mailbox, repo, clock, id } = await setup();
-    await repo.claimForDelivery(
+    await repo.claimDeliveryByJob(
       id,
       'other-token',
       clock.now(),
@@ -129,7 +129,7 @@ describe('SupportMailService.deliverNow (BR-009-07, BR-009-10)', () => {
   it('never throws, and logs the id and a code only, when the store itself fails', async () => {
     const logger = spyOnLogger();
     const { mail, repo, id } = await setup();
-    vi.spyOn(repo, 'claimForDelivery').mockRejectedValue(
+    vi.spyOn(repo, 'claimDeliveryByJob').mockRejectedValue(
       new Error(`boom ${REQUESTER.email} Mensagem ficticia`),
     );
 
@@ -307,5 +307,121 @@ describe('SupportMailService.processDue (the job)', () => {
     expect(a.requests + b.requests).toBe(1);
     expect(mailbox.supportNotices).toHaveLength(1);
     expect(mailbox.supportConfirmations).toHaveLength(1);
+  });
+});
+
+describe('a slow SMTP server against the claim lease (BR-009-07, review finding 1)', () => {
+  // Hand-computed: the lease is 2 minutes; one send may take 20 s; the request that creates a support
+  // request waits 6 s for its own delivery at most.
+  const SEND_TIMEOUT_MS = 20_000;
+  const INLINE_BUDGET_MS = 6_000;
+
+  afterEach(() => vi.useRealTimers());
+
+  it('a send that outlives the lease is taken over by another worker: each mail is delivered once and the first worker clobbers nothing', async () => {
+    const { mail, mailbox, repo, clock, id } = await setup();
+    const stalled = mailbox.holdNextSupportSend(); // the first worker's notice hangs
+    const first = mail.deliverNow(id);
+    await vi.waitFor(() => expect(mailbox.waitingSupportSends).toBe(1));
+
+    clock.advance(3 * MINUTE); // its 2-minute lease ran out; a second worker takes the request
+    await expect(mail.processDue()).resolves.toMatchObject({ requests: 1, sent: 2 });
+    stalled.fail(); // the first worker's transport finally gives up
+    await first;
+
+    expect(mailbox.supportNotices).toHaveLength(1);
+    expect(mailbox.supportConfirmations).toHaveLength(1);
+    expect(repo.rows[0]).toMatchObject({ mailAttempts: 0 });
+    expect(repo.rows[0]?.teamNoticeSentAt).toBeDefined();
+    expect(repo.rows[0]?.confirmationSentAt).toBeDefined();
+    expect(repo.rows[0]?.mailNextAttemptAt).toBeUndefined(); // the first worker's release did not undo it
+    expect(repo.rows[0]?.mailClaimToken).toBeUndefined();
+  });
+
+  it('a worker whose lease ended while it sent the first mail does not send the second, and hands the rest to the next run', async () => {
+    const { mail, mailbox, repo, clock, id } = await setup();
+    const slow = mailbox.holdNextSupportSend();
+    const first = mail.deliverNow(id);
+    await vi.waitFor(() => expect(mailbox.waitingSupportSends).toBe(1));
+
+    clock.advance(3 * MINUTE); // nobody has taken over yet, but the lease is over
+    slow.succeed();
+    await first;
+
+    expect(mailbox.supportNotices).toHaveLength(1);
+    expect(mailbox.supportConfirmations).toHaveLength(0); // not sent on a lease it no longer holds
+    expect(repo.rows[0]?.mailClaimToken).toBeUndefined();
+
+    await mail.processDue();
+    expect(mailbox.supportNotices).toHaveLength(1); // the notice is not repeated
+    expect(mailbox.supportConfirmations).toHaveLength(1);
+  });
+
+  it('answers the request at once when SMTP stalls: deliverNow returns within its budget with confirmationSent false', async () => {
+    vi.useFakeTimers();
+    const { mail, mailbox, repo, id } = await setup();
+    const stalled = mailbox.holdNextSupportSend();
+
+    const answer = mail.deliverNow(id);
+    await vi.advanceTimersByTimeAsync(INLINE_BUDGET_MS);
+
+    await expect(answer).resolves.toEqual({ confirmationSent: false });
+    expect(repo.rows[0]?.mailClaimToken).toBeDefined(); // the delivery goes on in the background
+    stalled.fail();
+    await vi.waitFor(() => expect(repo.rows[0]?.mailClaimToken).toBeUndefined());
+    expect(repo.rows[0]).toMatchObject({ mailAttempts: 1 }); // and a failed round is counted
+  });
+
+  it('gives up on one send after its time limit, far inside the lease, and retries the round', async () => {
+    vi.useFakeTimers();
+    const { mail, mailbox, repo } = await setup();
+    mailbox.holdNextSupportSend(); // never answers
+
+    const run = mail.processDue();
+    await vi.advanceTimersByTimeAsync(SEND_TIMEOUT_MS);
+    const outcome = await run;
+
+    expect(outcome).toMatchObject({ requests: 1, retried: 1 });
+    expect(repo.rows[0]).toMatchObject({ mailAttempts: 1 });
+    expect(repo.rows[0]?.mailClaimToken).toBeUndefined();
+    // The confirmation was still tried in the same round (the notice timed out, its own time not up).
+    expect(mailbox.supportConfirmations).toHaveLength(1);
+  });
+});
+
+describe('a fault outside the send (review finding 7)', () => {
+  it('a failing account lookup counts as a failed round, and does not stop the run for the other requests', async () => {
+    const { mail, mailbox, repo, users, clock } = await setup();
+    const ctx = await anAccessContext('64b7f0000000000000000012');
+    await repo.createFor(ctx, {
+      protocol: 'FL-2099-000002',
+      subject: 'Assunto ficticio',
+      message: 'Mensagem ficticia de teste',
+      allowDataAccess: false,
+      openedAt: clock.now(),
+    });
+    (users.findById as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error(`db down ${REQUESTER.email}`))
+      .mockResolvedValue({ ...REQUESTER, status: 'active' });
+
+    const outcome = await mail.processDue();
+
+    expect(outcome).toMatchObject({ requests: 2, retried: 1 });
+    expect(repo.rows[0]).toMatchObject({ mailAttempts: 1 });
+    expect(repo.rows[0]?.mailNextAttemptAt).toEqual(new Date(clock.now().getTime() + MINUTE));
+    expect(repo.rows[1]?.teamNoticeSentAt).toBeDefined(); // the other request was delivered
+    expect(mailbox.supportNotices).toHaveLength(1);
+  });
+
+  it('a request whose lookup keeps failing gives up at the eighth round, like any other failure', async () => {
+    const { mail, repo, users, clock } = await setup();
+    (users.findById as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('db down'));
+    for (let round = 0; round < 8; round += 1) {
+      clock.advance(4 * 60 * MINUTE);
+      await mail.processDue();
+    }
+
+    expect(repo.rows[0]).toMatchObject({ mailAttempts: 8 });
+    expect(repo.rows[0]?.mailGaveUpAt).toBeDefined();
   });
 });

@@ -1,7 +1,11 @@
 // SPEC-009 BR-009-07, BR-009-10, BR-009-15: the outbox rules. Hand-computed expectations (TS-04).
 import { describe, expect, it } from 'vitest';
 import {
+  isLeaseOver,
+  MAIL_CLAIM_LEASE_MS,
+  MAIL_INLINE_BUDGET_MS,
   MAIL_RETRY_DELAYS_MINUTES,
+  MAIL_SEND_TIMEOUT_MS,
   MAX_MAIL_ATTEMPTS,
   mailDecision,
   nextMailAttempt,
@@ -70,5 +74,32 @@ describe('nextMailAttempt', () => {
 
   it.each([0, -1, 1.5, Number.NaN])('refuses %s failed rounds', (failed) => {
     expect(() => nextMailAttempt(failed, NOW)).toThrow(RangeError);
+  });
+});
+
+describe('the time limits of a delivery (review of #186, finding 1)', () => {
+  it('are 20 s per send, 6 s inline, 2 minutes of lease', () => {
+    expect(MAIL_SEND_TIMEOUT_MS).toBe(20_000);
+    expect(MAIL_INLINE_BUDGET_MS).toBe(6_000);
+    expect(MAIL_CLAIM_LEASE_MS).toBe(120_000);
+  });
+
+  it('leave the two sends of a round (40 s) well inside the lease, and the inline wait inside one send', () => {
+    expect(2 * MAIL_SEND_TIMEOUT_MS).toBeLessThan(MAIL_CLAIM_LEASE_MS);
+    expect(MAIL_INLINE_BUDGET_MS).toBeLessThan(MAIL_SEND_TIMEOUT_MS);
+  });
+});
+
+describe('isLeaseOver', () => {
+  const until = new Date('2026-03-01T12:02:00.000Z');
+
+  it('is half-open: still held the instant before, over at the end instant and after', () => {
+    expect(isLeaseOver(until, new Date('2026-03-01T12:01:59.999Z'))).toBe(false);
+    expect(isLeaseOver(until, new Date('2026-03-01T12:02:00.000Z'))).toBe(true);
+    expect(isLeaseOver(until, new Date('2026-03-01T12:03:00.000Z'))).toBe(true);
+  });
+
+  it('is never over for a request with no lease recorded', () => {
+    expect(isLeaseOver(undefined, new Date('2026-03-01T12:03:00.000Z'))).toBe(false);
   });
 });

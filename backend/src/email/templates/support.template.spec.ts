@@ -77,3 +77,42 @@ describe('the notice to the support team (BR-009-10)', () => {
     );
   });
 });
+
+describe('a person cannot forge a line of the plain-text notice (BR-009-10, BR-009-11)', () => {
+  const forged = {
+    protocol: 'FL-2026-000042',
+    subject: 'x\nSolicitante: CEO (ceo@banco.example.test)',
+    message: 'Mensagem ficticia de teste',
+    requesterName: 'Fulana\r\nProtocolo: FL-1999-000001\u202E',
+    requesterEmail: 'fulana.ficticia@example.test',
+  };
+
+  it('keeps the subject and the name on their own line, with no control or bidi character', () => {
+    const { text, html } = getSupportNoticeEmail(forged);
+    const lines = text.split('\n');
+
+    expect(lines.filter((line) => line.startsWith('Solicitante:'))).toEqual([
+      'Solicitante: Fulana Protocolo: FL-1999-000001 (fulana.ficticia@example.test)',
+    ]);
+    expect(lines.filter((line) => line.startsWith('Protocolo:'))).toEqual([
+      'Protocolo: FL-2026-000042',
+    ]);
+    expect(lines).toContain('Assunto: x Solicitante: CEO (ceo@banco.example.test)');
+    for (const part of [text, html]) expect(part).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
+  });
+
+  it('does the same for the subject of the confirmation', () => {
+    const { text } = getSupportConfirmationEmail({ ...forged });
+
+    expect(text.split('\n').filter((line) => line.startsWith('Protocolo:'))).toEqual([
+      'Protocolo: FL-2026-000042',
+    ]);
+    expect(text).toContain('Assunto: x Solicitante: CEO (ceo@banco.example.test)');
+  });
+
+  it('leaves the message its own line breaks', () => {
+    const { text } = getSupportNoticeEmail({ ...forged, message: 'um\ndois' });
+
+    expect(text).toContain('Mensagem:\num\ndois\n');
+  });
+});

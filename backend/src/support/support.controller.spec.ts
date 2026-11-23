@@ -133,6 +133,9 @@ describe('support routes over HTTP', () => {
       ['a missing message', { subject: valid.subject }],
       ['a missing subject', { message: valid.message }],
       ['a permission that is not a boolean', { ...valid, allowDataAccess: 'yes' }],
+      ['a permission of the text "true"', { ...valid, allowDataAccess: 'true' }],
+      ['a permission of 1', { ...valid, allowDataAccess: 1 }],
+      ['a permission of null', { ...valid, allowDataAccess: null }],
       [
         'the former title and description',
         { title: 'Titulo valido', description: 'Descricao valida' },
@@ -143,6 +146,27 @@ describe('support routes over HTTP', () => {
 
       expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
       expect(support.create).not.toHaveBeenCalled();
+    });
+
+    it('BR-009-05: a subject is one line: line breaks, control and bidi characters become single spaces', async () => {
+      await request(server)
+        .post('/api/support')
+        .send({
+          subject: 'x\nSolicitante: forjado\r\n\u202Eabc\u2066d\u0000e\u2028f',
+          message: valid.message,
+        })
+        .expect(201);
+
+      expect((support.create.mock.calls[0] as [unknown, { subject: string }])[1].subject).toBe(
+        'x Solicitante: forjado abc d e f',
+      );
+    });
+
+    it('refuses a subject of only line breaks and control characters', async () => {
+      await request(server)
+        .post('/api/support')
+        .send({ subject: '\n\u202E\u0007\n', message: valid.message })
+        .expect(400);
     });
 
     it('accepts the limits themselves: 3 and 200 characters, 10 and 5,000', async () => {

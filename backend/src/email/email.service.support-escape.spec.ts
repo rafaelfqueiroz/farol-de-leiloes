@@ -3,7 +3,12 @@
 // so markup in them was interpreted by the mail client. This spec was written against that code
 // first and failed on it (an html part holding a live <script> and <a href>). Fake values only (TS-27).
 import { describe, expect, it, vi } from 'vitest';
-import { EmailService, supportConfirmationMessageId } from './email.service.js';
+import {
+  EmailService,
+  SMTP_TIMEOUTS,
+  smtpTransportOptions,
+  supportConfirmationMessageId,
+} from './email.service.js';
 import { testConfigService } from '../../test/support/test-env.js';
 
 const SCRIPT = '<script>alert(1)</script>';
@@ -139,5 +144,35 @@ describe('supportConfirmationMessageId', () => {
     expect(supportConfirmationMessageId('abc', 'sem-arroba')).toBe(
       '<support-confirmation-abc@localhost>',
     );
+  });
+});
+
+describe('the SMTP transport is bounded (review of #186, finding 1)', () => {
+  it('has timeouts well inside the 2-minute claim lease, unlike nodemailer’s defaults', () => {
+    expect(SMTP_TIMEOUTS).toEqual({
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
+    });
+  });
+
+  it('builds the transport options of the configured account with those timeouts', () => {
+    expect(
+      smtpTransportOptions({
+        host: 'smtp.example.test',
+        port: 587,
+        secure: false,
+        user: 'u',
+        pass: 'p',
+      }),
+    ).toEqual({
+      host: 'smtp.example.test',
+      port: 587,
+      secure: false,
+      auth: { user: 'u', pass: 'p' },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
+    });
   });
 });

@@ -18,6 +18,36 @@ import {
   ReminderEmailPayload,
 } from '../reminders/templates/reminder.template.js';
 
+/**
+ * SPEC-009 BR-009-07 (security review of #186): an SMTP server that accepts the connection and then
+ * stalls must not hold a send for minutes (nodemailer's defaults are 2 minutes to connect, 30 seconds for
+ * the greeting and 10 minutes of socket silence). These are well inside the support outbox's claim lease
+ * of 2 minutes (domain/mail-outbox.ts), so one send is over, one way or the other, before another worker
+ * can take the request over.
+ */
+export const SMTP_TIMEOUTS = {
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 15_000,
+} as const;
+
+/** The nodemailer transport options for the configured SMTP account, with the bounded timeouts. */
+export function smtpTransportOptions(account: {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+}) {
+  return {
+    host: account.host,
+    port: account.port,
+    secure: account.secure,
+    auth: { user: account.user, pass: account.pass },
+    ...SMTP_TIMEOUTS,
+  };
+}
+
 /** SPEC-009 BR-009-07: what the confirmation to a requester is made of (`requestId` keys its Message-ID). */
 export interface SupportConfirmationMail extends SupportConfirmationInput {
   readonly to: string;
@@ -57,15 +87,15 @@ export class EmailService {
     const pass = this.configService.get('SMTP_PASS', { infer: true });
 
     if (host && port && user && pass) {
-      this.transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: this.configService.get('SMTP_SECURE', { infer: true }),
-        auth: {
+      this.transporter = nodemailer.createTransport(
+        smtpTransportOptions({
+          host,
+          port,
+          secure: this.configService.get('SMTP_SECURE', { infer: true }),
           user,
           pass,
-        },
-      });
+        }),
+      );
       this.logger.log('Email transporter initialized');
     } else {
       this.logger.warn('SMTP configuration not found. Emails are not sent (development mode).');
