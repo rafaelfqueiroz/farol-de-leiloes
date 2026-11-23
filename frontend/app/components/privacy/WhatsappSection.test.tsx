@@ -7,10 +7,17 @@ import type { WhatsappConsent } from './privacy-api';
 import { WHATSAPP_OFF, WHATSAPP_ON, json } from './privacy-test-support';
 import WhatsappSection from './WhatsappSection';
 
+const env = vi.hoisted(() => ({ refreshUser: vi.fn() }));
+vi.mock('@/app/contexts/AuthContext', () => ({
+  useAuth: () => ({ refreshUser: env.refreshUser }),
+}));
 vi.mock('@/lib/report-client-error', () => ({ reportClientError: vi.fn() }));
 
 const fetchMock = vi.fn();
-beforeEach(() => vi.stubGlobal('fetch', fetchMock));
+beforeEach(() => {
+  env.refreshUser.mockReset().mockResolvedValue(undefined);
+  vi.stubGlobal('fetch', fetchMock);
+});
 afterEach(() => {
   fetchMock.mockReset();
   vi.unstubAllGlobals();
@@ -148,5 +155,31 @@ describe('WhatsappSection', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Salvando');
     release(json(WHATSAPP_OFF));
     await waitFor(() => expect(screen.getByRole('switch', { name: SWITCH })).toBeEnabled());
+  });
+
+  it('BR-010-27: a successful withdrawal or grant refreshes the shared account state, so the one-time question is not asked again', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation(() => Promise.resolve(json(WHATSAPP_OFF)));
+    renderWithProviders(<Host initial={WHATSAPP_ON} />);
+
+    await user.click(screen.getByRole('switch', { name: SWITCH }));
+    await waitFor(() => expect(env.refreshUser).toHaveBeenCalledTimes(1));
+
+    fetchMock.mockImplementation(() => Promise.resolve(json(WHATSAPP_ON)));
+    await user.click(screen.getByRole('switch', { name: SWITCH }));
+    await waitFor(() => expect(env.refreshUser).toHaveBeenCalledTimes(2));
+  });
+
+  it('a failed answer does not touch the shared account state: the question is still pending', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(json({ code: 'TOO_MANY_REQUESTS', context: {} }, 429)),
+    );
+    renderWithProviders(<Host initial={WHATSAPP_ON} />);
+
+    await user.click(screen.getByRole('switch', { name: SWITCH }));
+    await screen.findByRole('alert');
+
+    expect(env.refreshUser).not.toHaveBeenCalled();
   });
 });

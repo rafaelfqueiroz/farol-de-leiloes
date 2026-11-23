@@ -23,6 +23,7 @@ import {
   dataExportSchema,
   downloadLinkSchema,
   exportsPageSchema,
+  settleExpiry,
   type DataExport,
 } from './privacy-api';
 import PrivacySection from './PrivacySection';
@@ -100,7 +101,9 @@ export default function ExportSection({ initial }: ExportSectionProps) {
       const response = await apiFetch(PRIVACY_API.latestExport);
       if (!response.ok) return undefined;
       const page = exportsPageSchema.safeParse(await response.json());
-      return page.success ? (page.data.items[0] ?? null) : undefined;
+      return page.success
+        ? settleExpiry(page.data.items[0] ?? null, response.headers.get('date'))
+        : undefined;
     } catch (error: unknown) {
       reportClientError(error, { where: 'ExportSection poll' });
       return undefined;
@@ -166,9 +169,15 @@ export default function ExportSection({ initial }: ExportSectionProps) {
       const response = await apiFetch(PRIVACY_API.download(current.id));
       if (!response.ok) {
         const error = await readApiError(response);
+        if (error.code === 'EXPORT_EXPIRED') {
+          // the server says it is past its time, though the list still calls it ready until the
+          // cleanup runs: it is expired here, with the replacement action (BR-010-11)
+          setCurrent({ ...current, status: 'expired' });
+          return;
+        }
         setFailure(apiErrorMessage(error));
-        // the file is gone or was never made: look again at what the account has now
-        if (error.code === 'EXPORT_EXPIRED' || error.code === 'NOT_FOUND') {
+        // the file was never made or is gone: look again at what the account has now
+        if (error.code === 'NOT_FOUND') {
           const latest = await look();
           if (latest !== undefined) setCurrent(latest);
         }

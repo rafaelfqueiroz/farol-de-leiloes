@@ -3,9 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe, renderWithProviders } from '@/test/render';
 import PrivacyPage from './PrivacyPage';
-import { QUEUED, WHATSAPP_OFF, json, privacyFetch } from './privacy-test-support';
+import { QUEUED, READY, WHATSAPP_OFF, json, privacyFetch } from './privacy-test-support';
 
-const env = vi.hoisted(() => ({ authenticated: true, report: vi.fn() }));
+const env = vi.hoisted(() => ({
+  authenticated: true,
+  report: vi.fn(),
+  refreshUser: vi.fn(),
+}));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock('next/link', () => ({
@@ -16,7 +20,11 @@ vi.mock('next/link', () => ({
   ),
 }));
 vi.mock('@/app/contexts/AuthContext', () => ({
-  useAuth: () => ({ isAuthenticated: env.authenticated, user: { providers: ['local'] } }),
+  useAuth: () => ({
+    isAuthenticated: env.authenticated,
+    user: { providers: ['local'] },
+    refreshUser: env.refreshUser,
+  }),
 }));
 vi.mock('@/lib/report-client-error', () => ({ reportClientError: env.report }));
 
@@ -25,6 +33,7 @@ const fetchMock = vi.fn();
 beforeEach(() => {
   env.authenticated = true;
   env.report.mockReset();
+  env.refreshUser.mockReset().mockResolvedValue(undefined);
   fetchMock.mockReset().mockImplementation(privacyFetch());
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -104,6 +113,26 @@ describe('PrivacyPage', () => {
     renderWithProviders(<PrivacyPage />);
 
     expect(await screen.findByText('Preparando seu arquivo', { selector: 'strong' })).toBeVisible();
+  });
+
+  it('BR-010-11: a listed ready export the server clock has passed is expired from the first paint, with the replacement action', async () => {
+    fetchMock.mockImplementation(
+      privacyFetch({}, (url) =>
+        url.startsWith('/api/privacy/exports?')
+          ? new Response(JSON.stringify({ items: [READY] }), {
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+                date: 'Thu, 26 Nov 2026 18:00:00 GMT',
+              },
+            })
+          : undefined,
+      ),
+    );
+    renderWithProviders(<PrivacyPage />);
+
+    expect(await screen.findByText('Arquivo expirado', { selector: 'strong' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Pedir nova exportação' })).toBeVisible();
   });
 
   it('shows the WhatsApp consent that was answered', async () => {

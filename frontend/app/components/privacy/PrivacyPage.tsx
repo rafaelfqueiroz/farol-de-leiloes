@@ -11,7 +11,8 @@ import InlineAlert from '@/app/components/patterns/InlineAlert';
 import PageHeader from '@/app/components/patterns/PageHeader';
 import PageShell from '@/app/components/patterns/PageShell';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { apiJson } from '@/lib/api-client';
+import { apiFetch, apiJson } from '@/lib/api-client';
+import { readApiError } from '@/lib/api-error';
 import { currentLegalSchema, type CurrentLegal } from '@/lib/legal';
 import { reportClientError } from '@/lib/report-client-error';
 import AcceptancesSection from './AcceptancesSection';
@@ -22,6 +23,7 @@ import {
   PRIVACY_API,
   acceptancesSchema,
   exportsPageSchema,
+  settleExpiry,
   myDataSchema,
   summarizeMyData,
   whatsappConsentSchema,
@@ -43,12 +45,20 @@ interface Snapshot {
 
 type Load = { name: 'loading' } | { name: 'failed' } | { name: 'ready'; snapshot: Snapshot };
 
+/** The newest export, settled against the server's own clock (see `settleExpiry`). */
+async function readLatestExport(): Promise<DataExport | null> {
+  const response = await apiFetch(PRIVACY_API.latestExport);
+  if (!response.ok) throw await readApiError(response);
+  const page = exportsPageSchema.parse(await response.json());
+  return settleExpiry(page.items[0] ?? null, response.headers.get('date'));
+}
+
 async function readSnapshot(): Promise<Snapshot> {
   const [acceptances, whatsapp, myData, exports, legal] = await Promise.all([
     apiJson<unknown>(PRIVACY_API.acceptances),
     apiJson<unknown>(PRIVACY_API.whatsapp),
     apiJson<unknown>(PRIVACY_API.myData),
-    apiJson<unknown>(PRIVACY_API.latestExport),
+    readLatestExport(),
     apiJson<unknown>('/api/legal/current').catch(() => null),
   ]);
   const legalDocuments = currentLegalSchema.safeParse(legal);
@@ -56,7 +66,7 @@ async function readSnapshot(): Promise<Snapshot> {
     acceptances: acceptancesSchema.parse(acceptances).items,
     whatsapp: whatsappConsentSchema.parse(whatsapp),
     myData: summarizeMyData(myDataSchema.parse(myData)),
-    latestExport: exportsPageSchema.parse(exports).items[0] ?? null,
+    latestExport: exports,
     legal: legalDocuments.success ? legalDocuments.data : null,
   };
 }

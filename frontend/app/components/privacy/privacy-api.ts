@@ -44,6 +44,25 @@ export const dataExportSchema = z.object({
 });
 export type DataExport = z.infer<typeof dataExportSchema>;
 
+/**
+ * A listed export is `ready` until the hourly cleanup marks it `expired`, but its download is refused
+ * from `expiresAt` on (BR-010-11). Judged by the SERVER's clock (the `Date` header of the answer),
+ * never the browser's: a `ready` export whose `expiresAt` the server time has reached is shown as
+ * expired, so the replacement action is there. Without a usable server time nothing changes, and the
+ * download's own EXPORT_EXPIRED answer decides.
+ */
+export function settleExpiry(
+  item: DataExport | null,
+  serverDate: string | null,
+): DataExport | null {
+  if (item?.status !== 'ready' || !item.expiresAt || !serverDate) return item;
+  const now = Date.parse(serverDate);
+  const expires = Date.parse(item.expiresAt);
+  return Number.isNaN(now) || Number.isNaN(expires) || now < expires
+    ? item
+    : { ...item, status: 'expired' };
+}
+
 export const exportsPageSchema = z.object({ items: z.array(dataExportSchema) });
 
 export const downloadLinkSchema = z.object({ url: z.string(), expiresInSeconds: z.number() });

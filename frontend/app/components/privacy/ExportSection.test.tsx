@@ -233,18 +233,66 @@ describe('ExportSection', () => {
       await waitFor(() => expect(clicks).toHaveBeenCalled());
     });
 
-    it("EXPORT_EXPIRED: says so, reads the account's exports again and shows the expired state", async () => {
+    it('EXPORT_EXPIRED while the list still says ready: shows the expired state and the replacement action at once (BR-010-11)', async () => {
       const user = userEvent.setup();
-      fetchMock
-        .mockResolvedValueOnce(json({ code: 'EXPORT_EXPIRED', context: {} }, 410))
-        .mockResolvedValueOnce(json({ items: [EXPIRED] }));
+      // the backend's list keeps calling it `ready` until the hourly cleanup; the download is refused
+      fetchMock.mockResolvedValueOnce(json({ code: 'EXPORT_EXPIRED', context: {} }, 410));
       renderWithProviders(<ExportSection initial={READY} />);
 
       await user.click(screen.getByRole('button', { name: 'Baixar' }));
 
       expect(await screen.findByText('Arquivo expirado', { selector: 'strong' })).toBeVisible();
-      expect(screen.getByRole('alert')).toHaveTextContent('Esta exportação expirou');
-      expect(urls()[1]).toBe('/api/privacy/exports?page=1&pageSize=1');
+      expect(screen.getByRole('status')).toHaveTextContent('Arquivo expirado');
+      expect(screen.getByRole('region', { name: 'Exportar meus dados' })).toHaveTextContent(
+        'Ficou disponível até 26/11/2026 14:45 (horário de Brasília) e foi apagado.',
+      );
+      expect(screen.queryByRole('button', { name: 'Baixar' })).not.toBeInTheDocument();
+      // nothing re-read the list, which would have said `ready` again
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      fetchMock.mockResolvedValueOnce(json({ ...QUEUED, id: '64b7f0000000000000000e02' }, 202));
+      await user.click(screen.getByRole('button', { name: 'Pedir nova exportação' }));
+
+      expect(
+        await screen.findByText('Preparando seu arquivo', { selector: 'strong' }),
+      ).toBeVisible();
+      expect(fetchMock.mock.calls[1]).toEqual([
+        '/api/privacy/exports',
+        expect.objectContaining({ method: 'POST' }),
+      ]);
+    });
+
+    it('a ready export the SERVER clock has passed is shown as expired when the page reads it again', async () => {
+      vi.useFakeTimers();
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ items: [READY] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', date: 'Thu, 26 Nov 2026 17:45:01 GMT' },
+        }),
+      );
+      renderWithProviders(<ExportSection initial={QUEUED} />);
+
+      await act(() => vi.advanceTimersByTimeAsync(EXPORT_POLL_INTERVAL_MS));
+
+      expect(screen.getByText('Arquivo expirado', { selector: 'strong' })).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Pedir nova exportação' })).toBeEnabled();
+    });
+
+    it('does not judge by the browser clock: with no server time, or one before expiry, a ready export stays ready', async () => {
+      vi.useFakeTimers();
+      // the browser is far past expiresAt (2026-11-26), the server says it is not
+      vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ items: [READY] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', date: 'Thu, 26 Nov 2026 17:44:59 GMT' },
+        }),
+      );
+      renderWithProviders(<ExportSection initial={QUEUED} />);
+
+      await act(() => vi.advanceTimersByTimeAsync(EXPORT_POLL_INTERVAL_MS));
+
+      expect(screen.getByText('Arquivo pronto', { selector: 'strong' })).toBeVisible();
     });
 
     it('another refusal is shown and leaves the file as it was', async () => {

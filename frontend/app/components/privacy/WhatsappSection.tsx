@@ -9,6 +9,7 @@ import { useId, useState } from 'react';
 import DateText from '@/app/components/patterns/DateText';
 import InlineAlert from '@/app/components/patterns/InlineAlert';
 import StatusBadge from '@/app/components/patterns/StatusBadge';
+import { useAuth } from '@/app/contexts/AuthContext';
 import { apiFetch } from '@/lib/api-client';
 import { readApiError, useApiErrorMessage } from '@/lib/api-error';
 import { reportClientError } from '@/lib/report-client-error';
@@ -27,6 +28,7 @@ export interface WhatsappSectionProps {
 export default function WhatsappSection({ consent, onChange }: WhatsappSectionProps) {
   const t = useTranslations('privacy.whatsapp');
   const apiErrorMessage = useApiErrorMessage();
+  const { refreshUser } = useAuth();
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const labelId = useId();
@@ -47,6 +49,10 @@ export default function WhatsappSection({ consent, onChange }: WhatsappSectionPr
       }
       const parsed = whatsappConsentSchema.safeParse(await response.json());
       if (parsed.success) onChange(parsed.data);
+      // any answer, given or withdrawn, answers the one-time question (the API says so in /auth/me):
+      // the shared account state learns it, or the prompt would ask again and a "Agora não" would
+      // overwrite what was just chosen here (BR-010-27)
+      await refreshUser();
     } catch (error: unknown) {
       reportClientError(error, { where: 'WhatsappSection' });
       setFailure(apiErrorMessage(error));
