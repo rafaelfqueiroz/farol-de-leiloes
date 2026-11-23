@@ -6,11 +6,56 @@
 // silently (AR-41, SC-16). Non-secret tunables (port, flags, schedules, model names) have defaults.
 // Flags use z.stringbool(), which reads "false" as false (z.coerce.boolean would read it as true).
 import { z } from 'zod';
+import { isCalendarDate } from '../common/domain/business-day.js';
 
 const required = z.string().min(1);
 const url = z.url();
 const flag = z.stringbool();
 const positiveInt = z.coerce.number().int().positive();
+
+// SPEC-004 BR-004-31: `2026-12-25,2027-01-01` -> a sorted, de-duplicated list. Every entry must be a
+// real YYYY-MM-DD day; the error names the position, never the value (SC-16).
+const holidayList = z
+  .string()
+  .transform((raw) =>
+    raw
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== ''),
+  )
+  .superRefine((entries, ctx) => {
+    for (const [index, entry] of entries.entries()) {
+      if (!isCalendarDate(entry)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `entry ${index + 1} is not a real YYYY-MM-DD date (comma-separated list)`,
+        });
+      }
+    }
+  })
+  .transform((entries) => [...new Set(entries)].sort());
+
+// SPEC-004 / ADR-003: the optional proxy Caixa traffic leaves through. http(s) only: undici's
+// ProxyAgent speaks no SOCKS, and a SOCKS endpoint needs a bridge that is #108's decision. The
+// URL may carry credentials, so no message below echoes it (SC-16).
+const proxyUrl = z.string().superRefine((value, ctx) => {
+  let protocol: string;
+  try {
+    protocol = new URL(value).protocol;
+  } catch {
+    ctx.addIssue({ code: 'custom', message: 'must be an http:// or https:// URL' });
+    return;
+  }
+  if (protocol.startsWith('socks')) {
+    ctx.addIssue({
+      code: 'custom',
+      message:
+        'SOCKS proxies are not supported yet (ADR-003, #108): use an http:// or https:// proxy',
+    });
+  } else if (protocol !== 'http:' && protocol !== 'https:') {
+    ctx.addIssue({ code: 'custom', message: 'must be an http:// or https:// URL' });
+  }
+});
 
 export const LLM_PROVIDERS = ['ollama', 'groq', 'gemini', 'openai', 'anthropic'] as const;
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
@@ -106,6 +151,14 @@ export const envSchema = z
     // until SPEC-017: without it, client file links are refused, never signed on the public bucket.
     R2_PRIVATE_BUCKET: required.optional(),
 
+    // Caixa access (SPEC-004, SC-24, ADR-003): every request to venda-imoveis.caixa.gov.br goes
+    // through the CaixaAccess port, whose HTTP adapter reads these. Optional proxy: http(s) only.
+    CAIXA_PROXY_URL: proxyUrl.optional(),
+    // Milliseconds one Caixa request may take, connection to last byte.
+    CAIXA_REQUEST_TIMEOUT_MS: positiveInt.default(30_000),
+    // Bytes a Caixa response may carry; a larger body is refused. The list is about 8 MB.
+    CAIXA_MAX_DOWNLOAD_BYTES: positiveInt.default(20 * 1024 * 1024),
+
     // Scheduled jobs
     IMPORT_ENABLED: flag.default(true),
     IMPORT_ON_START_UP: flag.default(false),
@@ -164,6 +217,14 @@ export const envSchema = z
     // requests until a lawyer's validation is recorded. Unset means true in production and false
     // elsewhere (legalGateEnforced in env.ts); a staging environment sets it to true.
     LEGAL_GATE_ENFORCED: flag.optional(),
+
+    // SPEC-004 BR-004-04 (AR-43): the least share of the last applied list's rows a new list must
+    // have, else it is rejected as truncated. A ratio in (0, 1]; 0.8 is 80%.
+    IMPORT_MIN_ROW_RATIO: z.coerce.number().gt(0).max(1).default(0.8),
+    // SPEC-004 BR-004-31 (AR-43): the national-holiday calendar, comma-separated YYYY-MM-DD days in
+    // Brasília. A holiday is not a business day, so a day with no new Caixa list is not a failure.
+    // Default empty: only weekends then count as non-business days, with a warning in the log.
+    NATIONAL_HOLIDAYS: holidayList.default([]),
 
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
