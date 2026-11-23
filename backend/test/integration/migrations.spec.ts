@@ -277,7 +277,7 @@ describe('Migrations (integration)', () => {
     });
   });
 
-  describe('0001 to 0010 through the runner (#81)', () => {
+  describe('0001 to 0011 through the runner (#81)', () => {
     const ALL = [
       '0001-money-decimal128',
       '0002-saved-filter-price-bounds',
@@ -289,6 +289,7 @@ describe('Migrations (integration)', () => {
       '0008-consent-indexes',
       '0009-privacy-rights-indexes',
       '0010-retention-legal-indexes',
+      '0011-erase-legacy-profile-fields',
     ];
     let afterFirstRun: Awaited<ReturnType<typeof snapshot>>;
 

@@ -129,7 +129,7 @@ describe('UsersService.update (SC-10)', () => {
     expect(setOf(model)).toEqual({ name: 'Ana' });
   });
 
-  it('SC-26: update no longer writes the legacy cpf, date of birth, sex and address', async () => {
+  it('SC-26: update cannot write a cpf, date of birth, sex or address (erased, BR-010-06)', async () => {
     const { service, model } = build();
     const legacy = {
       name: 'Ana',

@@ -175,9 +175,9 @@ describe('the account document', () => {
     ...overrides,
   });
 
-  it('shows the profile, how it signs in and the legacy fields, never the hash', async () => {
+  it('shows the profile, how it signs in and the legacy billing fields, never the hash', async () => {
     const provider = new UsersPersonalData(new PersonalDataRegistry(), {
-      findByIdFull: async () => user({ password: '$2b$10$hash', cpf: '123', role: 'free' }),
+      findByIdFull: async () => user({ password: '$2b$10$hash', role: 'free' }),
     } as never);
 
     const data = await provider.collect(ctx);
@@ -189,10 +189,22 @@ describe('the account document', () => {
       emailVerified: false,
       phone: null,
       signIn: { methods: ['password', 'google'], googleId: 'g-1' },
-      legacyProfile: { cpf: '123', sex: null },
       legacyBilling: { role: 'free', stripeCustomerId: null },
     });
     expect(JSON.stringify(data)).not.toContain('$2b$');
+  });
+
+  it('SC-26: holds no cpf, date of birth, sex or address any more, so the export carries none', async () => {
+    const provider = new UsersPersonalData(new PersonalDataRegistry(), {
+      findByIdFull: async () => user({ role: 'free' }),
+    } as never);
+
+    const data = await provider.collect(ctx);
+
+    expect(data).not.toHaveProperty('legacyProfile');
+    for (const erased of ['cpf', 'dateOfBirth', 'sex', 'address']) {
+      expect(JSON.stringify(data)).not.toContain(erased);
+    }
   });
 
   it('a Google-only account lists only Google; an unknown account is USER_NOT_FOUND', async () => {

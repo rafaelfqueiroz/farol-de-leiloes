@@ -6,8 +6,8 @@ import {
   ALL_CLASSIFIED,
   BOOKKEEPING,
   EMAIL_READ_ONLY,
+  ERASED_PERSONAL,
   HOSTILE_VALUES,
-  LEGACY_UNUSED,
   PROFILE_EDITABLE,
   PROTECTED,
 } from '../../test/support/profile-fields.js';
@@ -30,13 +30,20 @@ describe('BR-001-29: every user schema path is classified', () => {
     expect(new Set(ALL_CLASSIFIED).size).toBe(ALL_CLASSIFIED.length);
   });
 
+  it('SC-26: classifies none of the erased personal fields (they are not user fields any more)', () => {
+    expect(
+      ALL_CLASSIFIED.filter((path) => (ERASED_PERSONAL as readonly string[]).includes(path)),
+    ).toEqual([]);
+    expect(ERASED_PERSONAL.filter((path) => paths.includes(path))).toEqual([]);
+  });
+
   it('lets an account holder edit exactly name and phone', () => {
     expect([...PROFILE_EDITABLE]).toEqual(['name', 'phone']);
     expect([...EMAIL_READ_ONLY]).toEqual(['email']);
   });
 
   it('has a hostile value for every path that is not editable', () => {
-    const nonEditable = [...EMAIL_READ_ONLY, ...LEGACY_UNUSED, ...PROTECTED];
+    const nonEditable = [...EMAIL_READ_ONLY, ...PROTECTED];
     expect(nonEditable.filter((path) => !(path in HOSTILE_VALUES))).toEqual([]);
     expect(BOOKKEEPING).toContain('_id');
   });

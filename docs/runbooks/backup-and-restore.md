@@ -36,7 +36,7 @@ Atlas cannot snapshot on demand, so dump first.
 1. Stop the damage: if a migration or release caused it, roll back the code first ([deploy-and-rollback.md](deploy-and-rollback.md)).
 2. In Atlas, restore the most recent good snapshot **into a new temporary cluster** (or `mongorestore` a dump into one), never over production.
 3. Check the temporary cluster: collection counts against production, the latest `jobexecutions` rows, a few known documents, and the `migrations` collection.
-4. Bring back only what is needed (copy the lost documents), or, if the whole database is bad, repoint production at the new cluster: change the `MONGODB_URI` secret of the `deploy-production` environment (`gh secret set MONGODB_URI --env deploy-production`) and redeploy ([deploy-and-rollback.md](deploy-and-rollback.md), Change a setting or a secret). Tell the owner what up to 24 hours of data may be gone.
+4. Bring back only what is needed (copy the lost documents; after copying `users` documents, also do step 7 of [Restore: replay the purges](#restore-replay-the-purges)), or, if the whole database is bad, repoint production at the new cluster: change the `MONGODB_URI` secret of the `deploy-production` environment (`gh secret set MONGODB_URI --env deploy-production`) and redeploy ([deploy-and-rollback.md](deploy-and-rollback.md), Change a setting or a secret). Tell the owner what up to 24 hours of data may be gone.
 5. If personal data was lost or exposed, follow [incident-response.md](incident-response.md).
 
 ### Restore: replay the purges
@@ -49,6 +49,14 @@ Atlas cannot snapshot on demand, so dump first.
 4. Start the API with `ACCOUNT_PURGE_ENABLED=true` (the default): the daily job (04:10 Brasília time) purges every closed, unpurged account, oldest first (100 a run), and its alert fires if one is still there after `ACCOUNT_PURGE_ALERT_DAYS`. For a run before that, see [account-purge.md](account-purge.md#run-it-now).
 5. Check as in [account-purge.md](account-purge.md#check-a-purge): the account has `purgedAt`, an `@removed.invalid` address, and no name or phone.
 6. Record in the incident or restore notes that the purges were replayed, with the count (never the ids).
+7. **Erase the four legacy personal fields again, whatever the migration ledger says** (SPEC-010 BR-010-06, SC-26). The ledger only says production ran `0011-erase-legacy-profile-fields`: a `users` document copied back from an older snapshot or dump brings the CPF, date of birth, sex and address back without touching the ledger, so `npm run migrate` would skip 0011 and leave them. Before the database serves requests, in `mongosh` against the database that will serve them (copied documents or a whole restore alike), run the same idempotent update the migration runs:
+   ```js
+   db.users.updateMany(
+     { $or: [{ cpf: { $exists: true } }, { dateOfBirth: { $exists: true } }, { sex: { $exists: true } }, { address: { $exists: true } }] },
+     { $unset: { cpf: '', dateOfBirth: '', sex: '', address: '' } }
+   )
+   ```
+   Then **verify** that `db.users.countDocuments({ $or: [{ cpf: { $exists: true } }, { dateOfBirth: { $exists: true } }, { sex: { $exists: true } }, { address: { $exists: true } }] })` is `0`, and write the matched count (never the values) in the restore notes. Also run `npm run migrate` for any other pending migration (a whole restore of an older snapshot repoints production at an older ledger). Snapshots taken before 0011 hold those fields until they rotate out (the same 30-day ceiling as deleted accounts).
 
 ### Restore drill
 

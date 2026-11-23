@@ -12,8 +12,8 @@ import { UsersService } from '../../src/users/users.service.js';
 import {
   BOOKKEEPING,
   EMAIL_READ_ONLY,
+  ERASED_PERSONAL,
   HOSTILE_VALUES,
-  LEGACY_UNUSED,
   PROFILE_EDITABLE,
   PROTECTED,
 } from '../support/profile-fields.js';
@@ -72,7 +72,7 @@ describe('profile allowlist over the user schema (integration)', () => {
     await moduleRef.close();
   });
 
-  const NOT_PROFILE = [...EMAIL_READ_ONLY, ...LEGACY_UNUSED, ...PROTECTED];
+  const NOT_PROFILE = [...EMAIL_READ_ONLY, ...PROTECTED];
 
   it.each(NOT_PROFILE)(
     'updateProfile cannot change %s, even when the input carries it',
@@ -125,22 +125,25 @@ describe('profile allowlist over the user schema (integration)', () => {
     expect(changedKeys(before, await raw(id))).toEqual([]);
   });
 
-  it.each(LEGACY_UNUSED)(
-    'stored %s survives every write path untouched and is never returned by them',
+  // SC-26, BR-010-06: the CPF, date of birth, sex and address were erased (migration 0011) and are not
+  // in the schema. No write path may store them again, whatever the input carries: the profile and
+  // the server flow both copy a fixed list of fields, so a hostile name reaches nothing.
+  it.each(ERASED_PERSONAL)(
+    'neither updateProfile nor update can store %s, even when the input carries it',
     async (path) => {
       const { id } = await seed();
-      await users.collection.updateOne(
-        { _id: new users.base.Types.ObjectId(id) },
-        { $set: { [path]: HOSTILE_VALUES[path] } },
-      );
       const before = await raw(id);
+      const body = { [path]: HOSTILE_VALUES[path], name: 'Ana Nova' };
 
-      await service.updateProfile(id, { name: 'Ana Nova', phone: '+5584999991234' });
-      await service.update(id, { name: 'Ana Servidor' });
+      await service.updateProfile(
+        id,
+        body as unknown as Parameters<UsersService['updateProfile']>[1],
+      );
+      await service.update(id, body as unknown as Parameters<UsersService['update']>[1]);
 
       const after = await raw(id);
-      expect(after[path]).toEqual(before[path]);
-      expect(changedKeys(before, after).sort()).toEqual(['name', 'phone']);
+      expect(after).not.toHaveProperty(path);
+      expect(changedKeys(before, after)).toEqual(['name']);
     },
   );
 

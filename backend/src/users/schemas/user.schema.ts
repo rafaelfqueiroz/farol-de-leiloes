@@ -4,14 +4,6 @@ import { SUBSCRIPTION_STATUSES, SubscriptionStatus } from '../subscription-statu
 import { ACCOUNT_STATUSES, type AccountStatus, type UserAccount } from '../user-account.js';
 import { markIsolation } from '../../access/isolation-mark.js';
 
-/** Legacy shape of the stored `address`; nothing reads or writes it (see the legacy fields below). */
-interface LegacyAddress {
-  street?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-}
-
 export type UserDocument = UserEntity & Document;
 
 @Schema({ collection: 'users', timestamps: true })
@@ -147,22 +139,6 @@ export class UserEntity extends Document implements UserAccount {
   // Profile fields
   @Prop({ required: false })
   phone?: string;
-
-  // Legacy, stored and unused until SPEC-010 (issue #1 owner decision, 16/11/2026): the profile
-  // stopped collecting and showing the next four fields, and no code path reads or writes them
-  // (BR-001-25, SC-26). Data already stored stays untouched: no migration, no deletion. SPEC-010
-  // (BR-010-06) decides what happens to it.
-  @Prop({ required: false })
-  cpf?: string;
-
-  @Prop({ required: false })
-  dateOfBirth?: Date;
-
-  @Prop({ required: false, enum: ['male', 'female', 'other'] })
-  sex?: string;
-
-  @Prop({ type: Object, required: false })
-  address?: LegacyAddress;
 }
 
 export const UserSchema = SchemaFactory.createForClass(UserEntity);

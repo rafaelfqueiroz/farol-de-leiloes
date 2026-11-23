@@ -197,7 +197,7 @@ describe('AuthService.toUserProfile mapping (AR-09, SC-15)', () => {
     );
   });
 
-  it('does not return the legacy cpf, date of birth, sex and address, even when stored', async () => {
+  it('SC-26: returns only the named fields, never an unlisted stored cpf, date of birth, sex or address', async () => {
     const stored = {
       cpf: '00000000000',
       dateOfBirth: new Date('1990-05-06T00:00:00.000Z'),
