@@ -64,6 +64,20 @@ describe('Caixa access settings', () => {
     },
   );
 
+  it('bounds the timeout at 120 s and the size cap at 100 MiB, and accepts the bounds', () => {
+    expect(caixaConfigFrom(testEnv({ CAIXA_REQUEST_TIMEOUT_MS: '120000' })).requestTimeoutMs).toBe(
+      120_000,
+    );
+    expect(errorOf({ CAIXA_REQUEST_TIMEOUT_MS: '120001' })).toContain('CAIXA_REQUEST_TIMEOUT_MS:');
+    const max = 100 * 1024 * 1024;
+    expect(
+      caixaConfigFrom(testEnv({ CAIXA_MAX_DOWNLOAD_BYTES: String(max) })).maxDownloadBytes,
+    ).toBe(max);
+    expect(errorOf({ CAIXA_MAX_DOWNLOAD_BYTES: String(max + 1) })).toContain(
+      'CAIXA_MAX_DOWNLOAD_BYTES:',
+    );
+  });
+
   it.each(['CAIXA_REQUEST_TIMEOUT_MS', 'CAIXA_MAX_DOWNLOAD_BYTES'])(
     '%s is a positive integer',
     (key) => {

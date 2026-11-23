@@ -21,11 +21,18 @@ export abstract class CaixaAccess {
 }
 
 /** Why Caixa said no. */
-export type CaixaBlockReason = 'HTTP_403' | 'HTTP_429' | 'CHALLENGE_PAGE' | 'REDIRECT_OFF_SITE';
+export type CaixaBlockReason =
+  | 'HTTP_401'
+  | 'HTTP_403'
+  | 'HTTP_407'
+  | 'HTTP_429'
+  | 'HTTP_451'
+  | 'CHALLENGE_PAGE'
+  | 'REDIRECT_OFF_SITE';
 
 /**
- * Caixa answered with a block, a challenge or a rate limit (403, 429, the Radware / ShieldSquare
- * page, a redirect away from the site). BR-004-20, SC-24: the caller STOPS for the run and
+ * Caixa (or the way to it) answered with a refusal, a challenge or a rate limit: 401, 403, 407,
+ * 429, 451, the Radware / ShieldSquare page (also in a 5xx body), a redirect away from the site. BR-004-20, SC-24: the caller STOPS for the run and
  * records it; nothing retries, switches address or tries to get past it.
  */
 export class CaixaBlockedError extends Error {

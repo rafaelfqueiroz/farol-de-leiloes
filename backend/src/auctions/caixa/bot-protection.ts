@@ -1,5 +1,8 @@
 import * as cheerio from 'cheerio';
 
+/** How much of a body is looked at: the first 256 KiB. */
+const PROBE_CHARS = 256 * 1024;
+
 // Host of the Radware bot-protection CDN. Compared exactly, never as a substring (SC-19).
 const RADWARE_CDN_HOST = 'cdn.perfdrive.com';
 
@@ -23,7 +26,9 @@ function loadsFromRadwareCdn(rawUrl: string): boolean {
  * host of a resource the page loads, so a look-alike host or the name in a query string or in
  * text does not count.
  */
-export function isBotProtectionPage(html: string): boolean {
+export function isBotProtectionPage(page: string): boolean {
+  // The challenge announces itself at the top; never parse more than this of an 8 MB body.
+  const html = page.length > PROBE_CHARS ? page.slice(0, PROBE_CHARS) : page;
   if (html.includes('Radware Bot Manager') || html.includes('ShieldSquare')) return true;
 
   const $ = cheerio.load(html);

@@ -154,10 +154,11 @@ export const envSchema = z
     // Caixa access (SPEC-004, SC-24, ADR-003): every request to venda-imoveis.caixa.gov.br goes
     // through the CaixaAccess port, whose HTTP adapter reads these. Optional proxy: http(s) only.
     CAIXA_PROXY_URL: proxyUrl.optional(),
-    // Milliseconds one Caixa request may take, connection to last byte.
-    CAIXA_REQUEST_TIMEOUT_MS: positiveInt.default(30_000),
-    // Bytes a Caixa response may carry; a larger body is refused. The list is about 8 MB.
-    CAIXA_MAX_DOWNLOAD_BYTES: positiveInt.default(20 * 1024 * 1024),
+    // Milliseconds one Caixa request may take, connection to last byte; at most 2 minutes.
+    CAIXA_REQUEST_TIMEOUT_MS: positiveInt.max(120_000).default(30_000),
+    // Bytes a Caixa response may carry; a larger body is refused; at most 100 MiB. The list is about
+    // 8 MB.
+    CAIXA_MAX_DOWNLOAD_BYTES: positiveInt.max(100 * 1024 * 1024).default(20 * 1024 * 1024),
 
     // Scheduled jobs
     IMPORT_ENABLED: flag.default(true),

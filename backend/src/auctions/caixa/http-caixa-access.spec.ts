@@ -9,6 +9,7 @@ import { CAIXA_USER_AGENT } from '../../common/caixa-user-agent.js';
 import type { CaixaConfig } from '../../config/caixa.config.js';
 import { caixaFixturePath, readCaixaFixture } from '../../../test/support/fixtures.js';
 import { readFileSync } from 'node:fs';
+import { spyOnLogger } from '../../../test/support/logger-spy.js';
 import { CaixaBlockedError, CaixaUnreachableError, CaixaUrlRefusedError } from './caixa-access.js';
 import { HttpCaixaAccess } from './http-caixa-access.js';
 
@@ -122,9 +123,13 @@ describe('HttpCaixaAccess', () => {
   });
 
   describe('block signals stop the request and are never retried (BR-004-20, SC-24)', () => {
+    // 407 is mapped too, but the Fetch standard turns a 407 into a network error before the
+    // adapter sees a status, so it cannot be driven here: it arrives as CaixaUnreachableError.
     it.each([
+      [401, 'HTTP_401'],
       [403, 'HTTP_403'],
       [429, 'HTTP_429'],
+      [451, 'HTTP_451'],
     ])('answers CaixaBlockedError for HTTP %i', async (status, reason) => {
       handler = (_request, response) => {
         response.statusCode = status;
@@ -136,6 +141,56 @@ describe('HttpCaixaAccess', () => {
         reason,
       });
       expect(requests).toHaveLength(1);
+    });
+
+    it('reads a 5xx body for a challenge: Radware can answer 503 with its page', async () => {
+      handler = (_request, response) => {
+        response.statusCode = 503;
+        response.setHeader('Content-Type', 'text/html');
+        response.end(readCaixaFixture('bot-protection.html'));
+      };
+
+      await expect(access().downloadList()).rejects.toMatchObject({
+        name: 'CaixaBlockedError',
+        reason: 'CHALLENGE_PAGE',
+      });
+      expect(requests).toHaveLength(1);
+    });
+
+    it('reads no more than 64 KiB of a 5xx body, whatever follows', async () => {
+      handler = (_request, response) => {
+        response.statusCode = 500;
+        response.end(`${'x'.repeat(65 * 1024)}Radware Bot Manager`);
+      };
+      await expect(access().downloadList()).rejects.toMatchObject({
+        name: 'CaixaUnreachableError',
+        reason: 'HTTP_STATUS',
+        status: 500,
+      });
+
+      handler = (_request, response) => {
+        response.statusCode = 500;
+        response.end(`Radware Bot Manager${'x'.repeat(65 * 1024)}`);
+      };
+      await expect(access().downloadList()).rejects.toMatchObject({ reason: 'CHALLENGE_PAGE' });
+    });
+
+    it('does not read a 5xx body that never ends, but stops at the cap', async () => {
+      let written = 0;
+      handler = (_request, response) => {
+        response.statusCode = 502;
+        const timer = setInterval(() => {
+          written += 16 * 1024;
+          response.write(Buffer.alloc(16 * 1024, 0x78));
+        }, 1);
+        response.on('close', () => clearInterval(timer));
+      };
+
+      await expect(access({ requestTimeoutMs: 5000 }).downloadList()).rejects.toMatchObject({
+        reason: 'HTTP_STATUS',
+        status: 502,
+      });
+      expect(written).toBeGreaterThan(0);
     });
 
     it('answers CaixaBlockedError for a challenge page on a detail page', async () => {
@@ -292,6 +347,20 @@ describe('HttpCaixaAccess', () => {
       expect(requests).toHaveLength(4);
     });
 
+    it('treats a redirect with a malformed Location as an unexpected answer, not a TypeError', async () => {
+      handler = (_request, response) => {
+        response.statusCode = 302;
+        response.setHeader('Location', 'http://[::1');
+        response.end();
+      };
+
+      await expect(access().downloadList()).rejects.toMatchObject({
+        name: 'CaixaUnreachableError',
+        reason: 'HTTP_STATUS',
+        status: 302,
+      });
+    });
+
     it('treats a redirect with no Location as an unexpected answer', async () => {
       handler = (_request, response) => {
         response.statusCode = 302;
@@ -342,11 +411,29 @@ describe('HttpCaixaAccess', () => {
       'http://169.254.169.254/latest/meta-data',
       '//example.com/x',
       'http://[::1',
+      'https://user:secret@venda-imoveis.caixa.gov.br/x',
+      'https://venda-imoveis.caixa.gov.br.evil.example/x',
+      'https://venda-imoveis.caixa.gov.br@evil.example/x',
+      'https://@evil.example/x',
+      'https://venda-imoveis.caixa.gov.br:8443/x',
+      'https://evil.example\\@venda-imoveis.caixa.gov.br/x',
+      'http://venda-imoveis.caixa.gov.br/x',
     ])('refuses %s without sending any request', async (url) => {
-      const caixa = access();
+      // The default origin: Caixa's own. The refusal happens before anything is sent.
+      const caixa = new HttpCaixaAccess(BASE_CONFIG);
+      created.push(caixa);
 
       await expect(caixa.fetchDetailPage(url)).rejects.toBeInstanceOf(CaixaUrlRefusedError);
       await expect(caixa.fetchFile(url)).rejects.toBeInstanceOf(CaixaUrlRefusedError);
+      expect(requests).toEqual([]);
+    });
+
+    it('refuses credentials in a URL on the origin itself', async () => {
+      const withUserinfo = origin.replace('http://', 'http://user:secret@');
+
+      await expect(access().fetchDetailPage(`${withUserinfo}/p`)).rejects.toBeInstanceOf(
+        CaixaUrlRefusedError,
+      );
       expect(requests).toEqual([]);
     });
 
@@ -420,6 +507,23 @@ describe('HttpCaixaAccess', () => {
         proxy.closeAllConnections();
         await new Promise((resolve) => proxy.close(resolve));
       }
+    });
+
+    it('says at boot that a proxy is set, and never prints it (SC-16, SC-24)', () => {
+      const logger = spyOnLogger();
+      created.push(
+        new HttpCaixaAccess({
+          ...BASE_CONFIG,
+          proxyUrl: 'http://user:hunter2@proxy.example.test:3128',
+        }),
+      );
+      created.push(new HttpCaixaAccess(BASE_CONFIG));
+
+      expect(logger.loggedText()).toContain('CAIXA_PROXY_URL is set');
+      expect(logger.loggedText()).not.toContain('hunter2');
+      expect(logger.loggedText()).not.toContain('proxy.example.test');
+      // Only the proxied adapter said it.
+      expect(logger.loggedText().match(/CAIXA_PROXY_URL is set/g)).toHaveLength(1);
     });
 
     it('is a failure, never a fall back to a direct connection, when the proxy is down', async () => {

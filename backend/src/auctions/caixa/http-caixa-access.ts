@@ -4,24 +4,35 @@
 // 429, a challenge page, a redirect off the site) with CaixaBlockedError. It never retries, never
 // switches address, never answers a challenge. The one way out of the VPS's own address is the
 // optional CAIXA_PROXY_URL (ADR-003, #108); an http(s) proxy only.
-import { OnModuleDestroy } from '@nestjs/common';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { type Dispatcher, ProxyAgent, fetch } from 'undici';
+import { CAIXA_ORIGIN, resolveOnCaixaSite } from '../../common/caixa-site.js';
 import { CAIXA_USER_AGENT } from '../../common/caixa-user-agent.js';
 import type { CaixaConfig } from '../../config/caixa.config.js';
 import { isBotProtectionPage } from './bot-protection.js';
 import {
   CaixaAccess,
   CaixaBlockedError,
+  type CaixaBlockReason,
   type CaixaFile,
   CaixaUnreachableError,
   CaixaUrlRefusedError,
 } from './caixa-access.js';
 
-export const CAIXA_ORIGIN = 'https://venda-imoveis.caixa.gov.br';
 /** The national list, all states: `Lista_imoveis_geral.csv`. */
 export const CAIXA_LIST_PATH = '/listaweb/Lista_imoveis_geral.csv';
 
 const MAX_REDIRECTS = 3;
+/** Statuses that are Caixa (or the proxy, or the law) saying no: stop, as for a challenge. */
+const BLOCK_STATUS: Readonly<Record<number, CaixaBlockReason>> = {
+  401: 'HTTP_401',
+  403: 'HTTP_403',
+  407: 'HTTP_407',
+  429: 'HTTP_429',
+  451: 'HTTP_451',
+};
+/** A 5xx body is read only far enough to see whether it is a challenge page. */
+const ERROR_BODY_PROBE_BYTES = 64 * 1024;
 /** Caixa's pages and list are Windows-1252; a browser would assume it too when nothing says else. */
 const DEFAULT_CHARSET = 'windows-1252';
 
@@ -42,6 +53,13 @@ export class HttpCaixaAccess extends CaixaAccess implements OnModuleDestroy {
     super();
     this.origin = new URL(origin);
     this.proxy = config.proxyUrl === undefined ? undefined : new ProxyAgent(config.proxyUrl);
+    if (this.proxy) {
+      // SC-24: a proxy is a transport decision (ADR-003, #108), never an answer to a block. Said
+      // once at boot, without the URL (it may carry credentials, SC-16).
+      new Logger(HttpCaixaAccess.name).warn(
+        'CAIXA_PROXY_URL is set: Caixa traffic leaves through a proxy. Do not add or change it because Caixa blocked a request (SC-24, ADR-003)',
+      );
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -65,15 +83,10 @@ export class HttpCaixaAccess extends CaixaAccess implements OnModuleDestroy {
     return response;
   }
 
-  /** SC-24 / SC-19: Caixa's data holds the URLs; a request only ever goes to Caixa's own origin. */
+  /** SC-24 / SC-19: Caixa's data holds the URLs; a request only ever goes to Caixa's own site. */
   private onSite(rawUrl: string): URL {
-    let url: URL;
-    try {
-      url = new URL(rawUrl.trim(), this.origin);
-    } catch {
-      throw new CaixaUrlRefusedError();
-    }
-    if (url.origin !== this.origin.origin) throw new CaixaUrlRefusedError();
+    const url = resolveOnCaixaSite(rawUrl, this.origin);
+    if (!url) throw new CaixaUrlRefusedError();
     return url;
   }
 
@@ -85,17 +98,20 @@ export class HttpCaixaAccess extends CaixaAccess implements OnModuleDestroy {
       if (status >= 300 && status < 400) {
         const location = response.headers.get('location');
         await response.body?.cancel();
-        if (!location) throw new CaixaUnreachableError('HTTP_STATUS', status);
-        const next = new URL(location, url);
+        const next = location ? this.resolveRedirect(location, url) : null;
+        // A missing or malformed Location is an unexpected answer, not a crash.
+        if (!next) throw new CaixaUnreachableError('HTTP_STATUS', status);
         // A redirect away from the site is how a challenge usually arrives.
         if (next.origin !== this.origin.origin) throw new CaixaBlockedError('REDIRECT_OFF_SITE');
         url = next;
         continue;
       }
-      if (status === 403 || status === 429) {
+      const blocked = BLOCK_STATUS[status];
+      if (blocked) {
         await response.body?.cancel();
-        throw new CaixaBlockedError(status === 403 ? 'HTTP_403' : 'HTTP_429');
+        throw new CaixaBlockedError(blocked);
       }
+      if (status >= 500) await this.refuseServerErrorPage(response);
       if (status < 200 || status >= 300) {
         await response.body?.cancel();
         throw new CaixaUnreachableError('HTTP_STATUS', status);
@@ -106,6 +122,35 @@ export class HttpCaixaAccess extends CaixaAccess implements OnModuleDestroy {
       };
     }
     throw new CaixaUnreachableError('TOO_MANY_REDIRECTS');
+  }
+
+  private resolveRedirect(location: string, from: URL): URL | null {
+    try {
+      return new URL(location, from);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Radware can answer a challenge with a 5xx. Reads at most ERROR_BODY_PROBE_BYTES of the body to
+   * tell: a challenge is a block, anything else stays an unreachable 5xx (the caller throws it).
+   */
+  private async refuseServerErrorPage(response: Awaited<ReturnType<typeof fetch>>): Promise<void> {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    try {
+      for await (const chunk of response.body ?? []) {
+        const bytes = Buffer.from(chunk as Uint8Array);
+        chunks.push(bytes.subarray(0, ERROR_BODY_PROBE_BYTES - size));
+        size += bytes.length;
+        if (size >= ERROR_BODY_PROBE_BYTES) break; // leaving the loop cancels the stream
+      }
+    } catch {
+      return; // the status alone decides: an unreachable 5xx
+    }
+    const text = decodeBody(Buffer.concat(chunks), response.headers.get('content-type'));
+    this.refuseChallenge(text);
   }
 
   private async request(url: URL, accept: string) {
