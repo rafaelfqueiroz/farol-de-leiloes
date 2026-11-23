@@ -107,7 +107,7 @@ export class AuctionsService {
 
     this.logger.log(`[query] Found ${docs.length} docs, total: ${total}`);
     return paginated(
-      docs.map((doc) => toAuction(doc)),
+      docs.map((doc) => toAuction(doc, this.clock.now())),
       total,
       page,
     );
@@ -116,20 +116,20 @@ export class AuctionsService {
   async findByCode(code: string): Promise<Auction | null> {
     // SC-10: a code is a string; an object (`{ $ne: null }`) is not an auction, it is not found.
     if (typeof code !== 'string') return null;
-    const doc = await this.auctionRepository
-      .findOne({ code: { $eq: code }, available: true })
-      .exec();
-    return doc ? toAuction(doc) : null;
+    // BR-004-17: a property that left the list or is past its dates is still reachable by its
+    // number, with its last known data; `available` and `active` say what it is now.
+    const doc = await this.auctionRepository.findOne({ code: { $eq: code } }).exec();
+    return doc ? toAuction(doc, this.clock.now()) : null; // AR-24
   }
 
-  /** The available auctions among `codes`, in no particular order. */
-  async findAvailableByCodes(codes: string[]): Promise<Auction[]> {
+  /** The auctions among `codes` (BR-004-17: unavailable and inactive ones too), in no particular order. */
+  async findByCodes(codes: string[]): Promise<Auction[]> {
     if (!codes.length) return [];
     const docs = await this.auctionRepository
-      .find({ code: serverOperators({ $in: codes }), available: true })
+      .find({ code: serverOperators({ $in: codes }) })
       .lean()
       .exec();
-    return docs.map((doc) => toAuction(doc));
+    return docs.map((doc) => toAuction(doc, this.clock.now())); // AR-24
   }
 
   /**
@@ -183,7 +183,7 @@ export class AuctionsService {
    * documents (favorites), so they map it the same way without the auction schema (AR-09).
    */
   toAuction(record: AuctionRecord): Auction {
-    return toAuction(record);
+    return toAuction(record, this.clock.now()); // AR-24
   }
 
   /**

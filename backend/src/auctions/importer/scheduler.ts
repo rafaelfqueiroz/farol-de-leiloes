@@ -74,19 +74,8 @@ export class AuctionsImporter {
       return;
     }
 
-    // Scheduled job always runs (if enabled), regardless of onStartup setting
-    // Check if job ran recently to prevent duplicate runs
-    const ranRecently = await this.jobExecutionService.hasRunRecently(
-      this.jobName,
-      RunMode.AUTO,
-      23, // Within last 23 hours
-    );
-
-    if (ranRecently) {
-      this.logger.log('Job ran recently, skipping scheduled execution');
-      return;
-    }
-
+    // The Import Run of today (a SUCCESS one makes runImport stop before it downloads) replaces
+    // the old "ran within 23 hours" guard of jobexecutions (SPEC-004 BR-004-07).
     await this.runImport(RunMode.AUTO);
   }
 
@@ -96,6 +85,9 @@ export class AuctionsImporter {
    * newer than the last applied one, is recorded and applies NOTHING (BR-004-10); a failure is
    * recorded with a stable code, never the message (SC-15). The window, cutoff, retries and alerts
    * of the run are part 3.
+   *
+   * Only the download, the validation and the apply are the run: once the Import Run says SUCCESS
+   * nothing after it can make the run or the health report fail (afterSuccess is best-effort).
    */
   private async runImport(runMode: RunMode) {
     this.logger.log(`Starting auctions import (${runMode} mode)`);
@@ -109,39 +101,44 @@ export class AuctionsImporter {
 
       const csv = await this.csvCacheService.resolveCsv();
       const list = parseCaixaList(csv);
+      const facts = listFacts(list);
       const verdict = validateList(
-        listFacts(list),
+        facts,
         await this.importRuns.lastAppliedList(),
         this.business.import.minRowRatio,
+        today,
       );
       if (verdict.kind !== 'valid') {
-        await this.recordNotApplied(runMode, today, list, verdict);
+        await this.recordNotApplied(runMode, today, list, facts.usableCodeCount, verdict);
         return;
       }
       // A valid verdict has a generation date (validateList rejects a list without one).
       const generatedOn = list.generatedOn ?? today;
 
-      const run = await this.importRuns.begin(today, { generatedOn, rows: list.rows.length });
+      // The row count of a list is its DISTINCT usable property numbers: what the next list is
+      // compared with (BR-004-04).
+      const run = await this.importRuns.begin(today, { generatedOn, rows: facts.usableCodeCount });
       if (run === null) {
         this.logger.log('Today is already imported (an Import Run succeeded); nothing to do');
         return;
       }
       runId = run.id;
 
-      const { rows, withoutCode, unknownModality } = toListRows(normalizeRows(list.rows));
-      this.logger.log(
-        `List rows: ${list.rows.length}, without a property number: ${withoutCode}, unknown modality: ${unknownModality}`,
+      const { rows, withoutCode, unknownModality, offSiteLinks } = toListRows(
+        normalizeRows(list.rows),
       );
-      const counts = await this.applier.apply({ runId, rows });
-      await this.importRuns.markSuccess(runId, counts);
-
-      // Invalidate neighborhoods cache after import
-      await this.auctions.invalidateNeighborhoodsCache();
-      this.logger.log(`Neighborhoods cache invalidated`);
-
-      // Record execution in database (GET /api/health, AR-48)
-      await this.jobExecutionService.recordExecution(this.jobName, runMode);
-      this.logger.log(`Auctions import completed (run recorded)`);
+      this.logger.log(
+        `List rows: ${list.rows.length}, without a property number: ${withoutCode}, unknown modality: ${unknownModality}, links off Caixa's site: ${offSiteLinks}`,
+      );
+      const counts = await this.applier.apply({
+        runId,
+        rows,
+        minRowRatio: this.business.import.minRowRatio,
+      });
+      if (!(await this.importRuns.markSuccess(runId, counts))) {
+        // Another attempt of the day finished it first. Applying is idempotent: nothing is lost.
+        this.logger.log('The Import Run was already finished by another attempt');
+      }
     } catch (e) {
       // SC-15: the stable code, never the message (it may quote a URL or a value).
       this.logger.error(`Failed import: ${jobErrorCode(e)}`);
@@ -150,6 +147,27 @@ export class AuctionsImporter {
       await this.recordFailure(runMode, e, today, runId);
       throw e;
     }
+    await this.afterSuccess(runMode);
+  }
+
+  /**
+   * After the Import Run is SUCCESS: refresh the neighborhoods cache and record the run for the
+   * health report (AR-48). Best-effort and outside the failure path: a throw here is logged by its
+   * code and must never turn a run that applied the list into a failed one.
+   */
+  private async afterSuccess(runMode: RunMode): Promise<void> {
+    try {
+      await this.auctions.invalidateNeighborhoodsCache();
+      this.logger.log('Neighborhoods cache invalidated');
+    } catch (error) {
+      this.logger.warn(`Could not invalidate the neighborhoods cache: ${jobErrorCode(error)}`);
+    }
+    try {
+      await this.jobExecutionService.recordExecution(this.jobName, runMode);
+      this.logger.log('Auctions import completed (run recorded)');
+    } catch (error) {
+      this.logger.error(`Could not record the successful import: ${jobErrorCode(error)}`);
+    }
   }
 
   /** BR-004-10: the list is not applied; the day's run says why, by code (SC-15). */
@@ -157,6 +175,7 @@ export class AuctionsImporter {
     runMode: RunMode,
     today: string,
     list: ParsedList,
+    usableRows: number,
     verdict: Exclude<ListVerdict, { kind: 'valid' }>,
   ): Promise<void> {
     const rejected = verdict.kind === 'rejected';
@@ -165,7 +184,7 @@ export class AuctionsImporter {
       today,
       rejected ? 'REJECTED_LIST' : 'NO_NEW_LIST',
       code,
-      { generatedOn: list.generatedOn, rows: list.rows.length },
+      { generatedOn: list.generatedOn, rows: usableRows },
     );
     this.logger.warn(`List not applied: ${rejected ? 'REJECTED_LIST' : 'NO_NEW_LIST'} ${code}`);
     await this.jobExecutionService.recordFailure(

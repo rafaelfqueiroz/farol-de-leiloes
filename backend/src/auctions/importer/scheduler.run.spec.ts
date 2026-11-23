@@ -37,12 +37,21 @@ function build(
     lastApplied?: { generatedOn: string; rowCount: number } | null;
     begin?: { id: string } | null;
     applyFails?: boolean;
+    marked?: boolean;
+    cacheFails?: boolean;
+    recordFails?: boolean;
   } = {},
 ) {
-  const auctions = { invalidateNeighborhoodsCache: vi.fn().mockResolvedValue(undefined) };
+  const auctions = {
+    invalidateNeighborhoodsCache: vi.fn(() =>
+      opts.cacheFails ? Promise.reject(new TypeError('cache down')) : Promise.resolve(undefined),
+    ),
+  };
   const jobExecutions = {
     hasRunRecently: vi.fn().mockResolvedValue(opts.ranRecently ?? false),
-    recordExecution: vi.fn().mockResolvedValue(undefined),
+    recordExecution: vi.fn(() =>
+      opts.recordFails ? Promise.reject(new TypeError('db down')) : Promise.resolve(undefined),
+    ),
     recordFailure: vi.fn().mockResolvedValue(undefined),
   };
   const csvCache = {
@@ -53,7 +62,7 @@ function build(
     lastAppliedList: vi.fn().mockResolvedValue(opts.lastApplied ?? null),
     begin: vi.fn().mockResolvedValue(opts.begin === undefined ? { id: 'run-1' } : opts.begin),
     recordWithoutApply: vi.fn().mockResolvedValue(null),
-    markSuccess: vi.fn().mockResolvedValue(true),
+    markSuccess: vi.fn().mockResolvedValue(opts.marked ?? true),
     markFailed: vi.fn().mockResolvedValue(true),
   };
   const applier = {
@@ -131,17 +140,20 @@ describe('AuctionsImporter.dailyJob', () => {
     expect(csvCache.resolveCsv).not.toHaveBeenCalled();
   });
 
-  it('is skipped when a run succeeded within 23 hours', async () => {
-    const { importer, jobExecutions, csvCache } = build(HEADER, { ranRecently: true });
+  it("does not consult the 23-hour jobexecutions guard: only today's Import Run decides (BR-004-07)", async () => {
+    // The health record says a run succeeded an hour ago (yesterday's 23:50, say): today is a new day.
+    const { importer, jobExecutions, importRuns, csvCache } = build(
+      HEADER + row('1', 'Venda Online'),
+      {
+        ranRecently: true,
+      },
+    );
 
     await importer.dailyJob();
 
-    expect(jobExecutions.hasRunRecently).toHaveBeenCalledWith(
-      AUCTIONS_IMPORT_JOB,
-      RunMode.AUTO,
-      23,
-    );
-    expect(csvCache.resolveCsv).not.toHaveBeenCalled();
+    expect(jobExecutions.hasRunRecently).not.toHaveBeenCalled();
+    expect(importRuns.findByDate).toHaveBeenCalledWith('2025-11-10');
+    expect(csvCache.resolveCsv).toHaveBeenCalledTimes(1);
   });
 
   it("applies a valid list: begins the day's run, hands the rows to the applier, records the counts", async () => {
@@ -165,6 +177,8 @@ describe('AuctionsImporter.dailyJob', () => {
       { runId: string; rows: Record<string, unknown>[] },
     ];
     expect(input.runId).toBe('run-1');
+    // The guard of the sweep (BR-004-08) is told the configured ratio.
+    expect(applier.apply).toHaveBeenCalledWith(expect.objectContaining({ minRowRatio: 0.8 }));
     expect(input.rows.map((r) => [r['code'], r['modality']])).toEqual([
       ['111', PhaseModality.ONLINE_SALES],
       ['222', PhaseModality.SFI_AUCTION],
@@ -296,5 +310,45 @@ describe('AuctionsImporter.dailyJob', () => {
       RunMode.AUTO,
       'TypeError',
     );
+  });
+
+  describe('after the list was applied (BR-004-07, AR-48)', () => {
+    const csv = HEADER + row('111', 'Venda Online');
+
+    it('a cache that cannot be invalidated does not fail the run or the health record', async () => {
+      const logger = spyOnLogger();
+      const { importer, importRuns, jobExecutions } = build(csv, { cacheFails: true });
+
+      await expect(importer.dailyJob()).resolves.toBeUndefined();
+
+      expect(importRuns.markFailed).not.toHaveBeenCalled();
+      expect(jobExecutions.recordFailure).not.toHaveBeenCalled();
+      expect(jobExecutions.recordExecution).toHaveBeenCalledTimes(1);
+      expect(logger.loggedText()).toContain(
+        'Could not invalidate the neighborhoods cache: TypeError',
+      );
+      expect(logger.loggedText()).not.toContain('cache down'); // SC-15: the code, not the message
+    });
+
+    it('a health record that cannot be written does not fail the run either', async () => {
+      const logger = spyOnLogger();
+      const { importer, importRuns, jobExecutions } = build(csv, { recordFails: true });
+
+      await expect(importer.dailyJob()).resolves.toBeUndefined();
+
+      expect(importRuns.markSuccess).toHaveBeenCalledTimes(1);
+      expect(importRuns.markFailed).not.toHaveBeenCalled();
+      expect(jobExecutions.recordFailure).not.toHaveBeenCalled();
+      expect(logger.loggedText()).toContain('Could not record the successful import: TypeError');
+    });
+
+    it('a run another attempt already finished is not an error: the apply was idempotent', async () => {
+      const { importer, importRuns, jobExecutions } = build(csv, { marked: false });
+
+      await expect(importer.dailyJob()).resolves.toBeUndefined();
+
+      expect(importRuns.markFailed).not.toHaveBeenCalled();
+      expect(jobExecutions.recordExecution).toHaveBeenCalledTimes(1);
+    });
   });
 });

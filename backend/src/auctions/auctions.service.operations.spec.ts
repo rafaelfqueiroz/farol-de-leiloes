@@ -61,24 +61,21 @@ describe('AuctionsService.query paging', () => {
   });
 });
 
-describe('AuctionsService.findAvailableByCodes', () => {
+describe('AuctionsService.findByCodes', () => {
   it('answers nothing for an empty list without querying', async () => {
     const repo = { find: vi.fn() };
-    await expect(build(repo).service.findAvailableByCodes([])).resolves.toEqual([]);
+    await expect(build(repo).service.findByCodes([])).resolves.toEqual([]);
     expect(repo.find).not.toHaveBeenCalled();
   });
 
-  it('maps the available auctions among the codes', async () => {
+  it('maps the auctions among the codes, unavailable and inactive ones too (BR-004-17)', async () => {
     const repo = {
       find: vi.fn().mockReturnValue(new FakeQuery([{ code: 'A1', updatedAt: NOW }])),
     };
 
-    const auctions = await build(repo).service.findAvailableByCodes(['A1', 'A2']);
+    const auctions = await build(repo).service.findByCodes(['A1', 'A2']);
 
-    expect(repo.find).toHaveBeenCalledWith({
-      code: serverOperators({ $in: ['A1', 'A2'] }),
-      available: true,
-    });
+    expect(repo.find).toHaveBeenCalledWith({ code: serverOperators({ $in: ['A1', 'A2'] }) });
     expect(auctions.map((a) => a.code)).toEqual(['A1']);
   });
 });

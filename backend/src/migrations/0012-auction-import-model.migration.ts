@@ -3,7 +3,7 @@
 //   auctions       the indexes of the new fields (rounds, detailsCollectedAt, propertyType, the run
 //                  stamps), and a backfill of `rounds` from the dates the scraper already stored
 //   importruns     the unique run per Brasília day, and the last-SUCCESS lookup (BR-004-27)
-//   propertychanges  the change-entry indexes, with the unique (run, property, field) that makes
+//   propertychanges  the change-entry indexes, with the unique (run, property, field, type) that makes
 //                  writing the same list's entries twice end with one of each (BR-004-07)
 //
 // Old readers keep working: nothing is removed or renamed, `phases` / `currentPhase` stay as they
@@ -28,6 +28,10 @@ import type { Migration } from './migration.js';
 
 export const AUCTION_IMPORT_INDEXES: Readonly<Record<string, readonly mongo.IndexDescription[]>> = {
   auctions: [
+    // Already declared by the schema (`code`), ensured here so a catalogue the old importer left
+    // without it, or a deploy where autoIndex is off, cannot hold two documents of one property
+    // (BR-004-05). Idempotent: the same keys and options are a no-op.
+    { key: { code: 1 }, unique: true },
     { key: { available: 1, 'rounds.date': 1 } },
     { key: { available: 1, detailsCollectedAt: 1 } },
     { key: { propertyType: 1 } },
@@ -43,8 +47,8 @@ export const AUCTION_IMPORT_INDEXES: Readonly<Record<string, readonly mongo.Inde
     { key: { propertyCode: 1, createdAt: -1 } },
     { key: { relevant: 1, createdAt: 1 } },
     {
-      key: { importRunId: 1, propertyCode: 1, field: 1 },
-      name: 'one_change_per_run_property_field',
+      key: { importRunId: 1, propertyCode: 1, field: 1, type: 1 },
+      name: 'one_change_per_run_property_field_type',
       unique: true,
     },
   ],

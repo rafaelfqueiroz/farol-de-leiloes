@@ -9,17 +9,31 @@ import {
   type ListRow,
   type RowDiff,
 } from '../domain/list-diff.js';
+import { sweepWithinLimit } from '../domain/list-validator.js';
 import type { ImportCounts } from '../import-runs/import-run.js';
 import { ListApplierRepository } from './list-applier.repository.js';
 
 /** Rows read, diffed and written together. Bounds the `$in` of a read and the size of a bulk write. */
 export const LIST_APPLY_CHUNK_SIZE = 500;
 
+/**
+ * The sweep would hide more properties than a day can plausibly end (see `sweepWithinLimit`). It is
+ * thrown BEFORE anything is marked unavailable; the run ends FAILED with this class as its code.
+ */
+export class SweepAbortedError extends Error {
+  override name = 'SweepAbortedError';
+}
+
 export interface ApplyInput {
   /** The Import Run this apply belongs to (hex ObjectId): the stamp and the key of the entries. */
   runId: string;
   /** The validated list's rows (BR-004-04): nothing is applied before the list passed. */
   rows: readonly ListRow[];
+  /**
+   * IMPORT_MIN_ROW_RATIO: no more than `1 - minRowRatio` of the available properties may be hidden
+   * by this run. 0 allows any sweep (specs only).
+   */
+  minRowRatio: number;
   /** Rows per chunk; the default is LIST_APPLY_CHUNK_SIZE. */
   chunkSize?: number;
 }
@@ -63,6 +77,9 @@ export class ListApplier {
     const chunkSize = input.chunkSize ?? LIST_APPLY_CHUNK_SIZE;
     const rows = latestRowPerCode(input.rows);
 
+    // The catalogue the list is judged against: counted before this run writes anything.
+    const availableBefore = await this.properties.countAvailable();
+
     let skipped = 0;
     for (let at = 0; at < rows.length; at += chunkSize) {
       skipped += await this.applyChunk(input.runId, runId, rows.slice(at, at + chunkSize), now);
@@ -72,7 +89,10 @@ export class ListApplier {
       this.logger.warn(`List apply skipped ${skipped} new rows with an unknown modality`);
     }
 
-    await this.markAbsentUnavailable(input.runId, runId, now, chunkSize);
+    await this.markAbsentUnavailable(input.runId, runId, now, chunkSize, {
+      availableBefore,
+      minRowRatio: input.minRowRatio,
+    });
 
     const counts: ImportCounts = {
       new: await this.changes.countByType(input.runId, 'NEW'),
@@ -93,7 +113,10 @@ export class ListApplier {
     rows: readonly ListRow[],
     now: Date,
   ): Promise<number> {
-    const states = await this.properties.findStates(rows.map((row) => row.code));
+    const states = await this.properties.findStates(
+      rows.map((row) => row.code),
+      now,
+    );
     const diffs = new Map<string, Exclude<RowDiff, { kind: 'skip' }>>();
     const entries: ChangeDraft[] = [];
     let skipped = 0;
@@ -119,7 +142,16 @@ export class ListApplier {
     runId: Types.ObjectId,
     now: Date,
     chunkSize: number,
+    guard: { availableBefore: number; minRowRatio: number },
   ): Promise<void> {
+    // BR-004-08, DL-004-03: refuse BEFORE the first flag, so an aborted sweep has hidden nothing.
+    const unseen = await this.properties.countUnseenAvailable(runId);
+    if (!sweepWithinLimit(unseen, guard.availableBefore, guard.minRowRatio)) {
+      this.logger.error(
+        `List sweep aborted: ${unseen} of ${guard.availableBefore} available properties are not in the list`,
+      );
+      throw new SweepAbortedError('The list would hide too many properties');
+    }
     let after: string | null = null;
     for (;;) {
       const codes = await this.properties.findUnseenAvailable(runId, after, chunkSize);

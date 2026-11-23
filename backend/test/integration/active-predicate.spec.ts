@@ -94,7 +94,7 @@ describe('the active predicate: in memory and in MongoDB (integration)', () => {
     const docs = await auctions.find({}).lean();
     return docs
       .filter((doc) => {
-        const auction = toAuction(doc);
+        const auction = toAuction(doc, now);
         return isActive({ available: auction.available, rounds: auction.rounds }, now);
       })
       .map((doc) => doc.code)

@@ -12,7 +12,7 @@ import type {
   StoredListState,
 } from '../domain/list-diff.js';
 import type { PhaseModality } from '../domain/modality.js';
-import { AuctionEntity, AuctionDocument } from '../schemas/auction.schema.js';
+import { AuctionEntity, AuctionDocument, type StoredRound } from '../schemas/auction.schema.js';
 import { activeAuctionFilter } from '../utils/auction-filters.js';
 
 /** What `ListApplier` hands the repository for one chunk of rows. */
@@ -33,11 +33,11 @@ export class ListApplierRepository {
   constructor(@InjectModel(AuctionEntity.name) private readonly model: Model<AuctionDocument>) {}
 
   /** The stored state the diff needs, by code. A code not stored is absent from the map. */
-  async findStates(codes: readonly string[]): Promise<Map<string, StoredListState>> {
+  async findStates(codes: readonly string[], now: Date): Promise<Map<string, StoredListState>> {
     const docs = await this.model
       .find({ code: serverOperators({ $in: [...codes] }) })
       .select(
-        'code title address appraisalPrice detailsUrl propertyType available currentPhase phases detailsCollectedAt',
+        'code title address appraisalPrice detailsUrl propertyType available currentPhase phases detailsCollectedAt rounds',
       )
       .lean()
       .exec();
@@ -56,6 +56,7 @@ export class ListApplierRepository {
           minimumPrice: phase?.minimumPrice ?? null,
           phaseCount: doc.phases?.length ?? 0,
           detailsCollected: doc.detailsCollectedAt != null,
+          staleRounds: roundsAreStale(doc.rounds, now),
         };
         return [doc.code, state];
       }),
@@ -79,7 +80,7 @@ export class ListApplierRepository {
     for (const [code, diff] of diffs) {
       if (diff.kind === 'unchanged') unchanged.push(code);
       else if (diff.kind === 'insert') ops.push(insertOp(diff.row, diff.modality, stamp, now));
-      else ops.push(updateOp(code, diff, stamp, runId, now));
+      else ops.push(...updateOps(code, diff, stamp, runId, now));
     }
     if (unchanged.length > 0) {
       ops.push({
@@ -133,6 +134,18 @@ export class ListApplierRepository {
       .exec();
   }
 
+  /** Available properties now: the catalogue a list is judged against (BR-004-08 guard). */
+  countAvailable(): Promise<number> {
+    return this.model.countDocuments({ available: true }).exec();
+  }
+
+  /** Available properties the run's list did not contain (what the sweep would hide). */
+  countUnseenAvailable(runId: Types.ObjectId): Promise<number> {
+    return this.model
+      .countDocuments({ available: true, lastSeenRunId: serverOperators({ $ne: runId }) })
+      .exec();
+  }
+
   /** Properties the run changed (a list field, or returned): BR-004-27's "changed". */
   countChanged(runId: Types.ObjectId): Promise<number> {
     return this.model.countDocuments({ lastChangedRunId: runId }).exec();
@@ -142,6 +155,12 @@ export class ListApplierRepository {
   countActive(now: Date): Promise<number> {
     return this.model.countDocuments(activeAuctionFilter(now)).exec();
   }
+}
+
+/** Rounds were collected, none is open-ended, and every date is at or before `now`. */
+function roundsAreStale(rounds: StoredRound[] | null | undefined, now: Date): boolean {
+  if (!rounds || rounds.length === 0) return false;
+  return rounds.every((round) => round.date != null && round.date.getTime() <= now.getTime());
 }
 
 type Stamp = { lastSeenRunId: Types.ObjectId; listSeenAt: Date };
@@ -180,22 +199,39 @@ function insertOp(
   };
 }
 
-function updateOp(
+/**
+ * The writes of one changed property, as separate operations so each guard protects only its own
+ * write. The stamp and the list fields (op 1) have NO guard: a property the list contains is
+ * always stamped as seen, so a skipped guarded write can never make it look absent (no false
+ * BECAME_UNAVAILABLE). The guarded writes (the phase append, the price) are applied only to the
+ * state they were computed from; a guard that matches nothing means someone else already did it
+ * (a concurrent apply) or the state moved (the scraper), and the next list recomputes.
+ */
+function updateOps(
   code: string,
   diff: RowUpdate,
   stamp: Stamp,
   runId: Types.ObjectId,
   now: Date,
-): AnyBulkWriteOperation<AuctionEntity> {
+): AnyBulkWriteOperation<AuctionEntity>[] {
   const set: Record<string, unknown> = { ...stamp, ...fieldWrites(diff.fields) };
-  const filter: Record<string, unknown> = { code };
-  const update: Record<string, unknown> = { $set: set };
+  const unguarded: Record<string, unknown> = { $set: set };
 
   if (diff.changed) {
     set.updatedAt = now;
     set.lastChangedRunId = runId;
   }
   if (diff.returned) set.available = true;
+  if (diff.refreshDetails) {
+    // BR-004-09, BR-004-19: collected again, first. No rounds is "not collected yet" (unknown,
+    // active), so the old dates cannot keep it inactive; `fulfilled: false` queues the scraper.
+    set.detailsCollectedAt = null;
+    set.fulfilled = false;
+    unguarded.$unset = { rounds: '' };
+  }
+  const ops: AnyBulkWriteOperation<AuctionEntity>[] = [
+    { updateOne: { filter: { code }, update: unguarded, timestamps: false } },
+  ];
 
   if (diff.modalityChange) {
     const phase = toStoredPhase({
@@ -203,26 +239,47 @@ function updateOp(
       minimumPrice: diff.modalityChange.price,
       phaseDates: [],
     });
-    set.currentPhase = phase;
-    update.$push = { phases: phase };
-    // Guarded by the modality read: a second process that read the same state finds the phase
-    // already appended and matches nothing, so a phase is never appended twice (BR-004-07).
-    filter['currentPhase.modality'] = diff.modalityChange.from;
+    ops.push({
+      updateOne: {
+        // Guarded by the modality that was read: a second process that read the same state finds
+        // the phase already appended and matches nothing, so a phase is never appended twice.
+        filter: { code, 'currentPhase.modality': diff.modalityChange.from },
+        update: { $set: { currentPhase: phase }, $push: { phases: phase } },
+        timestamps: false,
+      },
+    });
   } else if (diff.price) {
     const price = toDecimal128OrNull(diff.price.value);
-    set['currentPhase.minimumPrice'] = price;
-    // The last phase follows the list price, as the current one does (the scraper writes them
-    // back together).
-    if (diff.phaseCount > 0) set[`phases.${diff.phaseCount - 1}.minimumPrice`] = price;
+    if (diff.phaseCount > 0) {
+      // The last phase follows the list price, as the current one does (the scraper writes them
+      // back together). Guarded by the phase count that was read: the scraper rewrites `phases`
+      // wholesale, and an index into a list that changed shape would price the wrong phase.
+      ops.push({
+        updateOne: {
+          filter: { code, phases: serverOperators({ $size: diff.phaseCount }) },
+          update: {
+            $set: {
+              'currentPhase.minimumPrice': price,
+              [`phases.${diff.phaseCount - 1}.minimumPrice`]: price,
+            },
+          },
+          timestamps: false,
+        },
+      });
+    }
+    ops.push({
+      updateOne: {
+        // The phases are not what was read: only the current phase's price follows the list.
+        filter: {
+          code,
+          phases: serverOperators({ $not: serverOperators({ $size: diff.phaseCount }) }),
+        },
+        update: { $set: { 'currentPhase.minimumPrice': price } },
+        timestamps: false,
+      },
+    });
   }
-
-  return {
-    updateOne: {
-      filter,
-      update,
-      timestamps: false,
-    },
-  };
+  return ops;
 }
 
 /** The list fields of an update as stored (money as Decimal128, AR-17). */

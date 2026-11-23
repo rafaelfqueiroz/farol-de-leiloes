@@ -46,7 +46,14 @@ export interface Auction {
   editalUrl: string | null;
   description: string | null;
   fulfilled: boolean;
+  /** Marked available by the last applied list (BR-004-08). */
   available: boolean;
+  /** BR-004-16: available and not past its last round, at the read's "now" (domain/active.ts). */
+  active: boolean;
+  /** BR-004-13: the current round's price, or the list price when none is known; reais (AR-17). */
+  currentMinimumPrice: Decimal | null;
+  /** BR-004-14: percent, computed at read time, never clamped; null when a figure is unknown. */
+  discountPercent: Decimal | null;
   updatedAt: Date;
 }
 

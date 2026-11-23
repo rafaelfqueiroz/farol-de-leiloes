@@ -132,11 +132,11 @@ describe('AuctionsService code lookups (SC-10)', () => {
 
   const operator = { $ne: null } as unknown as string;
 
-  it('findByCode compares the code by equality and only among available auctions', async () => {
+  it('findByCode compares the code by equality, among every property: a gone one is reachable (BR-004-17)', async () => {
     const { service, repo } = build();
 
     await expect(service.findByCode('A1')).resolves.toBeNull();
-    expect(repo.findOne).toHaveBeenCalledWith({ code: { $eq: 'A1' }, available: true });
+    expect(repo.findOne).toHaveBeenCalledWith({ code: { $eq: 'A1' } });
   });
 
   it('findByCode finds nothing, and never queries, for a non-string code', async () => {

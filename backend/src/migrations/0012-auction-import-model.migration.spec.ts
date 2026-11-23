@@ -34,6 +34,7 @@ describe('createAuctionImportIndexes', () => {
 
     await expect(createAuctionImportIndexes(db)).resolves.toEqual({
       auctions: [
+        'code',
         'available_rounds.date',
         'available_detailsCollectedAt',
         'propertyType',
@@ -45,7 +46,7 @@ describe('createAuctionImportIndexes', () => {
         'importRunId',
         'propertyCode_createdAt',
         'relevant_createdAt',
-        'one_change_per_run_property_field',
+        'one_change_per_run_property_field_type',
       ],
     });
     expect(collection.mock.calls).toEqual([['auctions'], ['importruns'], ['propertychanges']]);
@@ -58,8 +59,8 @@ describe('createAuctionImportIndexes', () => {
       { key: { propertyCode: 1, createdAt: -1 } },
       { key: { relevant: 1, createdAt: 1 } },
       {
-        key: { importRunId: 1, propertyCode: 1, field: 1 },
-        name: 'one_change_per_run_property_field',
+        key: { importRunId: 1, propertyCode: 1, field: 1, type: 1 },
+        name: 'one_change_per_run_property_field_type',
         unique: true,
       },
     ]);

@@ -93,7 +93,7 @@ describe('ListApplier (integration)', () => {
     it('stores every property with its list fields, one phase, and one NEW entry each', async () => {
       const run = newRun();
 
-      const counts = await kit.applier.apply({ runId: run, rows: listA() });
+      const counts = await kit.applier.apply({ minRowRatio: 0, runId: run, rows: listA() });
 
       expect(counts).toEqual({ new: 4, changed: 0, unavailable: 0, active: 4 });
       expect(await catalogue()).toEqual([
@@ -139,7 +139,7 @@ describe('ListApplier (integration)', () => {
     });
 
     it('BR-004-15: a property first seen is "not collected yet", never a default', async () => {
-      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1')] });
+      await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: [aRow('P1')] });
 
       const raw = await kit.auctionModel.collection.findOne({ code: 'P1' });
       // Nothing the list does not carry was written: no rounds, no payment methods, no photos.
@@ -148,7 +148,7 @@ describe('ListApplier (integration)', () => {
       expect(raw).not.toHaveProperty('image');
       expect(raw?.['detailsCollectedAt'] ?? null).toBeNull();
       expect(raw?.['occupancy'] ?? null).toBeNull();
-      const auction = toAuction(raw as never);
+      const auction = toAuction(raw as never, START);
       expect(auction.rounds).toEqual([]);
       expect(auction.occupancy).toBeNull();
       expect(auction.detailsCollectedAt).toBeNull();
@@ -158,7 +158,11 @@ describe('ListApplier (integration)', () => {
     });
 
     it('stores the property type fallback and the money as Decimal128 (AR-17)', async () => {
-      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1', { propertyType: 'Casa' })] });
+      await kit.applier.apply({
+        minRowRatio: 0,
+        runId: newRun(),
+        rows: [aRow('P1', { propertyType: 'Casa' })],
+      });
 
       const raw = await kit.auctionModel.collection.findOne({ code: 'P1' });
       expect(raw?.['propertyType']).toBe('Casa');
@@ -168,6 +172,7 @@ describe('ListApplier (integration)', () => {
 
     it('applies a code listed twice once, as its last row says', async () => {
       const counts = await kit.applier.apply({
+        minRowRatio: 0,
         runId: newRun(),
         rows: [online('P2', '100000'), online('P2', '95000')],
       });
@@ -179,6 +184,7 @@ describe('ListApplier (integration)', () => {
     it('skips a new row whose modality is unknown, without hiding anything', async () => {
       const run = newRun();
       const counts = await kit.applier.apply({
+        minRowRatio: 0,
         runId: run,
         rows: [aRow('P1'), aRow('PX', { modality: null })],
       });
@@ -190,12 +196,12 @@ describe('ListApplier (integration)', () => {
 
   describe('applying the same list again (BR-004-07)', () => {
     it('as a later run: zero new, changed and unavailable, no new entry, updatedAt untouched', async () => {
-      await kit.applier.apply({ runId: newRun(), rows: listA() });
+      await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: listA() });
       const before = await kit.auctionModel.collection.find({}).sort({ code: 1 }).toArray();
       clock.advance(DAY);
       const second = newRun();
 
-      const counts = await kit.applier.apply({ runId: second, rows: listA() });
+      const counts = await kit.applier.apply({ minRowRatio: 0, runId: second, rows: listA() });
 
       expect(counts).toEqual({ new: 0, changed: 0, unavailable: 0, active: 4 });
       expect(await entriesOf(second)).toEqual([]);
@@ -210,8 +216,8 @@ describe('ListApplier (integration)', () => {
 
     it('with the same run: the same counts and still one entry of each', async () => {
       const run = newRun();
-      const first = await kit.applier.apply({ runId: run, rows: listA() });
-      const again = await kit.applier.apply({ runId: run, rows: listA() });
+      const first = await kit.applier.apply({ minRowRatio: 0, runId: run, rows: listA() });
+      const again = await kit.applier.apply({ minRowRatio: 0, runId: run, rows: listA() });
 
       expect(again).toEqual(first);
       expect(await entriesOf(run)).toHaveLength(4);
@@ -233,11 +239,11 @@ describe('ListApplier (integration)', () => {
     ];
 
     it('records exactly the tracked changes and counts them', async () => {
-      await kit.applier.apply({ runId: newRun(), rows: listA() });
+      await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: listA() });
       clock.advance(DAY);
       const run = newRun();
 
-      const counts = await kit.applier.apply({ runId: run, rows: listB() });
+      const counts = await kit.applier.apply({ minRowRatio: 0, runId: run, rows: listB() });
 
       // P1 changed (price) and P3 changed (address, untracked: no entry); P2 left; P5 new.
       expect(counts).toEqual({ new: 1, changed: 2, unavailable: 1, active: 4 });
@@ -296,13 +302,14 @@ describe('ListApplier (integration)', () => {
     });
 
     it('a property back on a later list is RETURNED with its new modality and price (BR-004-09)', async () => {
-      await kit.applier.apply({ runId: newRun(), rows: listA() });
+      await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: listA() });
       clock.advance(DAY);
-      await kit.applier.apply({ runId: newRun(), rows: listB() }); // P2 leaves
+      await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: listB() }); // P2 leaves
       clock.advance(28 * DAY);
       const run = newRun();
 
       const counts = await kit.applier.apply({
+        minRowRatio: 0,
         runId: run,
         rows: [
           ...listB(),
@@ -331,10 +338,11 @@ describe('ListApplier (integration)', () => {
     });
 
     it('a modality change appends a phase and the current price follows the list (BR-004-06)', async () => {
-      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1')] });
+      await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: [aRow('P1')] });
       const run = newRun();
 
       await kit.applier.apply({
+        minRowRatio: 0,
         runId: run,
         rows: [aRow('P1', { modality: PhaseModality.OPEN_BIDDING, minimumPrice: d('150000') })],
       });
@@ -347,7 +355,7 @@ describe('ListApplier (integration)', () => {
     });
 
     it('keeps what the detail collection wrote: rounds, payment methods and the details date', async () => {
-      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1')] });
+      await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: [aRow('P1')] });
       const rounds = [
         { label: '1º Leilão', minimumPrice: null, date: new Date('2026-03-10T13:00:00Z') },
       ];
@@ -365,6 +373,7 @@ describe('ListApplier (integration)', () => {
       );
 
       await kit.applier.apply({
+        minRowRatio: 0,
         runId: newRun(),
         rows: [aRow('P1', { minimumPrice: d('140000'), propertyType: 'Casa' })],
       });
@@ -382,10 +391,10 @@ describe('ListApplier (integration)', () => {
   describe('BR-004-17: nothing is ever deleted', () => {
     it('a property absent for weeks stays stored, unavailable, with its history', async () => {
       const first = newRun();
-      await kit.applier.apply({ runId: first, rows: listA() });
+      await kit.applier.apply({ minRowRatio: 0, runId: first, rows: listA() });
       for (let week = 1; week <= 5; week++) {
         clock.advance(7 * DAY);
-        await kit.applier.apply({ runId: newRun(), rows: [aRow('P1')] }); // the others are gone
+        await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: [aRow('P1')] }); // the others are gone
       }
 
       const p3 = await kit.auctionModel.collection.findOne({ code: 'P3' });
@@ -394,7 +403,9 @@ describe('ListApplier (integration)', () => {
       const history = await kit.changes.findByCode('P3');
       expect(history.map((e) => e.type)).toEqual(['BECAME_UNAVAILABLE', 'NEW']);
       // Reachable by its number 35 days later, with the price it had (AC: 30 days).
-      expect(toAuction(p3 as never).currentPhase?.minimumPrice?.toString()).toBe('90000');
+      expect(toAuction(p3 as never, clock.now()).currentPhase?.minimumPrice?.toString()).toBe(
+        '90000',
+      );
       expect(await kit.auctionModel.countDocuments()).toBe(4);
     });
   });
@@ -461,14 +472,14 @@ describe('ListApplier (integration)', () => {
     let run: string;
 
     beforeEach(async () => {
-      await kit.applier.apply({ runId: newRun(), rows: listA() });
+      await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: listA() });
       clock.advance(DAY);
       run = newRun();
     });
 
     /** The final state an uninterrupted day-2 run leaves, applied to an identical day 1. */
     async function uninterrupted() {
-      await kit.applier.apply({ runId: run, rows: listB(), chunkSize: 2 });
+      await kit.applier.apply({ minRowRatio: 0, runId: run, rows: listB(), chunkSize: 2 });
       return stateOfDay2();
     }
 
@@ -481,15 +492,20 @@ describe('ListApplier (integration)', () => {
       async (_name, failAt) => {
         const dying = flakyApplier(failAt);
 
-        await expect(dying.apply({ runId: run, rows: listB(), chunkSize: 2 })).rejects.toThrow(
-          'the process died',
-        );
+        await expect(
+          dying.apply({ minRowRatio: 0, runId: run, rows: listB(), chunkSize: 2 }),
+        ).rejects.toThrow('the process died');
 
         // BR-004-07/08: no property was marked unavailable by the dead run.
         expect((await catalogue()).find((p) => p.code === 'P2')?.available).toBe(true);
         expect(await kit.auctionModel.countDocuments({ available: false })).toBe(0);
 
-        const counts = await kit.applier.apply({ runId: run, rows: listB(), chunkSize: 2 });
+        const counts = await kit.applier.apply({
+          minRowRatio: 0,
+          runId: run,
+          rows: listB(),
+          chunkSize: 2,
+        });
 
         expect(counts).toEqual(FINAL_COUNTS);
         expect(await entriesOf(run)).toEqual(FINAL_ENTRIES);
@@ -499,17 +515,22 @@ describe('ListApplier (integration)', () => {
         await kit.auctionModel.deleteMany({});
         await kit.changeModel.deleteMany({});
         clock.set(START);
-        await kit.applier.apply({ runId: newRun(), rows: listA() });
+        await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: listA() });
         clock.advance(DAY);
         expect(await uninterrupted()).toEqual(interrupted);
       },
     );
 
     it('a retry of a finished run leaves everything as it was (idempotent to the end)', async () => {
-      await kit.applier.apply({ runId: run, rows: listB(), chunkSize: 2 });
+      await kit.applier.apply({ minRowRatio: 0, runId: run, rows: listB(), chunkSize: 2 });
       const once = await stateOfDay2();
 
-      const counts = await kit.applier.apply({ runId: run, rows: listB(), chunkSize: 3 });
+      const counts = await kit.applier.apply({
+        minRowRatio: 0,
+        runId: run,
+        rows: listB(),
+        chunkSize: 3,
+      });
 
       expect(counts).toEqual(FINAL_COUNTS);
       expect(await stateOfDay2()).toEqual(once);
@@ -518,7 +539,9 @@ describe('ListApplier (integration)', () => {
     it('a failed write never leaves a change applied without its entry', async () => {
       // Chunk 1 is P1 and P3 (the two changed rows): its write dies.
       const dying = flakyApplier({ applyChunk: 1 });
-      await expect(dying.apply({ runId: run, rows: listB(), chunkSize: 2 })).rejects.toThrow();
+      await expect(
+        dying.apply({ minRowRatio: 0, runId: run, rows: listB(), chunkSize: 2 }),
+      ).rejects.toThrow();
 
       // The entries came first, so the retry's diff still sees the change and writes it.
       expect(await entriesOf(run)).toEqual(
@@ -533,7 +556,7 @@ describe('ListApplier (integration)', () => {
 
   describe('two applies of the same list at once (BR-004-07)', () => {
     it('converge: one document per property, one entry of each, no phase twice', async () => {
-      await kit.applier.apply({ runId: newRun(), rows: listA() });
+      await kit.applier.apply({ minRowRatio: 0, runId: newRun(), rows: listA() });
       clock.advance(DAY);
       const run = newRun();
       const rows = [
@@ -545,11 +568,11 @@ describe('ListApplier (integration)', () => {
       ];
 
       const [one, other] = await Promise.all([
-        kit.applier.apply({ runId: run, rows, chunkSize: 2 }),
-        kit.applier.apply({ runId: run, rows, chunkSize: 2 }),
+        kit.applier.apply({ minRowRatio: 0, runId: run, rows, chunkSize: 2 }),
+        kit.applier.apply({ minRowRatio: 0, runId: run, rows, chunkSize: 2 }),
       ]);
 
-      const settled = await kit.applier.apply({ runId: run, rows, chunkSize: 2 });
+      const settled = await kit.applier.apply({ minRowRatio: 0, runId: run, rows, chunkSize: 2 });
       expect(settled).toEqual({ new: 2, changed: 2, unavailable: 1, active: 5 });
       expect(one.new).toBeLessThanOrEqual(2);
       expect(other.new).toBeLessThanOrEqual(2);
@@ -569,8 +592,8 @@ describe('ListApplier (integration)', () => {
       const run = newRun();
 
       await Promise.all([
-        kit.applier.apply({ runId: run, rows: listA(), chunkSize: 1 }),
-        kit.applier.apply({ runId: run, rows: listA(), chunkSize: 1 }),
+        kit.applier.apply({ minRowRatio: 0, runId: run, rows: listA(), chunkSize: 1 }),
+        kit.applier.apply({ minRowRatio: 0, runId: run, rows: listA(), chunkSize: 1 }),
       ]);
 
       expect(await kit.auctionModel.countDocuments()).toBe(4);

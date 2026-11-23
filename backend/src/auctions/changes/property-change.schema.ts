@@ -11,7 +11,7 @@ import {
 
 /**
  * SPEC-004 BR-004-25, BR-004-26: one entry per tracked field that changed on a property, in a run.
- * Money is a decimal string (AR-17), never a number. The unique (run, property, field) is what
+ * Money is a decimal string (AR-17), never a number. The unique (run, property, field, type) is what
  * makes writing the same list's entries twice end with one of each (BR-004-07). Property data
  * only: nothing about an account or a client (SC-15).
  */
@@ -56,9 +56,11 @@ export const PropertyChangeSchema = SchemaFactory.createForClass(PropertyChangeE
 PropertyChangeSchema.index({ importRunId: 1 });
 PropertyChangeSchema.index({ propertyCode: 1, createdAt: -1 });
 PropertyChangeSchema.index({ relevant: 1, createdAt: 1 });
+// The type is part of the key: RETURNED and BECAME_UNAVAILABLE share the field `available`, and
+// an attempt that retries a day with another list must be able to record both in one run.
 PropertyChangeSchema.index(
-  { importRunId: 1, propertyCode: 1, field: 1 },
-  { unique: true, name: 'one_change_per_run_property_field' },
+  { importRunId: 1, propertyCode: 1, field: 1, type: 1 },
+  { unique: true, name: 'one_change_per_run_property_field_type' },
 );
 
 markIsolation(PropertyChangeSchema, {

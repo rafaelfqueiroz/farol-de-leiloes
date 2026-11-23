@@ -113,8 +113,30 @@ export class AuctionResponseDto {
   @ApiProperty({ type: Boolean, description: 'Details page already scraped' })
   fulfilled: boolean;
 
-  @ApiProperty({ type: Boolean })
+  @ApiProperty({ type: Boolean, description: 'On the last applied list of the daily import' })
   available: boolean;
+
+  @ApiProperty({
+    type: Boolean,
+    description: 'Available and not past its last sale round, at the time of the request',
+  })
+  active: boolean;
+
+  @ApiProperty({
+    ...MONEY_API_PROPERTY,
+    nullable: true,
+    description: 'Minimum price of the current sale round in BRL; null when unknown',
+  })
+  currentMinimumPrice: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '25.00',
+    description:
+      'Discount over the appraisal as a percentage, computed at the time of the request; negative when the price is above the appraisal; null when unknown',
+  })
+  discountPercent: string | null;
 
   @ApiProperty({ type: String, format: 'date-time' })
   updatedAt: Date;
@@ -134,6 +156,9 @@ export class AuctionResponseDto {
     this.description = auction.description;
     this.fulfilled = auction.fulfilled;
     this.available = auction.available;
+    this.active = auction.active;
+    this.currentMinimumPrice = moneyToJson(auction.currentMinimumPrice);
+    this.discountPercent = moneyToJson(auction.discountPercent); // two places, half-even (AR-19)
     this.updatedAt = auction.updatedAt;
   }
 }

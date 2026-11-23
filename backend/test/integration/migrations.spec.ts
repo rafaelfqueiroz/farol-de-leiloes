@@ -168,7 +168,7 @@ describe('Migrations (integration)', () => {
 
     it('leaves documents the contract-step readers accept', async () => {
       const legacy = await byKey('auctions', 'code', 'LEGACY');
-      const auction = toAuction(legacy as unknown as Parameters<typeof toAuction>[0]);
+      const auction = toAuction(legacy as unknown as Parameters<typeof toAuction>[0], NOW);
 
       expect(auction.appraisalPrice?.toFixed()).toBe('91589.89');
       expect(auction.phases.map((phase) => phase.minimumPrice?.toFixed() ?? null)).toEqual([

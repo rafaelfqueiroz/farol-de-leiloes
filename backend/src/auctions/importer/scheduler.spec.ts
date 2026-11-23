@@ -104,15 +104,6 @@ describe('AuctionsImporter', () => {
     expect(error).toHaveBeenCalledWith('Could not record the failed import: Error');
   });
 
-  it('skips the scheduled run when a successful one is recent', async () => {
-    const { importer, jobExecutions } = build();
-    jobExecutions.hasRunRecently.mockResolvedValue(true);
-
-    await importer.dailyJob();
-
-    expect(jobExecutions.recordFailure).not.toHaveBeenCalled();
-  });
-
   it('catches a failed startup run: recorded and logged, no unhandled rejection', async () => {
     const { importer, jobExecutions, contexts } = build({ onStartup: true });
     const warn = vi.spyOn(Logger.prototype, 'warn');

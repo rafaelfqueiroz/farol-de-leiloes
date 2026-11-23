@@ -104,6 +104,7 @@ describe('Money round trip through MongoDB (integration)', () => {
     beforeAll(async () => {
       // The writer of the daily list (SPEC-004): the prices go in through it.
       await kit.applier.apply({
+        minRowRatio: 0,
         runId: new Types.ObjectId().toHexString(),
         rows: [
           aRow('NEW', {
@@ -130,7 +131,7 @@ describe('Money round trip through MongoDB (integration)', () => {
 
     it('reads back the exact Decimal, 34 digits included, lean and hydrated', async () => {
       const hydrated = await auctions.findByCode('NEW');
-      const [lean] = await auctions.findAvailableByCodes(['NEW']);
+      const [lean] = await auctions.findByCodes(['NEW']);
 
       for (const auction of [hydrated, lean]) {
         expect(auction?.appraisalPrice?.toFixed()).toBe(PRECISE);
@@ -153,6 +154,7 @@ describe('Money round trip through MongoDB (integration)', () => {
 
     it('keeps the stored phases as they were when the importer appends a phase', async () => {
       await kit.applier.apply({
+        minRowRatio: 0,
         runId: new Types.ObjectId().toHexString(),
         rows: [
           aRow('NEW', {

@@ -26,6 +26,9 @@ const AUCTION: Auction = {
   appraisalPrice: new Decimal('150000'),
   phases: [{ modality: ONLINE_SALES, minimumPrice: new Decimal('90000.5') }],
   currentPhase: { modality: ONLINE_SALES, minimumPrice: new Decimal('90000.5') },
+  active: true,
+  currentMinimumPrice: new Decimal('90000.5'),
+  discountPercent: new Decimal('40'),
   propertyType: 'Casa',
   rounds: [],
   occupancy: null,
@@ -49,6 +52,8 @@ void [rounds, occupancy, listSeenAt, detailsCollectedAt];
 const AUCTION_JSON = {
   ...EXPOSED,
   appraisalPrice: '150000.00',
+  currentMinimumPrice: '90000.50',
+  discountPercent: '40.00',
   phases: [PHASE_JSON],
   currentPhase: PHASE_JSON,
   updatedAt: '2026-01-15T12:00:00.000Z',

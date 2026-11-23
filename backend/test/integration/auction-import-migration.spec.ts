@@ -59,6 +59,7 @@ describe('0012-auction-import-model (integration)', () => {
 
     expect(await indexNames('auctions')).toEqual(
       expect.arrayContaining([
+        'code_1',
         'available_1_rounds.date_1',
         'available_1_detailsCollectedAt_1',
         'propertyType_1',
@@ -96,7 +97,13 @@ describe('0012-auction-import-model (integration)', () => {
     await runs.insertOne({ brasiliaDate: '2026-03-11', outcome: 'RUNNING' });
   });
 
-  it('BR-004-07: one change entry per run, property and field; another field or run is fine', async () => {
+  it("BR-004-05: one auction per property number, on the migration's index alone", async () => {
+    const auctions = db.collection('auctions');
+
+    await expect(auctions.insertOne({ code: 'SFI' })).rejects.toMatchObject({ code: 11000 });
+  });
+
+  it('BR-004-07: one change entry per run, property, field and type; another of any is fine', async () => {
     const changes = db.collection('propertychanges');
     const run = new Types.ObjectId();
     const entry = { importRunId: run, propertyCode: '1', field: 'available', type: 'NEW' };
@@ -104,6 +111,8 @@ describe('0012-auction-import-model (integration)', () => {
     await changes.insertOne({ ...entry });
     await expect(changes.insertOne({ ...entry })).rejects.toMatchObject({ code: 11000 });
     await changes.insertOne({ ...entry, field: 'modality' });
+    // RETURNED and BECAME_UNAVAILABLE share the field `available`: both fit in one run.
+    await changes.insertOne({ ...entry, type: 'BECAME_UNAVAILABLE' });
     await changes.insertOne({ ...entry, importRunId: new Types.ObjectId() });
   });
 

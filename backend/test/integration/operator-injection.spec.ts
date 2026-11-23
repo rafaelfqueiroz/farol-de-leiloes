@@ -170,7 +170,11 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       await expect(auctions.findByCode(NE_NULL)).resolves.toBeNull();
       await expect(auctions.findByCode(REGEX_ALL)).resolves.toBeNull();
       await expect(auctions.findByCode('A1')).resolves.toMatchObject({ code: 'A1' });
-      await expect(auctions.findByCode('A4-unavailable')).resolves.toBeNull();
+      // BR-004-17: a property that left the list is still reachable by its number.
+      await expect(auctions.findByCode('A4-unavailable')).resolves.toMatchObject({
+        available: false,
+        active: false,
+      });
     });
 
     it('findDocumentByCode finds nothing for an operator object', async () => {
@@ -249,10 +253,10 @@ describe('SC-10: Mongo operator injection (integration)', () => {
       expect(page.total).toBe(0);
     });
 
-    it('findAvailableByCodes and findActiveCodes keep their $in lookups', async () => {
-      const found = await auctions.findAvailableByCodes(['A1', 'A2', 'A4-unavailable']);
+    it('findByCodes and findActiveCodes keep their $in lookups', async () => {
+      const found = await auctions.findByCodes(['A1', 'A2', 'A4-unavailable']);
 
-      expect(found.map((item) => item.code).sort()).toEqual(['A1', 'A2']);
+      expect(found.map((item) => item.code).sort()).toEqual(['A1', 'A2', 'A4-unavailable']);
       await expect(auctions.findActiveCodes(['A1', 'A4-unavailable'])).resolves.toEqual(
         new Set(['A1']),
       );

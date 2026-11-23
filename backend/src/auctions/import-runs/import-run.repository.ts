@@ -114,11 +114,19 @@ export class ImportRunRepository {
     }
   }
 
-  /** RUNNING -> SUCCESS with the counts; false when the run was not RUNNING any more. */
+  /**
+   * RUNNING -> SUCCESS with the counts. A run another attempt marked FAILED meanwhile may still
+   * become SUCCESS (this attempt applied the whole list; applying is idempotent). False when the
+   * run is SUCCESS already (another attempt got there first) or is in no state to end this way.
+   */
   async markSuccess(id: string, counts: ImportCounts, now: Date): Promise<boolean> {
     const result = await this.model
       .updateOne(
-        { _id: new Types.ObjectId(id), outcome: 'RUNNING' },
+        {
+          _id: new Types.ObjectId(id),
+          outcome: serverOperators({ $in: ['RUNNING', 'FAILED'] as ImportOutcome[] }),
+        },
+        // failureReasons stays: an earlier attempt's reason is the day's history.
         { $set: { outcome: 'SUCCESS', finishedAt: now, counts } },
       )
       .exec();
