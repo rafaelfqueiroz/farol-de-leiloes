@@ -726,11 +726,11 @@
     "form": {
       "heading": "Enviar solicitação",
       "description": "Descreva seu problema ou dúvida e nossa equipe entrará em contato pelo e-mail da sua conta.",
-      "title": "Título",
-      "body": "Descrição",
+      "subject": "Assunto",
+      "message": "Mensagem",
       "submit": "Enviar solicitação",
       "submitting": "Enviando…",
-      "success": "Solicitação de suporte enviada com sucesso!"
+      "success": "Solicitação registrada. Seu protocolo é {protocol}. Enviamos a confirmação para o e-mail da sua conta."
     }
   },
   "plans": {

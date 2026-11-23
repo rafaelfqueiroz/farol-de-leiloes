@@ -23,6 +23,21 @@ import PageShell from '@/app/components/patterns/PageShell';
 import { apiJson } from '@/lib/api-client';
 import { useApiErrorMessage } from '@/lib/api-error';
 
+/**
+ * SPEC-009 BR-009-05 / BR-009-08: the limits of the API and the permission option. The form keeps its
+ * layout until the new support page (part 3 of #9, after its frame is approved): until then the option
+ * is not offered, so every request is sent with the permission off (the API's default too).
+ */
+const SUBJECT_MAX = 200;
+const SUBJECT_MIN = 3;
+const MESSAGE_MAX = 5000;
+const MESSAGE_MIN = 10;
+
+/** The answer of POST /api/support (BR-009-06): the protocol to show the requester. */
+interface SupportRequestCreated {
+  protocol: string;
+}
+
 const FAQ_KEYS = [
   'howAuctionsWork',
   'plans',
@@ -35,8 +50,8 @@ const FAQ_KEYS = [
 export default function SupportPage() {
   const apiErrorMessage = useApiErrorMessage();
   const t = useTranslations('support');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -50,15 +65,18 @@ export default function SupportPage() {
 
     try {
       // SC-02: the session cookie goes with the request; a signed-out visitor gets UNAUTHENTICATED
-      await apiJson('/api/support', { method: 'POST', json: { title, description } });
+      const created = await apiJson<SupportRequestCreated>('/api/support', {
+        method: 'POST',
+        json: { subject, message, allowDataAccess: false },
+      });
 
       setSnackbar({
         open: true,
-        message: t('form.success'),
+        message: t('form.success', { protocol: created.protocol }),
         severity: 'success',
       });
-      setTitle('');
-      setDescription('');
+      setSubject('');
+      setMessage('');
     } catch (error: unknown) {
       setSnackbar({
         open: true,
@@ -128,29 +146,29 @@ export default function SupportPage() {
 
           <Box component="form" onSubmit={handleSubmit}>
             <TextField
-              label={t('form.title')}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              label={t('form.subject')}
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
               fullWidth
               required
-              inputProps={{ minLength: 3, maxLength: 200 }}
+              inputProps={{ minLength: SUBJECT_MIN, maxLength: SUBJECT_MAX }}
               sx={{ mb: 2 }}
             />
             <TextField
-              label={t('form.body')}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              label={t('form.message')}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
               fullWidth
               required
               multiline
               rows={4}
-              inputProps={{ minLength: 10, maxLength: 2000 }}
+              inputProps={{ minLength: MESSAGE_MIN, maxLength: MESSAGE_MAX }}
               sx={{ mb: 3 }}
             />
             <Button
               type="submit"
               variant="contained"
-              disabled={loading || !title.trim() || !description.trim()}
+              disabled={loading || !subject.trim() || !message.trim()}
               startIcon={loading ? <CircularProgress size={18} /> : <SendIcon />}
             >
               {loading ? t('form.submitting') : t('form.submit')}
