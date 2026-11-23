@@ -388,8 +388,23 @@ describe('AuctionDetailsScraper.processAuction', () => {
           updatedAt: NOW,
           phases: [earlier, expectedLast],
           currentPhase: expectedLast,
+          // BR-004-13: the dates are the property's SFI round(s) too, the page counts as collected.
+          rounds: [{ label: '1º Leilão', minimumPrice: null, date: phaseDetails.phaseDates[0] }],
+          detailsCollectedAt: NOW,
         },
       });
+    });
+
+    it('writes an open-ended round for a direct online sale, which has no end date', async () => {
+      scraped({ phaseDetails: { ...phaseDetails, phaseDates: [] } });
+      const { scraper, auctionModel } = build([]);
+      const direct = { ...lastPhase, modality: PhaseModality.DIRECT_ONLINE_SALES };
+
+      await scraper['processAuction'](aCandidate(1, { phases: [direct] }) as never);
+
+      expect(update(auctionModel)[1].$set['rounds']).toEqual([
+        { label: 'Venda Direta', minimumPrice: null, date: null },
+      ]);
     });
 
     it.each([
