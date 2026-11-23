@@ -103,7 +103,8 @@ const REGISTRY_MEMBERS = new Set(['models', 'collections', 'modelNames']);
  * plans, subscriptions and paymentEvents indexes, 0007 one of the subscriptions and ownerCounters
  * indexes, 0008 one of the consents and whatsappConsents indexes and 0009 one of the dataExports,
  * actorPseudonyms and users indexes and 0010 one of the retentionDeletions and legalValidations
- * indexes, none of the two protected ones.
+ * indexes and 0012 one of the auctions, importruns and propertychanges indexes, none of the two
+ * protected ones.
  */
 const UNRESOLVED_ALLOWED = [
   'migrations/0001-money-decimal128.migration.ts',
@@ -112,6 +113,7 @@ const UNRESOLVED_ALLOWED = [
   'migrations/0008-consent-indexes.migration.ts',
   'migrations/0009-privacy-rights-indexes.migration.ts',
   'migrations/0010-retention-legal-indexes.migration.ts',
+  'migrations/0012-auction-import-model.migration.ts',
 ];
 
 const PRIVATE_PATHS = [
