@@ -2,8 +2,8 @@
 // and no personal data. Reading them would otherwise be admin access with no grant and no log entry.
 //
 // Marker strings are seeded through the real API into every place client or personal text lives
-// today — an account's name and email, a profile change, a support request's title and
-// description, a saved filter's name, a reminder's note, an owned (probe) record's name, the name and
+// today — an account's name and email, a profile change, a support request's subject and
+// message (SPEC-009: stored, mailed to the team and retried by the outbox job), a saved filter's name, a reminder's note, an owned (probe) record's name, the name and
 // address of an office member who gets the payment-failed email, the name of a buyer whose
 // customer the payment provider is told about (SPEC-012) and the name and e-mail of accounts that
 // sign up with an acceptance and a WhatsApp answer (SPEC-010), and the name, e-mail and phone of an
@@ -50,6 +50,7 @@ import { SubscriptionsReconcileJob } from '../../src/subscriptions/subscriptions
 import { SubscriptionsRepository } from '../../src/subscriptions/subscriptions.repository.js';
 import { SubscriptionsService } from '../../src/subscriptions/subscriptions.service.js';
 import { StorageService } from '../../src/storage/storage.service.js';
+import { SupportMailJob } from '../../src/support/support-mail.job.js';
 import { SupportModule } from '../../src/support/support.module.js';
 import { aProviderSubscription } from '../builders/provider-subscription.builder.js';
 import { DAY } from '../fakes/fake-clock.js';
@@ -84,8 +85,8 @@ const SCHEDULED_AT = '2099-01-20T12:00:00.000Z';
 const MARKERS = {
   accountName: 'MKR-ACCOUNT-NAME-QX7',
   profileName: 'MKR-PROFILE-NAME-QX7',
-  supportTitle: 'MKR-SUPPORT-TITLE-QX7',
-  supportDescription: 'MKR-SUPPORT-DESCRIPTION-QX7 a private message',
+  supportSubject: 'MKR-SUPPORT-SUBJECT-QX7',
+  supportMessage: 'MKR-SUPPORT-MESSAGE-QX7 a private message',
   filterName: 'MKR-FILTER-NAME-QX7',
   reminderNote: 'MKR-REMINDER-NOTE-QX7',
   probeName: 'MKR-PROBE-NAME-QX7',
@@ -263,15 +264,32 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
         as.patch('/api/auth/profile').send({ name: `${MARKERS.profileName}${'x'.repeat(300)}` }),
       );
 
-      // A support request (SPEC-009 will store it; today it is emailed to the team).
+      // A support request (SPEC-009): stored and mailed, one refused with the same subject, one made
+      // while the mail server is down and delivered by the outbox job once it is back, a read of it
+      // and the withdrawal of its permission (BR-009-07, BR-009-08; ids and codes only, SC-15).
+      const support = await call(
+        as.post('/api/support').send({
+          subject: MARKERS.supportSubject,
+          message: MARKERS.supportMessage,
+          allowDataAccess: true,
+        }),
+      );
+      await call(
+        as.post('/api/support').send({ subject: MARKERS.supportSubject, message: 'short' }),
+      );
+      app.harness.mailbox.supportMailDown = true;
       await call(
         as
           .post('/api/support')
-          .send({ title: MARKERS.supportTitle, description: MARKERS.supportDescription }),
+          .send({ subject: MARKERS.supportSubject, message: MARKERS.supportMessage }),
       );
-      await call(
-        as.post('/api/support').send({ title: MARKERS.supportTitle, description: 'short' }),
-      );
+      app.harness.mailbox.supportMailDown = false;
+      clock.advance(60 * 1000);
+      await moduleRef.get(SupportMailJob).run();
+      const supportId = (support.body as { id: string }).id;
+      await call(as.get(`/api/support/mine/${supportId}`));
+      await call(as.post(`/api/support/mine/${supportId}/withdraw-data-access`));
+      await call(as.get(`/api/support/mine/${RANDOM_ID}`));
 
       // A saved filter, then the same name again (SAVED_FILTER_NAME_TAKEN).
       for (let i = 0; i < 2; i += 1) {
@@ -436,6 +454,9 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
     expect(logged).toContain('BR-002-27: admin access log not written');
     expect(logged).toContain('Unhandled AdminAccessLogUnavailableError');
     expect(app.harness.mailbox.reminderEmails).toHaveLength(1);
+    // SPEC-009: two requests were mailed to the team and the requester, the second after the outbox job retried it.
+    expect(app.harness.mailbox.supportNotices).toHaveLength(2);
+    expect(app.harness.mailbox.supportConfirmations).toHaveLength(2);
     // SPEC-012: the failed renewal reached the member contact, and the job ran.
     expect(app.harness.mailbox.paymentFailedEmails).toEqual([
       { email: MEMBER_CONTACT.email, name: MEMBER_CONTACT.name },

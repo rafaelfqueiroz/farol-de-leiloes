@@ -65,6 +65,7 @@ describe('SPEC-010 SC-27: every model that holds a person is in the registry or 
         'savedFilters',
         'reminders',
         'notificationLogs',
+        'supportRequests',
         'acceptances',
         'dataExports',
         'actorPseudonyms',

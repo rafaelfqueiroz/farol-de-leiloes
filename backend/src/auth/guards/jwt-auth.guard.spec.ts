@@ -22,6 +22,8 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { AccessModule } from '../../access/access.module.js';
 import { SubscriptionsModule } from '../../subscriptions/subscriptions.module.js';
 import { StubSubscriptionsModule } from '../../../test/support/stub-subscriptions-module.js';
+import { StubSupportRequestsStoreModule } from '../../../test/support/stub-support-requests-module.js';
+import { SupportRequestsStoreModule } from '../../support/support-requests-store.module.js';
 import type { AccessContext } from '../../access/access-context.js';
 import { Access } from '../../access/decorators/access.decorator.js';
 import { RequiresPersona } from '../../access/decorators/access-guards.decorator.js';
@@ -110,6 +112,9 @@ describe('global JWT authentication (SC-07)', () => {
       // spec runs the guards only, on the default sources.
       .overrideModule(SubscriptionsModule)
       .useModule(StubSubscriptionsModule)
+      // SPEC-009: the same for the support requests' store, which AccessModule binds its source from.
+      .overrideModule(SupportRequestsStoreModule)
+      .useModule(StubSupportRequestsStoreModule)
       .compile();
     app = moduleRef.createNestApplication();
     configureApp(app);

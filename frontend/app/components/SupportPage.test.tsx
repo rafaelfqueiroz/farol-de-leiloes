@@ -28,13 +28,13 @@ async function enter(user: ReturnType<typeof userEvent.setup>, field: HTMLElemen
 }
 
 async function fillForm(
-  title = 'Erro ao favoritar',
-  body = 'Não consigo favoritar nenhum imóvel.',
+  subject = 'Erro ao favoritar',
+  message = 'Não consigo favoritar nenhum imóvel.',
 ) {
   const user = userEvent.setup();
   render(<SupportPage />);
-  await enter(user, screen.getByLabelText(/^Título/), title);
-  await enter(user, screen.getByLabelText(/^Descrição/), body);
+  await enter(user, screen.getByLabelText(/^Assunto/), subject);
+  await enter(user, screen.getByLabelText(/^Mensagem/), message);
   return user;
 }
 
@@ -99,9 +99,9 @@ describe('SupportPage', () => {
     const submit = screen.getByRole('button', { name: 'Enviar solicitação' });
     expect(submit).toBeDisabled();
 
-    await enter(user, screen.getByLabelText(/^Título/), 'Erro ao favoritar');
+    await enter(user, screen.getByLabelText(/^Assunto/), 'Erro ao favoritar');
     expect(submit).toBeDisabled();
-    await enter(user, screen.getByLabelText(/^Descrição/), 'Não consigo favoritar nenhum imóvel.');
+    await enter(user, screen.getByLabelText(/^Mensagem/), 'Não consigo favoritar nenhum imóvel.');
 
     expect(submit).toBeEnabled();
   });
@@ -110,30 +110,65 @@ describe('SupportPage', () => {
     const user = userEvent.setup();
     render(<SupportPage />);
 
-    await enter(user, screen.getByLabelText(/^Título/), '   ');
-    await enter(user, screen.getByLabelText(/^Descrição/), '          ');
+    await enter(user, screen.getByLabelText(/^Assunto/), '   ');
+    await enter(user, screen.getByLabelText(/^Mensagem/), '          ');
 
     expect(screen.getByRole('button', { name: 'Enviar solicitação' })).toBeDisabled();
   });
 
-  it('sends the request with the session cookie, confirms and clears the form', async () => {
-    answer(201);
+  it('SPEC-009 BR-009-06, BR-009-08: sends subject and message with the permission off, shows the protocol and clears the form', async () => {
+    answer(201, {
+      id: '64b7f00000000000000a0001',
+      protocol: 'FL-2026-000042',
+      confirmationSent: true,
+    });
     const user = await fillForm();
 
     await user.click(screen.getByRole('button', { name: 'Enviar solicitação' }));
 
-    expect(await screen.findByText(messages.support.form.success)).toBeVisible();
+    expect(
+      await screen.findByText(
+        'Solicitação registrada. Seu protocolo é FL-2026-000042. Enviamos a confirmação para o e-mail da sua conta.',
+      ),
+    ).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith('/api/support', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: 'Erro ao favoritar',
-        description: 'Não consigo favoritar nenhum imóvel.',
+        subject: 'Erro ao favoritar',
+        message: 'Não consigo favoritar nenhum imóvel.',
+        allowDataAccess: false,
       }),
     });
-    expect(screen.getByLabelText(/^Título/)).toHaveValue('');
-    expect(screen.getByLabelText(/^Descrição/)).toHaveValue('');
+    expect(screen.getByLabelText(/^Assunto/)).toHaveValue('');
+    expect(screen.getByLabelText(/^Mensagem/)).toHaveValue('');
+  });
+
+  it('BR-009-07: when the confirmation could not be sent yet, shows the protocol and says it will be sent shortly, not that it was sent', async () => {
+    answer(201, {
+      id: '64b7f00000000000000a0001',
+      protocol: 'FL-2026-000042',
+      confirmationSent: false,
+    });
+    const user = await fillForm();
+
+    await user.click(screen.getByRole('button', { name: 'Enviar solicitação' }));
+
+    expect(
+      await screen.findByText(
+        'Solicitação registrada. Seu protocolo é FL-2026-000042. A confirmação será enviada para o e-mail da sua conta em instantes.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/Enviamos a confirmação/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Assunto/)).toHaveValue('');
+  });
+
+  it('BR-009-05: limits the subject to 200 characters and the message to 5,000', () => {
+    render(<SupportPage />);
+
+    expect(screen.getByLabelText(/^Assunto/)).toHaveAttribute('maxlength', '200');
+    expect(screen.getByLabelText(/^Mensagem/)).toHaveAttribute('maxlength', '5000');
   });
 
   it('shows the catalogue message of the code and keeps the text when the API refuses', async () => {
@@ -143,7 +178,7 @@ describe('SupportPage', () => {
     await user.click(screen.getByRole('button', { name: 'Enviar solicitação' }));
 
     expect(await screen.findByText(messages.errors.VALIDATION_FAILED)).toBeVisible();
-    expect(screen.getByLabelText(/^Título/)).toHaveValue('Erro ao favoritar');
+    expect(screen.getByLabelText(/^Assunto/)).toHaveValue('Erro ao favoritar');
   });
 
   it('says the session expired when the API answers that nobody is signed in', async () => {

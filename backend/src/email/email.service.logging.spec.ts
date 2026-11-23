@@ -36,7 +36,21 @@ afterEach(() => vi.restoreAllMocks());
 async function sendAll(service: EmailService) {
   await service.sendVerificationEmail(EMAIL, TOKEN, NAME);
   await service.sendPasswordResetEmail(EMAIL, TOKEN, NAME);
-  await service.sendSupportEmail(SUPPORT, EMAIL, NAME, TITLE, TEXT);
+  await service.sendSupportConfirmationEmail({
+    to: EMAIL,
+    requestId: '64b7f00000000000000a0001',
+    protocol: 'FL-2026-000001',
+    subject: TITLE,
+    message: TEXT,
+  });
+  await service.sendSupportNoticeEmail({
+    to: SUPPORT,
+    protocol: 'FL-2026-000001',
+    requesterName: NAME,
+    requesterEmail: EMAIL,
+    subject: TITLE,
+    message: TEXT,
+  });
   await service.sendReminderEmail(EMAIL, reminder);
   await service.sendPaymentFailedEmail(EMAIL, NAME);
 }
@@ -58,6 +72,8 @@ describe('EmailService logging', () => {
       expect(logged).toContain('Verification email simulated (SMTP not configured)');
       expect(logged).toContain('Password reset email simulated (SMTP not configured)');
       expect(logged).toContain('Payment failed email simulated (SMTP not configured)');
+      expect(logged).toContain('Support confirmation email simulated (SMTP not configured)');
+      expect(logged).toContain('Support notice email simulated (SMTP not configured)');
     },
   );
 

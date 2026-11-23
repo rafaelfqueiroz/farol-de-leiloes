@@ -1,4 +1,8 @@
 import { formatBrasiliaDateTimeMarked } from '../../common/clock/brasilia-time.js';
+import { escapeHtml } from '../../common/html/escape-html.js';
+
+// #144: the user's name, the note and the auction's title, code and place are text somebody typed or
+// the Caixa published; every one reaches the html only through escapeHtml.
 
 export interface ReminderEmailPayload {
   userName: string;
@@ -13,19 +17,20 @@ export interface ReminderEmailPayload {
 }
 
 export const getAuctionReminderEmailTemplate = (payload: ReminderEmailPayload): string => {
-  const location =
-    [payload.auctionCity, payload.auctionState].filter(Boolean).join(', ') || 'Local não informado';
+  const location = escapeHtml(
+    [payload.auctionCity, payload.auctionState].filter(Boolean).join(', ') || 'Local não informado',
+  );
 
   const detailsButton = payload.auctionDetailsUrl
     ? `<div style="text-align: center;">
-        <a href="${payload.auctionDetailsUrl}" class="button">Ver detalhes do leilão</a>
+        <a href="${escapeHtml(payload.auctionDetailsUrl)}" class="button">Ver detalhes do leilão</a>
       </div>`
     : '';
 
   const descriptionSection = payload.description
     ? `<div class="note">
         <strong>Sua anotação:</strong>
-        <p>${payload.description}</p>
+        <p>${escapeHtml(payload.description)}</p>
       </div>`
     : '';
 
@@ -108,12 +113,12 @@ export const getAuctionReminderEmailTemplate = (payload: ReminderEmailPayload): 
   <div class="container">
     <div class="card">
       <h2>Lembrete de leilão</h2>
-      <p>Olá, <strong>${payload.userName}</strong>!</p>
+      <p>Olá, <strong>${escapeHtml(payload.userName)}</strong>!</p>
       <p>Este é um lembrete sobre um leilão que você marcou para acompanhar:</p>
 
       <div class="auction-info">
-        <h3>${payload.auctionTitle || payload.auctionCode}</h3>
-        <p class="auction-detail"><strong>Código:</strong> ${payload.auctionCode}</p>
+        <h3>${escapeHtml(payload.auctionTitle || payload.auctionCode)}</h3>
+        <p class="auction-detail"><strong>Código:</strong> ${escapeHtml(payload.auctionCode)}</p>
         <p class="auction-detail"><strong>Local:</strong> ${location}</p>
         <p class="auction-detail"><strong>Lembrete para:</strong> ${formatBrasiliaDateTimeMarked(payload.scheduledAt)}</p>
       </div>

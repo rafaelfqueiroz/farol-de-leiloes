@@ -2,9 +2,11 @@
 // opens a support access grant and again on EVERY read under one (BR-002-24, BR-002-26): a request
 // closed, or a permission withdrawn, a second ago ends the grant on the next read.
 //
-// Until SPEC-009 binds a real implementation to SUPPORT_REQUEST_SOURCE (in AccessModule), the
-// default knows no support request at all, so no grant can be opened and the admin has no path to
-// client data: the safe direction to fail (BR-002-24, DL-002-04).
+// SPEC-009 binds the real implementation (support/support-requests.source.ts) to
+// SUPPORT_REQUEST_SOURCE in AccessModule. The default below, which knows no support request at all, so
+// no grant can be opened and the admin has no path to client data, is the safe direction to fail
+// (BR-002-24, DL-002-04); it is no longer bound in the API, and stands in for the source in the unit
+// specs that import AccessModule without a database (test/support/stub-support-requests-module.ts).
 //
 // The binding MUST be made inside AccessModule (access.module.ts), like the other access sources:
 // one place, so no context of the app can read a permissive implementation by accident. Enforced
@@ -31,7 +33,7 @@ export interface SupportRequestSource {
 
 export const SUPPORT_REQUEST_SOURCE = Symbol('SUPPORT_REQUEST_SOURCE');
 
-/** Before SPEC-009: there is no support request, so no grant can ever be opened (BR-002-24). */
+/** Knows no support request, so no grant can ever be opened (BR-002-24): the unit specs' stand-in. */
 export class NoSupportRequestSource implements SupportRequestSource {
   findForGrant(): Promise<SupportRequestForGrant | null> {
     return Promise.resolve(null);

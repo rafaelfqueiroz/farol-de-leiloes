@@ -1,6 +1,8 @@
 import { Global, Module } from '@nestjs/common';
 import { SubscriptionOfficePlanSource } from '../subscriptions/subscription-office-plan.source.js';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
+import { SupportRequestsSource } from '../support/support-requests.source.js';
+import { SupportRequestsStoreModule } from '../support/support-requests-store.module.js';
 import { AccessContextFactory } from './access-context.js';
 import { AccessContextGuard } from './guards/access-context.guard.js';
 import { AdminGuard } from './guards/admin.guard.js';
@@ -10,10 +12,7 @@ import { CLIENT_LINK_SOURCE, NoClientLinkSource } from './sources/client-link.so
 import { MEMBERSHIP_SOURCE, NoMembershipSource } from './sources/membership.source.js';
 import { OFFICE_PLAN_SOURCE } from './sources/office-plan.source.js';
 import { NoSelfAdvisedSource, SELF_ADVISED_SOURCE } from './sources/self-advised.source.js';
-import {
-  NoSupportRequestSource,
-  SUPPORT_REQUEST_SOURCE,
-} from './sources/support-request.source.js';
+import { SUPPORT_REQUEST_SOURCE } from './sources/support-request.source.js';
 
 /**
  * SPEC-002: the access context and the guards that read it (ARCHITECTURE §4).
@@ -27,6 +26,7 @@ import {
  *   OFFICE_PLAN_SOURCE   SPEC-012 advisor plan, read-only state and entitlements (BOUND below, to
  *                        the subscriptions module's SubscriptionOfficePlanSource)
  *   SUPPORT_REQUEST_SOURCE  SPEC-009 support requests a support access grant hangs on (BR-002-24)
+ *                        (BOUND below, to the support module's SupportRequestsSource)
  *
  * BINDINGS (BR-002-21): a spec plugs its implementation in HERE, by replacing the default line below
  * (and importing its own module into this one if the implementation needs its services). Never bind
@@ -43,7 +43,11 @@ import {
   // SPEC-012: the office plan comes from the subscriptions module. SubscriptionsModule imports
   // nothing of auth or access, so this adds no cycle with AuthModule; AccessModule is also what
   // `npm run grant-admin` imports, so both read the same plan source.
-  imports: [SubscriptionsModule],
+  //
+  // SPEC-009: the support requests come from their light store module (the model, its repository and
+  // the source; it imports nothing else), so this adds no cycle with AuthModule or the admin code, and
+  // `npm run grant-admin` reads the same source.
+  imports: [SubscriptionsModule, SupportRequestsStoreModule],
   providers: [
     AccessContextFactory,
     AccessContextGuard,
@@ -54,7 +58,7 @@ import {
     { provide: CLIENT_LINK_SOURCE, useClass: NoClientLinkSource },
     { provide: SELF_ADVISED_SOURCE, useClass: NoSelfAdvisedSource },
     { provide: OFFICE_PLAN_SOURCE, useExisting: SubscriptionOfficePlanSource },
-    { provide: SUPPORT_REQUEST_SOURCE, useClass: NoSupportRequestSource },
+    { provide: SUPPORT_REQUEST_SOURCE, useExisting: SupportRequestsSource },
   ],
   exports: [
     AccessContextFactory,

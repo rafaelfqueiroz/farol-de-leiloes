@@ -77,6 +77,11 @@ export const envSchema = z
     SMTP_SECURE: flag.default(false),
     SMTP_USER: required,
     SMTP_PASS: required,
+    // SPEC-009 BR-009-03, BR-009-10: the support team's mailbox. It is where each new support request
+    // is sent (BR-009-10) and the address the product shows to people who cannot sign in (BR-009-03,
+    // BR-009-20). No default and no placeholder: a missing or malformed value stops the boot, so
+    // the product never publishes an address nobody reads (AR-41).
+    SUPPORT_EMAIL: z.email(),
 
     // Notifications
     SMS_PROVIDER_API_KEY: required,
@@ -123,6 +128,10 @@ export const envSchema = z
     // DOCUMENT_RETENTION_YEARS ago (AR-04). Needs the closed-journey files source SPEC-017 binds;
     // until then it finds nothing.
     DOCUMENT_RETENTION_ENABLED: flag.default(true),
+    // SPEC-009 BR-009-07: the worker that (re)sends the support emails of the outbox (AR-04). A
+    // request is stored and its mails are tried at once whatever this says; with it off a failed
+    // mail waits until it is switched on again.
+    SUPPORT_MAIL_JOB_ENABLED: flag.default(true),
     CLEANUP_ON_STARTUP: flag.default(false),
     NEIGHBORHOODS_CACHE_ENABLED: flag.default(false),
     // Milliseconds; 600000 = 10 minutes.

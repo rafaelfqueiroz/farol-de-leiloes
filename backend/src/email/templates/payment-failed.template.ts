@@ -1,13 +1,6 @@
 // SPEC-012 BR-012-20: the email every member of an office gets when a renewal payment fails, with a
 // link to update the payment method. The name is a member's own text, so it is escaped.
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
+import { escapeHtml } from '../../common/html/escape-html.js';
 
 export const getPaymentFailedEmailTemplate = (
   name: string | undefined,

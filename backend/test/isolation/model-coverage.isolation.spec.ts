@@ -103,6 +103,7 @@ describe('TS-14: every model the API registers is classified, and every owned on
       'NotificationLog',
       'ReminderEntity',
       'SavedFilterEntity',
+      'SupportRequestEntity',
     ]);
   });
 });

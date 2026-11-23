@@ -73,6 +73,7 @@ services:
       SMTP_HOST: smtp.farol.test
       SMTP_USER: e2e
       SMTP_PASS: e2e
+      SUPPORT_EMAIL: suporte@farol.test
       SMS_PROVIDER_API_KEY: e2e-fake
       WHATSAPP_API_KEY: e2e-fake
       LLM_PROVIDER: ollama
@@ -93,6 +94,8 @@ services:
       DATA_EXPORT_ENABLED: 'false'
       # SPEC-010: no retention job runs in the stack either (AR-04).
       DOCUMENT_RETENTION_ENABLED: 'false'
+      # SPEC-009: no support-mail worker runs in the stack either (AR-04); the mails are recorded in memory.
+      SUPPORT_MAIL_JOB_ENABLED: 'false'
       CLEANUP_ON_STARTUP: 'false'
     healthcheck:
       test:

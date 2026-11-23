@@ -29,6 +29,8 @@ import { testConfigService } from '../../../test/support/test-env.js';
 import { AccessModule } from '../access.module.js';
 import { SubscriptionsModule } from '../../subscriptions/subscriptions.module.js';
 import { StubSubscriptionsModule } from '../../../test/support/stub-subscriptions-module.js';
+import { StubSupportRequestsStoreModule } from '../../../test/support/stub-support-requests-module.js';
+import { SupportRequestsStoreModule } from '../../support/support-requests-store.module.js';
 import {
   AdminOnly,
   RequiresEntitlement,
@@ -145,6 +147,9 @@ describe('SC-07: an access requirement overrides @Public() (SPEC-002)', () => {
       // spec runs the guards only, with the sources overridden below.
       .overrideModule(SubscriptionsModule)
       .useModule(StubSubscriptionsModule)
+      // SPEC-009: the same for the support requests' store, which AccessModule binds its source from.
+      .overrideModule(SupportRequestsStoreModule)
+      .useModule(StubSupportRequestsStoreModule)
       .overrideProvider(MEMBERSHIP_SOURCE)
       .useValue({
         activeMemberships: (id: string) =>

@@ -12,6 +12,7 @@ import { consentIndexes } from './0008-consent-indexes.migration.js';
 import { privacyRightsIndexes } from './0009-privacy-rights-indexes.migration.js';
 import { retentionLegalIndexes } from './0010-retention-legal-indexes.migration.js';
 import { eraseLegacyProfileFieldsMigration } from './0011-erase-legacy-profile-fields.migration.js';
+import { supportRequestsIndexes } from './0012-support-requests-indexes.migration.js';
 import type { Migration } from './migration.js';
 
 export const MIGRATIONS: readonly Migration[] = [
@@ -26,4 +27,5 @@ export const MIGRATIONS: readonly Migration[] = [
   privacyRightsIndexes,
   retentionLegalIndexes,
   eraseLegacyProfileFieldsMigration,
+  supportRequestsIndexes,
 ];
