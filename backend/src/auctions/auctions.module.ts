@@ -14,6 +14,9 @@ import { CommonModule } from '../common/common.module.js';
 import { StorageModule } from '../storage/storage.module.js';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config.js';
 import businessConfig from '../config/business.config.js';
+import caixaConfig, { type CaixaConfig } from '../config/caixa.config.js';
+import { CaixaAccess } from './caixa/caixa-access.js';
+import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
 
 @Module({
   imports: [
@@ -23,6 +26,7 @@ import businessConfig from '../config/business.config.js';
     ]),
     ConfigModule.forFeature(schedulerConfig),
     ConfigModule.forFeature(businessConfig),
+    ConfigModule.forFeature(caixaConfig),
     CacheModule.registerAsync({
       imports: [ConfigModule.forFeature(schedulerConfig)],
       inject: [ConfigService],
@@ -41,6 +45,12 @@ import businessConfig from '../config/business.config.js';
     AuctionsService,
     AuctionsImporter,
     CsvCacheService,
+    // AR-10: Caixa behind its port; HttpCaixaAccess is the one adapter (SC-24).
+    {
+      provide: CaixaAccess,
+      useFactory: (config: CaixaConfig) => new HttpCaixaAccess(config),
+      inject: [caixaConfig.KEY],
+    },
     AuctionDetailsScraper,
     AuctionCleanupService,
   ],

@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CsvUpload, CsvUploadDocument } from './schemas/csv-upload.schema.js';
 import { StorageService } from '../../storage/storage.service.js';
-import { downloadCsvAllStates } from './downloader.js';
+import { CaixaAccess } from '../caixa/caixa-access.js';
 import { errorMessage } from '../../common/error-message.js';
 import { Clock } from '../../common/clock/clock.js';
 import { isSameBrasiliaDay } from '../../common/clock/brasilia-time.js';
@@ -18,12 +18,13 @@ export class CsvCacheService {
     private readonly csvUploadModel: Model<CsvUploadDocument>,
     private readonly storage: StorageService,
     private readonly clock: Clock, // AR-24
+    private readonly caixa: CaixaAccess, // AR-10: the one way to reach Caixa (SC-24)
   ) {}
 
   async resolveCsv(): Promise<string> {
     if (!this.storage.isConfigured()) {
       this.logger.warn('R2 not configured, downloading directly from Caixa');
-      return downloadCsvAllStates();
+      return this.caixa.downloadList();
     }
 
     const record = await this.csvUploadModel.findOne({}).lean();
@@ -55,7 +56,7 @@ export class CsvCacheService {
 
   private async fetchFromCaixaAndUpload(): Promise<string> {
     this.logger.log('Downloading CSV from Caixa');
-    const csv = await downloadCsvAllStates();
+    const csv = await this.caixa.downloadList();
 
     const buffer = Buffer.from(csv, 'utf8');
 
