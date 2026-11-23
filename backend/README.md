@@ -2,7 +2,7 @@ Auctions API (NestJS 12 + MongoDB)
 
 Overview
 
-- Ingests daily CSVs from Caixa auctions (per state, option "Todos").
+- Ingests the daily national list of Caixa properties (`Lista_imoveis_geral.csv`, all states) through the `CaixaAccess` port (SPEC-004, SC-24).
 - Parses and normalizes fields, stores in MongoDB.
 - Exposes REST endpoint to query by state, city, and modality.
 
@@ -119,5 +119,6 @@ Scheduling
 
 Notes
 
-- CSV layout from Caixa can vary; the parser is resilient to common Portuguese headers and keeps the full `raw` row for reference.
-- The download step tries GET with `?UF=<state>&Cidade=Todos`, then falls back to POST form if needed.
+- CSV layout from Caixa can vary; the parser (`importer/parser.ts`) is resilient to common Portuguese headers, reads the list's `Data de geração` as a Brasília calendar day and takes the property type from the description as a fallback. The pure list validator (`auctions/domain/list-validator.ts`, BR-004-02, BR-004-04) judges a parsed list; the run that applies it arrives with SPEC-004 part 2.
+- Caixa is reached only through the `CaixaAccess` port. The default adapter sends the honest `FarolDosLeiloes/1.0` user agent, has a timeout (`CAIXA_REQUEST_TIMEOUT_MS`) and a size cap (`CAIXA_MAX_DOWNLOAD_BYTES`), can use an http(s) proxy (`CAIXA_PROXY_URL`, SOCKS refused) and stops on any 403, 429 or challenge page with `CaixaBlockedError`, never retrying (BR-004-20). Details and the manual live test: `docs/runbooks/caixa-import.md`.
+- `NATIONAL_HOLIDAYS` (comma-separated `YYYY-MM-DD`, default empty) is the business-day calendar of BR-004-31 (`BusinessCalendar`); `IMPORT_MIN_ROW_RATIO` (default 0.8) is the truncated-list threshold of BR-004-04. Both are in `.env.example`.
