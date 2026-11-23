@@ -113,6 +113,27 @@ export const ROUTES: readonly AppRoute[] = [
     heading: 'Plano do escritório',
   },
   { name: 'profile', path: '/profile', as: 'investor', heading: 'Meu perfil' },
+  // SPEC-010: the rights page of the signed-in account, and the two public documents (the title is
+  // the API's own) and the screen the account lands on once it is closed.
+  {
+    name: 'privacy and data',
+    path: '/profile/privacidade',
+    as: 'investor',
+    heading: 'Privacidade e dados',
+  },
+  { name: 'terms of use', path: '/termos', as: 'public', heading: 'Termos de Uso' },
+  {
+    name: 'privacy policy',
+    path: '/privacidade',
+    as: 'public',
+    heading: 'Política de Privacidade',
+  },
+  {
+    name: 'account closed',
+    path: '/conta-encerrada',
+    as: 'public',
+    heading: 'Sua conta foi encerrada',
+  },
   { name: 'reminders', path: '/reminders', as: 'investor', heading: 'Meus Lembretes' },
   { name: 'support', path: '/support', as: 'investor', heading: 'Suporte' },
   // A verified account is sent to /, so this one is the seeded unverified account.

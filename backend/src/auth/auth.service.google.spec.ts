@@ -126,6 +126,58 @@ describe('AuthService.beginGoogleSignIn (BR-001-08)', () => {
   });
 });
 
+describe('AuthService.beginGoogleReauthentication (SPEC-010 BR-010-13)', () => {
+  it('gives the account linked to the Google identity a 60-second exchange code, and no session', async () => {
+    ctx.users.seed(account({ googleId: 'g-1', providers: ['google'] }));
+
+    const code = await ctx.service.beginGoogleReauthentication(identity());
+
+    expect(code).toMatch(/^[0-9a-f]{64}$/);
+    expect(ctx.tokenRepo.stored.map((t) => t.purpose)).toEqual(['google_exchange']);
+    expect(ctx.tokenRepo.stored[0]?.expiresAt).toEqual(
+      new Date(ctx.clock.now().getTime() + 60 * SECOND),
+    );
+    expect(ctx.sessionRepo.stored).toEqual([]);
+  });
+
+  it('refuses an email Google does not report as verified', async () => {
+    ctx.users.seed(account({ googleId: 'g-1', providers: ['google'] }));
+
+    await expect(
+      ctx.service.beginGoogleReauthentication(identity({ emailVerified: false })),
+    ).rejects.toEqual(new DomainError('GOOGLE_EMAIL_NOT_VERIFIED'));
+    expect(ctx.tokenRepo.stored).toEqual([]);
+  });
+
+  it('never creates a sign-up record or links an identity: a Google identity with no account is refused', async () => {
+    await expect(ctx.service.beginGoogleReauthentication(identity())).rejects.toEqual(
+      new DomainError('GOOGLE_SIGN_IN_FAILED'),
+    );
+
+    expect(ctx.users.accounts.size).toBe(0);
+    expect(ctx.tokenRepo.stored).toEqual([]);
+  });
+
+  it('does not link an account that has the same email but another sign-in method', async () => {
+    ctx.users.seed(account());
+
+    await expect(ctx.service.beginGoogleReauthentication(identity())).rejects.toEqual(
+      new DomainError('GOOGLE_SIGN_IN_FAILED'),
+    );
+
+    expect(ctx.users.accounts.values().next().value).toMatchObject({ providers: ['local'] });
+    expect(ctx.tokenRepo.stored).toEqual([]);
+  });
+
+  it('refuses an inactive account', async () => {
+    ctx.users.seed(account({ googleId: 'g-1', providers: ['google'], status: 'closed' }));
+
+    await expect(ctx.service.beginGoogleReauthentication(identity())).rejects.toEqual(
+      new DomainError('GOOGLE_SIGN_IN_FAILED'),
+    );
+  });
+});
+
 describe('Google linking decision table (BR-001-10, BR-001-11, BR-001-16, DL-001-02)', () => {
   it('BR-001-10: a confirmed account is linked and keeps its password and local provider', async () => {
     const existing = ctx.users.seed(account());

@@ -15,7 +15,9 @@ import {
   bumpAuthGeneration,
   currentAuthGeneration,
   onSessionEnded,
+  onTermsAcceptanceRequired,
 } from '@/lib/api-client';
+import type { AcceptedVersions } from '@/lib/legal';
 import { reportClientError } from '@/lib/report-client-error';
 
 interface User {
@@ -32,13 +34,33 @@ interface User {
   isAdmin?: boolean;
   /** SPEC-002 BR-002-14: derived by the server on each /api/auth/me; absent in a sign-in answer. */
   personas?: string[];
+  /**
+   * SPEC-010 BR-010-05: the account has not accepted the current terms or privacy policy; the
+   * interface asks (the one re-acceptance dialog). Also set when any call answers
+   * TERMS_ACCEPTANCE_REQUIRED. Absent in a sign-in answer; read from /api/auth/me right after it.
+   */
+  termsAcceptanceRequired?: boolean;
+  /** The documents still to accept; empty when `termsAcceptanceRequired` is false. */
+  documents?: { type: string; version: string }[];
+  /** SPEC-010 BR-010-27: true until the account answers the one-time WhatsApp question. */
+  whatsappPromptPending?: boolean;
+}
+
+/** What the sign-up form sends beside `acceptTerms: true` (SPEC-010 BR-010-01, BR-010-27). */
+export interface SignupConsent extends AcceptedVersions {
+  whatsappConsent: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    name: string,
+    consent: SignupConsent,
+  ) => Promise<void>;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -128,26 +150,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // sign-in resolves and the caller navigates; a failed read leaves the profile as the answer had it.
   // It does not start a new session lookup (no generation bump, no loading): it asks /me once and
   // merges the two capability fields, and only if the session it was asked under is still current.
-  const readCapabilities = async (profile: User) => {
+  // SPEC-010: it also reads what the sign-in answer lacks about the documents and the one-time
+  // WhatsApp question, so a sign-in under a pending version opens the re-acceptance dialog at once.
+  const mergeAccountState = async (expectedId?: string) => {
     const generation = currentAuthGeneration();
     try {
       const response = await apiFetch('/api/auth/me');
       if (!response.ok) return;
-      const me: { isAdmin?: boolean; personas?: string[] } = await response.json();
+      const me: {
+        isAdmin?: boolean;
+        personas?: string[];
+        termsAcceptanceRequired?: boolean;
+        documents?: User['documents'];
+        whatsappPromptPending?: boolean;
+      } = await response.json();
       if (currentAuthGeneration() !== generation) return;
       setUser((current) =>
-        current?._id === profile._id
+        current && (expectedId === undefined || current._id === expectedId)
           ? {
               ...current,
               ...(Array.isArray(me.personas) ? { personas: me.personas } : {}),
               ...(typeof me.isAdmin === 'boolean' ? { isAdmin: me.isAdmin } : {}),
+              ...(typeof me.termsAcceptanceRequired === 'boolean'
+                ? { termsAcceptanceRequired: me.termsAcceptanceRequired }
+                : {}),
+              ...(Array.isArray(me.documents) ? { documents: me.documents } : {}),
+              ...(typeof me.whatsappPromptPending === 'boolean'
+                ? { whatsappPromptPending: me.whatsappPromptPending }
+                : {}),
             }
           : current,
       );
     } catch (error) {
-      reportClientError(error, { where: 'AuthContext.readCapabilities' });
+      reportClientError(error, { where: 'AuthContext.mergeAccountState' });
     }
   };
+
+  // SPEC-010 BR-010-05: some call was refused with TERMS_ACCEPTANCE_REQUIRED. The dialog opens at
+  // once; /api/auth/me (always allowed) then says which documents.
+  useEffect(
+    () =>
+      onTermsAcceptanceRequired(() => {
+        setUser((current) =>
+          current && current.termsAcceptanceRequired !== true
+            ? { ...current, termsAcceptanceRequired: true }
+            : current,
+        );
+        void mergeAccountState();
+      }),
+    [],
+  );
 
   // The BFF has set the cookie from the backend's token; the answer carries the user only.
   const login = async (email: string, password: string) => {
@@ -157,18 +209,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     bumpAuthGeneration(); // BR-001-18: calls started before this sign-in are stale now
     setUser(data.user);
-    await readCapabilities(data.user);
+    await mergeAccountState(data.user._id);
   };
 
-  const register = async (email: string, password: string, name: string) => {
+  const register = async (
+    email: string,
+    password: string,
+    name: string,
+    consent: SignupConsent,
+  ) => {
     const data = await apiJson<{ user: User }>('/api/auth/register', {
       method: 'POST',
-      // BR-001-02: the form only submits once the terms are accepted
-      json: { email, password, name, acceptTerms: true },
+      // BR-001-02: the form only submits once the terms are accepted. SPEC-010 BR-010-01: with
+      // the versions the person was shown, and the separate, optional WhatsApp choice (BR-010-27).
+      json: { email, password, name, acceptTerms: true, ...consent },
     });
     bumpAuthGeneration(); // BR-001-18: calls started before this registration are stale now
     setUser(data.user);
-    await readCapabilities(data.user);
+    await mergeAccountState(data.user._id);
   };
 
   const logout = async () => {

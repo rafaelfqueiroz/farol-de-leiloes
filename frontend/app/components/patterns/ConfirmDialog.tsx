@@ -3,11 +3,13 @@
 import type { SvgIconComponent } from '@mui/icons-material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -47,6 +49,20 @@ export interface ConfirmDialogProps {
   error?: string | null;
   /** What the confirm button says while busy ("Cancelando…"); required with `busy`. */
   busyLabel?: string;
+  /**
+   * The field variant (SPEC-010 BR-010-13, frame "Excluir conta"): the controls the action needs
+   * before it can run, such as the current password, under the description. They are NOT part of
+   * the dialog's description (a screen reader would read a field's value as text), so give each its
+   * own label. The caller owns their state and their field errors (`aria-describedby`).
+   */
+  controls?: ReactNode;
+  /**
+   * The "I understand" checkbox of an irreversible action, after the controls and the `error`. The
+   * confirm button stays disabled until it is ticked, and it is disabled while the dialog is busy.
+   */
+  acknowledge?: { label: string; checked: boolean; onChange: (checked: boolean) => void };
+  /** Keeps the confirm button inert for a reason of the caller's (an empty password). */
+  confirmDisabled?: boolean;
 }
 
 // DS-27: every destructive action confirms here; the safe action comes first and has focus.
@@ -64,6 +80,9 @@ export default function ConfirmDialog({
   busy = false,
   busyLabel,
   error = null,
+  controls,
+  acknowledge,
+  confirmDisabled = false,
 }: ConfirmDialogProps) {
   const t = useTranslations('patterns.confirmDialog');
   const titleId = useId();
@@ -100,12 +119,27 @@ export default function ConfirmDialog({
             </List>
           ) : null}
         </Box>
+        {controls ? <Box sx={{ mt: 2 }}>{controls}</Box> : null}
         {error ? (
           <Box sx={{ mt: 2 }}>
             <InlineAlert severity="error" role="alert">
               {error}
             </InlineAlert>
           </Box>
+        ) : null}
+        {acknowledge ? (
+          <FormControlLabel
+            // DS-16: the whole row is the target
+            sx={(theme) => ({ mt: 2, mx: 0, minHeight: theme.spacing(5.5), alignItems: 'center' })}
+            control={
+              <Checkbox
+                checked={acknowledge.checked}
+                disabled={busy}
+                onChange={(event) => acknowledge.onChange(event.target.checked)}
+              />
+            }
+            label={acknowledge.label}
+          />
         ) : null}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -119,6 +153,7 @@ export default function ConfirmDialog({
           onClick={onConfirm}
           busy={busy}
           busyLabel={busyLabel ?? confirmLabel}
+          disabled={confirmDisabled || (acknowledge !== undefined && !acknowledge.checked)}
         >
           {confirmLabel}
         </BusyButton>

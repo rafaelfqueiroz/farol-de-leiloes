@@ -10,6 +10,7 @@ import {
   GOOGLE_FLOW_COOKIE,
   GOOGLE_FLOW_COOKIE_PATH,
   GoogleOAuthStateStore,
+  type GoogleFlowRequest,
 } from './google-oauth-state.store.js';
 
 const START = new Date('2099-01-15T12:00:00.000Z');
@@ -22,19 +23,20 @@ function setup(env: Record<string, string> = {}) {
 }
 
 /** A response that records the cookie calls, and a request that carries it. */
-function exchange(cookieHeader?: string) {
+function exchange(cookieHeader?: string, query: Record<string, unknown> = {}) {
   const cookie = vi.fn();
   const clearCookie = vi.fn();
   const req = {
     headers: cookieHeader === undefined ? {} : { cookie: cookieHeader },
+    query,
     res: { cookie, clearCookie },
   } as unknown as Request;
   return { req, cookie, clearCookie };
 }
 
 /** Starts the flow and returns what the browser would hold and what Google would be sent. */
-function start(store: GoogleOAuthStateStore) {
-  const { req, cookie } = exchange();
+function start(store: GoogleOAuthStateStore, query: Record<string, unknown> = {}) {
+  const { req, cookie } = exchange(undefined, query);
   let state = '';
   store.store(req, VERIFIER, undefined, {}, (error, stored) => {
     expect(error).toBeNull();
@@ -48,7 +50,7 @@ function verify(store: GoogleOAuthStateStore, cookieHeader: string | undefined, 
   const { req, clearCookie } = exchange(cookieHeader);
   const results: unknown[][] = [];
   store.verify(req, state, (...args: unknown[]) => results.push(args));
-  return { results, clearCookie };
+  return { results, clearCookie, req: req as GoogleFlowRequest };
 }
 
 describe('GoogleOAuthStateStore as passport-oauth2 calls it', () => {
@@ -234,5 +236,111 @@ describe('verify (the return from Google)', () => {
 
     // Nothing is logged at all: the refusal carries only its closed code.
     expect(log.loggedText()).toBe('');
+  });
+});
+
+describe('the intent of the flow (SPEC-010 BR-010-13)', () => {
+  const sealedIntent = (value: string) =>
+    JSON.parse(Buffer.from(value.split('.')[0] ?? '', 'base64url').toString()) as {
+      intent?: string;
+    };
+
+  it('an ordinary start seals no intent, and the callback sees none', () => {
+    const { store } = setup();
+    const started = start(store);
+
+    const { req } = verify(store, `${GOOGLE_FLOW_COOKIE}=${started.value}`, started.state);
+
+    expect(sealedIntent(started.value).intent).toBeUndefined();
+    expect(req.googleFlowIntent).toBeUndefined();
+  });
+
+  it('?intent=reauth seals the intent into the cookie, and the callback reads it from there', () => {
+    const { store } = setup();
+    const started = start(store, { intent: 'reauth' });
+
+    const { results, req } = verify(store, `${GOOGLE_FLOW_COOKIE}=${started.value}`, started.state);
+
+    expect(sealedIntent(started.value).intent).toBe('reauth');
+    expect(results).toEqual([[null, VERIFIER]]);
+    expect(req.googleFlowIntent).toBe('reauth');
+  });
+
+  it.each([['signin'], ['admin'], [''], [['reauth', 'reauth']], [{ a: 1 }]])(
+    'refuses a start with the intent %j: it is not a sign-in in disguise',
+    (intent) => {
+      const { store } = setup();
+      const { req, cookie } = exchange(undefined, { intent });
+      const callback = vi.fn();
+
+      store.store(req, VERIFIER, undefined, {}, callback);
+
+      const [error] = callback.mock.calls[0] as [DomainError];
+      expect(error).toBeInstanceOf(DomainError);
+      expect(error.code).toBe('GOOGLE_SIGN_IN_FAILED');
+      expect(cookie).not.toHaveBeenCalled();
+    },
+  );
+
+  it('an intent in the URL of the CALLBACK changes nothing: only the sealed cookie counts', () => {
+    const { store } = setup();
+    const started = start(store);
+    const { req } = exchange(`${GOOGLE_FLOW_COOKIE}=${started.value}`, { intent: 'reauth' });
+
+    store.verify(req, started.state, () => undefined);
+
+    expect((req as GoogleFlowRequest).googleFlowIntent).toBeUndefined();
+  });
+
+  it('a cookie whose intent was edited to reauth is refused (tampered)', () => {
+    const { store } = setup();
+    const started = start(store);
+    const [body = '', signature = ''] = started.value.split('.');
+    const decoded = JSON.parse(Buffer.from(body, 'base64url').toString()) as object;
+    const forged = Buffer.from(JSON.stringify({ ...decoded, intent: 'reauth' })).toString(
+      'base64url',
+    );
+
+    const { results, req } = verify(
+      store,
+      `${GOOGLE_FLOW_COOKIE}=${forged}.${signature}`,
+      started.state,
+    );
+
+    expect((results[0]?.[0] as DomainError).code).toBe('GOOGLE_SIGN_IN_FAILED');
+    expect(req.googleFlowIntent).toBeUndefined();
+  });
+});
+
+describe('flowIntentOf: the intent of a flow whose callback failed before verify ran', () => {
+  const read = (store: GoogleOAuthStateStore, cookieHeader: string | undefined) => {
+    const { req, clearCookie } = exchange(cookieHeader);
+    return { intent: store.flowIntentOf(req), clearCookie };
+  };
+
+  it('reads reauth from an intact cookie, and clears the single-use cookie', () => {
+    const { store } = setup();
+    const started = start(store, { intent: 'reauth' });
+
+    const { intent, clearCookie } = read(store, `${GOOGLE_FLOW_COOKIE}=${started.value}`);
+
+    expect(intent).toBe('reauth');
+    expect(clearCookie).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['an ordinary sign-in cookie', 'ordinary'],
+    ['no cookie', 'none'],
+    ['an altered cookie', 'altered'],
+    ['an expired cookie', 'expired'],
+  ])('says nothing for %s', (_label, kind) => {
+    const { store, clock } = setup();
+    const started = start(store, kind === 'ordinary' ? {} : { intent: 'reauth' });
+    let header: string | undefined = `${GOOGLE_FLOW_COOKIE}=${started.value}`;
+    if (kind === 'none') header = undefined;
+    if (kind === 'altered') header = `${GOOGLE_FLOW_COOKIE}=${started.value.slice(0, -3)}AAA`;
+    if (kind === 'expired') clock.advance(10 * MINUTE);
+
+    expect(read(store, header).intent).toBeUndefined();
   });
 });

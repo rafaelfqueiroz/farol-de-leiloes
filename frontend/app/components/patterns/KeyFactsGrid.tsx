@@ -39,7 +39,11 @@ export default function KeyFactsGrid({ facts }: KeyFactsGridProps) {
           <Typography component="dt" variant="caption" sx={{ color: 'text.secondary' }}>
             {fact.label}
           </Typography>
-          <Typography component="dd" variant="subtitle1" sx={{ m: 0, fontWeight: 600 }}>
+          <Typography
+            component="dd"
+            variant="subtitle1"
+            sx={{ m: 0, fontWeight: 600, overflowWrap: 'anywhere' }}
+          >
             {fact.value}
           </Typography>
         </Box>

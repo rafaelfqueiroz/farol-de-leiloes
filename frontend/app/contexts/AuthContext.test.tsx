@@ -44,7 +44,15 @@ describe('AuthProvider', () => {
     answerWith(409, { code: 'EMAIL_ALREADY_REGISTERED', context: {} });
     const { result } = renderHook(() => useAuth(), { wrapper });
 
-    const error = await act(() => rejectionOf(result.current.register('a@b.com', 'x', 'A')));
+    const error = await act(() =>
+      rejectionOf(
+        result.current.register('a@b.com', 'x', 'A', {
+          termsVersion: '0.2',
+          privacyVersion: '0.2',
+          whatsappConsent: false,
+        }),
+      ),
+    );
 
     expect(error).toMatchObject({ code: 'EMAIL_ALREADY_REGISTERED', status: 409 });
   });

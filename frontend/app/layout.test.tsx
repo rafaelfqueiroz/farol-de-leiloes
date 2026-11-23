@@ -94,6 +94,9 @@ describe('RootLayout', () => {
     const reminders = find(favorites?.props.children as ReactNode, named('RemindersProvider'));
     expect(auth).toBeDefined();
     expect(favorites).toBeDefined();
-    expect(reminders?.props.children).toBe(page);
+    const inside = reminders?.props.children as ReactNode[];
+    expect(inside[0]).toBe(page);
+    // SPEC-010: the consent dialogs are decided in one place, inside the providers, after the page
+    expect(find(reminders, named('AccountConsentGate'))).toBeDefined();
   });
 });

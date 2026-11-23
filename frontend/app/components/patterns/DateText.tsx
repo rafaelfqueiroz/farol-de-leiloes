@@ -15,6 +15,12 @@ export interface DateTextProps {
   /** An ISO instant with a zone, or a YYYY-MM-DD calendar date (never shifted, AR-22). */
   value: string;
   withTime?: boolean;
+  /**
+   * Appends "(horário de Brasília)" after a time of day (BR-003-23); default true. Only a caller
+   * that states the zone once for the whole column or section turns it off (the acceptances table:
+   * its header says "(horário de Brasília)"), so no time on a page is left without its zone.
+   */
+  zoneMarker?: boolean;
   /** Appends "· em 14 dias" after the absolute date, which is always shown. */
   relative?: boolean;
   /** The clock for `relative`; injectable so tests do not depend on today. */
@@ -44,6 +50,7 @@ function RelativeText({ parts }: { parts: RelativeParts }) {
 export default function DateText({
   value,
   withTime = false,
+  zoneMarker = true,
   relative = false,
   now,
 }: DateTextProps) {
@@ -69,7 +76,7 @@ export default function DateText({
   return (
     <Typography component="span" variant="inherit" sx={{ fontVariantNumeric: 'tabular-nums' }}>
       <time dateTime={dateTime}>{label}</time>
-      {showsTimeOfDay ? t('timeZoneMarker') : null}
+      {showsTimeOfDay && zoneMarker ? t('timeZoneMarker') : null}
       {relative ? <RelativeText parts={relativeParts(value, now ?? new Date())} /> : null}
     </Typography>
   );

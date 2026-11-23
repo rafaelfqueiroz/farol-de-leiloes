@@ -238,6 +238,20 @@ describe('AppShell — frame', () => {
     expect(within(main).getByRole('heading', { name: 'Conteúdo da página' })).toBeInTheDocument();
   });
 
+  it('SPEC-010 BR-010-02: ends the content with the legal footer, after the <main>, for a guest too', () => {
+    setViewport(DESKTOP);
+    renderShell();
+
+    const main = screen.getByRole('main');
+    const footer = screen.getByRole('contentinfo');
+    expect(main.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(main).not.toContainElement(footer);
+    expect(within(footer).getByRole('link', { name: 'Termos de uso' })).toHaveAttribute(
+      'href',
+      '/termos',
+    );
+  });
+
   it('links the logo home, with mark and lockup both in the markup (no swap after mount)', () => {
     setViewport(DESKTOP);
     renderShell();
@@ -329,19 +343,43 @@ describe('AppShell — banner slot (frame 5)', () => {
 
 describe('AppShell — navigation by role', () => {
   it.each([
-    ['free', ['Busca', 'Conta'], ['Buscar imóveis', 'Perfil', 'Assinatura', 'Suporte']],
+    [
+      'free',
+      ['Busca', 'Conta'],
+      ['Buscar imóveis', 'Perfil', 'Assinatura', 'Privacidade', 'Suporte'],
+    ],
     [
       'standard',
       ['Busca', 'Acompanhamento', 'Conta'],
-      ['Buscar imóveis', 'Favoritos', 'Lembretes', 'Perfil', 'Assinatura', 'Suporte'],
+      [
+        'Buscar imóveis',
+        'Favoritos',
+        'Lembretes',
+        'Perfil',
+        'Assinatura',
+        'Privacidade',
+        'Suporte',
+      ],
     ],
     [
       'premium',
       ['Busca', 'Acompanhamento', 'Conta'],
-      ['Buscar imóveis', 'Favoritos', 'Lembretes', 'Perfil', 'Assinatura', 'Suporte'],
+      [
+        'Buscar imóveis',
+        'Favoritos',
+        'Lembretes',
+        'Perfil',
+        'Assinatura',
+        'Privacidade',
+        'Suporte',
+      ],
     ],
     // SPEC-002 BR-002-23: the legacy role 'admin' is no plan and no admin capability
-    ['admin', ['Busca', 'Conta'], ['Buscar imóveis', 'Perfil', 'Assinatura', 'Suporte']],
+    [
+      'admin',
+      ['Busca', 'Conta'],
+      ['Buscar imóveis', 'Perfil', 'Assinatura', 'Privacidade', 'Suporte'],
+    ],
   ] as const)('shows %s its groups and destinations in the fixed order', (role, groups, links) => {
     setViewport(DESKTOP);
     signIn(role);
@@ -386,12 +424,21 @@ describe('AppShell — navigation by role', () => {
     [
       'free',
       ['Busca', 'Conta', 'Administração'],
-      ['Buscar imóveis', 'Perfil', 'Assinatura', 'Suporte', 'Cupons'],
+      ['Buscar imóveis', 'Perfil', 'Assinatura', 'Privacidade', 'Suporte', 'Cupons'],
     ],
     [
       'premium',
       ['Busca', 'Acompanhamento', 'Conta', 'Administração'],
-      ['Buscar imóveis', 'Favoritos', 'Lembretes', 'Perfil', 'Assinatura', 'Suporte', 'Cupons'],
+      [
+        'Buscar imóveis',
+        'Favoritos',
+        'Lembretes',
+        'Perfil',
+        'Assinatura',
+        'Privacidade',
+        'Suporte',
+        'Cupons',
+      ],
     ],
   ] as const)(
     'SPEC-002: adds Administração to a %s account with the admin capability, and no plan feature',
@@ -549,7 +596,7 @@ describe('AppShell — phone drawer', () => {
     const user = userEvent.setup();
     renderShell();
 
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Principal' })).not.toBeInTheDocument();
     const menuButton = screen.getByRole('button', { name: 'Abrir menu' });
     expect(menuButton).toHaveAttribute('aria-expanded', 'false');
     expect(menuButton).toHaveAttribute('aria-controls', 'app-shell-drawer');
@@ -599,6 +646,7 @@ describe('AppShell — phone drawer', () => {
       'Buscar imóveis',
       'Perfil',
       'Assinatura',
+      'Privacidade',
       'Suporte',
     ]);
   });
@@ -664,7 +712,7 @@ describe('AppShell — guest', () => {
     signOut();
     renderShell();
 
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Principal' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Abrir menu' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tema' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', '/login');
@@ -676,7 +724,7 @@ describe('AppShell — guest', () => {
     env.setAuth({ ...env.auth, user: null, isAuthenticated: false, loading: true });
     renderShell();
 
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Principal' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Entrar' })).not.toBeInTheDocument();
   });
 });

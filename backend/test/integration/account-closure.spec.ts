@@ -129,6 +129,41 @@ describe('SPEC-010 closing the account (BR-010-13, BR-010-14)', () => {
       expect((await stored(bia)).status).toBe('closed');
     });
 
+    it('SPEC-010 BR-010-13: the code of a Google RE-AUTHENTICATION closes the account, starts no session and is bound to that account', async () => {
+      const ana = await account();
+      await app.googleCodeFor(ana.email, 'google-reauth-1'); // links the Google identity (BR-001-10)
+      const sessions = app.collection('sessions');
+      const before = await sessions.countDocuments();
+
+      const code = await app.googleReauthCodeFor(ana.email, 'google-reauth-1');
+
+      expect(await sessions.countDocuments()).toBe(before);
+      // a stranger's account cannot spend it
+      const bia = await account('Beltrana');
+      expect((await close(bia, { googleCode: code, confirm: true }).expect(400)).body.code).toBe(
+        'INVALID_GOOGLE_CODE',
+      );
+      await close(ana, { googleCode: code, confirm: true }).expect(200);
+      expect((await stored(ana)).status).toBe('closed');
+      expect(await sessions.countDocuments({ userId: oid(ana.id), revokedAt: null })).toBe(0);
+    });
+
+    it('SPEC-010 BR-010-13: a re-authentication never links an identity nor leaves a sign-up record', async () => {
+      const ana = await account();
+      const tokens = app.collection('accountTokens');
+      const before = await tokens.countDocuments();
+
+      await expect(app.googleReauthCodeFor(ana.email, 'google-never-linked')).rejects.toMatchObject(
+        { code: 'GOOGLE_SIGN_IN_FAILED' },
+      );
+      await expect(
+        app.googleReauthCodeFor('nobody-at-all@example.test', 'google-nobody'),
+      ).rejects.toMatchObject({ code: 'GOOGLE_SIGN_IN_FAILED' });
+
+      expect(await tokens.countDocuments()).toBe(before);
+      expect((await stored(ana)) as { googleId?: string }).not.toHaveProperty('googleId');
+    });
+
     it('AC: a Google code is single use, expires after 60 seconds, and an unknown one is the same refusal', async () => {
       const ana = await account();
       const used = await app.googleCodeFor(ana.email, 'google-ana-1');

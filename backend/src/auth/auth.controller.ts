@@ -45,10 +45,11 @@ import { ErrorResponseDto } from '../common/errors/error-response.dto.js';
 import { GoogleAuthGuard } from './guards/google-auth.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import { AuthenticatedUser } from './interfaces/auth.interface.js';
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import type { Env } from '../config/env.js';
 import { GoogleCallbackRedirectFilter } from './google/google-callback-redirect.filter.js';
 import type { GoogleIdentity } from './google/google-identity.js';
+import type { GoogleFlowRequest } from './google/google-oauth-state.store.js';
 import { GoogleCodeDto, GoogleCompleteDto } from './dto/google-code.dto.js';
 import { Access } from '../access/decorators/access.decorator.js';
 import type { AccessContext } from '../access/access-context.js';
@@ -57,17 +58,22 @@ import { AllowWithoutTerms } from '../privacy/decorators/allow-without-terms.dec
 
 // GoogleStrategy.validate hands the verified Google identity to passport, which sets it on the
 // request.
-type GoogleCallbackRequest = Request & { user: GoogleIdentity };
+type GoogleCallbackRequest = GoogleFlowRequest & { user: GoogleIdentity };
 
 @ApiTags('auth')
 @ApiErrorResponses()
 @Controller('auth')
 export class AuthController {
+  /** TERMS_ENFORCEMENT_ENABLED, read once from the typed config (AR-42), as CurrentTermsGuard does. */
+  private readonly termsEnforced: boolean;
+
   constructor(
     private authService: AuthService,
     private readonly config: ConfigService<Env, true>,
     private readonly consents: ConsentsService,
-  ) {}
+  ) {
+    this.termsEnforced = config.get('TERMS_ENFORCEMENT_ENABLED', { infer: true });
+  }
 
   @Public()
   @Post('register')
@@ -115,8 +121,10 @@ export class AuthController {
     summary: 'Start Google sign-in (browser redirect to Google)',
     description:
       'Sends OAuth `state` and a PKCE (S256) challenge to Google and keeps the state and the code ' +
-      'verifier in a signed, HttpOnly, SameSite=Lax cookie (10 minutes, Path /api/auth/google), ' +
-      'so the callback only goes on in the browser that started the flow (issue #152).',
+      'verifier in a signed, HttpOnly, SameSite=Lax cookie (10 minutes, Path /api/auth/google/callback), ' +
+      'so the callback only goes on in the browser that started the flow (issue #152). ' +
+      '`?intent=reauth` starts a re-authentication, sealed into the same cookie (SPEC-010 ' +
+      'BR-010-13), and asks Google for an interactive login (`prompt=login`); any other `intent` is refused.',
   })
   @ApiFoundResponse({ description: 'Redirect to Google consent' })
   async googleAuth() {
@@ -132,16 +140,27 @@ export class AuthController {
     description:
       'Never answers JSON and never puts a session in the URL (BR-001-20). Success redirects to ' +
       '{FRONTEND_URL}/auth/callback?code=<one-time code>, which POST /auth/google/exchange trades ' +
-      'for a session. A refusal (GOOGLE_EMAIL_NOT_VERIFIED, GOOGLE_SIGN_IN_FAILED...) redirects to ' +
-      '{FRONTEND_URL}/login?error=<CODE>. A callback whose state is missing, different, expired ' +
-      'or without the cookie of the start is refused as GOOGLE_SIGN_IN_FAILED.',
+      'for a session. A flow started with `?intent=reauth` is a re-authentication (SPEC-010 ' +
+      'BR-010-13): it starts no session and redirects to ' +
+      '{FRONTEND_URL}/profile/privacidade?reauth=<one-time code>, or ?reauthError=<CODE>, for ' +
+      'POST /privacy/delete-account. A refusal (GOOGLE_EMAIL_NOT_VERIFIED, GOOGLE_SIGN_IN_FAILED...) ' +
+      'redirects to {FRONTEND_URL}/login?error=<CODE>. A callback whose state is missing, different, ' +
+      'expired or without the cookie of the start is refused as GOOGLE_SIGN_IN_FAILED.',
   })
   @ApiFoundResponse({
     description: 'Redirect to the frontend with a one-time code or an error code',
   })
   async googleAuthRedirect(@Req() req: GoogleCallbackRequest, @Res() res: Response) {
-    const code = await this.authService.beginGoogleSignIn(req.user);
     const frontendUrl = this.config.get('FRONTEND_URL', { infer: true }); // AR-42
+    // The intent comes from the sealed state cookie of the start, never from the URL.
+    if (req.googleFlowIntent === 'reauth') {
+      // SPEC-010 BR-010-13: a re-authentication starts no session and no sign-up: the code goes
+      // back to the privacy page, which hands it to POST /privacy/delete-account.
+      const code = await this.authService.beginGoogleReauthentication(req.user);
+      res.redirect(`${frontendUrl}/profile/privacidade?reauth=${code}`);
+      return;
+    }
+    const code = await this.authService.beginGoogleSignIn(req.user);
     res.redirect(`${frontendUrl}/auth/callback?code=${code}`);
   }
 
@@ -243,7 +262,9 @@ export class AuthController {
       'isAdmin and personas are read and derived on this request (SPEC-002 BR-002-14, ' +
       'BR-002-15); they tell the interface what to show and authorize nothing by themselves. ' +
       'termsAcceptanceRequired is true, with the `documents` still to accept, when the account has ' +
-      'not accepted the current terms and privacy policy (SPEC-010 BR-010-05); whatsappPromptPending ' +
+      'not accepted the current terms and privacy policy AND TERMS_ENFORCEMENT_ENABLED is on ' +
+      '(SPEC-010 BR-010-05): with enforcement off it is false and `documents` is empty, so the ' +
+      'interface asks for nothing the server does not require; whatsappPromptPending ' +
       'is true until the account answers the one-time WhatsApp consent request (BR-010-27). ' +
       'Answered without accepting anything first.',
   })
@@ -252,11 +273,12 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
     @Access() access: AccessContext,
   ): Promise<CurrentUserResponseDto> {
-    return new CurrentUserResponseDto(
-      user,
-      access,
-      await this.consents.pendingFor(user.userId, user.consentResetAt),
-    );
+    // Enforcement off: nothing is required, so nothing is reported (and nothing is read). The
+    // whatsappPromptPending question is independent of it (BR-010-27).
+    const pending = this.termsEnforced
+      ? await this.consents.pendingFor(user.userId, user.consentResetAt)
+      : [];
+    return new CurrentUserResponseDto(user, access, pending);
   }
 
   @Post('logout')

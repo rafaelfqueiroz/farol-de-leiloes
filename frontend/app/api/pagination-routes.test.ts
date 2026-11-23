@@ -8,6 +8,7 @@ import { GET as favorites } from './favorites/route';
 import { GET as favoriteCodes } from './favorites/codes/route';
 import { GET as invoices } from './office/subscription/invoices/route';
 import { GET as officeSubscription } from './office/subscription/route';
+import { GET as exportsList } from './privacy/exports/route';
 import { GET as reminders } from './reminders/route';
 import { GET as savedFilters } from './saved-filters/route';
 import { GET as search } from './search/route';
@@ -102,6 +103,8 @@ describe.each([
   ['reminders', reminders, '/api/reminders'],
   ['saved filters', savedFilters, '/api/saved-filters'],
   ['coupons', coupons, '/api/coupons'],
+  // SPEC-010 BR-010-11: the account's own exports, newest first
+  ['exports', exportsList, '/api/privacy/exports'],
 ])('GET %s', (_name, handler, path) => {
   it('forwards page and pageSize and nothing else', async () => {
     await handler(request(`${path}?page=2&pageSize=100&owner=other`, signedIn));

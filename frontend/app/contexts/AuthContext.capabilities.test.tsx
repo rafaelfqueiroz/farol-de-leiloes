@@ -80,7 +80,11 @@ function Harness({ via }: { via: 'login' | 'register' }) {
           void (
             via === 'login'
               ? login('ana.teste@example.test', 'secret1')
-              : register('ana.teste@example.test', 'secret1', 'Ana Teste')
+              : register('ana.teste@example.test', 'secret1', 'Ana Teste', {
+                  termsVersion: '0.2',
+                  privacyVersion: '0.2',
+                  whatsappConsent: false,
+                })
           ).then(() => setDone(true))
         }
       >

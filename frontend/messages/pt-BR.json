@@ -24,7 +24,8 @@
       "code": "Código {code}"
     },
     "confirmDialog": {
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "busyDefault": "Aguarde"
     },
     "logo": {
       "name": "Farol dos Leilões"
@@ -104,8 +105,31 @@
         "subscription": "Assinatura",
         "support": "Suporte",
         "coupons": "Cupons",
-        "officePlan": "Plano do escritório"
+        "officePlan": "Plano do escritório",
+        "privacy": "Privacidade"
       }
+    },
+    "siteFooter": {
+      "navigation": "Informações legais e suporte",
+      "terms": "Termos de uso",
+      "privacy": "Política de privacidade",
+      "support": "Suporte",
+      "copyright": "© {year} Farol dos Leilões"
+    },
+    "legalDocument": {
+      "version": "Versão {version}",
+      "draft": "Rascunho",
+      "effectiveSince": "Em vigor desde <date></date> (horário de Brasília)",
+      "draftBanner": {
+        "title": "Rascunho, pendente de revisão jurídica",
+        "text": "Este texto ainda não foi validado por advogado e pode mudar antes do lançamento. Ele não deve ser lido como a versão final."
+      },
+      "article": {
+        "terms": "Texto dos termos de uso",
+        "privacy": "Texto da política de privacidade"
+      },
+      "table": "Tabela do documento",
+      "tableOf": "Tabela: {heading}"
     }
   },
   "errors": {
@@ -297,9 +321,6 @@
       "title": "Pronto para encontrar seu imóvel?",
       "subtitle": "Crie sua conta gratuitamente e descubra oportunidades incríveis em todo o Brasil",
       "button": "Criar conta grátis"
-    },
-    "footer": {
-      "rights": "© 2024 Farol dos Leilões. Todos os direitos reservados."
     }
   },
   "requireRole": {
@@ -331,7 +352,8 @@
     "errors": {
       "passwordMismatch": "As senhas não coincidem",
       "passwordLength": "Use de {min} a {max} caracteres"
-    }
+    },
+    "legalLoadFailed": "Não foi possível carregar as versões vigentes dos documentos."
   },
   "resetPassword": {
     "request": {
@@ -379,16 +401,29 @@
     "authenticating": "Entrando…",
     "fallback": "Carregando…",
     "terms": {
-      "title": "Falta pouco",
-      "summary": "Entrando como {email}",
-      "submit": "Criar conta",
+      "title": "Quase lá",
+      "summary": "Você entrou com o Google como <strong>{name}</strong> ({email}). Sua conta só é criada depois de aceitar os documentos abaixo.",
+      "summaryNoName": "Você entrou com o Google como <strong>{email}</strong>. Sua conta só é criada depois de aceitar os documentos abaixo.",
+      "submit": "Aceitar e criar conta",
       "submitting": "Criando conta…",
-      "decline": "Cancelar"
+      "decline": "Recusar e cancelar",
+      "declineNote": "Ao recusar, descartamos o que recebemos do Google. Nenhuma conta é criada e nada fica guardado.",
+      "stillNotCreated": "Sua conta continua sem ser criada até você aceitar."
     },
     "error": {
       "title": "Não foi possível entrar com o Google",
       "hint": "Tente de novo ou entre com e-mail e senha.",
       "backToLogin": "Voltar para o login"
+    },
+    "declined": {
+      "title": "Cadastro cancelado",
+      "text": "Você recusou os termos, então não criamos nenhuma conta e não guardamos nenhum dado do seu perfil do Google.",
+      "action": "Voltar ao início"
+    },
+    "expired": {
+      "title": "O tempo para aceitar acabou",
+      "text": "Por segurança, o cadastro com o Google expira em poucos minutos. Entre com o Google de novo para recomeçar.",
+      "action": "Entrar com o Google"
     }
   },
   "plansResult": {
@@ -874,8 +909,22 @@
   },
   "account": {
     "terms": {
-      "label": "Li e aceito os Termos de uso e a Política de privacidade",
-      "required": "Aceite os termos para criar a conta"
+      "legend": "Termos e privacidade",
+      "label": "Li e aceito os <terms>Termos de uso</terms> e a <privacy>Política de privacidade</privacy>.",
+      "versions": "Versões vigentes: termos {terms} e política {privacy}{draft, select, true { (rascunho)} other {}}.",
+      "required": "Aceite os termos e a política para criar a conta.",
+      "loadFailed": "Não foi possível carregar as versões vigentes dos documentos.",
+      "retry": "Tentar de novo",
+      "loading": "Carregando as versões vigentes",
+      "whatsappLabel": "Quero receber avisos por WhatsApp (opcional).",
+      "whatsappHelp": "É uma escolha separada dos termos. Você pode cancelar quando quiser e não precisa marcar para criar a conta. Mesmo marcada, nenhuma mensagem sai sem você ativar o canal em cada aviso e confirmar seu telefone.",
+      "whatsappHelpShort": "Escolha separada dos termos; pode ser cancelada a qualquer momento.",
+      "changed": {
+        "title": "Os documentos mudaram",
+        "register": "Os termos ou a política foram atualizados enquanto você preenchia. Leia a nova versão e aceite de novo.",
+        "callback": "Os termos ou a política foram atualizados. Leia as novas versões e aceite de novo.",
+        "action": "Ler as novas versões"
+      }
     },
     "emailBanner": {
       "unconfirmed": "Confirme seu e-mail para usar favoritos, filtros, lembretes e a calculadora.",
@@ -883,7 +932,9 @@
       "resending": "Enviando…",
       "sent": "Enviamos um novo link para {email}."
     },
-    "googleSignIn": "Entrar com Google"
+    "googleSignIn": "Entrar com Google",
+    "googleReauth": "Confirmar com o Google",
+    "googleSignUpNote": "Com o Google, mostramos os termos antes de criar a conta. Se você recusar, nada é guardado."
   },
   "officePlan": {
     "title": "Plano do escritório",
@@ -1060,5 +1111,171 @@
         "action": "Ver plano do escritório"
       }
     }
+  },
+  "legal": {
+    "titles": {
+      "terms": "Termos de uso",
+      "privacy": "Política de privacidade"
+    },
+    "loading": "Carregando o documento",
+    "loadFailed": {
+      "title": "Não foi possível carregar o documento",
+      "text": "Tente de novo em instantes.",
+      "retry": "Tentar de novo"
+    },
+    "meta": {
+      "terms": "Termos de uso",
+      "privacy": "Política de privacidade"
+    }
+  },
+  "consentDialogs": {
+    "terms": {
+      "title": "Novos termos e política de privacidade",
+      "intro": "Atualizamos os documentos abaixo. Para continuar usando sua conta, leia as novas versões e aceite.",
+      "document": "<link>{type, select, terms {Termos de uso} other {Política de privacidade}}, versão {version}</link> (em vigor desde <date></date>)",
+      "acknowledge": "Li e aceito as novas versões.",
+      "rights": "Seus direitos continuam disponíveis sem aceitar: <link>ver meus dados, exportar ou excluir a conta</link>.",
+      "signOut": "Sair da conta",
+      "accept": "Aceitar e continuar",
+      "accepting": "Registrando",
+      "newer": "Saiu uma versão ainda mais nova enquanto você lia. Leia e aceite de novo.",
+      "loadFailed": "Não foi possível carregar as novas versões.",
+      "retry": "Tentar de novo"
+    },
+    "whatsapp": {
+      "title": "Avisos por WhatsApp",
+      "question": "Você aceita receber avisos do Farol dos Leilões por WhatsApp? Perguntamos uma única vez.",
+      "note": "Dizer sim não liga nenhum aviso por si só: você ainda escolhe, aviso a aviso, o canal, e confirma seu telefone. Você pode cancelar quando quiser na página de privacidade.",
+      "later": "Agora não",
+      "accept": "Aceito receber",
+      "saving": "Salvando",
+      "signOut": "Sair da conta",
+      "rights": "Seus direitos continuam disponíveis: <link>ver meus dados, exportar ou excluir a conta</link>."
+    }
+  },
+  "privacy": {
+    "title": "Privacidade e dados",
+    "summary": "Veja o que aceitou, o que guardamos e exerça seus direitos sobre seus dados.",
+    "loading": "Carregando",
+    "loadFailed": {
+      "title": "Não foi possível carregar suas informações",
+      "text": "Tente de novo em instantes."
+    },
+    "acceptances": {
+      "title": "Aceites",
+      "description": "Versões dos documentos que você aceitou, com data e hora de Brasília.",
+      "caption": "Aceites registrados",
+      "columns": {
+        "document": "Documento",
+        "version": "Versão",
+        "acceptedAt": "Aceito em (horário de Brasília)",
+        "method": "Forma"
+      },
+      "documents": {
+        "terms": "Termos de uso",
+        "privacy": "Política de privacidade"
+      },
+      "version": "{version}{draft, select, true { (rascunho)} other {}}",
+      "methods": {
+        "signup_email": "Cadastro com e-mail",
+        "signup_google": "Cadastro com o Google",
+        "invitation": "Convite",
+        "reacceptance": "Reaceite"
+      },
+      "empty": "Nenhum aceite registrado.",
+      "links": "Documentos em vigor"
+    },
+    "whatsapp": {
+      "title": "Avisos por WhatsApp",
+      "description": "Um consentimento próprio, separado dos termos.",
+      "switch": "Receber avisos por WhatsApp",
+      "on": "Consentimento ativo",
+      "off": "Sem consentimento",
+      "grantedAt": "Dado em <date></date>, texto versão {version}.",
+      "withdrawnAt": "Cancelado em <date></date>. Nenhuma mensagem é enviada.",
+      "declinedAt": "Recusado em <date></date>. Nenhuma mensagem é enviada.",
+      "none": "Você ainda não deu este consentimento. Nenhuma mensagem é enviada.",
+      "note": "Ter consentido não liga nenhum aviso: você ainda escolhe o canal de cada aviso e confirma seu telefone.",
+      "saving": "Salvando"
+    },
+    "myData": {
+      "title": "Seus dados",
+      "description": "O que guardamos sobre a sua conta. Para corrigir nome e telefone, use o <profile>perfil</profile>; para outros dados, abra um chamado no <support>suporte</support>.",
+      "name": "Nome",
+      "email": "E-mail (identidade da conta, não muda)",
+      "phone": "Telefone",
+      "signIn": "Formas de entrar",
+      "methods": {
+        "password": "E-mail e senha",
+        "google": "Google"
+      },
+      "favorites": "Favoritos",
+      "savedFilters": "Filtros salvos",
+      "reminders": "Lembretes e alertas",
+      "notificationLogs": "Registros de avisos enviados",
+      "truncated": "{shown} de {total}: o arquivo de exportação traz tudo.",
+      "truncatedLabel": "Lista parcial",
+      "footnote": "Dados de um escritório (clientes, perfis, jornadas) pertencem ao escritório e não aparecem aqui nem na exportação."
+    },
+    "export": {
+      "title": "Exportar meus dados",
+      "description": "Portabilidade em arquivo estruturado.",
+      "intro": "Gere um arquivo com todos os seus dados em formato JSON. Ele fica disponível por 7 dias e depois é apagado. Normalmente fica pronto em poucos minutos, e em no máximo 15 dias.",
+      "request": "Pedir exportação",
+      "requesting": "Pedindo",
+      "queued": {
+        "title": "Preparando seu arquivo",
+        "text": "Pedido em <date></date>. Você pode sair desta página; o arquivo aparece aqui.",
+        "slow": "Está demorando mais que o normal. Você pode voltar mais tarde: o arquivo aparece aqui quando estiver pronto."
+      },
+      "ready": {
+        "title": "Arquivo pronto",
+        "text": "Disponível até <date></date>.",
+        "fileName": "dados-farol.json",
+        "download": "Baixar",
+        "downloading": "Baixando",
+        "linkNote": "O link de download vale 60 segundos; se vencer, baixe de novo por aqui."
+      },
+      "failed": {
+        "title": "Não foi possível gerar o arquivo",
+        "text": "Tente pedir de novo. Se continuar, fale com o suporte.",
+        "retry": "Pedir de novo"
+      },
+      "expired": {
+        "title": "Arquivo expirado",
+        "text": "Ficou disponível até <date></date> e foi apagado.",
+        "again": "Pedir nova exportação"
+      },
+      "downloadFailed": "Não foi possível abrir o arquivo."
+    },
+    "delete": {
+      "title": "Excluir minha conta",
+      "description": "Encerra a conta agora e apaga seus dados pessoais em até 30 dias.",
+      "consequences": {
+        "logout": "Você sai de todos os aparelhos agora e não consegue entrar de novo.",
+        "notifications": "Você não recebe mais nenhum aviso.",
+        "kept": "Guardamos só o que a lei manda (por exemplo, registros de cobrança) e o que pertence a um escritório.",
+        "irreversible": "Não dá para desfazer. O e-mail fica livre para um novo cadastro depois da exclusão dos dados."
+      },
+      "open": "Excluir minha conta",
+      "dialogTitle": "Excluir sua conta?",
+      "dialogText": "Isto encerra sua conta agora, para sempre. Seus dados pessoais são apagados em até 30 dias.",
+      "password": "Sua senha atual",
+      "wrongPassword": "Senha incorreta.",
+      "passwordRequired": "Digite a sua senha atual.",
+      "acknowledge": "Entendo que não dá para desfazer.",
+      "keep": "Manter minha conta",
+      "confirm": "Excluir minha conta",
+      "deleting": "Excluindo",
+      "googleText": "Sua conta entra só com o Google. Para confirmar que é você, entre com o Google de novo.",
+      "googleConfirmed": "Confirmado há instantes. Você já pode excluir.",
+      "googleExpired": "A confirmação do Google expirou. Confirme de novo.",
+      "unavailable": "Não há senha nem conta Google para confirmar a sua identidade. Fale com o suporte."
+    }
+  },
+  "accountClosed": {
+    "title": "Sua conta foi encerrada",
+    "text": "Você saiu de todos os aparelhos. Apagamos seus dados pessoais em até 30 dias, exceto o que a lei manda guardar. Não enviaremos mais nenhum aviso.",
+    "action": "Voltar ao início"
   }
 }

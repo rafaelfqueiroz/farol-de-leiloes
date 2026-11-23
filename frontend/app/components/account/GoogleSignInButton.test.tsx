@@ -26,4 +26,19 @@ describe('GoogleSignInButton', () => {
     expect(assign).toHaveBeenCalledWith('http://api.example.test/api/auth/google');
     Object.defineProperty(window, 'location', { value: original, writable: true });
   });
+
+  it('SPEC-010 BR-010-13: for a re-authentication it says so and starts the flow with intent=reauth', async () => {
+    const assign = vi.fn();
+    const original = window.location;
+    Object.defineProperty(window, 'location', { value: { ...original, assign }, writable: true });
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(<GoogleSignInButton intent="reauth" />);
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar com o Google' }));
+
+    expect(assign).toHaveBeenCalledWith('http://api.example.test/api/auth/google?intent=reauth');
+    expect(screen.queryByRole('button', { name: 'Entrar com Google' })).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+    Object.defineProperty(window, 'location', { value: original, writable: true });
+  });
 });

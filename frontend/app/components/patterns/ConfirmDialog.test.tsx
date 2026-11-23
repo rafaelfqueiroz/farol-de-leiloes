@@ -1,7 +1,9 @@
 import EventOutlined from '@mui/icons-material/EventOutlined';
 import InventoryOutlined from '@mui/icons-material/Inventory2Outlined';
+import TextField from '@mui/material/TextField';
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { axe, renderWithProviders } from '@/test/render';
 import ConfirmDialog from './ConfirmDialog';
@@ -186,5 +188,95 @@ describe('ConfirmDialog', () => {
     const dialog = screen.getByRole('alertdialog');
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Não foi possível cancelar.');
     expect(await axe(dialog)).toHaveNoViolations();
+  });
+
+  describe('the field variant (SPEC-010 BR-010-13)', () => {
+    function FieldDialog({
+      onConfirm = vi.fn(),
+      fieldError,
+      error,
+      busy = false,
+    }: {
+      onConfirm?: () => void;
+      fieldError?: string;
+      error?: string;
+      busy?: boolean;
+    }) {
+      const [password, setPassword] = useState('');
+      const [understood, setUnderstood] = useState(false);
+      return (
+        <ConfirmDialog
+          open
+          title="Excluir sua conta?"
+          description="Isto encerra sua conta agora, para sempre."
+          confirmLabel="Excluir minha conta"
+          cancelLabel="Manter minha conta"
+          busy={busy}
+          busyLabel="Excluindo"
+          error={error}
+          confirmDisabled={password === ''}
+          acknowledge={{
+            label: 'Entendo que não dá para desfazer.',
+            checked: understood,
+            onChange: setUnderstood,
+          }}
+          controls={
+            <TextField
+              label="Sua senha atual"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              error={fieldError !== undefined}
+              helperText={fieldError}
+            />
+          }
+          onConfirm={onConfirm}
+          onClose={() => undefined}
+        />
+      );
+    }
+
+    it.each(['light', 'dark'] as const)(
+      'keeps the field out of the description, labels it, and passes axe (%s)',
+      async (scheme) => {
+        renderWithProviders(<FieldDialog fieldError="Senha incorreta." />, { scheme });
+
+        const dialog = screen.getByRole('alertdialog', { name: 'Excluir sua conta?' });
+        expect(dialog).toHaveAccessibleDescription('Isto encerra sua conta agora, para sempre.');
+        const field = within(dialog).getByLabelText('Sua senha atual');
+        expect(field).toHaveAccessibleDescription('Senha incorreta.');
+        expect(field).toBeInvalid();
+        expect(await axe(dialog)).toHaveNoViolations();
+      },
+    );
+
+    it('enables the confirm button only with the field filled and the box ticked', async () => {
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      renderWithProviders(<FieldDialog onConfirm={onConfirm} />);
+      const confirm = screen.getByRole('button', { name: 'Excluir minha conta' });
+      expect(confirm).toBeDisabled();
+
+      await user.type(screen.getByLabelText('Sua senha atual'), 'segredo');
+      expect(confirm).toBeDisabled();
+      await user.click(screen.getByRole('checkbox', { name: 'Entendo que não dá para desfazer.' }));
+      expect(confirm).toBeEnabled();
+      await user.click(confirm);
+
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows a failed attempt as an alert between the field and the box, and locks everything while busy', () => {
+      const { rerender } = renderWithProviders(<FieldDialog error="Muitas tentativas." />);
+      expect(screen.getByRole('alert')).toHaveTextContent('Muitas tentativas.');
+
+      rerender(<FieldDialog busy />);
+      expect(screen.getByRole('checkbox')).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Excluindo' })).toHaveAttribute(
+        'aria-busy',
+        'true',
+      );
+      expect(screen.getByRole('button', { name: 'Manter minha conta' })).toBeDisabled();
+    });
   });
 });

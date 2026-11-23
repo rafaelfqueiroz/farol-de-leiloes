@@ -143,7 +143,13 @@ describe('AuthProvider session', () => {
     });
     const { result } = renderHook(() => useAuth(), { wrapper });
 
-    await act(() => result.current.register('a@b.com', 'secret1', 'A'));
+    await act(() =>
+      result.current.register('a@b.com', 'secret1', 'A', {
+        termsVersion: '0.2',
+        privacyVersion: '0.2',
+        whatsappConsent: false,
+      }),
+    );
 
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/register', {
       method: 'POST',
@@ -154,6 +160,9 @@ describe('AuthProvider session', () => {
         password: 'secret1',
         name: 'A',
         acceptTerms: true,
+        termsVersion: '0.2',
+        privacyVersion: '0.2',
+        whatsappConsent: false,
       }),
     });
     expect(window.localStorage.length).toBe(0);

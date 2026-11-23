@@ -15,13 +15,17 @@ import {
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthFormPage } from '@/app/components/patterns/PublicScreens';
+import InlineAlert from '@/app/components/patterns/InlineAlert';
 import GoogleSignInButton from '@/app/components/account/GoogleSignInButton';
 import TermsAcceptance from '@/app/components/account/TermsAcceptance';
+import { useCurrentLegal } from '@/app/components/account/use-current-legal';
 import { ApiError, useApiErrorMessage } from '@/lib/api-error';
-
-// The password length the form accepts
-const MIN_PASSWORD_LENGTH = 8; // SPEC-001 BR-001-13
-const MAX_PASSWORD_LENGTH = 128; // SPEC-001 BR-001-13
+import { LEGAL_PATHS, versionsOf } from '@/lib/legal';
+import {
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  registerFormErrors,
+} from '@/lib/forms/register-form';
 
 type FieldErrors = Partial<Record<'email' | 'password' | 'confirmPassword', string>>;
 
@@ -30,12 +34,19 @@ export default function RegisterPage() {
   const { register, loading: authLoading } = useAuth();
   const t = useTranslations('register');
   const tLogin = useTranslations('login');
+  const tTerms = useTranslations('account.terms');
+  const tAccount = useTranslations('account');
+  const { state: legal, reload: reloadLegal } = useCurrentLegal();
   const apiErrorMessage = useApiErrorMessage();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [accepted, setAccepted] = useState(false);
+  // BR-010-27: its own choice, unticked until the person ticks it
+  const [whatsapp, setWhatsapp] = useState(false);
+  // BR-010-01: a newer version was published while the form was open
+  const [documentsChanged, setDocumentsChanged] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [termsMissing, setTermsMissing] = useState(false);
@@ -46,29 +57,51 @@ export default function RegisterPage() {
     // BR-001-18: no registration while the first session lookup is pending (Enter in a field included)
     if (authLoading) return;
     setError('');
+    // the versions sent are the ones the form showed; without them nothing is sent (BR-010-01)
+    if (legal.status !== 'ready') return;
+    const problems = registerFormErrors({
+      name,
+      email,
+      password,
+      confirmPassword,
+      acceptTerms: accepted,
+      whatsappConsent: whatsapp,
+    });
     const invalid: FieldErrors = {};
-
-    if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    if (problems.password) {
       invalid.password = t('errors.passwordLength', {
         min: MIN_PASSWORD_LENGTH,
         max: MAX_PASSWORD_LENGTH,
       });
     }
-    if (password !== confirmPassword) {
-      invalid.confirmPassword = t('errors.passwordMismatch');
-    }
+    if (problems.confirmPassword) invalid.confirmPassword = t('errors.passwordMismatch');
     // BR-001-02: the acceptance blocks the submit on the client; the API refuses it as well
-    setTermsMissing(!accepted);
+    setTermsMissing(problems.acceptTerms !== undefined);
     setFieldErrors(invalid);
-    if (!accepted || Object.keys(invalid).length > 0) return;
+    if (
+      problems.name ||
+      problems.email ||
+      problems.acceptTerms ||
+      Object.keys(invalid).length > 0
+    ) {
+      return;
+    }
 
     setLoading(true);
 
     try {
-      await register(email, password, name);
+      await register(email, password, name, {
+        ...versionsOf(legal.legal),
+        whatsappConsent: whatsapp,
+      });
       router.push('/verify-email');
     } catch (err: unknown) {
-      if (err instanceof ApiError && err.code === 'EMAIL_ALREADY_REGISTERED') {
+      if (err instanceof ApiError && err.code === 'TERMS_VERSION_OUTDATED') {
+        // nothing was created: read the new documents and accept again
+        setDocumentsChanged(true);
+        setAccepted(false);
+        reloadLegal();
+      } else if (err instanceof ApiError && err.code === 'EMAIL_ALREADY_REGISTERED') {
         // frame 1.2: the error sits under the E-mail field
         setFieldErrors({ email: apiErrorMessage(err) });
       } else {
@@ -84,6 +117,26 @@ export default function RegisterPage() {
       {error && <Alert severity="error">{error}</Alert>}
 
       <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+        {documentsChanged && (
+          <InlineAlert
+            severity="warning"
+            role="status"
+            title={tTerms('changed.title')}
+            action={
+              <Button
+                variant="outlined"
+                component="a"
+                href={LEGAL_PATHS.terms}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {tTerms('changed.action')}
+              </Button>
+            }
+          >
+            {tTerms('changed.register')}
+          </InlineAlert>
+        )}
         <TextField
           fullWidth
           label={t('name')}
@@ -141,6 +194,10 @@ export default function RegisterPage() {
             if (checked) setTermsMissing(false);
           }}
           error={termsMissing}
+          whatsapp={whatsapp}
+          onWhatsappChange={setWhatsapp}
+          legal={legal}
+          onRetryLegal={reloadLegal}
         />
 
         <Button
@@ -148,7 +205,7 @@ export default function RegisterPage() {
           size="large"
           variant="contained"
           type="submit"
-          disabled={loading || authLoading}
+          disabled={loading || authLoading || legal.status !== 'ready'}
         >
           {loading ? t('submitting') : t('submit')}
         </Button>
@@ -161,6 +218,9 @@ export default function RegisterPage() {
       </Divider>
 
       <GoogleSignInButton />
+      <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+        {tAccount('googleSignUpNote')}
+      </Typography>
 
       <Typography variant="body2" sx={{ textAlign: 'center' }}>
         <MuiLink component={Link} href="/login" variant="subtitle2">
