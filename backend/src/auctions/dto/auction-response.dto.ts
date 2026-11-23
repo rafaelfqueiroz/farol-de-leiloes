@@ -88,6 +88,13 @@ export class AuctionResponseDto {
   @ApiProperty({ type: () => AuctionPhaseDto, nullable: true })
   currentPhase: AuctionPhaseDto | null;
 
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Property type (e.g. Casa); null = not known yet',
+  })
+  propertyType: string | null;
+
   @ApiProperty({ type: String, nullable: true })
   detailsUrl: string | null;
 
@@ -119,6 +126,7 @@ export class AuctionResponseDto {
     this.appraisalPrice = moneyToJson(auction.appraisalPrice);
     this.phases = auction.phases.map((phase) => new AuctionPhaseDto(phase));
     this.currentPhase = auction.currentPhase ? new AuctionPhaseDto(auction.currentPhase) : null;
+    this.propertyType = auction.propertyType;
     this.detailsUrl = auction.detailsUrl;
     this.imageUrl = auction.imageUrl;
     this.matriculaUrl = auction.matriculaUrl;

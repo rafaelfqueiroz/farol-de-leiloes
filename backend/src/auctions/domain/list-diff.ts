@@ -57,6 +57,8 @@ export interface RowUpdate {
   changed: boolean;
   /** Back from unavailable (BR-004-09). */
   returned: boolean;
+  /** The stored property's phase count, to keep its last phase's price in step with the list's. */
+  phaseCount: number;
   /** Only the fields that differ. */
   fields: Partial<ListFields>;
   /** The list price, when it differs and the modality did not change. */
@@ -165,7 +167,14 @@ export function diffListRow(existing: StoredListState | null, row: ListRow): Row
     fields.propertyType = row.propertyType;
   }
 
-  const update: RowUpdate = { kind: 'update', entries, changed, returned, fields };
+  const update: RowUpdate = {
+    kind: 'update',
+    entries,
+    changed,
+    returned,
+    phaseCount: existing.phaseCount,
+    fields,
+  };
 
   if (row.modality !== null) {
     if (existing.modality !== row.modality) {

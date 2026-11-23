@@ -6,15 +6,11 @@ import { MongooseModule, getModelToken } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { AuctionEntity, AuctionSchema } from '../../src/auctions/schemas/auction.schema.js';
-import {
-  missingFromListFilter,
-  unfulfilledWithDetailsFilter,
-} from '../../src/auctions/utils/job-queries.js';
+import { unfulfilledWithDetailsFilter } from '../../src/auctions/utils/job-queries.js';
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
 import { useTestDatabase } from '../support/test-database.js';
 
 const URL_OF = (code: string) => `https://caixa.test/detalhe/${code}`;
-const CUTOFF = new Date('2026-01-14T12:00:00.000Z');
 
 describe('scheduled job filters (integration, sanitizeFilter on)', () => {
   const db = useTestDatabase();
@@ -43,30 +39,6 @@ describe('scheduled job filters (integration, sanitizeFilter on)', () => {
   async function seed(code: string, fields: Record<string, unknown>) {
     await auctions.collection.insertOne({ code, detailsUrl: URL_OF(code), ...fields });
   }
-
-  describe('missingFromListFilter', () => {
-    it('selects fulfilled, available auctions outside the list never checked or checked before the cutoff', async () => {
-      await seed('NEVER', { fulfilled: true, available: true });
-      await seed('STALE', {
-        fulfilled: true,
-        available: true,
-        availabilityCheckedAt: new Date('2026-01-13T00:00:00.000Z'),
-      });
-      await seed('FRESH', {
-        fulfilled: true,
-        available: true,
-        availabilityCheckedAt: new Date('2026-01-15T00:00:00.000Z'),
-      });
-      await seed('IN-LIST', { fulfilled: true, available: true });
-      await seed('NOT-FULFILLED', { fulfilled: false, available: true });
-      await seed('UNAVAILABLE', { fulfilled: true, available: false });
-      await seed('NO-URL', { fulfilled: true, available: true, detailsUrl: null });
-
-      const found = await auctions.find(missingFromListFilter(['IN-LIST'], CUTOFF)).lean();
-
-      expect(found.map((a) => a.code).sort()).toEqual(['NEVER', 'STALE']);
-    });
-  });
 
   describe('unfulfilledWithDetailsFilter', () => {
     it('selects auctions with a details page whose fulfilled flag is false or missing', async () => {

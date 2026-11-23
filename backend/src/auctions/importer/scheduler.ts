@@ -2,14 +2,18 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { captureException } from '@sentry/nestjs';
 import { AuctionsService } from '../auctions.service.js';
-import { normalizeRows, parseCsv } from './parser.js';
-import { PhaseModality } from '../schemas/auction.schema.js';
-import type { Phase } from '../interfaces/auction.interface.js';
+import { normalizeRows, listFacts, parseCaixaList, type ParsedList } from './parser.js';
+import { toListRows } from './list-rows.js';
+import { ListApplier } from './list-applier.service.js';
+import { validateList, type ListVerdict } from '../domain/list-validator.js';
+import { ImportRunService } from '../import-runs/import-run.service.js';
+import { Clock } from '../../common/clock/clock.js';
+import businessConfig, { type BusinessConfig } from '../../config/business.config.js';
 import { JobExecutionService } from '../../common/services/job-execution.service.js';
 import { RunMode } from '../../common/job-execution.js';
 import { CsvCacheService } from './csv-cache.service.js';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config.js';
-import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time.js';
+import { BRASILIA_TIME_ZONE, brasiliaToday } from '../../common/clock/brasilia-time.js';
 import { InJobContext, runInJobContext } from '../../common/observability/job-context.js';
 import { jobErrorCode } from '../../common/services/job-error-code.js';
 import { AUCTIONS_IMPORT_JOB } from './import-job.js';
@@ -28,6 +32,10 @@ export class AuctionsImporter {
     private readonly csvCacheService: CsvCacheService,
     @Inject(schedulerConfig.KEY)
     private readonly config: SchedulerConfig,
+    private readonly importRuns: ImportRunService,
+    private readonly applier: ListApplier,
+    private readonly clock: Clock, // AR-24
+    @Inject(businessConfig.KEY) private readonly business: BusinessConfig,
   ) {}
 
   // Run on startup only if IMPORT_ON_START_UP=true
@@ -82,125 +90,110 @@ export class AuctionsImporter {
     await this.runImport(RunMode.AUTO);
   }
 
+  /**
+   * SPEC-004 part 2, single attempt: download, parse, validate against the last applied list,
+   * apply, record the Import Run of the Brasília day (BR-004-27). A list that is rejected, or not
+   * newer than the last applied one, is recorded and applies NOTHING (BR-004-10); a failure is
+   * recorded with a stable code, never the message (SC-15). The window, cutoff, retries and alerts
+   * of the run are part 3.
+   */
   private async runImport(runMode: RunMode) {
     this.logger.log(`Starting auctions import (${runMode} mode)`);
+    const today = brasiliaToday(this.clock); // AR-23, AR-24
+    let runId: string | null = null;
     try {
+      if ((await this.importRuns.findByDate(today))?.outcome === 'SUCCESS') {
+        this.logger.log('Today is already imported (an Import Run succeeded); nothing to do');
+        return;
+      }
+
       const csv = await this.csvCacheService.resolveCsv();
-      const parsed = parseCsv(csv);
-      const normalizedRows = normalizeRows(parsed);
-      this.logger.log(`Normalized rows: ${normalizedRows.length}`);
-
-      const skippedNoModality = 0;
-      let skippedUnknownModality = 0;
-
-      const normalized = normalizedRows.map((n) => {
-        const phases: Phase[] = [];
-
-        // Convert modality to phase
-        if (n.modality) {
-          const phaseModality = this.mapModalityToPhase(n.modality);
-          if (phaseModality) {
-            phases.push({
-              modality: phaseModality,
-              minimumPrice: n.minimumPrice ?? null,
-              phaseDates: [], // Dates are scraped from the details page
-            });
-          } else {
-            skippedUnknownModality++;
-            this.logger.debug(`Unknown modality: "${n.modality}" for code: ${n.code}`);
-          }
-        }
-
-        return {
-          code: n.code,
-          title: n.title,
-          address: {
-            street: n.street,
-            neighborhood: n.neighborhood,
-            city: n.city,
-            state: n.state,
-          },
-          appraisalPrice: n.appraisalPrice ?? undefined,
-          phases,
-          detailsUrl: n.detailsUrl ?? undefined,
-        };
-      });
-
-      this.logger.log(`Prepared ${normalized.length} items for upsert`);
-      this.logger.log(`Items without modality: ${skippedNoModality}`);
-      this.logger.log(`Items with unknown modality: ${skippedUnknownModality}`);
-
-      const withPhases = normalized.filter((n) => n.phases.length > 0);
-      const withoutPhases = normalized.filter((n) => n.phases.length === 0);
-      this.logger.log(
-        `Items with phases: ${withPhases.length}, without phases: ${withoutPhases.length}`,
+      const list = parseCaixaList(csv);
+      const verdict = validateList(
+        listFacts(list),
+        await this.importRuns.lastAppliedList(),
+        this.business.import.minRowRatio,
       );
+      if (verdict.kind !== 'valid') {
+        await this.recordNotApplied(runMode, today, list, verdict);
+        return;
+      }
+      // A valid verdict has a generation date (validateList rejects a list without one).
+      const generatedOn = list.generatedOn ?? today;
 
-      const res = await this.auctions.upsertMany(normalized);
+      const run = await this.importRuns.begin(today, { generatedOn, rows: list.rows.length });
+      if (run === null) {
+        this.logger.log('Today is already imported (an Import Run succeeded); nothing to do');
+        return;
+      }
+      runId = run.id;
+
+      const { rows, withoutCode, unknownModality } = toListRows(normalizeRows(list.rows));
       this.logger.log(
-        `Import result - matched: ${res.matched}, upserted: ${res.upserted}, modified: ${res.modified}`,
+        `List rows: ${list.rows.length}, without a property number: ${withoutCode}, unknown modality: ${unknownModality}`,
       );
-      this.logger.log(`Auctions import completed.`);
-
-      // Auctions present in the CSV are available again (e.g. previously marked unavailable)
-      const csvCodes = normalized.map((n) => n.code).filter(Boolean) as string[];
-      if (csvCodes.length > 0) {
-        const markedAvailable = await this.auctions.markAvailable(csvCodes);
-        this.logger.log(`Availability restore - marked available: ${markedAvailable}`);
-      }
-
-      // Verify availability of auctions not present in the CSV
-      if (csvCodes.length > 0) {
-        const availabilityResult = await this.auctions.verifyAvailability(csvCodes);
-        this.logger.log(
-          `Availability check - checked: ${availabilityResult.checked}, unavailable: ${availabilityResult.unavailable}, errors: ${availabilityResult.errors}`,
-        );
-      } else {
-        this.logger.warn('Skipping availability check — CSV returned no auction codes');
-      }
+      const counts = await this.applier.apply({ runId, rows });
+      await this.importRuns.markSuccess(runId, counts);
 
       // Invalidate neighborhoods cache after import
       await this.auctions.invalidateNeighborhoodsCache();
       this.logger.log(`Neighborhoods cache invalidated`);
 
-      // Record execution in database
+      // Record execution in database (GET /api/health, AR-48)
       await this.jobExecutionService.recordExecution(this.jobName, runMode);
-      this.logger.log(`Execution recorded in database`);
+      this.logger.log(`Auctions import completed (run recorded)`);
     } catch (e) {
       // SC-15: the stable code, never the message (it may quote a URL or a value).
       this.logger.error(`Failed import: ${jobErrorCode(e)}`);
       // AR-47: cron and startup runs alike; the scrubber drops the message from the event.
       captureException(e, { tags: { jobName: this.jobName } });
-      await this.recordFailure(runMode, e);
+      await this.recordFailure(runMode, e, today, runId);
       throw e;
     }
   }
 
+  /** BR-004-10: the list is not applied; the day's run says why, by code (SC-15). */
+  private async recordNotApplied(
+    runMode: RunMode,
+    today: string,
+    list: ParsedList,
+    verdict: Exclude<ListVerdict, { kind: 'valid' }>,
+  ): Promise<void> {
+    const rejected = verdict.kind === 'rejected';
+    const code = rejected ? verdict.reason : 'NO_NEW_LIST';
+    await this.importRuns.recordWithoutApply(
+      today,
+      rejected ? 'REJECTED_LIST' : 'NO_NEW_LIST',
+      code,
+      { generatedOn: list.generatedOn, rows: list.rows.length },
+    );
+    this.logger.warn(`List not applied: ${rejected ? 'REJECTED_LIST' : 'NO_NEW_LIST'} ${code}`);
+    await this.jobExecutionService.recordFailure(
+      this.jobName,
+      runMode,
+      rejected ? 'LIST_REJECTED' : 'NO_NEW_LIST',
+    );
+  }
+
   /** AR-03: a failed run is recorded too (GET /api/health reports it, AR-48). */
-  private async recordFailure(runMode: RunMode, error: unknown): Promise<void> {
+  private async recordFailure(
+    runMode: RunMode,
+    error: unknown,
+    today: string,
+    runId: string | null,
+  ): Promise<void> {
+    const code = jobErrorCode(error);
     try {
-      await this.jobExecutionService.recordFailure(this.jobName, runMode, jobErrorCode(error));
+      try {
+        if (runId !== null) await this.importRuns.markFailed(runId, code);
+        else await this.importRuns.recordWithoutApply(today, 'FAILED', code);
+      } finally {
+        // The health report reads this one, whatever happened to the Import Run row.
+        await this.jobExecutionService.recordFailure(this.jobName, runMode, code);
+      }
     } catch (recordError) {
       // The original failure is what the caller must see; this one is only logged.
       this.logger.error(`Could not record the failed import: ${jobErrorCode(recordError)}`);
     }
-  }
-
-  private mapModalityToPhase(modality: string): PhaseModality | null {
-    const normalized = modality.toUpperCase();
-    if (
-      normalized.includes('SFI') ||
-      normalized.includes('EDITAL ÚNICO') ||
-      normalized.includes('EDITAL UNICO') ||
-      normalized.includes('LEILÃO') ||
-      normalized.includes('LEILAO')
-    )
-      return PhaseModality.SFI_AUCTION;
-    if (normalized.includes('LICITACAO') || normalized.includes('LICITAÇÃO'))
-      return PhaseModality.OPEN_BIDDING;
-    if (normalized.includes('VENDA DIRETA') || normalized.includes('VENDA DIRETA ONLINE'))
-      return PhaseModality.DIRECT_ONLINE_SALES;
-    if (normalized.includes('VENDA ONLINE')) return PhaseModality.ONLINE_SALES;
-    return null;
   }
 }

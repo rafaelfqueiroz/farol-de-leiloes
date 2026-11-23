@@ -3,37 +3,22 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { AnyBulkWriteOperation, isObjectIdOrHexString, Model } from 'mongoose';
-import { subHours } from 'date-fns';
-import { AuctionEntity, AuctionDocument, Address } from './schemas/auction.schema.js';
-import { Auction, AuctionRecord, Phase } from './interfaces/auction.interface.js';
-import { toAuction, toStoredPhase } from './auction.mapper.js';
-import { isAuctionActive } from './utils/auction-filters.js';
-import { fetchAndCheckAvailability } from './scraper/details-scraper.js';
+import { isObjectIdOrHexString, Model } from 'mongoose';
+import { AuctionEntity, AuctionDocument } from './schemas/auction.schema.js';
+import { Auction, AuctionRecord } from './interfaces/auction.interface.js';
+import { toAuction } from './auction.mapper.js';
+import { activeAuctionFilter } from './utils/auction-filters.js';
 import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config.js';
-import { errorMessage } from '../common/error-message.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { decimalFilter, serverOperators } from '../common/mongo/query-safety.js';
-import { missingFromListFilter } from './utils/job-queries.js';
 import { Clock } from '../common/clock/clock.js';
 import type { Decimal } from '../common/money/money.js';
-import { toDecimal128OrNull } from '../common/money/decimal128.js';
 import {
   type PageRequest,
   type Paginated,
   paginated,
   skipOf,
 } from '../common/pagination/paginated.js';
-
-export interface AuctionUpsert {
-  code?: string;
-  title?: string;
-  address?: Address;
-  /** Reais (AR-17). */
-  appraisalPrice?: Decimal;
-  phases?: Phase[];
-  detailsUrl?: string;
-}
 
 export interface QueryFilters {
   state?: string;
@@ -46,10 +31,6 @@ export interface QueryFilters {
 }
 
 const NEIGHBORHOODS_CACHE_PREFIX = 'neighborhoods';
-
-// The fields upsertMany writes. Partial because the schema defaults fill `fulfilled` and
-// `available` on insert; createdAt is set by hand alongside the schema's own timestamp.
-type AuctionWrite = Partial<AuctionEntity> & { createdAt?: Date };
 
 @Injectable()
 export class AuctionsService {
@@ -66,141 +47,10 @@ export class AuctionsService {
     this.cacheEnabled = config?.cache.neighborhoodsEnabled ?? false;
   }
 
-  async upsertMany(items: AuctionUpsert[]) {
-    this.logger.log(`[upsertMany] Received ${items.length} items`);
-    if (!items.length) return { matched: 0, upserted: 0, modified: 0 };
-
-    // Step 1: Fetch all existing auctions in ONE query
-    const codes = items.map((item) => item.code).filter(Boolean) as string[];
-    this.logger.log(`[upsertMany] Valid codes: ${codes.length}`);
-
-    const existing = await this.auctionRepository
-      .find({ code: serverOperators({ $in: codes }) })
-      .select('code phases')
-      .lean();
-    this.logger.log(`[upsertMany] Found ${existing.length} existing auctions in DB`);
-
-    const existingMap = new Map(existing.map((doc) => [doc.code, doc]));
-    // AR-24: one instant for the whole import, from the injected clock.
-    const now = this.clock.now();
-
-    // Step 2: Build bulk operations
-    const ops: AnyBulkWriteOperation<AuctionWrite>[] = [];
-    let skippedNoCode = 0;
-    let skippedNoPhases = 0;
-    let skippedSameModality = 0;
-    let insertOps = 0;
-    let updateOps = 0;
-
-    for (const item of items) {
-      // Code is always present (from CSV or extracted from URL)
-      if (!item.code) {
-        skippedNoCode++;
-        continue;
-      }
-
-      const code = item.code;
-      const newPhases = item.phases ?? [];
-
-      // Skip if no phases provided
-      if (newPhases.length === 0) {
-        skippedNoPhases++;
-        continue;
-      }
-
-      const [newPhase] = newPhases; // CSV imports have single phase
-      // Unreachable: the empty case was skipped above. Narrows the type (DV-03).
-      if (!newPhase) continue;
-      const existingDoc = existingMap.get(code);
-
-      if (!existingDoc) {
-        // INSERT: New auction
-        insertOps++;
-        ops.push({
-          insertOne: {
-            document: {
-              code,
-              title: item.title ?? null,
-              address: item.address ?? {},
-              // AR-17: every price is written as Decimal128.
-              appraisalPrice: toDecimal128OrNull(item.appraisalPrice),
-              phases: newPhases.map(toStoredPhase),
-              currentPhase: toStoredPhase(newPhase),
-              detailsUrl: item.detailsUrl ?? null,
-              createdAt: now,
-              updatedAt: now,
-            },
-          },
-        });
-      } else {
-        // UPDATE: Existing auction
-        const existingPhases = existingDoc.phases ?? [];
-        const lastPhase = existingPhases[existingPhases.length - 1];
-
-        // Only add phase if modality is different
-        if (lastPhase?.modality !== newPhase.modality) {
-          updateOps++;
-          // The phases already stored are written back as read: Decimal128 already (AR-17).
-          const updatedPhases = [...existingPhases, ...newPhases.map(toStoredPhase)];
-          ops.push({
-            updateOne: {
-              filter: { code },
-              update: {
-                $set: {
-                  phases: updatedPhases,
-                  currentPhase: toStoredPhase(newPhase),
-                  updatedAt: now,
-                },
-              },
-            },
-          });
-        } else {
-          skippedSameModality++;
-        }
-      }
-    }
-
-    this.logger.log(
-      `[upsertMany] Skipped - no code: ${skippedNoCode}, no phases: ${skippedNoPhases}, same modality: ${skippedSameModality}`,
-    );
-    this.logger.log(
-      `[upsertMany] Operations - inserts: ${insertOps}, updates: ${updateOps}, total: ${ops.length}`,
-    );
-
-    if (ops.length === 0) {
-      this.logger.log(`[upsertMany] No operations to execute`);
-      return { matched: 0, upserted: 0, modified: 0 };
-    }
-
-    const res = await this.auctionRepository.bulkWrite(ops, { ordered: false });
-    this.logger.log(
-      `[upsertMany] BulkWrite result - matched: ${res.matchedCount}, upserted: ${res.upsertedCount}, modified: ${res.modifiedCount}`,
-    );
-    return {
-      matched: res.matchedCount,
-      upserted: res.upsertedCount,
-      modified: res.modifiedCount,
-    };
-  }
-
-  /**
-   * Mark auctions present in the imported CSV as available.
-   * Restores auctions previously marked unavailable that reappear in the CSV.
-   */
-  async markAvailable(codes: string[]): Promise<number> {
-    if (!codes.length) return 0;
-    const result = await this.auctionRepository.updateMany(
-      { code: serverOperators({ $in: codes }), available: serverOperators({ $ne: true }) },
-      { $set: { available: true, updatedAt: this.clock.now() } },
-    );
-    return result.modifiedCount;
-  }
-
   /** AR-35: one page of the matching active auctions, newest update first. */
   async query(filters: QueryFilters, page: PageRequest): Promise<Paginated<Auction>> {
-    // Build query using currentPhase denormalized field
-    // Filter active auctions: available AND (ONLINE_SALES OR has future date)
-    const query: Record<string, unknown> = this.buildActiveAuctionFilter();
+    // BR-004-16: active = available and not past its last round, evaluated now (the one predicate).
+    const query: Record<string, unknown> = activeAuctionFilter(this.clock.now()); // AR-24
 
     // SC-10: the DTO validates the filters (AR-34), and this builder does not rely on it. Every
     // value is checked to be a string or a finite Decimal before it reaches the query, so a request
@@ -283,23 +133,18 @@ export class AuctionsService {
   }
 
   /**
-   * The codes among `codes` whose auction is active (isAuctionActive). Reads only the fields the
-   * check needs, so a caller can count and page a large set before loading whole auctions.
+   * The codes among `codes` whose auction is active (BR-004-16): the same predicate search uses
+   * (`activeAuctionFilter`), asked of the database, so a caller can count and page a large set
+   * before loading whole auctions.
    */
   async findActiveCodes(codes: string[]): Promise<Set<string>> {
     if (!codes.length) return new Set();
     const docs = await this.auctionRepository
-      .find({ code: serverOperators({ $in: codes }), available: true })
-      .select('code phases currentPhase available updatedAt')
+      .find({ code: serverOperators({ $in: codes }), ...activeAuctionFilter(this.clock.now()) }) // AR-24
+      .select('code')
       .lean()
       .exec();
-    const now = this.clock.now(); // AR-24
-    return new Set(
-      docs
-        .map((doc) => toAuction(doc))
-        .filter((auction) => isAuctionActive(auction, now))
-        .map((auction) => auction.code),
-    );
+    return new Set(docs.map((doc) => doc.code));
   }
 
   async findDocumentByCode(code: string): Promise<AuctionDocument | null> {
@@ -321,7 +166,7 @@ export class AuctionsService {
    */
   async getAllCodes(): Promise<{ code: string; updatedAt: Date }[]> {
     const docs = await this.auctionRepository
-      .find(this.buildActiveAuctionFilter())
+      .find(activeAuctionFilter(this.clock.now()))
       .select('code updatedAt')
       .sort({ updatedAt: -1 })
       .lean()
@@ -339,16 +184,6 @@ export class AuctionsService {
    */
   toAuction(record: AuctionRecord): Auction {
     return toAuction(record);
-  }
-
-  /**
-   * Builds the MongoDB query filter for active auctions.
-   * An auction is active if available is true.
-   */
-  private buildActiveAuctionFilter(): Record<string, unknown> {
-    return {
-      available: true,
-    };
   }
 
   /**
@@ -374,7 +209,7 @@ export class AuctionsService {
 
     // Build match stage, excluding inactive auctions
     const matchStage: Record<string, unknown> = {
-      ...this.buildActiveAuctionFilter(),
+      ...activeAuctionFilter(this.clock.now()),
       'address.state': state.toUpperCase(),
       'address.neighborhood': { $exists: true, $nin: [null, ''] },
     };
@@ -410,102 +245,6 @@ export class AuctionsService {
     }
 
     return neighborhoods;
-  }
-
-  /**
-   * Checks availability of fulfilled auctions whose codes are not in the CSV.
-   * Fetches each auction's details page and marks as unavailable if Caixa confirms it.
-   */
-  async verifyAvailability(
-    csvCodes: string[],
-  ): Promise<{ checked: number; unavailable: number; errors: number }> {
-    const cutoff = subHours(this.clock.now(), 24); // AR-24
-    const missingAuctions = await this.auctionRepository
-      .find(missingFromListFilter(csvCodes, cutoff))
-      .select('code detailsUrl')
-      .sort({ availabilityCheckedAt: 1 })
-      .limit(1000)
-      .lean();
-
-    this.logger.log(
-      `[verifyAvailability] Found ${missingAuctions.length} auctions not in CSV to check (max 1000)`,
-    );
-
-    if (missingAuctions.length === 0) {
-      return { checked: 0, unavailable: 0, errors: 0 };
-    }
-
-    const batchSize = 15;
-    const concurrency = 3;
-    const delayBetweenGroups = 1000;
-    let unavailableCount = 0;
-    let errorCount = 0;
-
-    const totalBatches = Math.ceil(missingAuctions.length / batchSize);
-
-    for (let i = 0; i < missingAuctions.length; i += batchSize) {
-      const batch = missingAuctions.slice(i, i + batchSize);
-      this.logger.log(
-        `[verifyAvailability] Processing batch ${Math.floor(i / batchSize) + 1}/${totalBatches}`,
-      );
-
-      for (let j = 0; j < batch.length; j += concurrency) {
-        const group = batch.slice(j, j + concurrency);
-        const results = await Promise.allSettled(
-          group.map(async (auction) => {
-            let available: boolean;
-            try {
-              // The query only selects auctions with a detailsUrl; a missing one fails like a
-              // failed fetch (DV-03).
-              if (!auction.detailsUrl) throw new Error('auction has no details URL');
-              available = await fetchAndCheckAvailability(auction.detailsUrl);
-            } catch (error) {
-              this.logger.error(
-                `[verifyAvailability] Auction ${auction.code} fetch failed for ${auction.detailsUrl}: ${error instanceof Error ? error.message : error}`,
-              );
-              throw error;
-            }
-            if (!available) {
-              await this.auctionRepository.updateOne(
-                { code: auction.code },
-                {
-                  $set: {
-                    available: false,
-                    availabilityCheckedAt: this.clock.now(),
-                    updatedAt: this.clock.now(),
-                  },
-                },
-              );
-              this.logger.debug(
-                `[verifyAvailability] Auction ${auction.code} marked as unavailable`,
-              );
-              return false;
-            }
-            await this.auctionRepository.updateOne(
-              { code: auction.code },
-              { $set: { availabilityCheckedAt: this.clock.now() } },
-            );
-            this.logger.debug(`[verifyAvailability] Auction ${auction.code} still available`);
-            return true;
-          }),
-        );
-
-        for (const [k, result] of results.entries()) {
-          if (result.status === 'fulfilled') {
-            if (!result.value) unavailableCount++;
-          } else {
-            errorCount++;
-            this.logger.error(
-              `[verifyAvailability] Error checking ${group[k]?.code}: ${errorMessage(result.reason)}`,
-            );
-          }
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, delayBetweenGroups));
-      }
-    }
-
-    return { checked: missingAuctions.length, unavailable: unavailableCount, errors: errorCount };
   }
 
   /**

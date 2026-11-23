@@ -8,20 +8,6 @@ import { serverOperators } from '../../common/mongo/query-safety.js';
  * `test/integration/job-queries.spec.ts` runs them against MongoDB under that setting.
  */
 
-/** Fulfilled, available auctions outside today's list not checked since `cutoff` (BR-004-12). */
-export function missingFromListFilter(csvCodes: readonly string[], cutoff: Date) {
-  return {
-    fulfilled: true,
-    available: true,
-    detailsUrl: serverOperators({ $exists: true, $ne: null }),
-    code: serverOperators({ $nin: [...csvCodes] }),
-    $or: [
-      { availabilityCheckedAt: serverOperators({ $exists: false }) },
-      { availabilityCheckedAt: serverOperators({ $lt: cutoff }) },
-    ],
-  };
-}
-
 /** Auctions with a details page that has not been scraped yet. */
 export function unfulfilledWithDetailsFilter() {
   return {

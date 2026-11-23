@@ -10,7 +10,8 @@
 // field, and the enums would start being validated against documents the importer wrote years
 // ago. That is a schema change of its own, not part of #34's money contract step (AR-28).
 import { fromDecimal128OrNull, toDecimal128OrNull } from '../common/money/decimal128.js';
-import type { StoredPhase } from './schemas/auction.schema.js';
+import type { Round } from './domain/rounds.js';
+import type { StoredPhase, StoredRound } from './schemas/auction.schema.js';
 import type { Auction, AuctionRecord, Phase } from './interfaces/auction.interface.js';
 
 /** A stored phase in code: its price as a Decimal. */
@@ -37,6 +38,24 @@ export function toStoredPhase(phase: Phase): StoredPhase {
   return stored;
 }
 
+/** A stored round in code: its price as a Decimal (AR-17); an absent date is open-ended. */
+export function fromStoredRound(stored: StoredRound): Round {
+  return {
+    label: stored.label,
+    minimumPrice: fromDecimal128OrNull(stored.minimumPrice),
+    date: stored.date ?? null,
+  };
+}
+
+/** AR-17: a round as written, its price as Decimal128. */
+export function toStoredRound(round: Round): StoredRound {
+  return {
+    label: round.label,
+    minimumPrice: toDecimal128OrNull(round.minimumPrice),
+    date: round.date,
+  };
+}
+
 /** The `Auction` of a stored record, lean or hydrated. */
 export function toAuction(doc: AuctionRecord): Auction {
   const phases = (doc.phases ?? []).map(fromStoredPhase);
@@ -54,6 +73,11 @@ export function toAuction(doc: AuctionRecord): Auction {
     currentPhase: doc.currentPhase
       ? fromStoredPhase(doc.currentPhase)
       : (phases[phases.length - 1] ?? null),
+    propertyType: doc.propertyType ?? null,
+    rounds: (doc.rounds ?? []).map(fromStoredRound),
+    occupancy: doc.occupancy ?? null,
+    listSeenAt: doc.listSeenAt ?? null,
+    detailsCollectedAt: doc.detailsCollectedAt ?? null,
     detailsUrl: doc.detailsUrl ?? null,
     imageUrl,
     matriculaUrl,

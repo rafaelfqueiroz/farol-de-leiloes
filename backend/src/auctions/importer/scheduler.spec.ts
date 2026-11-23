@@ -6,6 +6,7 @@ import { captureException } from '@sentry/nestjs';
 import { logContextFields } from '../../common/observability/log-context.js';
 import { AuctionsImporter, STARTUP_IMPORT_DELAY_MS } from './scheduler.js';
 import { AUCTIONS_IMPORT_JOB } from './import-job.js';
+import { FakeClock } from '../../../test/fakes/fake-clock.js';
 
 // TS-03: the Sentry SDK has no port of ours; vi.mock observes what the job reports. Nothing is sent
 // either way (TS-07): Sentry is never initialised in tests.
@@ -31,13 +32,21 @@ function build({ onStartup = false, recordFails = false } = {}) {
     // A message that must never be recorded (SC-15): only the class name is.
     resolveCsv: vi.fn().mockRejectedValue(new DownloadError('Failed to download CSV: 403 for x')),
   };
+  const importRuns = {
+    findByDate: vi.fn().mockResolvedValue(null),
+    recordWithoutApply: vi.fn().mockResolvedValue(null),
+  };
   const importer = new AuctionsImporter(
     {} as Deps[0],
     jobExecutions as unknown as Deps[1],
     csvCache as unknown as Deps[2],
     { import: { enabled: true, onStartup } } as Deps[3],
+    importRuns as unknown as Deps[4],
+    {} as Deps[5],
+    new FakeClock(new Date('2026-01-15T12:00:00.000Z')),
+    { import: { minRowRatio: 0.8 } } as Deps[7],
   );
-  return { importer, jobExecutions, contexts };
+  return { importer, jobExecutions, importRuns, contexts };
 }
 
 describe('AuctionsImporter', () => {
@@ -50,9 +59,16 @@ describe('AuctionsImporter', () => {
   });
 
   it('records a failed scheduled run as FAILED with the error class, and rethrows', async () => {
-    const { importer, jobExecutions, contexts } = build();
+    const { importer, jobExecutions, importRuns, contexts } = build();
 
     await expect(importer.dailyJob()).rejects.toBeInstanceOf(DownloadError);
+
+    // BR-004-27: the day's Import Run says FAILED too, with the same stable code (SC-15).
+    expect(importRuns.recordWithoutApply).toHaveBeenCalledWith(
+      '2026-01-15',
+      'FAILED',
+      'DownloadError',
+    );
 
     expect(jobExecutions.recordFailure).toHaveBeenCalledWith(
       AUCTIONS_IMPORT_JOB,

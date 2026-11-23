@@ -257,10 +257,6 @@ describe('SC-10: Mongo operator injection (integration)', () => {
         new Set(['A1']),
       );
     });
-
-    it('markAvailable keeps its $in and $ne update filter', async () => {
-      await expect(auctions.markAvailable(['A4-unavailable', 'A1'])).resolves.toBe(1);
-    });
   });
 
   describe('FavoritesService.findOne', () => {

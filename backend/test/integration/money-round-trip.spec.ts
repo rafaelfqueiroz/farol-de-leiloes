@@ -14,6 +14,14 @@ import {
   AuctionSchema,
   PhaseModality,
 } from '../../src/auctions/schemas/auction.schema.js';
+import {
+  ImportRunEntity,
+  ImportRunSchema,
+} from '../../src/auctions/import-runs/import-run.schema.js';
+import {
+  PropertyChangeEntity,
+  PropertyChangeSchema,
+} from '../../src/auctions/changes/property-change.schema.js';
 import { Clock } from '../../src/common/clock/clock.js';
 import { Decimal } from '../../src/common/money/money.js';
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
@@ -29,6 +37,7 @@ import {
 } from '../../src/saved-filters/schemas/saved-filter.schema.js';
 import { FakeClock } from '../fakes/fake-clock.js';
 import { FakePaymentGateway } from '../fakes/fake-payment-gateway.js';
+import { aRow, type ImportKit, importKit } from '../support/list-applier.js';
 import { useTestDatabase } from '../support/test-database.js';
 import { testBusinessConfig, testConfigService } from '../support/test-env.js';
 import businessConfig from '../../src/config/business.config.js';
@@ -48,6 +57,7 @@ describe('Money round trip through MongoDB (integration)', () => {
   let coupons: CouponsService;
   let savedFilters: SavedFiltersService;
   let auctionModel: Model<AuctionEntity>;
+  let kit: ImportKit;
   let couponModel: Model<CouponEntity>;
   let savedFilterModel: Model<SavedFilterEntity>;
 
@@ -58,6 +68,8 @@ describe('Money round trip through MongoDB (integration)', () => {
         MongooseModule.forRoot(db.uri),
         MongooseModule.forFeature([
           { name: AuctionEntity.name, schema: AuctionSchema },
+          { name: ImportRunEntity.name, schema: ImportRunSchema },
+          { name: PropertyChangeEntity.name, schema: PropertyChangeSchema },
           { name: CouponEntity.name, schema: CouponSchema },
           { name: SavedFilterEntity.name, schema: SavedFilterSchema },
         ]),
@@ -80,6 +92,7 @@ describe('Money round trip through MongoDB (integration)', () => {
     auctionModel = moduleRef.get(getModelToken(AuctionEntity.name));
     couponModel = moduleRef.get(getModelToken(CouponEntity.name));
     savedFilterModel = moduleRef.get(getModelToken(SavedFilterEntity.name));
+    kit = importKit(moduleRef, new FakeClock(NOW));
     await auctionModel.syncIndexes();
   });
 
@@ -89,18 +102,22 @@ describe('Money round trip through MongoDB (integration)', () => {
 
   describe('auctions', () => {
     beforeAll(async () => {
-      await auctions.upsertMany([
-        {
-          code: 'NEW',
-          appraisalPrice: new Decimal(PRECISE),
-          phases: [{ modality: PhaseModality.ONLINE_SALES, minimumPrice: new Decimal('91589.89') }],
-        },
-        {
-          code: 'OLDER',
-          appraisalPrice: new Decimal('130000'),
-          phases: [{ modality: PhaseModality.ONLINE_SALES, minimumPrice: new Decimal('74628.94') }],
-        },
-      ]);
+      // The writer of the daily list (SPEC-004): the prices go in through it.
+      await kit.applier.apply({
+        runId: new Types.ObjectId().toHexString(),
+        rows: [
+          aRow('NEW', {
+            appraisalPrice: new Decimal(PRECISE),
+            minimumPrice: new Decimal('91589.89'),
+            modality: PhaseModality.ONLINE_SALES,
+          }),
+          aRow('OLDER', {
+            appraisalPrice: new Decimal('130000'),
+            minimumPrice: new Decimal('74628.94'),
+            modality: PhaseModality.ONLINE_SALES,
+          }),
+        ],
+      });
     });
 
     it('stores every price as Decimal128 (AR-17)', async () => {
@@ -134,13 +151,22 @@ describe('Money round trip through MongoDB (integration)', () => {
       await expect(codes('0', '91589.88')).resolves.toEqual(['OLDER']);
     });
 
-    it('writes the stored phases back as read when the importer appends a phase', async () => {
-      await auctions.upsertMany([
-        {
-          code: 'OLDER',
-          phases: [{ modality: PhaseModality.SFI_AUCTION, minimumPrice: new Decimal('70000') }],
-        },
-      ]);
+    it('keeps the stored phases as they were when the importer appends a phase', async () => {
+      await kit.applier.apply({
+        runId: new Types.ObjectId().toHexString(),
+        rows: [
+          aRow('NEW', {
+            appraisalPrice: new Decimal(PRECISE),
+            minimumPrice: new Decimal('91589.89'),
+            modality: PhaseModality.ONLINE_SALES,
+          }),
+          aRow('OLDER', {
+            appraisalPrice: new Decimal('130000'),
+            minimumPrice: new Decimal('70000'),
+            modality: PhaseModality.SFI_AUCTION,
+          }),
+        ],
+      });
 
       const raw = await auctionModel.collection.findOne({ code: 'OLDER' });
       expect(raw?.phases.map((phase: { minimumPrice: unknown }) => phase.minimumPrice)).toEqual([
