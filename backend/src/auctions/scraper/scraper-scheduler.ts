@@ -14,7 +14,7 @@ import { JobExecutionService } from '../../common/services/job-execution.service
 import { RunMode } from '../../common/job-execution.js';
 import schedulerConfig, { SchedulerConfig } from '../../config/scheduler.config.js';
 import { StorageService } from '../../storage/storage.service.js';
-import { serverOperators } from '../../common/mongo/query-safety.js';
+import { unfulfilledWithDetailsFilter } from '../utils/job-queries.js';
 import { Clock } from '../../common/clock/clock.js';
 import { BRASILIA_TIME_ZONE } from '../../common/clock/brasilia-time.js';
 import { InJobContext, runInJobContext } from '../../common/observability/job-context.js';
@@ -135,12 +135,7 @@ export class AuctionDetailsScraper implements OnModuleInit {
   private async scrapeAuctionDetails() {
     try {
       // Find auctions where fulfilled = false or doesn't exist, and have a detailsUrl
-      const auctionsToScrape = await this.auctionModel
-        .find({
-          detailsUrl: serverOperators({ $exists: true, $ne: null }),
-          $or: serverOperators([{ fulfilled: { $exists: false } }, { fulfilled: false }]),
-        })
-        .lean();
+      const auctionsToScrape = await this.auctionModel.find(unfulfilledWithDetailsFilter()).lean();
 
       this.logger.log(`Found ${auctionsToScrape.length} unfulfilled auctions to scrape`);
 
