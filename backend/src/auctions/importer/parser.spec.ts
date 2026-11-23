@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCsv, normalizeRows, parseCaixaMoney } from './parser.js';
+import { listFacts, normalizeRows, parseCaixaList, parseCaixaMoney, parseCsv } from './parser.js';
 import { readCaixaFixture } from '../../../test/support/fixtures.js';
 
 describe('CSV parser', () => {
@@ -121,5 +121,132 @@ describe('parseCaixaMoney', () => {
     const sum = parseCaixaMoney('0,10')?.plus(parseCaixaMoney('0,20') ?? 0);
 
     expect(sum?.toFixed()).toBe('0.3');
+  });
+});
+
+// SPEC-004 BR-004-02, BR-004-04, TS-12: the awkward lists Caixa has sent or could send. The
+// fixtures are derived from the captured list, trimmed (TS-28); none holds personal data.
+describe('parseCaixaList', () => {
+  it('reads the generation date of the captured list as a Brasília calendar day', () => {
+    const list = parseCaixaList(readCaixaFixture('Lista_imoveis_geral.csv'));
+
+    expect(list.generatedOn).toBe('2025-11-10');
+    expect(list.rows).toHaveLength(4);
+    expect(listFacts(list)).toEqual({
+      headerFound: true,
+      missingColumns: [],
+      generatedOn: '2025-11-10',
+      rowCount: 4,
+    });
+  });
+
+  it('reads a list that starts with a BOM, has extra metadata rows and reordered columns', () => {
+    const csv = readCaixaFixture('lista-bom-reordered.csv');
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+
+    const list = parseCaixaList(csv);
+    const normalized = normalizeRows(list.rows);
+
+    expect(list.generatedOn).toBe('2025-11-10');
+    expect(listFacts(list).missingColumns).toEqual([]);
+    expect(normalized.map((row) => [row.code, row.state, row.city])).toEqual([
+      ['1444419970935', 'AC', 'CRUZEIRO DO SUL'],
+      ['1444418010407', 'TO', 'PARAISO DO TOCANTINS'],
+      ['1444416160541', 'TO', 'PARAISO DO TOCANTINS'],
+    ]);
+    expect(normalized[1]?.minimumPrice?.toFixed()).toBe('235000');
+    expect(normalized[1]?.detailsUrl).toContain('hdnimovel=1444418010407');
+  });
+
+  it('names the required column a list lacks', () => {
+    const list = parseCaixaList(readCaixaFixture('lista-missing-column.csv'));
+
+    expect(list.rows).toHaveLength(3);
+    expect(listFacts(list).missingColumns).toEqual(['appraisalPrice']);
+    // The rows are still read: the validator, not the parser, rejects the list.
+    expect(normalizeRows(list.rows)[0]?.appraisalPrice).toBeNull();
+  });
+
+  it('reads a malformed price as unknown (null), never as a wrong amount (AR-17)', () => {
+    const rows = normalizeRows(parseCaixaList(readCaixaFixture('lista-malformed-prices.csv')).rows);
+
+    expect(rows.map((row) => row.minimumPrice)).toEqual([null, null, null, null]);
+    expect(rows[0]?.appraisalPrice).toBeNull(); // an empty cell
+    expect(rows[1]?.appraisalPrice?.toFixed()).toBe('235000');
+  });
+
+  it('finds the header of a list with no rows, and counts none', () => {
+    const list = parseCaixaList(readCaixaFixture('lista-empty.csv'));
+
+    expect(listFacts(list)).toEqual({
+      headerFound: true,
+      missingColumns: [],
+      generatedOn: '2025-11-10',
+      rowCount: 0,
+    });
+  });
+
+  it('has no generation date when the line is absent, or the day does not exist', () => {
+    expect(parseCaixaList(readCaixaFixture('lista-no-generation-date.csv')).generatedOn).toBeNull();
+    expect(
+      parseCaixaList(readCaixaFixture('lista-invalid-generation-date.csv')).generatedOn,
+    ).toBeNull();
+  });
+
+  it('has no generation date when the label has no value after it', () => {
+    const csv = 'Data de geração:;;\nN° do imóvel;UF;Cidade;Modalidade de venda\n1;AC;X;Y\n';
+
+    expect(parseCaixaList(csv).generatedOn).toBeNull();
+  });
+
+  it('reports an unrecognised layout: no header row, no rows', () => {
+    const list = parseCaixaList(readCaixaFixture('lista-unrecognised-layout.csv'));
+
+    expect(list.header).toBeNull();
+    expect(list.rows).toEqual([]);
+    expect(listFacts(list)).toMatchObject({ headerFound: false, rowCount: 0 });
+  });
+
+  it('reports an empty text as an unrecognised layout', () => {
+    expect(parseCaixaList('')).toEqual({ rows: [], header: null, generatedOn: null });
+    expect(parseCsv('')).toEqual([]);
+  });
+
+  it('does not parse the Radware page as a list (TS-12, BR-004-20)', () => {
+    const list = parseCaixaList(readCaixaFixture('bot-protection.html'));
+
+    expect(list.header).toBeNull();
+    expect(list.rows).toEqual([]);
+    // The port refuses this body before it gets here (http-caixa-access.spec.ts); if it ever did
+    // arrive, it would still be an unrecognised layout and nothing would be applied.
+  });
+
+  it('counts 30% of a list’s rows when it is cut short', () => {
+    const [metadata, header, ...body] = readCaixaFixture('Lista_imoveis_geral.csv')
+      .split('\n')
+      .filter((line) => line.trim() !== '');
+    const rows = Array.from({ length: 10 }, (_, i) => body[i % body.length] as string);
+
+    const full = [metadata, header, ...rows].join('\n');
+    const truncated = [metadata, header, ...rows.slice(0, 3)].join('\n');
+
+    expect(listFacts(parseCaixaList(full)).rowCount).toBe(10);
+    expect(listFacts(parseCaixaList(truncated)).rowCount).toBe(3);
+  });
+});
+
+describe('normalizeRows property type (BR-004-11 fallback)', () => {
+  it('takes the type the description begins with, and null for a description that gives none', () => {
+    const rows = normalizeRows(parseCsv(readCaixaFixture('Lista_imoveis_geral.csv')));
+
+    expect(rows.map((row) => row.propertyType)).toEqual(['Terreno', 'Casa', 'Casa', 'Casa']);
+    expect(
+      normalizeRows([
+        { UF: 'AC', Cidade: 'X', 'Modalidade de venda': 'Y', Descrição: 'sem tipo' },
+      ])[0]?.propertyType,
+    ).toBeNull();
+    expect(
+      normalizeRows([{ UF: 'AC', Cidade: 'X', 'Modalidade de venda': 'Y' }])[0]?.propertyType,
+    ).toBeNull();
   });
 });

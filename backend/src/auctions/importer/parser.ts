@@ -2,6 +2,15 @@
 // see, so under native ESM its namespace holds only `default` and `Papa.parse` would be undefined.
 import Papa from 'papaparse';
 import { Decimal } from '../../common/money/money.js';
+import {
+  type ListColumn,
+  findColumnLabel,
+  missingColumns,
+  normalizeColumnKey,
+} from '../domain/list-columns.js';
+import { parseGenerationDate } from '../domain/generation-date.js';
+import { propertyTypeFromDescription } from '../domain/property-type.js';
+import type { ListFacts } from '../domain/list-validator.js';
 
 export interface ParsedAuctionRow {
   [key: string]: string;
@@ -15,13 +24,57 @@ export interface NormalizedAuctionRow {
   street?: string;
   neighborhood?: string;
   modality?: string;
+  /**
+   * BR-004-11 fallback: the type the description begins with ("Casa"); null when it does not
+   * (unknown, BR-004-15). The detail page's own value replaces it once collected.
+   */
+  propertyType: string | null;
   /** Reais (AR-17); null when the cell is empty or not a pt-BR amount. */
   appraisalPrice?: Decimal | null;
   minimumPrice?: Decimal | null;
   detailsUrl?: string;
 }
 
+/** A parsed list: the rows, and what BR-004-02 / BR-004-04 need to judge it (no row content). */
+export interface ParsedList {
+  rows: ParsedAuctionRow[];
+  /** The header row's labels, null when no header row was found. */
+  header: string[] | null;
+  /** The list's "Data de geração" as a Brasília calendar day `YYYY-MM-DD`; null when absent. */
+  generatedOn: string | null;
+}
+
 export function parseCsv(csv: string): ParsedAuctionRow[] {
+  return parseCaixaList(csv).rows;
+}
+
+/** What the validator (domain/list-validator.ts) is told about a parsed list. */
+export function listFacts(list: ParsedList): ListFacts {
+  return {
+    headerFound: list.header !== null,
+    missingColumns: list.header === null ? [] : missingColumns(list.header),
+    generatedOn: list.generatedOn,
+    rowCount: list.rows.length,
+  };
+}
+
+/**
+ * The generation date line of the preamble, `Data de geração:;10/11/2025`: the first filled cell
+ * after the label. It sits above the header, but is looked for in every row until the header.
+ */
+function findGenerationDate(preamble: string[][]): string | null {
+  for (const row of preamble) {
+    const at = row.findIndex(
+      (cell) => normalizeColumnKey(cell).replace(/:$/, '') === 'data de geracao',
+    );
+    if (at === -1) continue;
+    const value = row.slice(at + 1).find((cell) => cell.trim() !== '');
+    return value === undefined ? null : parseGenerationDate(value);
+  }
+  return null;
+}
+
+export function parseCaixaList(csv: string): ParsedList {
   // Strip BOM if present
   csv = stripBom(csv);
 
@@ -32,9 +85,7 @@ export function parseCsv(csv: string): ParsedAuctionRow[] {
     transformHeader: (header: string) => header.trim(),
   });
 
-  if (!parseResult.data || parseResult.data.length === 0) return [];
-
-  const allRows = parseResult.data;
+  const allRows = parseResult.data ?? [];
 
   // Find the true header row; skip title lines like "Lista de Imóveis..."
   let headerIndex = -1;
@@ -54,7 +105,10 @@ export function parseCsv(csv: string): ParsedAuctionRow[] {
     }
   }
 
-  if (!header || headerIndex === -1) return [];
+  const generatedOn = findGenerationDate(
+    headerIndex === -1 ? allRows : allRows.slice(0, headerIndex),
+  );
+  if (!header || headerIndex === -1) return { rows: [], header: null, generatedOn };
 
   // Convert rows to objects using the found header
   const rows: ParsedAuctionRow[] = [];
@@ -69,34 +123,21 @@ export function parseCsv(csv: string): ParsedAuctionRow[] {
     rows.push(row);
   }
 
-  return rows;
+  return { rows, header, generatedOn };
 }
 
 export function normalizeRows(rows: ParsedAuctionRow[]): NormalizedAuctionRow[] {
   return rows.map((r) => {
-    const city = pick(r, ['Cidade', 'Municipio', 'Município']);
-    const state = (pick(r, ['UF', 'Estado']) || '').toUpperCase();
-    const title = pick(r, ['Descrição', 'Descricao', 'Imóvel', 'Imovel', 'Bem']);
-    const street = pick(r, ['Endereço', 'Endereco', 'Logradouro']);
-    const neighborhood = pick(r, ['Bairro']);
-    const modality = pick(r, ['Modalidade de venda', 'Modalidade', 'TipoVenda']);
-    const appraisalPrice = parseCaixaMoney(
-      pick(r, ['Valor de avaliação', 'ValorAvaliacao', 'Valor Avaliacao', 'Valor de avaliacao']),
-    );
-    const minimumPrice = parseCaixaMoney(
-      pick(r, ['Preço', 'Preco', 'ValorMinimo', 'Valor Minimo', 'Valor de Venda', 'Valor Venda']),
-    );
-    const detailsUrl = pick(r, ['Link de acesso', 'Link', 'URL', 'Url']);
-    let code = pick(r, [
-      'N° do imóvel',
-      'Nº do imóvel',
-      'No do imovel',
-      'Numero do imovel',
-      'Código',
-      'Codigo',
-      'Identificador',
-      'Matricula',
-    ]);
+    const city = pick(r, 'city');
+    const state = (pick(r, 'state') || '').toUpperCase();
+    const title = pick(r, 'title');
+    const street = pick(r, 'street');
+    const neighborhood = pick(r, 'neighborhood');
+    const modality = pick(r, 'modality');
+    const appraisalPrice = parseCaixaMoney(pick(r, 'appraisalPrice'));
+    const minimumPrice = parseCaixaMoney(pick(r, 'minimumPrice'));
+    const detailsUrl = pick(r, 'detailsUrl');
+    let code = pick(r, 'code');
 
     // If code is not available from the column, extract it from detailsUrl
     // Example: https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=1444419970935
@@ -115,6 +156,7 @@ export function normalizeRows(rows: ParsedAuctionRow[]): NormalizedAuctionRow[] 
       street: street || undefined,
       neighborhood: neighborhood || undefined,
       modality: modality || undefined,
+      propertyType: propertyTypeFromDescription(title),
       appraisalPrice,
       minimumPrice,
       detailsUrl: detailsUrl || undefined,
@@ -122,18 +164,9 @@ export function normalizeRows(rows: ParsedAuctionRow[]): NormalizedAuctionRow[] 
   });
 }
 
-function pick(row: Record<string, string>, keys: string[]): string {
-  const k = findKey(row, keys);
-  return k ? (row[k] ?? '') : '';
-}
-
-function findKey(row: Record<string, string>, keys: string[]): string | undefined {
-  const lower = Object.fromEntries(Object.entries(row).map(([k]) => [normalizeKey(k), k]));
-  for (const k of keys) {
-    const norm = normalizeKey(k);
-    if (lower[norm]) return lower[norm];
-  }
-  return undefined;
+function pick(row: Record<string, string>, column: ListColumn): string {
+  const label = findColumnLabel(Object.keys(row), column);
+  return label ? (row[label] ?? '') : '';
 }
 
 // A pt-BR amount as Caixa writes it: an optional `R$`, digits grouped in threes by dots or not
@@ -157,16 +190,7 @@ export function parseCaixaMoney(cell: string): Decimal | null {
   return new Decimal(text.replace(/\./g, '').replace(',', '.'));
 }
 
-function removeDiacritics(s: string) {
-  return s.normalize('NFD').replace(/\p{Diacritic}+/gu, '');
-}
-
-function normalizeKey(s: string): string {
-  return removeDiacritics(String(s || ''))
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
+const normalizeKey = normalizeColumnKey;
 
 function stripBom(s: string): string {
   if (s.charCodeAt(0) === 0xfeff) return s.slice(1);
