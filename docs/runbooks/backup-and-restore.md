@@ -49,6 +49,7 @@ Atlas cannot snapshot on demand, so dump first.
 4. Start the API with `ACCOUNT_PURGE_ENABLED=true` (the default): the daily job (04:10 Brasília time) purges every closed, unpurged account, oldest first (100 a run), and its alert fires if one is still there after `ACCOUNT_PURGE_ALERT_DAYS`. For a run before that, see [account-purge.md](account-purge.md#run-it-now).
 5. Check as in [account-purge.md](account-purge.md#check-a-purge): the account has `purgedAt`, an `@removed.invalid` address, and no name or phone.
 6. Record in the incident or restore notes that the purges were replayed, with the count (never the ids).
+7. **Run the pending migrations after a restore** (`npm run migrate`, see the deploy runbook): a snapshot older than `0011-erase-legacy-profile-fields` still holds the erased CPF, date of birth, sex and address, and the migration erases them again. Snapshots taken before it hold those fields until they rotate out (the same 30-day ceiling as deleted accounts).
 
 ### Restore drill
 
