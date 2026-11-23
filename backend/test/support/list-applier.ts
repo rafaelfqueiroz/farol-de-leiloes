@@ -31,6 +31,7 @@ export interface ImportKit {
   applier: ListApplier;
   properties: ListApplierRepository;
   changes: PropertyChangeService;
+  changeRepository: PropertyChangeRepository;
   runs: ImportRunService;
   auctionModel: Model<AuctionDocument>;
   changeModel: Model<PropertyChangeDocument>;
@@ -45,11 +46,13 @@ export function importKit(moduleRef: TestingModule, clock: Clock): ImportKit {
   );
   const runModel = moduleRef.get<Model<ImportRunDocument>>(getModelToken(ImportRunEntity.name));
   const properties = new ListApplierRepository(auctionModel);
-  const changes = new PropertyChangeService(new PropertyChangeRepository(changeModel));
+  const changeRepository = new PropertyChangeRepository(changeModel);
+  const changes = new PropertyChangeService(changeRepository);
   return {
     applier: new ListApplier(properties, changes, clock),
     properties,
     changes,
+    changeRepository,
     runs: new ImportRunService(new ImportRunRepository(runModel), clock),
     auctionModel,
     changeModel,

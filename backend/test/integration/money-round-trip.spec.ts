@@ -51,6 +51,7 @@ const PAGE = { page: 1, pageSize: 20 };
 const PRECISE = '1234567890123.123456789012345678901';
 
 describe('Money round trip through MongoDB (integration)', () => {
+  const clock = new FakeClock(NOW);
   const db = useTestDatabase();
   let moduleRef: TestingModule;
   let auctions: AuctionsService;
@@ -79,7 +80,7 @@ describe('Money round trip through MongoDB (integration)', () => {
         CouponsService,
         SavedFiltersService,
         SavedFiltersRepository,
-        { provide: Clock, useValue: new FakeClock(NOW) },
+        { provide: Clock, useValue: clock },
         { provide: PaymentGateway, useValue: new FakePaymentGateway() },
         { provide: CACHE_MANAGER, useValue: {} },
         { provide: ConfigService, useValue: testConfigService() },
@@ -92,7 +93,7 @@ describe('Money round trip through MongoDB (integration)', () => {
     auctionModel = moduleRef.get(getModelToken(AuctionEntity.name));
     couponModel = moduleRef.get(getModelToken(CouponEntity.name));
     savedFilterModel = moduleRef.get(getModelToken(SavedFilterEntity.name));
-    kit = importKit(moduleRef, new FakeClock(NOW));
+    kit = importKit(moduleRef, clock);
     await auctionModel.syncIndexes();
   });
 
@@ -180,6 +181,77 @@ describe('Money round trip through MongoDB (integration)', () => {
         '74628.94',
         '70000',
       ]);
+    });
+  });
+
+  describe('a property that left the list (BR-004-17, BR-004-13, BR-004-14)', () => {
+    it('is still reachable by its number, with read-time state and money as strings', async () => {
+      const rows = [
+        aRow('GONE', {
+          appraisalPrice: new Decimal('200000'),
+          minimumPrice: new Decimal('150000'),
+          modality: PhaseModality.SFI_AUCTION,
+        }),
+      ];
+      await kit.applier.apply({ minRowRatio: 0, runId: new Types.ObjectId().toHexString(), rows });
+      // The collector's rounds: 1st at 10h00 on 2026-03-10, 2nd a week later (Brasília).
+      await auctionModel.collection.updateOne(
+        { code: 'GONE' },
+        {
+          $set: {
+            rounds: [
+              {
+                label: '1º Leilão',
+                minimumPrice: Types.Decimal128.fromString('150000'),
+                date: new Date('2026-03-10T13:00:00Z'),
+              },
+              {
+                label: '2º Leilão',
+                minimumPrice: Types.Decimal128.fromString('120000'),
+                date: new Date('2026-03-16T13:00:00Z'),
+              },
+            ],
+          },
+        },
+      );
+      // The next list does not have it: swept, and 30 days pass.
+      await kit.applier.apply({
+        minRowRatio: 0,
+        runId: new Types.ObjectId().toHexString(),
+        rows: [aRow('KEEP')],
+      });
+      clock.set(new Date('2026-04-15T12:00:00.000Z'));
+
+      const found = await auctions.findByCode('GONE');
+
+      expect(found).toMatchObject({ code: 'GONE', available: false, active: false });
+      expect(found?.currentMinimumPrice?.toFixed(2)).toBe('150000.00'); // no round left: the list price stands
+      expect(found?.discountPercent?.toFixed(2)).toBe('25.00');
+      // The same lookup the favorites page makes returns it too, flagged.
+      const [again] = await auctions.findByCodes(['GONE']);
+      expect(again?.available).toBe(false);
+      // Search lists only what is active.
+      const listed = await auctions.query({}, PAGE);
+      expect(listed.items.map((item) => item.code)).not.toContain('GONE');
+    });
+
+    it('switches the price at 10h00 of the second round, with no import (the clock decides)', async () => {
+      await auctionModel.collection.updateOne({ code: 'GONE' }, { $set: { available: true } });
+
+      clock.set(new Date('2026-03-10T12:59:00.000Z'));
+      const before = await auctions.findByCode('GONE');
+      clock.set(new Date('2026-03-10T13:00:00.000Z'));
+      const after = await auctions.findByCode('GONE');
+
+      expect([
+        before?.currentMinimumPrice?.toFixed(2),
+        before?.discountPercent?.toFixed(2),
+      ]).toEqual(['150000.00', '25.00']);
+      expect([after?.currentMinimumPrice?.toFixed(2), after?.discountPercent?.toFixed(2)]).toEqual([
+        '120000.00',
+        '40.00',
+      ]);
+      expect([before?.active, after?.active]).toEqual([true, true]);
     });
   });
 
