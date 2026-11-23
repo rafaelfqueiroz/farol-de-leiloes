@@ -36,6 +36,8 @@ const MESSAGE_MIN = 10;
 /** The answer of POST /api/support (BR-009-06): the protocol to show the requester. */
 interface SupportRequestCreated {
   protocol: string;
+  /** False when the email could not be sent yet: the request is stored and the email is retried (BR-009-07). */
+  confirmationSent: boolean;
 }
 
 const FAQ_KEYS = [
@@ -72,7 +74,9 @@ export default function SupportPage() {
 
       setSnackbar({
         open: true,
-        message: t('form.success', { protocol: created.protocol }),
+        message: t(created.confirmationSent ? 'form.success' : 'form.successPending', {
+          protocol: created.protocol,
+        }),
         severity: 'success',
       });
       setSubject('');

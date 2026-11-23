@@ -117,12 +117,20 @@ describe('SupportPage', () => {
   });
 
   it('SPEC-009 BR-009-06, BR-009-08: sends subject and message with the permission off, shows the protocol and clears the form', async () => {
-    answer(201, { id: '64b7f00000000000000a0001', protocol: 'FL-2026-000042' });
+    answer(201, {
+      id: '64b7f00000000000000a0001',
+      protocol: 'FL-2026-000042',
+      confirmationSent: true,
+    });
     const user = await fillForm();
 
     await user.click(screen.getByRole('button', { name: 'Enviar solicitação' }));
 
-    expect(await screen.findByText(/Seu protocolo é FL-2026-000042\./)).toBeVisible();
+    expect(
+      await screen.findByText(
+        'Solicitação registrada. Seu protocolo é FL-2026-000042. Enviamos a confirmação para o e-mail da sua conta.',
+      ),
+    ).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith('/api/support', {
       method: 'POST',
       credentials: 'same-origin',
@@ -135,6 +143,25 @@ describe('SupportPage', () => {
     });
     expect(screen.getByLabelText(/^Assunto/)).toHaveValue('');
     expect(screen.getByLabelText(/^Mensagem/)).toHaveValue('');
+  });
+
+  it('BR-009-07: when the confirmation could not be sent yet, shows the protocol and says it will be sent shortly, not that it was sent', async () => {
+    answer(201, {
+      id: '64b7f00000000000000a0001',
+      protocol: 'FL-2026-000042',
+      confirmationSent: false,
+    });
+    const user = await fillForm();
+
+    await user.click(screen.getByRole('button', { name: 'Enviar solicitação' }));
+
+    expect(
+      await screen.findByText(
+        'Solicitação registrada. Seu protocolo é FL-2026-000042. A confirmação será enviada para o e-mail da sua conta em instantes.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/Enviamos a confirmação/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Assunto/)).toHaveValue('');
   });
 
   it('BR-009-05: limits the subject to 200 characters and the message to 5,000', () => {

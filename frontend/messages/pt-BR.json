@@ -730,7 +730,8 @@
       "message": "Mensagem",
       "submit": "Enviar solicitação",
       "submitting": "Enviando…",
-      "success": "Solicitação registrada. Seu protocolo é {protocol}. Enviamos a confirmação para o e-mail da sua conta."
+      "success": "Solicitação registrada. Seu protocolo é {protocol}. Enviamos a confirmação para o e-mail da sua conta.",
+      "successPending": "Solicitação registrada. Seu protocolo é {protocol}. A confirmação será enviada para o e-mail da sua conta em instantes."
     }
   },
   "plans": {
