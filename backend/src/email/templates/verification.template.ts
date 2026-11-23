@@ -1,3 +1,6 @@
+// #144: the account name is text a person typed; it reaches the html only through escapeHtml.
+import { escapeHtml } from '../../common/html/escape-html.js';
+
 export const getVerificationEmailTemplate = (name: string, verificationUrl: string): string => `
 <!DOCTYPE html>
 <html>
@@ -66,7 +69,7 @@ export const getVerificationEmailTemplate = (name: string, verificationUrl: stri
   <div class="container">
     <div class="card">
       <h2>Verifique seu email</h2>
-      <p>Ola, <strong>${name}</strong>!</p>
+      <p>Ola, <strong>${escapeHtml(name)}</strong>!</p>
       <p>Obrigado por se cadastrar no Farol dos Leiloes.</p>
       <p>Para completar seu cadastro e ter acesso completo a plataforma, por favor verifique seu email clicando no botao abaixo:</p>
 
@@ -154,7 +157,7 @@ export const getPasswordResetEmailTemplate = (name: string, resetUrl: string): s
   <div class="container">
     <div class="card">
       <h2>Redefinir Senha</h2>
-      <p>Ola, <strong>${name}</strong>!</p>
+      <p>Ola, <strong>${escapeHtml(name)}</strong>!</p>
       <p>Recebemos uma solicitacao para redefinir a senha da sua conta no Farol dos Leiloes.</p>
       <p>Clique no botao abaixo para criar uma nova senha:</p>
 
