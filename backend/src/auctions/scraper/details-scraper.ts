@@ -6,6 +6,8 @@ import puppeteer from 'puppeteer';
 import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema.js';
 import { brasiliaWallClockToInstant } from '../../common/clock/brasilia-time.js';
 import { isBotProtectionPage } from '../caixa/bot-protection.js';
+import { CaixaUrlRefusedError } from '../caixa/caixa-access.js';
+import { resolveOnCaixaSite } from '../../common/caixa-site.js';
 
 export interface ScrapedPhaseDetails {
   paymentMethods?: PaymentMethod[];
@@ -281,6 +283,10 @@ function extractPhaseDetails(relatedBoxHtml: string, fullHtml: string): ScrapedP
  * Fetches the HTML content of an auction details page from Caixa website
  */
 async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
+  // SC-24: the link comes from Caixa's list; the browser opens only Caixa's own site.
+  const target = resolveOnCaixaSite(detailsUrl);
+  if (!target) throw new CaixaUrlRefusedError();
+
   // The sandbox flags are needed to run Chrome as root in a container; they disguise nothing.
   const browser = await puppeteer.launch({
     headless: true,
@@ -289,7 +295,10 @@ async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
 
   try {
     const page = await browser.newPage();
-    const response = await page.goto(detailsUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const response = await page.goto(target.href, {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000,
+    });
     if (!response) {
       throw new Error('No response received from navigation');
     }
@@ -318,9 +327,8 @@ export async function fetchAndScrapeDetails(detailsUrl: string): Promise<Scraped
     const html = await fetchAuctionDetailHtml(detailsUrl);
     return scrapeAuctionDetails(html);
   } catch (error) {
-    throw new Error(
-      `Failed to scrape details from ${detailsUrl}: ${error instanceof Error ? error.message : error}`,
-    );
+    // SC-15: the URL stays out of the message, it comes from Caixa's data (it may carry anything).
+    throw new Error(`Failed to scrape details: ${error instanceof Error ? error.message : error}`);
   }
 }
 

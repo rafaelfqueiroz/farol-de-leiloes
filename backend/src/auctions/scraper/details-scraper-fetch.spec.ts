@@ -34,6 +34,34 @@ function mockBrowser(
 }
 
 describe('fetchAndCheckAvailability', () => {
+  describe('only Caixa’s own site is opened (SC-24)', () => {
+    it.each([
+      'https://evil.example/sistema/detalhe-imovel.asp?hdnimovel=1',
+      'http://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=1',
+      'https://user:secret@venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp',
+      'https://venda-imoveis.caixa.gov.br.evil.example/x',
+      'https://venda-imoveis.caixa.gov.br:8443/x',
+      'file:///etc/passwd',
+      'http://[::1',
+    ])('does not launch a browser for %s', async (url) => {
+      mockBrowser(OK);
+      vi.mocked(puppeteer.launch).mockClear();
+
+      await expect(fetchAndCheckAvailability(url)).rejects.toThrow('not on the Caixa site');
+
+      expect(puppeteer.launch).not.toHaveBeenCalled();
+    });
+
+    it('does not echo the URL in the error', async () => {
+      const error = await fetchAndCheckAvailability('https://u:secret@evil.example/x').catch(
+        (e: unknown) => e,
+      );
+
+      expect((error as Error).message).not.toContain('secret');
+      expect((error as Error).message).not.toContain('evil.example');
+    });
+  });
+
   describe('navigation checks', () => {
     it('throws on an unsuccessful HTTP status and closes the browser', async () => {
       const { close } = mockBrowser({ ok: () => false, status: () => 503 });

@@ -9,7 +9,9 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import r2Config from '../config/r2.config.js';
 import { errorMessage } from '../common/error-message.js';
+import { jobErrorCode } from '../common/services/job-error-code.js';
 import { CAIXA_USER_AGENT } from '../common/caixa-user-agent.js';
+import { resolveOnCaixaSite } from '../common/caixa-site.js';
 
 /**
  * SPEC-002 BR-002-08 / SC-18: client files (journey documents and photos, SPEC-017) have keys under
@@ -112,14 +114,22 @@ export class StorageService {
       return null;
     }
 
+    // SC-24 / SC-19: the URL comes from Caixa's data; only Caixa's own site is requested.
+    const source = resolveOnCaixaSite(sourceUrl);
+    if (!source || source.protocol !== 'https:') {
+      this.logger.warn(`Image source for ${auctionCode} is not on the Caixa site, skipping`);
+      return null;
+    }
+
     try {
-      const response = await fetch(sourceUrl, {
+      const response = await fetch(source.href, {
         // SC-24: honest user agent, never a browser's
         headers: { 'User-Agent': CAIXA_USER_AGENT },
       });
 
       if (!response.ok) {
-        this.logger.warn(`Failed to fetch image from ${sourceUrl}: ${response.status}`);
+        // SC-15: the property code, never the URL (it comes from Caixa's data).
+        this.logger.warn(`Failed to fetch image for ${auctionCode}: ${response.status}`);
         return null;
       }
 
@@ -149,7 +159,7 @@ export class StorageService {
         size: buffer.length,
       };
     } catch (error) {
-      this.logger.error(`Failed to upload image from ${sourceUrl}: ${errorMessage(error)}`);
+      this.logger.error(`Failed to upload image for ${auctionCode}: ${jobErrorCode(error)}`);
       return null;
     }
   }
@@ -168,14 +178,22 @@ export class StorageService {
       return null;
     }
 
+    // SC-24 / SC-19: the URL comes from Caixa's data; only Caixa's own site is requested.
+    const source = resolveOnCaixaSite(sourceUrl);
+    if (!source || source.protocol !== 'https:') {
+      this.logger.warn(`Document source for ${auctionCode} is not on the Caixa site, skipping`);
+      return null;
+    }
+
     try {
-      const response = await fetch(sourceUrl, {
+      const response = await fetch(source.href, {
         // SC-24: honest user agent, never a browser's
         headers: { 'User-Agent': CAIXA_USER_AGENT },
       });
 
       if (!response.ok) {
-        this.logger.warn(`Failed to fetch document from ${sourceUrl}: ${response.status}`);
+        // SC-15: the property code, never the URL (it comes from Caixa's data).
+        this.logger.warn(`Failed to fetch document for ${auctionCode}: ${response.status}`);
         return null;
       }
 
@@ -203,7 +221,7 @@ export class StorageService {
         size: buffer.length,
       };
     } catch (error) {
-      this.logger.error(`Failed to upload document from ${sourceUrl}: ${errorMessage(error)}`);
+      this.logger.error(`Failed to upload document for ${auctionCode}: ${jobErrorCode(error)}`);
       return null;
     }
   }
