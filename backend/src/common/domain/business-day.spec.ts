@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addCalendarDays,
   hasHolidaysInYear,
   isBusinessDay,
   isCalendarDate,
@@ -112,5 +113,20 @@ describe('yearOf', () => {
 
   it('refuses a date that is not a real calendar day', () => {
     expect(() => yearOf('nope')).toThrow(RangeError);
+  });
+});
+
+describe('addCalendarDays', () => {
+  it('moves by calendar days across month, year and leap-day ends', () => {
+    expect(addCalendarDays('2025-11-10', 1)).toBe('2025-11-11');
+    expect(addCalendarDays('2025-12-31', 1)).toBe('2026-01-01');
+    expect(addCalendarDays('2028-02-28', 1)).toBe('2028-02-29');
+    expect(addCalendarDays('2026-02-28', 1)).toBe('2026-03-01');
+    expect(addCalendarDays('2026-01-01', -1)).toBe('2025-12-31');
+    expect(addCalendarDays('2026-01-01', 0)).toBe('2026-01-01');
+  });
+
+  it('refuses a day that does not exist', () => {
+    expect(() => addCalendarDays('2026-02-30', 1)).toThrow(RangeError);
   });
 });

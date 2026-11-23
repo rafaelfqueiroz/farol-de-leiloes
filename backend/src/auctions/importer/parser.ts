@@ -32,6 +32,8 @@ export interface NormalizedAuctionRow {
   /** Reais (AR-17); null when the cell is empty or not a pt-BR amount. */
   appraisalPrice?: Decimal | null;
   minimumPrice?: Decimal | null;
+  /** A price or appraisal cell was filled but is not a pt-BR amount (a changed money format). */
+  moneyUnreadable: boolean;
   detailsUrl?: string;
 }
 
@@ -50,11 +52,16 @@ export function parseCsv(csv: string): ParsedAuctionRow[] {
 
 /** What the validator (domain/list-validator.ts) is told about a parsed list. */
 export function listFacts(list: ParsedList): ListFacts {
+  const normalized = normalizeRows(list.rows);
+  const codes = normalized.flatMap((row) => (row.code ? [row.code] : []));
   return {
     headerFound: list.header !== null,
     missingColumns: list.header === null ? [] : missingColumns(list.header),
     generatedOn: list.generatedOn,
     rowCount: list.rows.length,
+    usableCodeCount: new Set(codes).size,
+    rowsWithoutCode: normalized.length - codes.length,
+    unreadableMoneyRows: normalized.filter((row) => row.moneyUnreadable).length,
   };
 }
 
@@ -134,8 +141,10 @@ export function normalizeRows(rows: ParsedAuctionRow[]): NormalizedAuctionRow[] 
     const street = pick(r, 'street');
     const neighborhood = pick(r, 'neighborhood');
     const modality = pick(r, 'modality');
-    const appraisalPrice = parseCaixaMoney(pick(r, 'appraisalPrice'));
-    const minimumPrice = parseCaixaMoney(pick(r, 'minimumPrice'));
+    const appraisalCell = pick(r, 'appraisalPrice');
+    const minimumCell = pick(r, 'minimumPrice');
+    const appraisalPrice = parseCaixaMoney(appraisalCell);
+    const minimumPrice = parseCaixaMoney(minimumCell);
     const detailsUrl = pick(r, 'detailsUrl');
     let code = pick(r, 'code');
 
@@ -159,6 +168,10 @@ export function normalizeRows(rows: ParsedAuctionRow[]): NormalizedAuctionRow[] 
       propertyType: propertyTypeFromDescription(title),
       appraisalPrice,
       minimumPrice,
+      // An empty cell is "no price" (a direct sale has none); a filled one that does not read is not.
+      moneyUnreadable:
+        (appraisalCell.trim() !== '' && appraisalPrice === null) ||
+        (minimumCell.trim() !== '' && minimumPrice === null),
       detailsUrl: detailsUrl || undefined,
     };
   });

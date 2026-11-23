@@ -47,6 +47,11 @@ export interface StoredListState extends ListFields {
   phaseCount: number;
   /** The detail page was collected: its property type replaces the list's fallback. */
   detailsCollected: boolean;
+  /**
+   * Rounds were collected, none is open-ended and every date has passed, yet the list still has
+   * the property: the dates are stale and the page must be collected again (BR-004-19).
+   */
+  staleRounds: boolean;
 }
 
 /** The writes of a row that changes a stored property. */
@@ -57,12 +62,18 @@ export interface RowUpdate {
   changed: boolean;
   /** Back from unavailable (BR-004-09). */
   returned: boolean;
+  /**
+   * The collected rounds (and the details date) are dropped so the property is collected again,
+   * first (BR-004-19): it came back, its modality changed, or its dates went stale. Until then it
+   * has no rounds, which is unknown and active, never "stuck inactive" on old dates.
+   */
+  refreshDetails: boolean;
   /** The stored property's phase count, to keep its last phase's price in step with the list's. */
   phaseCount: number;
   /** Only the fields that differ. */
   fields: Partial<ListFields>;
   /** The list price, when it differs and the modality did not change. */
-  price?: { value: Decimal | null };
+  price?: { value: Decimal };
   /** A new phase is appended: the modality changed (or none was stored). */
   modalityChange?: { from: PhaseModality | null; to: PhaseModality; price: Decimal | null };
 }
@@ -79,6 +90,19 @@ const money = (value: Decimal | null): string | null => (value === null ? null :
 
 function sameMoney(a: Decimal | null, b: Decimal | null): boolean {
   return a === null || b === null ? a === b : a.eq(b);
+}
+
+/**
+ * The stored address with the parts the row knows laid over it. An empty part of the row is not a
+ * change: unknown never replaces a known value (BR-004-15).
+ */
+function mergedAddress(stored: ListAddress | null, row: ListAddress): ListAddress {
+  return {
+    street: row.street || stored?.street,
+    neighborhood: row.neighborhood || stored?.neighborhood,
+    city: row.city || stored?.city,
+    state: row.state || stored?.state,
+  };
 }
 
 function sameAddress(a: ListAddress | null, b: ListAddress): boolean {
@@ -129,8 +153,10 @@ export function becameUnavailableEntry(code: string): ChangeDraft {
  *   price differs            -> PRICE_DROPPED / PRICE_RAISED
  *   address, description, appraisal, link differ -> applied, no entry
  *
- * A row with an unknown modality never changes the stored modality or price (unknown is not a
- * change, BR-004-15).
+ * A row with an unknown modality never changes the stored modality or price, and a value the row
+ * leaves empty never replaces a known one (unknown is not a change, BR-004-15). A property that
+ * came back, changed modality or has only stale round dates is marked for a fresh collection of
+ * its detail page (refreshDetails, BR-004-19).
  */
 export function diffListRow(existing: StoredListState | null, row: ListRow): RowDiff {
   if (existing === null) {
@@ -153,17 +179,25 @@ export function diffListRow(existing: StoredListState | null, row: ListRow): Row
     changed = true;
   }
 
-  if (existing.title !== row.title) fields.title = row.title;
-  if (!sameAddress(existing.address, row.address)) fields.address = row.address;
-  if (!sameMoney(existing.appraisalPrice, row.appraisalPrice)) {
+  // BR-004-15: a value the list does not give (null, empty) never replaces one already known.
+  if (row.title !== null && existing.title !== row.title) fields.title = row.title;
+  const address = mergedAddress(existing.address, row.address);
+  if (!sameAddress(existing.address, address)) fields.address = address;
+  if (row.appraisalPrice !== null && !sameMoney(existing.appraisalPrice, row.appraisalPrice)) {
     fields.appraisalPrice = row.appraisalPrice;
   }
-  if (existing.detailsUrl !== row.detailsUrl) fields.detailsUrl = row.detailsUrl;
+  if (row.detailsUrl !== null && existing.detailsUrl !== row.detailsUrl) {
+    fields.detailsUrl = row.detailsUrl;
+  }
   if (Object.keys(fields).length > 0) changed = true;
 
   // The type is a fallback, not a list fact: it is applied silently (no entry, not "changed"),
-  // and never over the detail page's own value.
-  if (!existing.detailsCollected && existing.propertyType !== row.propertyType) {
+  // and never over the detail page's own value, nor with nothing.
+  if (
+    !existing.detailsCollected &&
+    row.propertyType !== null &&
+    existing.propertyType !== row.propertyType
+  ) {
     fields.propertyType = row.propertyType;
   }
 
@@ -172,6 +206,7 @@ export function diffListRow(existing: StoredListState | null, row: ListRow): Row
     entries,
     changed,
     returned,
+    refreshDetails: returned || existing.staleRounds,
     phaseCount: existing.phaseCount,
     fields,
   };
@@ -181,22 +216,27 @@ export function diffListRow(existing: StoredListState | null, row: ListRow): Row
       entries.push(
         entry(row.code, 'MODALITY_OR_ROUND_CHANGED', 'modality', existing.modality, row.modality),
       );
+      // A new phase starts with the price the list gives for it, or none: the old modality's
+      // price is not this one's.
       update.modalityChange = {
         from: existing.modality,
         to: row.modality,
         price: row.minimumPrice,
       };
       update.changed = true;
-      if (!sameMoney(existing.minimumPrice, row.minimumPrice)) {
+      update.refreshDetails = true;
+      if (row.minimumPrice !== null && !sameMoney(existing.minimumPrice, row.minimumPrice)) {
         entries.push(priceEntry(row.code, existing.minimumPrice, row.minimumPrice));
       }
-    } else if (!sameMoney(existing.minimumPrice, row.minimumPrice)) {
+    } else if (row.minimumPrice !== null && !sameMoney(existing.minimumPrice, row.minimumPrice)) {
       entries.push(priceEntry(row.code, existing.minimumPrice, row.minimumPrice));
       update.price = { value: row.minimumPrice };
       update.changed = true;
     }
   }
 
-  if (!update.changed && Object.keys(fields).length === 0) return { kind: 'unchanged' };
+  if (!update.changed && !update.refreshDetails && Object.keys(fields).length === 0) {
+    return { kind: 'unchanged' };
+  }
   return update;
 }

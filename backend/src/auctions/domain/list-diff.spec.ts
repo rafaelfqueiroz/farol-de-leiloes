@@ -37,6 +37,7 @@ const STORED: StoredListState = {
   minimumPrice: d('150000.0'),
   phaseCount: 1,
   detailsCollected: false,
+  staleRounds: false,
 };
 
 function update(diff: RowDiff): RowUpdate {
@@ -114,18 +115,14 @@ describe('price (BR-004-25, BR-004-26)', () => {
     expect(diff.entries.map((e) => [e.type, e.relevant])).toEqual([['PRICE_RAISED', false]]);
   });
 
-  it('a price that appears or vanishes is OTHER_FIELD (not a drop, not a rise)', () => {
+  it('a price that appears is OTHER_FIELD (not a drop, not a rise)', () => {
     const appears = update(
       diffListRow({ ...STORED, minimumPrice: null }, { ...ROW, minimumPrice: d('1') }),
     );
     expect(appears.entries.map((e) => [e.type, e.oldValue, e.newValue])).toEqual([
       ['OTHER_FIELD', null, '1.00'],
     ]);
-    const vanishes = update(diffListRow(STORED, { ...ROW, minimumPrice: null }));
-    expect(vanishes.entries.map((e) => [e.type, e.oldValue, e.newValue])).toEqual([
-      ['OTHER_FIELD', '150000.00', null],
-    ]);
-    expect(vanishes.price).toEqual({ value: null });
+    // ...and one that vanishes is not a change at all (BR-004-15): see "unknown is not a change".
   });
 });
 
@@ -226,12 +223,9 @@ describe('untracked list fields (BR-004-25)', () => {
     }
   });
 
-  it('an appraisal that appears or vanishes is a change', () => {
+  it('an appraisal that appears is a change', () => {
     expect(update(diffListRow({ ...STORED, appraisalPrice: null }, ROW)).fields).toEqual({
       appraisalPrice: d('200000'),
-    });
-    expect(update(diffListRow(STORED, { ...ROW, appraisalPrice: null })).fields).toEqual({
-      appraisalPrice: null,
     });
   });
 });
@@ -262,5 +256,77 @@ describe('becameUnavailableEntry (BR-004-08)', () => {
       oldValue: true,
       newValue: false,
     });
+  });
+});
+
+describe('unknown is not a change (BR-004-15)', () => {
+  const EMPTY_ROW: ListRow = {
+    ...ROW,
+    title: null,
+    address: {},
+    appraisalPrice: null,
+    minimumPrice: null,
+    detailsUrl: null,
+    propertyType: null,
+  };
+
+  it('a row with every value empty changes nothing: no field, no entry, nothing counted', () => {
+    expect(diffListRow(STORED, EMPTY_ROW)).toEqual({ kind: 'unchanged' });
+  });
+
+  it('keeps each known address part the row leaves empty, and takes the ones it gives', () => {
+    const diff = update(
+      diffListRow(STORED, { ...ROW, address: { street: '', neighborhood: 'BAIRRO NOVO' } }),
+    );
+
+    expect(diff.fields.address).toEqual({
+      street: 'RUA A',
+      neighborhood: 'BAIRRO NOVO',
+      city: 'CAMPINAS',
+      state: 'SP',
+    });
+  });
+
+  it('keeps the known price when the row has none, and records no price entry', () => {
+    const diff = diffListRow({ ...STORED, available: false }, { ...ROW, minimumPrice: null });
+
+    expect(types(diff)).toEqual(['RETURNED']);
+    expect(update(diff).price).toBeUndefined();
+  });
+
+  it('a new modality with no price starts its phase with none: the old price is not its own', () => {
+    const diff = update(
+      diffListRow(STORED, {
+        ...ROW,
+        modality: PhaseModality.DIRECT_ONLINE_SALES,
+        minimumPrice: null,
+      }),
+    );
+
+    expect(diff.entries.map((e) => e.type)).toEqual(['MODALITY_OR_ROUND_CHANGED']);
+    expect(diff.modalityChange?.price).toBeNull();
+  });
+});
+
+describe('a property to collect again (BR-004-09, BR-004-19)', () => {
+  it('a returned property, a modality change and stale round dates each mark a refresh', () => {
+    expect(update(diffListRow({ ...STORED, available: false }, ROW)).refreshDetails).toBe(true);
+    expect(
+      update(diffListRow(STORED, { ...ROW, modality: PhaseModality.ONLINE_SALES })).refreshDetails,
+    ).toBe(true);
+    expect(update(diffListRow({ ...STORED, staleRounds: true }, ROW)).refreshDetails).toBe(true);
+  });
+
+  it('stale dates alone are not a change: no entry, not counted, not "changed"', () => {
+    const diff = update(diffListRow({ ...STORED, staleRounds: true }, ROW));
+
+    expect(diff.entries).toEqual([]);
+    expect(diff.changed).toBe(false);
+  });
+
+  it('a price change alone does not refresh the details', () => {
+    expect(update(diffListRow(STORED, { ...ROW, minimumPrice: d('1') })).refreshDetails).toBe(
+      false,
+    );
   });
 });
