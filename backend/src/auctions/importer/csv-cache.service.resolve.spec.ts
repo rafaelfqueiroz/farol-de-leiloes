@@ -78,6 +78,19 @@ describe('CsvCacheService.resolveCsv with R2', () => {
     );
   });
 
+  it('BR-004-02: a fresh attempt ignores today’s copy, asks Caixa and replaces the copy', async () => {
+    const { service, model, storage, caixa } = build({
+      lastUpload: new Date('2026-01-15T09:00:00.000Z'),
+    });
+
+    await expect(service.resolveCsv({ fresh: true })).resolves.toBe('fresh;csv');
+
+    expect(caixa.requests).toEqual([{ kind: 'list' }]);
+    expect(storage.downloadBuffer).not.toHaveBeenCalled();
+    expect(storage.uploadBuffer).toHaveBeenCalledTimes(1);
+    expect(model.findOneAndUpdate).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes a copy cached on an earlier Brasília day', async () => {
     // 14/01 23:00 in Brasília is yesterday, although it is 02:00 UTC on 15/01.
     const { service, storage } = build({ lastUpload: new Date('2026-01-15T02:00:00.000Z') });

@@ -21,13 +21,19 @@ export class CsvCacheService {
     private readonly caixa: CaixaAccess, // AR-10: the one way to reach Caixa (SC-24)
   ) {}
 
-  async resolveCsv(): Promise<string> {
+  /**
+   * The day's list. By default today's copy in R2 is reused (a retry of a half-applied list must
+   * not ask Caixa again, ADR-003). With `fresh` the copy is NOT read: the attempt is looking for a
+   * newer list than the one it saw earlier the same day (BR-004-02), and the day's copy would be
+   * that older list. The download replaces the stored copy either way.
+   */
+  async resolveCsv({ fresh = false }: { fresh?: boolean } = {}): Promise<string> {
     if (!this.storage.isConfigured()) {
       this.logger.warn('R2 not configured, downloading directly from Caixa');
       return this.caixa.downloadList();
     }
 
-    const record = await this.csvUploadModel.findOne({}).lean();
+    const record = fresh ? null : await this.csvUploadModel.findOne({}).lean();
 
     if (record && this.isTodaysUpload(record.lastUpload)) {
       this.logger.log('CSV already uploaded today, fetching from R2');

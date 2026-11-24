@@ -8,6 +8,13 @@ import { AuctionEntity, AuctionSchema } from './schemas/auction.schema.js';
 import { CsvUpload, CsvUploadSchema } from './importer/schemas/csv-upload.schema.js';
 import { CsvCacheService } from './importer/csv-cache.service.js';
 import { AuctionsImporter } from './importer/scheduler.js';
+import { ImportOrchestrator } from './importer/import-orchestrator.service.js';
+import { DailyUpdateBus } from './import-runs/daily-update-bus.js';
+import { ImportAlertService } from './import-runs/import-alert.service.js';
+import { EnrichmentPass, NoopEnrichmentPass } from './enrichment/enrichment-pass.js';
+import { EmailModule } from '../email/email.module.js';
+import { UsersModule } from '../users/users.module.js';
+import { BusinessCalendarModule } from '../common/business-calendar.module.js';
 import { ListApplier } from './importer/list-applier.service.js';
 import { ListApplierRepository } from './importer/list-applier.repository.js';
 import { ImportRunEntity, ImportRunSchema } from './import-runs/import-run.schema.js';
@@ -49,11 +56,19 @@ import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
     }),
     CommonModule,
     StorageModule,
+    EmailModule, // BR-004-29: the alert email
+    UsersModule, // BR-004-29: the admins to alert (AR-09)
+    BusinessCalendarModule, // BR-004-31
   ],
   controllers: [AuctionsController],
   providers: [
     AuctionsService,
     AuctionsImporter,
+    ImportOrchestrator,
+    DailyUpdateBus,
+    ImportAlertService,
+    // Part 4 provides the real pass; until then nothing is collected (SPEC-004 BR-004-23).
+    { provide: EnrichmentPass, useClass: NoopEnrichmentPass },
     ListApplier,
     ListApplierRepository,
     ImportRunService,
@@ -71,6 +86,6 @@ import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
     AuctionCleanupService,
   ],
   // SPEC-008 / SPEC-013 read the change entries and the Import Runs through these services (AR-09).
-  exports: [AuctionsService, CacheModule, PropertyChangeService, ImportRunService],
+  exports: [AuctionsService, CacheModule, PropertyChangeService, ImportRunService, DailyUpdateBus],
 })
 export class AuctionsModule {}
