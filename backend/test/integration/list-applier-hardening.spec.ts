@@ -77,6 +77,11 @@ describe('ListApplier, the review cases (integration)', () => {
   const entries = async (run: string) =>
     (await kit.changes.findByRun(run)).map((e) => `${e.propertyCode} ${e.type} ${e.field}`);
 
+  const history = async (code: string) =>
+    (await kit.changeModel.find({ propertyCode: code }).sort({ createdAt: 1, _id: 1 }).lean()).map(
+      (e) => `${e.type} ${String(e.oldValue)}>${String(e.newValue)}`,
+    );
+
   /** A catalogue the old importer left: available, no run stamp, nothing the new fields know. */
   async function seedLegacy(count: number) {
     const phase = { modality: 'ONLINE_SALES', minimumPrice: Types.Decimal128.fromString('1000') };
@@ -233,6 +238,97 @@ describe('ListApplier, the review cases (integration)', () => {
       const p1 = await raw('P1');
       expect(p1).toMatchObject({ fulfilled: false, detailsCollectedAt: null });
       expect(p1).not.toHaveProperty('rounds');
+    });
+
+    // Review of #187: an unordered bulk write may land any subset of its operations, so the
+    // modality transition and the reset of the old modality's rounds must be ONE operation. Only
+    // the operations of a chunk that rewrite the phases land here, the others do not, and then
+    // the bulk write fails: the boundary a partial failure is allowed to leave.
+    class PartialWrite extends ListApplierRepository {
+      constructor(model: ConstructorParameters<typeof ListApplierRepository>[0]) {
+        super(
+          new Proxy(model, {
+            get(target, property) {
+              if (property !== 'bulkWrite') {
+                const value = Reflect.get(target, property, target) as unknown;
+                return typeof value === 'function' ? value.bind(target) : value;
+              }
+              return async (ops: { updateOne?: { update?: Record<string, unknown> } }[]) => {
+                const landing = ops.filter((op) => op.updateOne?.update?.['$push'] !== undefined);
+                await target.bulkWrite(landing as never, { ordered: false });
+                throw new Error('the bulk write failed after part of it landed');
+              };
+            },
+          }),
+        );
+      }
+    }
+
+    it('a modality transition that lands without the rest of the chunk still resets the old rounds, and the retry ends the same', async () => {
+      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1')], minRowRatio: 0 });
+      await collected('P1', [
+        { label: '2º Leilão', minimumPrice: null, date: new Date('2099-01-01T00:00:00Z') },
+      ]);
+      clock.advance(DAY);
+      const rows = [aRow('P1', { modality: PhaseModality.DIRECT_ONLINE_SALES })];
+      const dying = new ListApplier(new PartialWrite(kit.auctionModel), kit.changes, clock);
+
+      await expect(dying.apply({ runId: newRun(), rows, minRowRatio: 0 })).rejects.toThrow(
+        'part of it landed',
+      );
+
+      // The transition is committed ...
+      const half = await raw('P1');
+      expect((half?.['currentPhase'] as { modality: string }).modality).toBe(
+        PhaseModality.DIRECT_ONLINE_SALES,
+      );
+      // ... and so is its reset: the new modality is not left with the old one's rounds.
+      expect(half).toMatchObject({ fulfilled: false, detailsCollectedAt: null });
+      expect(half).not.toHaveProperty('rounds');
+
+      // The retry sees a matching modality, and changes nothing more.
+      clock.advance(DAY);
+      await kit.applier.apply({ runId: newRun(), rows, minRowRatio: 0 });
+      const after = await raw('P1');
+      expect((after?.['currentPhase'] as { modality: string }).modality).toBe(
+        PhaseModality.DIRECT_ONLINE_SALES,
+      );
+      expect(after).toMatchObject({ fulfilled: false, detailsCollectedAt: null });
+      expect(after).not.toHaveProperty('rounds');
+      expect((after?.['phases'] as unknown[]).length).toBe(2);
+    });
+
+    it('a property that returns with another modality, with only the transition landed, is made available and reset by the retry', async () => {
+      await kit.applier.apply({
+        runId: newRun(),
+        rows: [aRow('P1'), aRow('P2')],
+        minRowRatio: 0,
+      });
+      await collected('P2', [
+        { label: '2º Leilão', minimumPrice: null, date: new Date('2099-01-01T00:00:00Z') },
+      ]);
+      clock.advance(DAY);
+      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1')], minRowRatio: 0 }); // P2 leaves
+      clock.advance(DAY);
+      const rows = [aRow('P1'), aRow('P2', { modality: PhaseModality.DIRECT_ONLINE_SALES })];
+      const dying = new ListApplier(new PartialWrite(kit.auctionModel), kit.changes, clock);
+      await expect(dying.apply({ runId: newRun(), rows, minRowRatio: 0 })).rejects.toThrow(
+        'part of it landed',
+      );
+      expect(await raw('P2')).toMatchObject({ available: false, fulfilled: false });
+
+      clock.advance(DAY);
+      await kit.applier.apply({ runId: newRun(), rows, minRowRatio: 0 });
+
+      const p2 = await raw('P2');
+      expect(p2).toMatchObject({ available: true, fulfilled: false, detailsCollectedAt: null });
+      expect(p2).not.toHaveProperty('rounds');
+      expect(await history('P2')).toEqual([
+        'NEW null>true',
+        'BECAME_UNAVAILABLE true>false',
+        'RETURNED false>true',
+        `MODALITY_OR_ROUND_CHANGED ${PhaseModality.SFI_AUCTION}>${PhaseModality.DIRECT_ONLINE_SALES}`,
+      ]);
     });
 
     it('a property still on the list whose every date has passed is collected again, silently', async () => {
@@ -531,10 +627,6 @@ describe('ListApplier, the review cases (integration)', () => {
         return super.markUnavailable(...args);
       }
     }
-    const history = async (code: string) =>
-      (
-        await kit.changeModel.find({ propertyCode: code }).sort({ createdAt: 1, _id: 1 }).lean()
-      ).map((e) => `${e.type} ${String(e.oldValue)}>${String(e.newValue)}`);
     function dying() {
       const repository = new Dying(kit.auctionModel);
       return { repository, applier: new ListApplier(repository, kit.changes, clock) };

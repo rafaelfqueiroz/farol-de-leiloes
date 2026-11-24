@@ -206,6 +206,14 @@ function insertOp(
  * BECAME_UNAVAILABLE). The guarded writes (the phase append, the price) are applied only to the
  * state they were computed from; a guard that matches nothing means someone else already did it
  * (a concurrent apply) or the state moved (the scraper), and the next list recomputes.
+ *
+ * What must hold together is ONE document update (BR-004-07, BR-004-09, AR-03): a bulk write is
+ * unordered, so any subset of its operations may land. The modality transition (the new current
+ * phase and the phase append) and the reset of the old modality's rounds (`rounds`,
+ * `detailsCollectedAt`, `fulfilled`) are therefore one guarded `updateOne`: it either happened
+ * whole or not at all, and a retry that sees the new modality finds the reset done. Were they two
+ * operations, the transition could land alone, the retry would see a matching modality and
+ * request no reset, and the new modality would keep the old one's rounds and `fulfilled: true`.
  */
 function updateOps(
   code: string,
@@ -222,9 +230,10 @@ function updateOps(
     set.lastChangedRunId = runId;
   }
   if (diff.returned) set.available = true;
-  if (diff.refreshDetails) {
-    // BR-004-09, BR-004-19: collected again, first. No rounds is "not collected yet" (unknown,
-    // active), so the old dates cannot keep it inactive; `fulfilled: false` queues the scraper.
+  // BR-004-09, BR-004-19: collected again, first. No rounds is "not collected yet" (unknown,
+  // active), so the old dates cannot keep it inactive; `fulfilled: false` queues the scraper.
+  // A modality change carries this reset in its own atomic write below, never in this one.
+  if (diff.refreshDetails && !diff.modalityChange) {
     set.detailsCollectedAt = null;
     set.fulfilled = false;
     unguarded.$unset = { rounds: '' };
@@ -242,9 +251,23 @@ function updateOps(
     ops.push({
       updateOne: {
         // Guarded by the modality that was read: a second process that read the same state finds
-        // the phase already appended and matches nothing, so a phase is never appended twice.
+        // the phase already appended and matches nothing, so a phase is never appended twice. The
+        // transition, the phase append, the stamp and the reset of the old rounds are this one
+        // update (see above); the change marks go with them, so a transition that lands alone is
+        // still counted as the change it is.
         filter: { code, 'currentPhase.modality': diff.modalityChange.from },
-        update: { $set: { currentPhase: phase }, $push: { phases: phase } },
+        update: {
+          $set: {
+            ...stamp,
+            currentPhase: phase,
+            updatedAt: now,
+            lastChangedRunId: runId,
+            detailsCollectedAt: null,
+            fulfilled: false,
+          },
+          $push: { phases: phase },
+          $unset: { rounds: '' },
+        },
         timestamps: false,
       },
     });
