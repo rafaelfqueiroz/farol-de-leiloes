@@ -216,6 +216,22 @@ describe('selectEnrichmentBatch: what is never collected', () => {
     expect(batch).toEqual([]);
   });
 
+  it('treats data collected at the very first instant of today as collected today, one millisecond earlier as not', () => {
+    const midnight = brasiliaInstant('2026-11-24', 0);
+    const batch = selectEnrichmentBatch(
+      [
+        property('0001', { detailsCollectedAt: midnight, lastChangedRunId: RUN }),
+        property('0002', {
+          detailsCollectedAt: new Date(midnight.getTime() - 1),
+          lastChangedRunId: RUN,
+        }),
+      ],
+      input(),
+    );
+
+    expect(batch).toEqual([{ code: '0002', tier: 'CHANGED' }]);
+  });
+
   it('collects data from just before midnight yesterday again when its row changed', () => {
     const batch = selectEnrichmentBatch(
       [

@@ -414,6 +414,15 @@ describe('what a collection writes, records and copies (integration)', () => {
         kind: 'EDITAL',
         retrievedAt: brasiliaInstant(MON, HH(6)),
       });
+      // The new version has its own retrieval date (today), the old one keeps Monday's.
+      const editals =
+        property?.documentVersions?.filter((version) => version.kind === 'EDITAL') ?? [];
+      expect(
+        editals.map(
+          (version) => version.retrievedAt.getTime() >= brasiliaInstant(TUE, HH(6)).getTime(),
+        ),
+      ).toEqual([false, true]);
+      expect(editals[1]?.publishedAt).toEqual(new Date('2026-11-25T12:00:00.000Z'));
       // A change entry, history only (BR-004-30: not one of the relevant types).
       const entries = await entriesOf(h, '0001', 'DETAILS');
       expect(entries).toHaveLength(1);

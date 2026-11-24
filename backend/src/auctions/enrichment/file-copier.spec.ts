@@ -87,6 +87,41 @@ describe('FileCopier', () => {
     expect(storage.publicFiles.size).toBe(2);
   });
 
+  it('stores the type the bytes show, whatever generic or aliased header came with them (SC-13)', async () => {
+    const { storage, copier } = setup();
+
+    const generic = await copier.copy(
+      'PHOTO',
+      '0001',
+      URL_ON_SITE,
+      returning({ body: PHOTO.body, contentType: 'application/octet-stream' }),
+      NOW,
+    );
+    const alias = await copier.copy(
+      'PHOTO',
+      '0002',
+      URL_ON_SITE,
+      returning({ body: PHOTO.body, contentType: 'image/jpg; charset=binary' }),
+      NOW,
+    );
+    const document = await copier.copy(
+      'EDITAL',
+      '0003',
+      URL_ON_SITE,
+      returning({ body: DOC.body, contentType: null }),
+      NOW,
+    );
+
+    expect(generic.ok && generic.file.mimeType).toBe('image/jpeg');
+    expect(alias.ok && alias.file.mimeType).toBe('image/jpeg');
+    expect(document.ok && document.file.mimeType).toBe('application/pdf');
+    expect([...storage.publicFiles.values()].map((file) => file.contentType).sort()).toEqual([
+      'application/pdf',
+      'image/jpeg',
+      'image/jpeg',
+    ]);
+  });
+
   describe('what it will not even ask Caixa for', () => {
     it.each([
       ['an unsafe property number', 'PHOTO', '../x', URL_ON_SITE, {}, 'UNSAFE_CODE'],
