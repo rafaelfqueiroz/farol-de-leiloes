@@ -8,6 +8,7 @@ import {
   REASON_TEXTS,
   UNKNOWN_REASON_TEXT,
 } from './import-alert-text.js';
+import type { ListRejectionReason } from './list-validator.js';
 
 const run = (outcome: string, extra: { alertedAt?: Date; blocked?: boolean } = {}) => ({
   outcome,
@@ -48,6 +49,25 @@ describe('the reason of an alert, by code', () => {
   it('REJECTED_LIST: the validator code', () => {
     expect(primaryReason('REJECTED_LIST', ['TRUNCATED_LIST'])).toBe('TRUNCATED_LIST');
     expect(primaryReason('REJECTED_LIST', [])).toBeNull();
+    expect(primaryReason('REJECTED_LIST', ['MALFORMED_CSV'])).toBe('MALFORMED_CSV');
+  });
+
+  it('has a sentence and an alert reason for every code the list validator can give', () => {
+    const rejections: Record<ListRejectionReason, true> = {
+      UNRECOGNISED_LAYOUT: true,
+      MISSING_COLUMNS: true,
+      NO_GENERATION_DATE: true,
+      MALFORMED_CSV: true,
+      EMPTY_LIST: true,
+      GENERATION_DATE_IN_FUTURE: true,
+      TOO_MANY_ROWS_WITHOUT_CODE: true,
+      UNREADABLE_PRICES: true,
+      TRUNCATED_LIST: true,
+    };
+    for (const code of Object.keys(rejections)) {
+      expect(primaryReason('REJECTED_LIST', [code])).toBe(code);
+      expect(REASON_TEXTS[code as keyof typeof REASON_TEXTS]).toBeDefined();
+    }
   });
 
   it('NO_NEW_LIST and a blocked collection have one reason each', () => {

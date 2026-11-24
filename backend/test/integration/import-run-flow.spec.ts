@@ -485,6 +485,36 @@ describe('the import state machine (integration)', () => {
       );
     });
 
+    it('BR-004-04, DL-004-03 (review of #187): an unterminated quote in row 9 swallows property 10; MALFORMED_CSV, nothing applied, property 10 stays available, ONE alert', async () => {
+      await fridayApplied();
+      const before = await snapshot();
+      // The ninth row opens a quote it never closes: Papa reports MissingQuotes, 9 rows parse (above
+      // the 0.8 ratio, and the sweep guard passes), and property 1009 is inside row 9's description.
+      const row9 = ' 1008 ;SP ;CAMPINAS ;CENTRO ; RUA A, N. 1 ;100.000,00;200.000,00;50.00;';
+      const malformed = list('23/11/2026', TEN).replace(
+        `${row9}Casa, 60 m2;`,
+        `${row9}"Casa, 60 m2;`,
+      );
+      expect(malformed).toContain('"Casa, 60 m2');
+      h.caixa.serveList(malformed);
+
+      await tickThrough(h.orchestrator(), MONDAY, HH(6), HH(12));
+
+      expect(await snapshot()).toEqual(before);
+      expect(await h.kit.auctionModel.findOne({ code: '1009' })).toMatchObject({ available: true });
+      expect(await h.kit.auctionModel.countDocuments({ available: false })).toBe(0);
+      expect(await runOf(MONDAY)).toMatchObject({
+        outcome: 'REJECTED_LIST',
+        failureReasons: ['MALFORMED_CSV'],
+        progress: { rejection: { generatedOn: '2026-11-23', reason: 'MALFORMED_CSV' } },
+      });
+      expect(h.email.importAlertEmails).toHaveLength(2);
+      expect(h.email.importAlertEmails[0]?.alert).toMatchObject({
+        outcomeLabel: 'Lista rejeitada',
+        codes: ['MALFORMED_CSV'],
+      });
+    });
+
     it('the same refused file is not judged again: still one rejection, and the day is decided when the attempts run out', async () => {
       await fridayApplied();
       h.caixa.serveList(list('23/11/2026', TEN.slice(0, 3)));
@@ -598,6 +628,43 @@ describe('the import state machine (integration)', () => {
         alertedAt: null,
       });
       expect(h.email.importAlertEmails).toHaveLength(0);
+    });
+
+    it('BR-004-07 (review of #187): the next day replays the same CSV under a NEW run; the 100 to 90 drop is recorded once and delivered once', async () => {
+      await fridayApplied();
+      const first = await h.kit.changes.findSince(null, { relevantOnly: false });
+      const dropped = list('23/11/2026', [['1000', 'Venda Online', '90.000,00'], ...TEN.slice(1)]);
+      h.caixa.serveList(dropped);
+
+      // Monday: the entry is written, then every property write dies; the day ends FAILED.
+      await tickThrough(h.orchestrator({}, { applier: dying() }), MONDAY, HH(6), HH(12));
+      expect(await runOf(MONDAY)).toMatchObject({ outcome: 'FAILED' });
+      const history = async () =>
+        (
+          await h.kit.changeModel
+            .find({ propertyCode: '1000' })
+            .sort({ createdAt: 1, _id: 1 })
+            .lean()
+        ).map((e) => `${e.type} ${String(e.oldValue)}>${String(e.newValue)}`);
+      expect(await history()).toEqual(['NEW null>true', 'PRICE_DROPPED 100000.00>90000.00']);
+
+      // Tuesday: the same CSV, and the day has another run id.
+      await tickThrough(h.orchestrator(), TUESDAY, HH(6), HH(6));
+
+      const monday = await runOf(MONDAY);
+      const tuesday = await runOf(TUESDAY);
+      expect(tuesday).toMatchObject({ outcome: 'SUCCESS' });
+      expect(tuesday?.id).not.toBe(monday?.id);
+      expect(await history()).toEqual(['NEW null>true', 'PRICE_DROPPED 100000.00>90000.00']);
+      const delivered = await h.kit.changes.findSince(first.cursor, { relevantOnly: false });
+      expect(delivered.items.map((e) => `${e.propertyCode} ${e.type}`)).toEqual([
+        '1000 PRICE_DROPPED',
+      ]);
+      expect(
+        (
+          await h.kit.auctionModel.findOne({ code: '1000' }).lean()
+        )?.currentPhase?.minimumPrice?.toString(),
+      ).toBe('90000');
     });
 
     it('all day: FAILED with the class as a code, one alert, nothing hidden', async () => {
