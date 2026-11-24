@@ -52,6 +52,12 @@ export interface RunProgress {
   applyFailed: boolean;
   /** The newest list the validator refused: its generation day (null: unreadable) and the code. */
   rejection: { generatedOn: string | null; reason: string } | null;
+  /**
+   * Caixa answered a request of the day with a block (`HTTP_403`, `CHALLENGE_PAGE`...): the reason
+   * code, null when it never did. A run that carries one is decided at once and asks Caixa for
+   * nothing more that day, whatever else it says (BR-004-20, SC-24).
+   */
+  blocked: string | null;
 }
 
 export interface RunState {
@@ -179,6 +185,7 @@ function endsAsFailure(decision: Extract<ImportDecision, { kind: 'finalize' }>):
  *    or holiday is left alone;
  *  - SUCCESS: complete the update (collection pass, then the signal) until it is done;
  *  - decided (FAILED, REJECTED_LIST, NO_NEW_LIST, NO_UPDATE): nothing, ever;
+ *  - RUNNING with a recorded block: decided FAILED LIST_BLOCKED at once, at any time of day;
  *  - RUNNING: at the cutoff, decide the day (`endOfDay`); before it, decide early when the
  *    attempts are used up on a day that ends FAILED or REJECTED_LIST; else attempt when the window
  *    is open and the spacing since the last attempt has passed. An attempt on a run whose list was
@@ -212,6 +219,10 @@ export function decideNextAction(
       : { kind: 'wait', reason: 'FINISHED' };
   }
   if (run.outcome !== 'RUNNING') return { kind: 'wait', reason: 'FINISHED' };
+  // BR-004-20, SC-24, AR-03: a recorded block ends the day before anything else is looked at: not
+  // the window, the spacing, the attempts, nor the cutoff may send another request. Recovery of a
+  // run whose finalization did not complete (it stays RUNNING with the block on it) lands here.
+  if (run.progress.blocked !== null) return finalize('FAILED', LIST_BLOCKED);
   const decided = endOfDay(run, calendar);
   if (pastCutoff) return decided;
   const exhausted = run.attempts >= schedule.maxAttempts;

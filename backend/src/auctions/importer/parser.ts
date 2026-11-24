@@ -44,6 +44,19 @@ export interface ParsedList {
   header: string[] | null;
   /** The list's "Data de geração" as a Brasília calendar day `YYYY-MM-DD`; null when absent. */
   generatedOn: string | null;
+  /**
+   * BR-004-04 / DL-004-03: the codes of the syntax errors PapaParse reported (`MissingQuotes`,
+   * `InvalidQuotes`, ...), one per error. Codes only, never the text or the row (SC-15). With the
+   * delimiter fixed to `;` and no header option, Papa can only report quote errors, but every
+   * error it reports makes the list malformed, whatever its type.
+   */
+  syntaxErrors: string[];
+  /**
+   * BR-004-04: rows after the header whose number of cells is not the header's. An unterminated
+   * quote swallows the lines after it into one cell, and a download cut in the middle of a row
+   * leaves a short one; either way the row is not what Caixa wrote.
+   */
+  irregularRows: number;
 }
 
 export function parseCsv(csv: string): ParsedAuctionRow[] {
@@ -62,6 +75,8 @@ export function listFacts(list: ParsedList): ListFacts {
     usableCodeCount: new Set(codes).size,
     rowsWithoutCode: normalized.length - codes.length,
     unreadableMoneyRows: normalized.filter((row) => row.moneyUnreadable).length,
+    syntaxErrors: list.syntaxErrors.length,
+    irregularRows: list.irregularRows,
   };
 }
 
@@ -93,6 +108,9 @@ export function parseCaixaList(csv: string): ParsedList {
   });
 
   const allRows = parseResult.data ?? [];
+  // The error's `code` only: its message and `row` index are not content, but the cell text could
+  // be (SC-15), and Papa does not put it there; the code is all the verdict needs.
+  const syntaxErrors = (parseResult.errors ?? []).map((error) => error.code);
 
   // Find the true header row; skip title lines like "Lista de Imóveis..."
   let headerIndex = -1;
@@ -115,13 +133,17 @@ export function parseCaixaList(csv: string): ParsedList {
   const generatedOn = findGenerationDate(
     headerIndex === -1 ? allRows : allRows.slice(0, headerIndex),
   );
-  if (!header || headerIndex === -1) return { rows: [], header: null, generatedOn };
+  if (!header || headerIndex === -1) {
+    return { rows: [], header: null, generatedOn, syntaxErrors, irregularRows: 0 };
+  }
 
   // Convert rows to objects using the found header
   const rows: ParsedAuctionRow[] = [];
+  let irregularRows = 0;
   for (const rowData of allRows.slice(headerIndex + 1)) {
     // Skip empty rows
     if (rowData.every((cell) => !cell || cell.trim() === '')) continue;
+    if (rowData.length !== header.length) irregularRows += 1;
 
     const row: ParsedAuctionRow = {};
     for (const [j, column] of header.entries()) {
@@ -130,7 +152,7 @@ export function parseCaixaList(csv: string): ParsedList {
     rows.push(row);
   }
 
-  return { rows, header, generatedOn };
+  return { rows, header, generatedOn, syntaxErrors, irregularRows };
 }
 
 export function normalizeRows(rows: ParsedAuctionRow[]): NormalizedAuctionRow[] {

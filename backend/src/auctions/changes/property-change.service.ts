@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { type ChangeDraft, type ChangeType, isRepeat } from '../domain/change-types.js';
 
-/** How far back on a field a repeat is looked for: a collection writes a handful at most. */
+/** How far back on a field a repeat is looked for: a field changes a handful of times a week. */
 const RECENT_ENTRIES = 10;
 import {
   type ChangeCursor,
@@ -32,25 +32,28 @@ export class PropertyChangeService {
   }
 
   /**
-   * Like `record`, for the entries a detail collection or the clock writes (BR-004-25): an entry
-   * that only repeats what is already the newest on its field (`isRepeat`) is left out. A run that
-   * died after its entries and before the write they describe is retried under ANOTHER run id, so
-   * the unique key alone would record the same change twice; the change was already told, once.
+   * Like `record`, for every entry a run writes before the write it describes (the list, the
+   * detail collection, the clock; BR-004-07, BR-004-25): an entry that only repeats what is already
+   * the newest on its field (`isRepeat`) is left out. A run that died after its entries and
+   * before the write they describe is retried under ANOTHER run id when the retry is the next
+   * day's run, so the unique key (which holds the run) alone would record the same change twice,
+   * and a consumer reading by cursor would be told twice; the change was already told, once.
+   * The entries of one call are read against the history in ONE query, not one per entry.
    */
   async recordUnlessRepeated(
     runId: string,
     drafts: readonly ChangeDraft[],
     now: Date,
   ): Promise<void> {
-    const fresh: ChangeDraft[] = [];
-    for (const draft of drafts) {
-      const recent = await this.changes.findRecentByField(
-        draft.propertyCode,
-        draft.field,
-        RECENT_ENTRIES,
-      );
-      if (!isRepeat(draft, recent)) fresh.push(draft);
-    }
+    if (drafts.length === 0) return;
+    const recent = await this.changes.findRecentByFields(
+      [...new Set(drafts.map((draft) => draft.propertyCode))],
+      [...new Set(drafts.map((draft) => draft.field))],
+      RECENT_ENTRIES,
+    );
+    const fresh = drafts.filter(
+      (draft) => !isRepeat(draft, recent.get(draft.propertyCode)?.get(draft.field) ?? []),
+    );
     await this.record(runId, fresh, now);
   }
 

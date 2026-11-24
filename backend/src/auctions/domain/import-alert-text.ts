@@ -38,6 +38,7 @@ export type KnownReason =
   | 'UNRECOGNISED_LAYOUT'
   | 'MISSING_COLUMNS'
   | 'NO_GENERATION_DATE'
+  | 'MALFORMED_CSV'
   | 'GENERATION_DATE_IN_FUTURE'
   | 'EMPTY_LIST'
   | 'TOO_MANY_ROWS_WITHOUT_CODE'
@@ -60,6 +61,8 @@ export const REASON_TEXTS: Readonly<Record<KnownReason, string>> = {
   UNRECOGNISED_LAYOUT: 'A lista baixada não tem o formato esperado (cabeçalho não reconhecido).',
   MISSING_COLUMNS: 'A lista baixada não tem todas as colunas esperadas.',
   NO_GENERATION_DATE: 'A lista baixada não informa a data de geração.',
+  MALFORMED_CSV:
+    'A lista baixada não é um CSV bem formado (aspas sem fechar ou linhas com número de colunas diferente do cabeçalho): provavelmente está corrompida ou incompleta.',
   GENERATION_DATE_IN_FUTURE: 'A data de geração da lista é posterior a amanhã, o que indica erro.',
   EMPTY_LIST: 'A lista baixada não tem imóveis.',
   TOO_MANY_ROWS_WITHOUT_CODE:
@@ -87,6 +90,7 @@ const REJECTED_CODES: readonly KnownReason[] = [
   'UNRECOGNISED_LAYOUT',
   'MISSING_COLUMNS',
   'NO_GENERATION_DATE',
+  'MALFORMED_CSV',
   'GENERATION_DATE_IN_FUTURE',
   'EMPTY_LIST',
   'TOO_MANY_ROWS_WITHOUT_CODE',

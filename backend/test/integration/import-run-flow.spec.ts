@@ -7,7 +7,7 @@
 //
 // Calendar of the scenarios (Brasília, no DST): 2026-11-20 Friday, 21 Saturday, 22 Sunday,
 // 23 Monday; 2026-12-24 Thursday, 12-25 Friday (a holiday only when configured), 12-28 Monday.
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { CaixaBlockedError, CaixaUnreachableError } from '../../src/auctions/caixa/caixa-access.js';
 import { brasiliaInstant } from '../../src/auctions/domain/import-schedule.js';
@@ -435,6 +435,103 @@ describe('the import state machine (integration)', () => {
       );
     });
 
+    describe('the stop-on-block decision survives an interrupted finalization (BR-004-20, SC-24, AR-03; review of #189)', () => {
+      /** The first write that ends the run FAILED (the finalization) fails, as a dropped connection would. */
+      function failFirstFinalization() {
+        const original = h.kit.runModel.updateOne.bind(h.kit.runModel);
+        let failed = false;
+        return vi.spyOn(h.kit.runModel, 'updateOne').mockImplementation(((...args: unknown[]) => {
+          const update = args[1] as { $set?: { outcome?: string } } | undefined;
+          if (!failed && update?.$set?.outcome === 'FAILED') {
+            failed = true;
+            return { exec: () => Promise.reject(new Error('the connection dropped')) };
+          }
+          return (original as (...a: unknown[]) => unknown)(...args);
+        }) as never);
+      }
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('Caixa answers 403 and the first finalization write fails: the next spaced tick asks Caixa nothing, finalizes, and alerts once', async () => {
+        await fridayApplied();
+        h.caixa.serveList(new CaixaBlockedError('HTTP_403'));
+        failFirstFinalization();
+        const orchestrator = h.orchestrator();
+
+        setClock(MONDAY, HH(6));
+        await orchestrator.tick();
+        expect(listRequests()).toBe(1);
+
+        // The next attempt is due at 06:30: it must not become a second request.
+        setClock(MONDAY, HH(6, 30));
+        await orchestrator.tick();
+        await tickThrough(orchestrator, MONDAY, HH(6, 35), HH(12));
+
+        expect(listRequests()).toBe(1);
+        expect(await runOf(MONDAY)).toMatchObject({
+          outcome: 'FAILED',
+          failureReasons: expect.arrayContaining(['HTTP_403', 'LIST_BLOCKED']),
+          progress: { blocked: 'HTTP_403' },
+        });
+        expect(h.email.importAlertEmails).toHaveLength(2); // one alert: two admins, once
+        expect(h.health.recordFailure).toHaveBeenCalledTimes(1);
+        expect(h.health.recordFailure).toHaveBeenCalledWith(
+          'auctions-import',
+          'AUTO',
+          'LIST_BLOCKED',
+        );
+      });
+
+      it('a run left RUNNING with the block on it (any process, any restart) is finalized by the next tick without a request, forced or not', async () => {
+        await fridayApplied();
+        h.caixa.serveList(MONDAY_LIST);
+        const monday = await h.kit.runs.ensure(MONDAY);
+        await h.kit.runModel.updateOne(
+          { _id: new Types.ObjectId(monday.id) },
+          {
+            $set: {
+              attempts: 1,
+              nextAttemptAt: brasiliaInstant(MONDAY, HH(6, 30)),
+              'progress.blocked': 'CHALLENGE_PAGE',
+            },
+            $addToSet: { failureReasons: 'CHALLENGE_PAGE' },
+          },
+        );
+
+        setClock(MONDAY, HH(6, 30));
+        await h.orchestrator().tick({ force: true }); // a fresh instance: no memory of the block
+
+        expect(listRequests()).toBe(0);
+        expect(await runOf(MONDAY)).toMatchObject({
+          outcome: 'FAILED',
+          failureReasons: ['CHALLENGE_PAGE', 'LIST_BLOCKED'],
+          progress: { blocked: 'CHALLENGE_PAGE' },
+        });
+        expect(h.email.importAlertEmails).toHaveLength(2);
+      });
+
+      it('the block and the end of the day are one write: there is no state with one and not the other', async () => {
+        await fridayApplied();
+        h.caixa.serveList(new CaixaBlockedError('HTTP_403'));
+        const seen: unknown[] = [];
+        const original = h.kit.runModel.updateOne.bind(h.kit.runModel);
+        vi.spyOn(h.kit.runModel, 'updateOne').mockImplementation(((...args: unknown[]) => {
+          seen.push(args[1]);
+          return (original as (...a: unknown[]) => unknown)(...args);
+        }) as never);
+
+        setClock(MONDAY, HH(6));
+        await h.orchestrator().tick();
+
+        const withBlock = seen.filter((update) => JSON.stringify(update).includes('HTTP_403'));
+        expect(withBlock).toHaveLength(1);
+        expect(JSON.stringify(withBlock[0])).toContain('FAILED');
+        expect(JSON.stringify(withBlock[0])).toContain('LIST_BLOCKED');
+      });
+    });
+
     it('a failure to read anything but Caixa (the cache, the storage) counts as an attempt without an answer', async () => {
       class StorageError extends Error {
         override name = 'StorageError';
@@ -483,6 +580,36 @@ describe('the import state machine (integration)', () => {
         'AUTO',
         'LIST_REJECTED',
       );
+    });
+
+    it('BR-004-04, DL-004-03 (review of #187): an unterminated quote in row 9 swallows property 10; MALFORMED_CSV, nothing applied, property 10 stays available, ONE alert', async () => {
+      await fridayApplied();
+      const before = await snapshot();
+      // The ninth row opens a quote it never closes: Papa reports MissingQuotes, 9 rows parse (above
+      // the 0.8 ratio, and the sweep guard passes), and property 1009 is inside row 9's description.
+      const row9 = ' 1008 ;SP ;CAMPINAS ;CENTRO ; RUA A, N. 1 ;100.000,00;200.000,00;50.00;';
+      const malformed = list('23/11/2026', TEN).replace(
+        `${row9}Casa, 60 m2;`,
+        `${row9}"Casa, 60 m2;`,
+      );
+      expect(malformed).toContain('"Casa, 60 m2');
+      h.caixa.serveList(malformed);
+
+      await tickThrough(h.orchestrator(), MONDAY, HH(6), HH(12));
+
+      expect(await snapshot()).toEqual(before);
+      expect(await h.kit.auctionModel.findOne({ code: '1009' })).toMatchObject({ available: true });
+      expect(await h.kit.auctionModel.countDocuments({ available: false })).toBe(0);
+      expect(await runOf(MONDAY)).toMatchObject({
+        outcome: 'REJECTED_LIST',
+        failureReasons: ['MALFORMED_CSV'],
+        progress: { rejection: { generatedOn: '2026-11-23', reason: 'MALFORMED_CSV' } },
+      });
+      expect(h.email.importAlertEmails).toHaveLength(2);
+      expect(h.email.importAlertEmails[0]?.alert).toMatchObject({
+        outcomeLabel: 'Lista rejeitada',
+        codes: ['MALFORMED_CSV'],
+      });
     });
 
     it('the same refused file is not judged again: still one rejection, and the day is decided when the attempts run out', async () => {
@@ -598,6 +725,43 @@ describe('the import state machine (integration)', () => {
         alertedAt: null,
       });
       expect(h.email.importAlertEmails).toHaveLength(0);
+    });
+
+    it('BR-004-07 (review of #187): the next day replays the same CSV under a NEW run; the 100 to 90 drop is recorded once and delivered once', async () => {
+      await fridayApplied();
+      const first = await h.kit.changes.findSince(null, { relevantOnly: false });
+      const dropped = list('23/11/2026', [['1000', 'Venda Online', '90.000,00'], ...TEN.slice(1)]);
+      h.caixa.serveList(dropped);
+
+      // Monday: the entry is written, then every property write dies; the day ends FAILED.
+      await tickThrough(h.orchestrator({}, { applier: dying() }), MONDAY, HH(6), HH(12));
+      expect(await runOf(MONDAY)).toMatchObject({ outcome: 'FAILED' });
+      const history = async () =>
+        (
+          await h.kit.changeModel
+            .find({ propertyCode: '1000' })
+            .sort({ createdAt: 1, _id: 1 })
+            .lean()
+        ).map((e) => `${e.type} ${String(e.oldValue)}>${String(e.newValue)}`);
+      expect(await history()).toEqual(['NEW null>true', 'PRICE_DROPPED 100000.00>90000.00']);
+
+      // Tuesday: the same CSV, and the day has another run id.
+      await tickThrough(h.orchestrator(), TUESDAY, HH(6), HH(6));
+
+      const monday = await runOf(MONDAY);
+      const tuesday = await runOf(TUESDAY);
+      expect(tuesday).toMatchObject({ outcome: 'SUCCESS' });
+      expect(tuesday?.id).not.toBe(monday?.id);
+      expect(await history()).toEqual(['NEW null>true', 'PRICE_DROPPED 100000.00>90000.00']);
+      const delivered = await h.kit.changes.findSince(first.cursor, { relevantOnly: false });
+      expect(delivered.items.map((e) => `${e.propertyCode} ${e.type}`)).toEqual([
+        '1000 PRICE_DROPPED',
+      ]);
+      expect(
+        (
+          await h.kit.auctionModel.findOne({ code: '1000' }).lean()
+        )?.currentPhase?.minimumPrice?.toString(),
+      ).toBe('90000');
     });
 
     it('all day: FAILED with the class as a code, one alert, nothing hidden', async () => {
