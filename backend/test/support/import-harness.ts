@@ -30,7 +30,10 @@ import { ImportAlertService } from '../../src/auctions/import-runs/import-alert.
 import {
   type CollectionResult,
   EnrichmentPass,
+  type EnrichmentPassInput,
 } from '../../src/auctions/enrichment/enrichment-pass.js';
+import { EnrichmentRepository } from '../../src/auctions/enrichment/enrichment.repository.js';
+import { RoundClockService } from '../../src/auctions/enrichment/round-clock.service.js';
 import { AuctionEntity, AuctionSchema } from '../../src/auctions/schemas/auction.schema.js';
 import {
   ImportRunEntity,
@@ -51,14 +54,17 @@ import { testBusinessConfig } from './test-env.js';
 /** A hand-written EnrichmentPass (TS-03): the result it answers, and the calls it received. */
 export class FakeEnrichmentPass extends EnrichmentPass {
   readonly calls: { importRunId: string; brasiliaDate: string }[] = [];
-  result: CollectionResult = { collected: 0, failed: 0, blocked: false };
+  /** The whole input of each call, for specs about what the orchestrator hands the pass. */
+  readonly inputs: EnrichmentPassInput[] = [];
+  result: CollectionResult = { collected: 0, failed: 0, blocked: false, pages: 0 };
   failWith: Error | null = null;
   /** Runs before the pass answers: a spec can simulate a slow or a dying pass. */
-  hook: (() => Promise<void>) | null = null;
+  hook: ((input: EnrichmentPassInput) => Promise<void>) | null = null;
 
-  async run(input: { importRunId: string; brasiliaDate: string }): Promise<CollectionResult> {
-    this.calls.push(input);
-    await this.hook?.();
+  async run(input: EnrichmentPassInput): Promise<CollectionResult> {
+    this.calls.push({ importRunId: input.importRunId, brasiliaDate: input.brasiliaDate });
+    this.inputs.push(input);
+    await this.hook?.(input);
     if (this.failWith !== null) throw this.failWith;
     return this.result;
   }
@@ -171,6 +177,7 @@ export async function createImportHarness(uri: string, start: Date): Promise<Imp
         overrides.enrichment ?? enrichment,
         bus,
         alerts,
+        new RoundClockService(new EnrichmentRepository(kit.auctionModel), kit.changes, clock),
       );
       if (overrides.leaseRenewMs !== undefined) orchestrator.leaseRenewMs = overrides.leaseRenewMs;
       return orchestrator;

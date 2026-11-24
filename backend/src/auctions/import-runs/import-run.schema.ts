@@ -41,15 +41,15 @@ export class ImportRunEntity {
   counts!: ImportCounts;
 
   /**
-   * Detail collection (part 3). Named `detailCollection` because `collection` is a reserved
+   * Detail collection (part 4: `pages` is what the daily budget counts). Named `detailCollection` because `collection` is a reserved
    * Mongoose path (it is the document's own collection handle); the issue's `collection` object.
    */
   @Prop({
-    type: { collected: Number, failed: Number, blocked: Boolean },
+    type: { collected: Number, failed: Number, blocked: Boolean, pages: Number },
     _id: false,
-    default: () => ({ collected: 0, failed: 0, blocked: false }),
+    default: () => ({ collected: 0, failed: 0, blocked: false, pages: 0 }),
   })
-  detailCollection!: { collected: number; failed: number; blocked: boolean };
+  detailCollection!: { collected: number; failed: number; blocked: boolean; pages: number };
 
   /** Stable codes only (SC-15). */
   @Prop({ type: [String], default: [] })

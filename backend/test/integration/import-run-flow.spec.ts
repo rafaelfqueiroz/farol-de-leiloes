@@ -82,7 +82,7 @@ describe('the import state machine (integration)', () => {
     h.email.failFor.clear();
     h.events.length = 0;
     h.enrichment.calls.length = 0;
-    h.enrichment.result = { collected: 0, failed: 0, blocked: false };
+    h.enrichment.result = { collected: 0, failed: 0, blocked: false, pages: 0 };
     h.enrichment.failWith = null;
     h.enrichment.hook = null;
     h.health.recordExecution.mockClear();
@@ -167,7 +167,7 @@ describe('the import state machine (integration)', () => {
   describe('a day with a new valid list (BR-004-01, BR-004-06, BR-004-23, BR-004-24)', () => {
     it('applies it, collects, completes the update once, emits one event and moves "last updated"', async () => {
       const orchestrator = h.orchestrator();
-      h.enrichment.result = { collected: 7, failed: 1, blocked: false };
+      h.enrichment.result = { collected: 7, failed: 1, blocked: false, pages: 0 };
       expect(await h.kit.runs.lastUpdateAt()).toBeNull();
       setClock(FRIDAY, HH(6));
 
@@ -181,7 +181,7 @@ describe('the import state machine (integration)', () => {
         listRows: 10,
         attempts: 1,
         counts: { new: 10, changed: 0, unavailable: 0, active: 10 },
-        collection: { collected: 7, failed: 1, blocked: false },
+        collection: { collected: 7, failed: 1, blocked: false, pages: 0 },
         failureReasons: [],
         alertedAt: null,
         updateCompletedAt: brasiliaInstant(FRIDAY, HH(6)),
@@ -233,7 +233,7 @@ describe('the import state machine (integration)', () => {
     });
 
     it('a collection that is blocked still completes the update and alerts once (BR-004-29)', async () => {
-      h.enrichment.result = { collected: 2, failed: 0, blocked: true };
+      h.enrichment.result = { collected: 2, failed: 0, blocked: true, pages: 0 };
       setClock(FRIDAY, HH(6));
 
       await h.orchestrator().tick();
@@ -259,7 +259,7 @@ describe('the import state machine (integration)', () => {
 
       expect(await runOf(FRIDAY)).toMatchObject({
         outcome: 'SUCCESS',
-        collection: { collected: 0, failed: 0, blocked: false },
+        collection: { collected: 0, failed: 0, blocked: false, pages: 0 },
       });
       expect(h.events).toHaveLength(1);
       expect(h.email.importAlertEmails).toHaveLength(0);
@@ -1216,7 +1216,7 @@ describe('the import state machine (integration)', () => {
     });
 
     it('a worker that loses the lease during the pass does not store its result, nor complete the day', async () => {
-      h.enrichment.result = { collected: 9, failed: 0, blocked: false };
+      h.enrichment.result = { collected: 9, failed: 0, blocked: false, pages: 0 };
       h.enrichment.hook = async () => {
         await steal(FRIDAY);
       };
@@ -1226,7 +1226,7 @@ describe('the import state machine (integration)', () => {
 
       expect(await runOf(FRIDAY)).toMatchObject({
         outcome: 'SUCCESS',
-        collection: { collected: 0, failed: 0, blocked: false },
+        collection: { collected: 0, failed: 0, blocked: false, pages: 0 },
         updateCompletedAt: null,
       });
       expect(h.events).toHaveLength(0);

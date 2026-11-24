@@ -13,7 +13,8 @@ export type DocumentKind = 'MATRICULA' | 'EDITAL';
 export interface VersionFacts {
   sourceUrl: string;
   contentHash: string;
-  retrievedAt: Date;
+  /** When the file was last compared with Caixa's (its retrieval, or a later re-check). */
+  checkedAt: Date;
   publishedAt: Date | null;
 }
 
@@ -29,7 +30,7 @@ export interface PageDocument {
 /**
  * Whether the document is worth a request this time. The page names no document: nothing to ask
  * for, whatever is stored stays. Otherwise: none stored, another address, another publication date,
- * or stored for DOCUMENT_RECHECK_DAYS or more (a replaced file behind the same address and date is
+ * or last compared with Caixa's DOCUMENT_RECHECK_DAYS or more days ago (a replaced file behind the same address and date is
  * found by its content hash then, BR-004-30).
  */
 export function shouldFetchDocument(
@@ -44,7 +45,7 @@ export function shouldFetchDocument(
     return true;
   }
   const recheckAfter = addCalendarDays(
-    brasiliaCalendarDate(current.retrievedAt),
+    brasiliaCalendarDate(current.checkedAt),
     DOCUMENT_RECHECK_DAYS,
   );
   return brasiliaCalendarDate(now) >= recheckAfter;

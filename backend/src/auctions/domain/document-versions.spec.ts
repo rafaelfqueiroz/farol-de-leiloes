@@ -12,7 +12,7 @@ const NOW = brasiliaInstant('2026-11-24', 600);
 const stored = (overrides: Partial<VersionFacts> = {}): VersionFacts => ({
   sourceUrl: 'https://venda-imoveis.caixa.gov.br/editais/EL1.PDF',
   contentHash: 'a'.repeat(64),
-  retrievedAt: brasiliaInstant('2026-11-20', 600),
+  checkedAt: brasiliaInstant('2026-11-20', 600),
   publishedAt: new Date('2026-11-01T12:00:00Z'),
   ...overrides,
 });
@@ -54,9 +54,9 @@ describe('shouldFetchDocument (BR-004-30)', () => {
     expect(shouldFetchDocument(stored(), page({ publishedAt: null }), NOW)).toBe(false);
   });
 
-  it('fetches again, to compare content, once the copy is 30 calendar days old', () => {
+  it('fetches again, to compare content, once it was last compared 30 calendar days ago', () => {
     expect(DOCUMENT_RECHECK_DAYS).toBe(30);
-    const retrieved = (day: string) => stored({ retrievedAt: brasiliaInstant(day, 1380) });
+    const retrieved = (day: string) => stored({ checkedAt: brasiliaInstant(day, 1380) });
     // Retrieved on 2026-10-25 at 23:00: due on 2026-11-24 (30 days on), not a day earlier.
     expect(shouldFetchDocument(retrieved('2026-10-25'), page(), NOW)).toBe(true);
     expect(shouldFetchDocument(retrieved('2026-10-26'), page(), NOW)).toBe(false);

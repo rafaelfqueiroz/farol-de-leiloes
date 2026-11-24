@@ -9,9 +9,6 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import r2Config from '../config/r2.config.js';
 import { errorMessage } from '../common/error-message.js';
-import { jobErrorCode } from '../common/services/job-error-code.js';
-import { CAIXA_USER_AGENT } from '../common/caixa-user-agent.js';
-import { resolveOnCaixaSite } from '../common/caixa-site.js';
 
 /**
  * SPEC-002 BR-002-08 / SC-18: client files (journey documents and photos, SPEC-017) have keys under
@@ -34,18 +31,6 @@ export function isPrivateFileKey(key: unknown): key is string {
 /** SC-15 / SC-18: a private key never reaches a log line. */
 function loggableKey(key: string): string {
   return key.startsWith(PRIVATE_FILE_PREFIX) ? '[private file]' : key;
-}
-
-export interface UploadResult {
-  key: string;
-  url: string;
-  size: number;
-}
-
-export interface DocumentUploadResult {
-  key: string;
-  url: string;
-  size: number;
 }
 
 @Injectable()
@@ -105,125 +90,15 @@ export class StorageService {
   }
 
   /**
-   * Upload an image from a URL to R2
-   * Images are stored publicly for direct frontend access
+   * SPEC-004 BR-004-22: the public URL of a public-catalogue object (a photo, an edital) of the
+   * public bucket. A private key has none (SC-18): it is linked per request by
+   * `issuePrivateFileLink`, so asking for one is a programming error.
    */
-  async uploadImageFromUrl(sourceUrl: string, auctionCode: string): Promise<UploadResult | null> {
-    if (!this.s3Client) {
-      this.logger.debug('R2 not configured, skipping image upload');
-      return null;
+  publicUrlFor(key: string): string {
+    if (key.startsWith(PRIVATE_FILE_PREFIX)) {
+      throw new Error('A private file has no public URL (SC-18)');
     }
-
-    // SC-24 / SC-19: the URL comes from Caixa's data; only Caixa's own site is requested.
-    const source = resolveOnCaixaSite(sourceUrl);
-    if (!source || source.protocol !== 'https:') {
-      this.logger.warn(`Image source for ${auctionCode} is not on the Caixa site, skipping`);
-      return null;
-    }
-
-    try {
-      const response = await fetch(source.href, {
-        // SC-24: honest user agent, never a browser's
-        headers: { 'User-Agent': CAIXA_USER_AGENT },
-      });
-
-      if (!response.ok) {
-        // SC-15: the property code, never the URL (it comes from Caixa's data).
-        this.logger.warn(`Failed to fetch image for ${auctionCode}: ${response.status}`);
-        return null;
-      }
-
-      const contentType = response.headers.get('content-type') || 'image/jpeg';
-      const buffer = Buffer.from(await response.arrayBuffer());
-
-      // Determine file extension from content type
-      const ext = this.getExtensionFromMimeType(contentType);
-      const key = `images/${auctionCode}${ext}`;
-
-      await this.s3Client.send(
-        new PutObjectCommand({
-          Bucket: this.bucket,
-          Key: key,
-          Body: buffer,
-          ContentType: contentType,
-        }),
-      );
-
-      const url = this.publicUrl ? `${this.publicUrl}/${key}` : key;
-
-      this.logger.debug(`Uploaded image for ${auctionCode}: ${key} (${buffer.length} bytes)`);
-
-      return {
-        key,
-        url,
-        size: buffer.length,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to upload image for ${auctionCode}: ${jobErrorCode(error)}`);
-      return null;
-    }
-  }
-
-  /**
-   * Upload a document (PDF) from a URL to R2
-   * Documents are stored privately and accessed via signed URLs
-   */
-  async uploadDocumentFromUrl(
-    sourceUrl: string,
-    auctionCode: string,
-    type: 'matricula' | 'edital',
-  ): Promise<DocumentUploadResult | null> {
-    if (!this.s3Client) {
-      this.logger.debug('R2 not configured, skipping document upload');
-      return null;
-    }
-
-    // SC-24 / SC-19: the URL comes from Caixa's data; only Caixa's own site is requested.
-    const source = resolveOnCaixaSite(sourceUrl);
-    if (!source || source.protocol !== 'https:') {
-      this.logger.warn(`Document source for ${auctionCode} is not on the Caixa site, skipping`);
-      return null;
-    }
-
-    try {
-      const response = await fetch(source.href, {
-        // SC-24: honest user agent, never a browser's
-        headers: { 'User-Agent': CAIXA_USER_AGENT },
-      });
-
-      if (!response.ok) {
-        // SC-15: the property code, never the URL (it comes from Caixa's data).
-        this.logger.warn(`Failed to fetch document for ${auctionCode}: ${response.status}`);
-        return null;
-      }
-
-      const contentType = response.headers.get('content-type') || 'application/pdf';
-      const buffer = Buffer.from(await response.arrayBuffer());
-
-      const key = `documents/${auctionCode}/${type}.pdf`;
-
-      await this.s3Client.send(
-        new PutObjectCommand({
-          Bucket: this.bucket,
-          Key: key,
-          Body: buffer,
-          ContentType: contentType,
-        }),
-      );
-
-      const url = this.publicUrl ? `${this.publicUrl}/${key}` : key;
-
-      this.logger.debug(`Uploaded ${type} for ${auctionCode}: ${key} (${buffer.length} bytes)`);
-
-      return {
-        key,
-        url,
-        size: buffer.length,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to upload document for ${auctionCode}: ${jobErrorCode(error)}`);
-      return null;
-    }
+    return this.publicUrl ? `${this.publicUrl}/${key}` : key;
   }
 
   /**
@@ -368,16 +243,5 @@ export class StorageService {
       throw new Error('The private file bucket is not configured (R2_PRIVATE_BUCKET, SC-18)');
     }
     return this.privateBucket;
-  }
-
-  private getExtensionFromMimeType(mimeType: string): string {
-    const mimeToExt: Record<string, string> = {
-      'image/jpeg': '.jpg',
-      'image/jpg': '.jpg',
-      'image/png': '.png',
-      'image/gif': '.gif',
-      'image/webp': '.webp',
-    };
-    return mimeToExt[mimeType] || '.jpg';
   }
 }

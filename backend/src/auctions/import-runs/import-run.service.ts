@@ -165,7 +165,7 @@ export class ImportRunService {
   saveCollection(
     id: string,
     owner: string,
-    collection: { collected: number; failed: number; blocked: boolean },
+    collection: { collected: number; failed: number; blocked: boolean; pages: number },
   ): Promise<boolean> {
     return this.runs.saveCollection(id, owner, collection);
   }

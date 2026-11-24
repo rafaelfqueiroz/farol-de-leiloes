@@ -20,10 +20,28 @@ export interface Address {
 export interface AuctionFile {
   originalUrl: string; // Caixa URL (kept for reference/fallback)
   storageKey?: string; // R2 object key (for signed URL generation)
-  publicUrl?: string; // R2 public URL (only for images)
+  publicUrl?: string; // R2 public URL (public catalogue files only: never a private one, SC-18)
   mimeType: string; // e.g., 'image/jpeg', 'application/pdf'
   size?: number; // File size in bytes
   uploadedAt?: Date; // When uploaded to R2
+  /** SHA-256 (hex) of the stored bytes (SPEC-004 BR-004-30); the key carries a prefix of it. */
+  contentHash?: string;
+}
+
+/**
+ * SPEC-004 BR-004-30: one stored version of a property's edital or matrícula. Append-only: a new
+ * file never replaces an earlier one, which stays stored (DL-004-10).
+ */
+export interface StoredDocumentVersion {
+  kind: 'MATRICULA' | 'EDITAL';
+  file: AuctionFile;
+  sourceUrl: string;
+  contentHash: string;
+  retrievedAt: Date;
+  /** When the file was last compared with Caixa's (equal to `retrievedAt` until a re-check). */
+  checkedAt: Date;
+  /** "Edital publicado em", where Caixa shows it. */
+  publishedAt: Date | null;
 }
 
 /**
@@ -112,14 +130,48 @@ export class AuctionEntity {
   @Prop({ type: Date, default: null })
   detailsCollectedAt?: Date | null;
 
+  /** BR-004-11: null / absent = unknown (the page was not collected, or does not say). */
+  @Prop({ type: [String], default: undefined })
+  paymentMethods?: PaymentMethod[] | null;
+
+  @Prop({ type: Array, default: undefined })
+  expenseRules?: ExpenseRule[] | null;
+
+  /** The first photo of the gallery (kept for readers of the single image). */
   @Prop({ type: Object })
   image?: AuctionFile | null;
 
+  /** BR-004-22: our copies of the gallery photos, in page order; absent = not collected. */
+  @Prop({ type: Array, default: undefined })
+  photos?: AuctionFile[];
+
+  /** The CURRENT matrícula (BR-004-30); a copy kept under `private/` (SC-18), never a public URL. */
   @Prop({ type: Object })
   matricula?: AuctionFile | null;
 
+  /** The CURRENT edital (BR-004-30). */
   @Prop({ type: Object })
   edital?: AuctionFile | null;
+
+  /** BR-004-30: every version of the edital and the matrícula ever stored, oldest first. */
+  @Prop({ type: Array, default: undefined })
+  documentVersions?: StoredDocumentVersion[];
+
+  /** BR-004-21: page failures in a row; 0 after a successful collection. */
+  @Prop({ type: Number, default: 0 })
+  detailsFailures!: number;
+
+  /** BR-004-21: a failed page is not asked for again before this instant; null = not waiting. */
+  @Prop({ type: Date, default: null })
+  detailsRetryAfter?: Date | null;
+
+  /**
+   * BR-004-13, BR-004-26: the label of the round that was current when the property was last
+   * looked at, by the collection or the clock; null = none was; absent = never recorded. What the
+   * clock compares the round of the day with.
+   */
+  @Prop({ type: String, default: undefined })
+  currentRoundLabel?: string | null;
 
   @Prop({ type: String })
   description?: string | null;
