@@ -10,6 +10,7 @@
 // field, and the enums would start being validated against documents the importer wrote years
 // ago. That is a schema change of its own, not part of #34's money contract step (AR-28).
 import { fromDecimal128OrNull, toDecimal128OrNull } from '../common/money/decimal128.js';
+import { isPrivateFileKey } from '../storage/storage.service.js';
 import { isActive } from './domain/active.js';
 import { currentMinimumPrice, discountPercent, type Round } from './domain/rounds.js';
 import type { StoredPhase, StoredRound } from './schemas/auction.schema.js';
@@ -67,7 +68,15 @@ export function toAuction(doc: AuctionRecord, now: Date): Auction {
 
   // Compute URLs from file objects (prefer publicUrl, fallback to originalUrl)
   const imageUrl = doc.image?.publicUrl ?? doc.image?.originalUrl ?? null;
-  const matriculaUrl = doc.matricula?.publicUrl ?? doc.matricula?.originalUrl ?? null;
+  // BR-004-22, SC-18: a matrícula we copied lives in the private bucket and has no public URL; it is
+  // linked per request (AuctionsService.issueMatriculaLink). A legacy public copy keeps its URL.
+  const privateMatricula = isPrivateFileKey(doc.matricula?.storageKey);
+  const matriculaUrl = privateMatricula
+    ? null
+    : (doc.matricula?.publicUrl ?? doc.matricula?.originalUrl ?? null);
+  const photoUrls = (doc.photos ?? []).flatMap((photo) =>
+    photo.publicUrl === undefined ? [] : [photo.publicUrl],
+  );
 
   const rounds = (doc.rounds ?? []).map(fromStoredRound);
   const available = doc.available ?? true;
@@ -91,9 +100,11 @@ export function toAuction(doc: AuctionRecord, now: Date): Auction {
     detailsCollectedAt: doc.detailsCollectedAt ?? null,
     detailsUrl: doc.detailsUrl ?? null,
     imageUrl,
+    photoUrls,
     matriculaUrl,
-    // Disabled: the edital belongs to an auction phase, not to the auction itself.
-    editalUrl: null,
+    hasMatricula: privateMatricula || matriculaUrl !== null,
+    // BR-004-30: the property's current edital, our copy; null while none was kept.
+    editalUrl: doc.edital?.publicUrl ?? null,
     description: doc.description ?? null,
     fulfilled: doc.fulfilled ?? false,
     available,

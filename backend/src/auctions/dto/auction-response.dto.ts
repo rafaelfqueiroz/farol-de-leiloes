@@ -101,8 +101,25 @@ export class AuctionResponseDto {
   @ApiProperty({ type: String, nullable: true })
   imageUrl: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiProperty({
+    type: [String],
+    description: 'The platform’s own copies of the gallery photos (kept after Caixa removes them)',
+  })
+  photoUrls: string[];
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'A matrícula link that is not a private copy (legacy); null for a private copy',
+  })
   matriculaUrl: string | null;
+
+  @ApiProperty({
+    type: Boolean,
+    description:
+      'The platform keeps a copy of the matrícula; its download link is issued per request (60 s)',
+  })
+  hasMatricula: boolean;
 
   @ApiProperty({ type: String, nullable: true })
   editalUrl: string | null;
@@ -151,7 +168,9 @@ export class AuctionResponseDto {
     this.propertyType = auction.propertyType;
     this.detailsUrl = auction.detailsUrl;
     this.imageUrl = auction.imageUrl;
+    this.photoUrls = auction.photoUrls;
     this.matriculaUrl = auction.matriculaUrl;
+    this.hasMatricula = auction.hasMatricula;
     this.editalUrl = auction.editalUrl;
     this.description = auction.description;
     this.fulfilled = auction.fulfilled;
