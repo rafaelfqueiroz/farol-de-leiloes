@@ -177,6 +177,7 @@ describe('the Import Run endpoints (integration, SPEC-004 BR-004-24, BR-004-28)'
         activeCount: 40,
         detailsCollected: 5,
         detailsFailed: 1,
+        detailsPages: 0,
         blocked: true,
         failureReasons: [],
         nonBusinessReason: null,
