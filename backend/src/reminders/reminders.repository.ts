@@ -128,7 +128,24 @@ export class RemindersRepository extends AccountScopedRepository<ReminderRecord>
     );
   }
 
-  /** AR-12 / SPEC-010: the scheduler found the reminder's account closed: it will never be sent. */
+  /**
+   * AR-12 / SPEC-009 BR-009-17: JOB-LIKE (the account administration's reactivation). Cancels the
+   * PENDING reminders of one account whose time has already come (`scheduledAt <= now`), so none that
+   * fell due while the account was deactivated is sent late once it is active again; reminders of the
+   * future stay. Idempotent. Answers how many it cancelled.
+   */
+  cancelDueOfAccountByJob(accountId: string, now: Date): Promise<number> {
+    return this.updateAcrossAccountsForJob(
+      {
+        userId: { $eq: accountId },
+        status: { $eq: ReminderStatus.PENDING },
+        scheduledAt: serverOperators({ $lte: now }),
+      },
+      { status: ReminderStatus.CANCELLED },
+    );
+  }
+
+  /** AR-12 / SPEC-010: the scheduler found the reminder's account not active: it will never be sent. */
   async markCancelledAcrossAccounts(reminderId: string): Promise<void> {
     await this.updateAcrossAccountsForJob(
       { _id: { $eq: reminderId }, status: { $eq: ReminderStatus.PENDING } },

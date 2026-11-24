@@ -180,7 +180,15 @@ export class RemindersService {
     return this.reminders.cancelPendingOfAccountByJob(userId);
   }
 
-  /** Scheduler (AR-12): the reminder's account is closed; it will never be sent. */
+  /**
+   * SPEC-009 BR-009-17: a reactivated account's reminders whose time passed while it was deactivated
+   * are cancelled, never sent late; the ones still in the future stay. Idempotent; answers how many.
+   */
+  cancelDueOfAccount(userId: string): Promise<number> {
+    return this.reminders.cancelDueOfAccountByJob(userId, this.clock.now());
+  }
+
+  /** Scheduler (AR-12): the reminder's account is not active; it will never be sent. */
   async markAsCancelled(reminderId: string): Promise<void> {
     await this.reminders.markCancelledAcrossAccounts(reminderId);
   }

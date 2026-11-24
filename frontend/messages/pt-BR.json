@@ -163,6 +163,7 @@
     "GOOGLE_SIGN_IN_FAILED": "Não foi possível entrar com o Google. Tente novamente ou entre com e-mail e senha.",
     "INVALID_GOOGLE_CODE": "Link de acesso inválido ou expirado",
     "TOO_MANY_ATTEMPTS": "Muitas tentativas. Tente de novo em 15 minutos",
+    "ACCOUNT_DEACTIVATED": "Esta conta está desativada. Fale com o suporte para saber mais.",
     "PERSONA_REQUIRED": "Esta área não está disponível para a sua conta.",
     "OFFICE_READ_ONLY": "O plano do escritório venceu e ele está em modo somente leitura. Regularize o plano para voltar a fazer alterações.",
     "TERMS_ACCEPTANCE_REQUIRED": "Há uma nova versão dos Termos de Uso ou da Política de Privacidade. Aceite-a para continuar usando a sua conta.",
@@ -200,6 +201,8 @@
     "PHONE_REQUIRED": "Cadastre um telefone no perfil para receber lembretes por {channel, select, sms {SMS} SMS {SMS} whatsapp {WhatsApp} WHATSAPP {WhatsApp} other {o canal escolhido}}.",
     "REMINDER_CHANNEL_NOT_IN_PLAN": "Seu plano não inclui lembretes por {channel, select, sms {SMS} SMS {SMS} whatsapp {WhatsApp} WHATSAPP {WhatsApp} other {o canal escolhido}}. Escolha outro canal ou mude de plano.",
     "SUPPORT_REQUEST_CLOSED": "Esta solicitação já foi encerrada. Abra uma nova solicitação se precisar de ajuda.",
+    "ACCOUNT_STATE_CONFLICT": "A conta não está mais no estado esperado para esta ação. Atualize a página e confira a situação atual.",
+    "CANNOT_DEACTIVATE_OWN_ACCOUNT": "Você não pode desativar a conta com a qual está conectado.",
     "MAINTENANCE_WINDOW_ALREADY_STARTED": "Esta manutenção já começou e não pode mais ser removida.",
     "UNKNOWN": "Algo deu errado. Tente novamente em instantes.",
     "BACKEND_UNAVAILABLE": "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente."

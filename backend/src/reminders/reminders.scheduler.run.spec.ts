@@ -156,19 +156,28 @@ describe('RemindersScheduler.processReminders', () => {
     },
   );
 
-  it('BR-010-14: a CLOSED account’s reminders are cancelled so they are never read again; a deactivated one’s stay pending', async () => {
-    const closed = build();
-    closed.usersService.findByIdFull.mockResolvedValue({ ...USER, status: 'closed' });
-    closed.remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r1' })]);
-    const deactivated = build();
-    deactivated.usersService.findByIdFull.mockResolvedValue({ ...USER, status: 'deactivated' });
-    deactivated.remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r2' })]);
+  it.each(['closed', 'deactivated'])(
+    'BR-010-14, BR-009-15, BR-009-17: a due reminder of a %s account is CANCELLED when found, so it is never read again, never sent late and never crowds out other accounts',
+    async (status) => {
+      const { scheduler, remindersService, usersService } = build();
+      usersService.findByIdFull.mockResolvedValue({ ...USER, status });
+      remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r1' })]);
 
-    await closed.scheduler.processReminders();
-    await deactivated.scheduler.processReminders();
+      await scheduler.processReminders();
 
-    expect(closed.remindersService.markAsCancelled).toHaveBeenCalledWith('r1');
-    expect(deactivated.remindersService.markAsCancelled).not.toHaveBeenCalled();
+      expect(remindersService.markAsCancelled).toHaveBeenCalledWith('r1');
+    },
+  );
+
+  it('BR-009-15: an ACTIVE account’s reminder is not cancelled', async () => {
+    const { scheduler, remindersService, usersService } = build();
+    usersService.findByIdFull.mockResolvedValue({ ...USER, status: 'active' });
+    remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r1' })]);
+
+    await scheduler.processReminders();
+
+    expect(remindersService.markAsCancelled).not.toHaveBeenCalled();
+    expect(remindersService.markAsSent).toHaveBeenCalledWith('r1');
   });
 
   it('a reminder whose account no longer exists is cancelled too: it can never be sent', async () => {

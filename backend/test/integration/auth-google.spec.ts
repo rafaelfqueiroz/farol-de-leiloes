@@ -465,24 +465,24 @@ describe('SPEC-001 Google sign-in (integration)', () => {
   });
 
   describe('a deactivated or closed account (BR-001-16)', () => {
-    it.each(['deactivated', 'closed'])(
-      '%s: refused by email, nothing linked, password intact',
-      async (status) => {
-        const who = identity();
-        await registerLocal(who.email, true);
-        await users.updateOne({ email: who.email }, { $set: { status } });
+    it.each([
+      ['deactivated', 'ACCOUNT_DEACTIVATED'], // SPEC-009 BR-009-20
+      ['closed', 'GOOGLE_SIGN_IN_FAILED'],
+    ])('%s: refused by email with %s, nothing linked, password intact', async (status, code) => {
+      const who = identity();
+      await registerLocal(who.email, true);
+      await users.updateOne({ email: who.email }, { $set: { status } });
 
-        const response = await callback(who).expect(302);
+      const response = await callback(who).expect(302);
 
-        expect(response.headers['location']).toBe(`${FRONTEND}/login?error=GOOGLE_SIGN_IN_FAILED`);
-        const stored = await users.findOne({ email: who.email }).lean();
-        expect(stored?.googleId).toBeUndefined();
-        expect(stored?.providers).toEqual(['local']);
-        expect(stored?.password).toEqual(expect.any(String));
-      },
-    );
+      expect(response.headers['location']).toBe(`${FRONTEND}/login?error=${code}`);
+      const stored = await users.findOne({ email: who.email }).lean();
+      expect(stored?.googleId).toBeUndefined();
+      expect(stored?.providers).toEqual(['local']);
+      expect(stored?.password).toEqual(expect.any(String));
+    });
 
-    it('refused by Google identity, and a session opened before is refused on its next request', async () => {
+    it('refused by Google identity (a deactivated account is told so, SPEC-009 BR-009-20), and a session opened before is refused on its next request', async () => {
       const who = identity();
       const session = await signUpWithGoogle(who);
       await request(server()).get('/api/auth/me').set(as(session.accessToken)).expect(200);
@@ -490,7 +490,7 @@ describe('SPEC-001 Google sign-in (integration)', () => {
       await users.updateOne({ email: who.email }, { $set: { status: 'deactivated' } });
 
       const response = await callback(who).expect(302);
-      expect(response.headers['location']).toBe(`${FRONTEND}/login?error=GOOGLE_SIGN_IN_FAILED`);
+      expect(response.headers['location']).toBe(`${FRONTEND}/login?error=ACCOUNT_DEACTIVATED`);
       await request(server()).get('/api/auth/me').set(as(session.accessToken)).expect(401);
     });
 

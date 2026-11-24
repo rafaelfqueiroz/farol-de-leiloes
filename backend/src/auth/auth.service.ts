@@ -24,6 +24,17 @@ import { ConsentsService, type AcceptedVersions } from '../privacy/consents.serv
 import type { AcceptanceMethod } from '../privacy/domain/legal-versions.js';
 import { WhatsappConsentService } from '../privacy/whatsapp-consent.service.js';
 
+/**
+ * SPEC-009 BR-009-20: why a Google sign-in of an account that is not active is refused: a DEACTIVATED
+ * account is told so (the redirect carries this code to the sign-in page, which shows the support
+ * address); closed, pending and every other case keep the generic failure (BR-001-16).
+ */
+function inactiveGoogleCode(
+  account: { status?: string | null } | null,
+): 'ACCOUNT_DEACTIVATED' | 'GOOGLE_SIGN_IN_FAILED' {
+  return account?.status === 'deactivated' ? 'ACCOUNT_DEACTIVATED' : 'GOOGLE_SIGN_IN_FAILED';
+}
+
 function idOf(user: UserAccount): string {
   return typeof user._id === 'string' ? user._id : user._id.toHexString();
 }
@@ -155,12 +166,22 @@ export class AuthService implements BeforeApplicationShutdown {
     // password.
     const reservation = await this.loginAttempts.reserve(email, ip);
 
-    const user = await this.usersService.validatePassword(email, loginDto.password);
-    if (!user) {
-      // BR-001-14: unknown email, wrong password and an inactive account are one answer. The
-      // count the attempt reserved stays: nothing more to record.
+    const account = await this.usersService.verifyPassword(email, loginDto.password);
+    if (!account) {
+      // BR-001-14: unknown email and wrong password are one answer. The count the attempt reserved
+      // stays: nothing more to record.
       throw new DomainError('INVALID_CREDENTIALS');
     }
+    if (!isAccountActive(account)) {
+      // SPEC-009 BR-009-20: AFTER valid credentials, a deactivated account is told so (the support
+      // address is the frontend's to show); closed and pending keep today's answer (BR-001-16). The
+      // reserved attempt stays too, so this answer is not a free way to test passwords (SC-04): the
+      // limit counts it like any other attempt.
+      throw new DomainError(
+        account.status === 'deactivated' ? 'ACCOUNT_DEACTIVATED' : 'INVALID_CREDENTIALS',
+      );
+    }
+    const user = account;
 
     await this.loginAttempts.recordSuccess(email, ip, reservation);
 
@@ -222,9 +243,10 @@ export class AuthService implements BeforeApplicationShutdown {
     const record = await this.accountTokens.consume(code, 'google_exchange');
     if (record) {
       const user = await this.usersService.findById(record.userId);
-      // BR-001-16: closed or deactivated between the redirect and the exchange.
+      // BR-001-16: closed or deactivated between the redirect and the exchange; a deactivated
+      // account is told so (SPEC-009 BR-009-20), as at the callback.
       if (!user || !isAccountActive(user)) {
-        throw new DomainError('GOOGLE_SIGN_IN_FAILED');
+        throw new DomainError(inactiveGoogleCode(user));
       }
       return { status: 'signed_in', ...(await this.startSession(user)) };
     }
@@ -297,7 +319,7 @@ export class AuthService implements BeforeApplicationShutdown {
     const linked = await this.usersService.findByGoogleId(identity.googleId);
     if (linked) {
       if (!isAccountActive(linked)) {
-        throw new DomainError('GOOGLE_SIGN_IN_FAILED');
+        throw new DomainError(inactiveGoogleCode(linked));
       }
       return linked;
     }
@@ -312,8 +334,12 @@ export class AuthService implements BeforeApplicationShutdown {
       this.clock.now(),
     );
     if (outcome.result !== 'linked_confirmed' && outcome.result !== 'linked_unconfirmed') {
-      // Not active (BR-001-16), another Google identity already linked (BR-001-11), or gone.
-      throw new DomainError('GOOGLE_SIGN_IN_FAILED');
+      // Not active (BR-001-16; a deactivated one is told so, SPEC-009 BR-009-20), another Google
+      // identity already linked (BR-001-11), or gone. Google vouched for the address, so naming the
+      // deactivation here shows it to the address's owner only.
+      throw new DomainError(
+        outcome.result === 'inactive' ? inactiveGoogleCode(existing) : 'GOOGLE_SIGN_IN_FAILED',
+      );
     }
     if (outcome.result === 'linked_unconfirmed') {
       // DL-001-02: the email was never confirmed, so whoever set the password never proved they
