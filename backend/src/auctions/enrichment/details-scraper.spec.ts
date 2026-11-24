@@ -411,18 +411,30 @@ describe('Details Scraper', () => {
       expect(performance.now() - started).toBeLessThan(200);
     });
 
+    // Timing on a loaded machine is noisy, so the proof is the SHAPE: four times the page costs
+    // about four times the time (a pattern that restarts at every position costs sixteen).
+    const fastest = (html: string) => {
+      const runs = Array.from({ length: 3 }, () => {
+        const started = performance.now();
+        const result = scrapeAuctionDetails(html);
+        expect(result.kind).toBe('page');
+        return performance.now() - started;
+      });
+      return Math.min(...runs);
+    };
+
     it.each([
       ['payment sections that never end', 'FORMAS DE PAGAMENTO ACEITAS:<br>'],
       ['expense sections that never end', 'REGRAS PARA PAGAMENTO DAS DESPESAS (caso existam):<br>'],
       ['open-ended items', '<i class="x"></i>&nbsp;Recursos próprios'],
+      ['unclosed item tags', '<i class="x"'],
     ])('is read in linear time for 1 MiB of %s', (_, unit) => {
-      const html = bare(unit.repeat(Math.ceil(MiB / unit.length)));
-      const started = performance.now();
+      const page = (bytes: number) => bare(unit.repeat(Math.ceil(bytes / unit.length)));
+      const small = fastest(page(MiB / 4));
+      const large = fastest(page(MiB));
 
-      const result = scrapeAuctionDetails(html);
-
-      expect(result.kind).toBe('page');
-      expect(performance.now() - started).toBeLessThan(200);
+      expect(large).toBeLessThan(small * 8 + 100); // linear is ~4x; quadratic would be ~16x
+      expect(large).toBeLessThan(3000); // and never anywhere near a stall
     });
 
     it('bounds the length of what it keeps: description, type, expense rules', () => {
