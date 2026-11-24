@@ -32,6 +32,7 @@ const timeZoneSpecs = [
   'src/common/clock/brasilia-time.spec.ts',
   'src/reminders/templates/reminder.template.spec.ts',
   'src/auctions/domain/sfi-rounds.spec.ts',
+  'src/auctions/enrichment/details-scraper.spec.ts',
 ];
 const timeZones = ['UTC', 'Asia/Tokyo', 'America/New_York', 'America/Sao_Paulo'];
 
