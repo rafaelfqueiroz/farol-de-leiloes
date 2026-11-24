@@ -130,6 +130,7 @@ describe('HttpCaixaAccess', () => {
       [403, 'HTTP_403'],
       [429, 'HTTP_429'],
       [451, 'HTTP_451'],
+      [503, 'HTTP_503'],
     ])('answers CaixaBlockedError for HTTP %i', async (status, reason) => {
       handler = (_request, response) => {
         response.statusCode = status;
@@ -142,6 +143,23 @@ describe('HttpCaixaAccess', () => {
       });
       expect(requests).toHaveLength(1);
     });
+
+    it.each([200, 404, 500, 302])(
+      'answers CaixaBlockedError for any HTTP %i that carries a Retry-After',
+      async (status) => {
+        handler = (_request, response) => {
+          response.statusCode = status;
+          response.setHeader('Retry-After', '120');
+          response.end('later');
+        };
+
+        await expect(access().downloadList()).rejects.toMatchObject({
+          name: 'CaixaBlockedError',
+          reason: 'RETRY_AFTER',
+        });
+        expect(requests).toHaveLength(1); // never waited out, never retried
+      },
+    );
 
     it('reads a 5xx body for a challenge: Radware can answer 503 with its page', async () => {
       handler = (_request, response) => {
@@ -243,7 +261,7 @@ describe('HttpCaixaAccess', () => {
   });
 
   describe('other failures are CaixaUnreachableError (BR-004-21)', () => {
-    it.each([404, 500, 503])('answers CaixaUnreachableError for HTTP %i, once', async (status) => {
+    it.each([404, 500])('answers CaixaUnreachableError for HTTP %i, once', async (status) => {
       handler = (_request, response) => {
         response.statusCode = status;
         response.end('no');
