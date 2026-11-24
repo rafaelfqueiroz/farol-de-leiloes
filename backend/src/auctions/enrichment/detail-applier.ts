@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PropertyChangeService } from '../changes/property-change.service.js';
 import type { ChangeDraft } from '../domain/change-types.js';
 import type { DetailPage } from '../domain/detail-data.js';
+import { clockChanges } from '../domain/clock-changes.js';
 import { diffDetails } from '../domain/detail-diff.js';
 import { currentRound, roundsFromPhaseDates } from '../domain/rounds.js';
 import {
@@ -47,7 +48,17 @@ export class DetailApplier {
         ? []
         : roundsFromPhaseDates(stored.modality, page.phaseDates, page.prices);
 
+    // BR-004-13, BR-004-26: the collection moves the recorded round (below). If the clock had not
+    // yet looked at the property today, the move it is about to hide (the 1st round ended since the
+    // last look) is recorded HERE, as the clock would have, under the same unique key: the clock
+    // step that follows then finds the round equal and adds nothing.
+    const clock = clockChanges(
+      stored.code,
+      { recordedLabel: stored.currentRoundLabel, rounds: stored.rounds },
+      now,
+    );
     const entries: ChangeDraft[] = [
+      ...clock.entries,
       ...diffDetails(
         stored.code,
         { rounds: stored.rounds, paymentMethods: stored.paymentMethods },
@@ -70,6 +81,8 @@ export class DetailApplier {
       write.rounds = rounds;
       write.currentRoundLabel = currentRound(rounds, now)?.label ?? null;
       write.phaseDates = page.phaseDates;
+    } else if (clock.label !== undefined) {
+      write.currentRoundLabel = clock.label; // the rounds stay as stored: the move still counts
     }
     if (page.paymentMethods !== null) write.paymentMethods = page.paymentMethods;
     if (page.expenseRules !== null) write.expenseRules = page.expenseRules;

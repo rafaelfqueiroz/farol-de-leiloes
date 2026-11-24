@@ -129,6 +129,38 @@ describe('the changes the clock makes (integration)', () => {
     expect(await h.kit.changeModel.countDocuments({ source: 'CLOCK' })).toBe(2);
   });
 
+  it('records the round change exactly once when the same run also collects the property again (the page moves the recorded round)', async () => {
+    await runDay(h, MON, list(MON), { env: { ENRICHMENT_MAX_STALENESS_DAYS: '1' } });
+
+    // Tuesday 11h00, after the 1st round ended: the property is due (N = 1) and collected again in
+    // this run, which writes the round that is current now before the clock step looks at it.
+    const tuesday = await runDay(h, TUE, list(TUE), {
+      minutes: HH(11),
+      env: { ENRICHMENT_MAX_STALENESS_DAYS: '1' },
+    });
+
+    expect(tuesday?.collection.collected).toBeGreaterThan(0);
+    const entries = await clockEntries();
+    expect(entries.map((entry) => [entry.type, entry.field])).toEqual([
+      ['PRICE_DROPPED', 'currentMinimumPrice'],
+      ['MODALITY_OR_ROUND_CHANGED', 'currentRound'],
+    ]);
+    expect(entries.every((entry) => entry.importRunId.toString() === tuesday?.id)).toBe(true);
+    expect((await stored(h, '0001'))?.currentRoundLabel).toBe('2º Leilão');
+    // ... and the clock step that follows adds nothing.
+    expect(await h.kit.changeModel.countDocuments({ propertyCode: '0001', source: 'CLOCK' })).toBe(
+      2,
+    );
+  });
+
+  it('still records it through the clock step when the property is not collected again (N = 7)', async () => {
+    await runDay(h, MON, list(MON));
+    const tuesday = await runDay(h, TUE, list(TUE), { minutes: HH(11) });
+
+    expect(tuesday?.collection.collected).toBe(0);
+    expect(await clockEntries()).toHaveLength(2);
+  });
+
   it('adds nothing when the clock step is repeated, or the next run finds the same round', async () => {
     await runDay(h, MON, list(MON));
     const tuesday = await runDay(h, TUE, list(TUE), { minutes: HH(11) });

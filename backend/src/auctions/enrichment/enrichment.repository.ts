@@ -37,6 +37,8 @@ export interface StoredForCollection {
   photos: AuctionFile[];
   documentVersions: StoredDocumentVersion[];
   detailsFailures: number;
+  /** The round recorded when the property was last looked at (undefined = never). */
+  currentRoundLabel: string | null | undefined;
   /** Null = this property's page was never collected (or was dropped when it came back). */
   detailsCollectedAt: Date | null;
 }
@@ -180,7 +182,7 @@ export class EnrichmentRepository {
     const doc = await this.model
       .findOne({ code: { $eq: code } })
       .select(
-        'code detailsUrl available currentPhase phases rounds paymentMethods expenseRules propertyType occupancy photos documentVersions detailsFailures detailsCollectedAt',
+        'code detailsUrl available currentPhase phases rounds paymentMethods expenseRules propertyType occupancy photos documentVersions detailsFailures detailsCollectedAt currentRoundLabel',
       )
       .lean()
       .exec();
@@ -200,6 +202,7 @@ export class EnrichmentRepository {
       documentVersions: doc.documentVersions ?? [],
       detailsFailures: doc.detailsFailures ?? 0,
       detailsCollectedAt: doc.detailsCollectedAt ?? null,
+      currentRoundLabel: doc.currentRoundLabel,
     };
   }
 

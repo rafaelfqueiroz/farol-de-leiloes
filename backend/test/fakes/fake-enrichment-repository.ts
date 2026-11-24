@@ -40,6 +40,7 @@ export function aStoredProperty(
     documentVersions: [],
     detailsFailures: 0,
     detailsCollectedAt: null,
+    currentRoundLabel: undefined,
     ...overrides,
   };
 }

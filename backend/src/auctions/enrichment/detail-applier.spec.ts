@@ -225,4 +225,62 @@ describe('DetailApplier', () => {
     expect(repository.applied[0]?.write.touch).toBe(false);
     expect(repository.applied[0]?.write.description).toBeUndefined(); // an empty text is not a description
   });
+
+  it("records the clock's round change itself when it moves the recorded round (the 1st round ended since the last look)", async () => {
+    const { repository, recorded, applier } = setup();
+    const first = {
+      label: '1º Leilão',
+      date: new Date('2026-11-24T13:00:00.000Z'),
+      minimumPrice: new Decimal('100.00'),
+    };
+    const second = { label: '2º Leilão', date: D2, minimumPrice: new Decimal('80.00') };
+
+    const count = await applier.apply({
+      runId: 'run-1',
+      stored: aStoredProperty('0001', {
+        modality: PhaseModality.SFI_AUCTION,
+        rounds: [first, second],
+        currentRoundLabel: '1º Leilão',
+        detailsCollectedAt: new Date('2026-11-23T12:00:00Z'),
+      }),
+      page: page({
+        phaseDates: [first.date, second.date],
+        prices: { first: first.minimumPrice, second: second.minimumPrice, single: null },
+      }),
+      copies: noCopies(),
+      now: NOW, // after the 1st round, before the 2nd
+    });
+
+    expect(count).toBe(2);
+    expect(recorded[0]?.drafts.map((draft) => [draft.source, draft.type])).toEqual([
+      ['CLOCK', 'MODALITY_OR_ROUND_CHANGED'],
+      ['CLOCK', 'PRICE_DROPPED'],
+    ]);
+    expect(repository.applied[0]?.write.currentRoundLabel).toBe('2º Leilão');
+  });
+
+  it("moves the recorded round even when the page gives no dates, so the clock's change is not lost", async () => {
+    const { repository, applier } = setup();
+    const first = {
+      label: '1º Leilão',
+      date: new Date('2026-11-24T13:00:00.000Z'),
+      minimumPrice: null,
+    };
+    const second = { label: '2º Leilão', date: D2, minimumPrice: null };
+
+    await applier.apply({
+      runId: 'run-1',
+      stored: aStoredProperty('0001', {
+        modality: PhaseModality.SFI_AUCTION,
+        rounds: [first, second],
+        currentRoundLabel: '1º Leilão',
+      }),
+      page: page(),
+      copies: noCopies(),
+      now: NOW,
+    });
+
+    expect(repository.applied[0]?.write.rounds).toBeUndefined();
+    expect(repository.applied[0]?.write.currentRoundLabel).toBe('2º Leilão');
+  });
 });
