@@ -239,9 +239,10 @@ export const envSchema = z
     // IMPORT_WINDOW_START or from IMPORT_CUTOFF on; at the cutoff the day is decided.
     IMPORT_WINDOW_START: timeOfDay.default('06:00'),
     IMPORT_CUTOFF: timeOfDay.default('12:00'),
-    // SPEC-004 BR-004-02: at most this many attempts a day, IMPORT_ATTEMPT_SPACING_MINUTES apart.
-    IMPORT_MAX_ATTEMPTS: positiveInt.default(12),
-    IMPORT_ATTEMPT_SPACING_MINUTES: positiveInt.default(30),
+    // SPEC-004 BR-004-02: at most this many attempts a day (1-48), IMPORT_ATTEMPT_SPACING_MINUTES
+    // (at least 5, the tick) apart: Caixa is asked politely, never in a tight loop (SC-24, ADR-003).
+    IMPORT_MAX_ATTEMPTS: positiveInt.max(48).default(12),
+    IMPORT_ATTEMPT_SPACING_MINUTES: positiveInt.min(5).default(30),
 
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
