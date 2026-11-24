@@ -91,12 +91,14 @@ export class ImportRunRepository {
 
   /**
    * Runs that may still owe the admins an email (BR-004-29): not alerted yet and either decided
-   * as a failure, or applied with the collection blocked. The newest few: an alert is about
-   * recent days.
+   * as a failure, or applied with the collection blocked, and not older than `sinceDate`: an
+   * alert is about recent days, and a row an earlier part of the import left must never email on
+   * the first deploy.
    */
-  async findAlertCandidates(): Promise<ImportRunRecord[]> {
+  async findAlertCandidates(sinceDate: string): Promise<ImportRunRecord[]> {
     const rows = await this.model
       .find({
+        brasiliaDate: serverOperators({ $gte: sinceDate }),
         alertedAt: null,
         $or: [
           { outcome: serverOperators({ $in: [...ALERTABLE_OUTCOMES] }) },
@@ -182,7 +184,8 @@ export class ImportRunRepository {
     const result = await this.model
       .updateOne(this.held(id, owner), { $set: { leaseExpiresAt: expiresAt } })
       .exec();
-    return result.modifiedCount === 1;
+    // Matched, not modified: renewing at the same instant changes nothing and the holder still holds.
+    return result.matchedCount === 1;
   }
 
   async releaseLease(id: string, owner: string): Promise<void> {
@@ -199,6 +202,19 @@ export class ImportRunRepository {
   /** Caixa answered with a list (a new one or not): it was reachable (BR-004-03). */
   async markListReached(id: string, owner: string): Promise<boolean> {
     return this.write(id, owner, { $set: { 'progress.listReached': true } });
+  }
+
+  /**
+   * A resume gives the half-applied state up: the process that was applying the list is gone and
+   * the list is judged afresh. Until a valid list is applied the day carries `applyFailed`: a list
+   * that passed validation was never applied, which is what the day ends as if nothing else
+   * works out (`beginApply` clears it again).
+   */
+  async clearApplying(id: string, owner: string): Promise<boolean> {
+    return this.write(id, owner, {
+      $set: { 'progress.applying': false, 'progress.applyFailed': true },
+      $addToSet: { failureReasons: 'APPLY_INTERRUPTED' },
+    });
   }
 
   /** The validator refused a list (BR-004-04): its day and code, never a row (SC-15). */
@@ -362,7 +378,8 @@ export class ImportRunRepository {
     const result = await this.model
       .updateOne(this.held(id, owner, inState), update, { timestamps: true })
       .exec();
-    return result.modifiedCount === 1;
+    // Matched: the fence held (the lease is the worker's and the run is in the state asked for).
+    return result.matchedCount === 1;
   }
 }
 

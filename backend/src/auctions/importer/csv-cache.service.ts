@@ -22,6 +22,23 @@ export class CsvCacheService {
   ) {}
 
   /**
+   * The copy of the list stored when it was last downloaded, or null when there is none (R2 not
+   * configured, nothing uploaded yet, or unreadable). It never reaches Caixa: it is what a resume of
+   * a half-applied list reads (SC-24, BR-004-07). Not limited to today: a list applied across
+   * midnight is still the one being finished.
+   */
+  async readStored(): Promise<string | null> {
+    if (!this.storage.isConfigured()) return null;
+    try {
+      if (!(await this.csvUploadModel.findOne({}).lean())) return null;
+      return await this.fetchFromR2();
+    } catch (error) {
+      this.logger.warn(`The stored list could not be read: ${errorMessage(error)}`);
+      return null;
+    }
+  }
+
+  /**
    * The day's list. By default today's copy in R2 is reused (a retry of a half-applied list must
    * not ask Caixa again, ADR-003). With `fresh` the copy is NOT read: the attempt is looking for a
    * newer list than the one it saw earlier the same day (BR-004-02), and the day's copy would be

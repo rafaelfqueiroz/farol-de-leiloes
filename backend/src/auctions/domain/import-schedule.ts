@@ -11,7 +11,9 @@
 //   window start <= now < cutoff        attempts, `attemptSpacingMinutes` apart, at most `maxAttempts`
 //   now >= cutoff                       no attempt; the day is decided at the first tick from here on
 //
-// The run is RUNNING until it is decided. Decided early (before the cutoff) only when nothing a
+// The run is RUNNING until it is decided. A day nobody attempted by the cutoff is decided at the
+// first tick after it, on a business day, as FAILED NO_ATTEMPT (nothing looked at, nobody told:
+// the admins must hear); on a weekend or holiday it leaves nothing. Decided early (before the cutoff) only when nothing a
 // later attempt could do changes the outcome: Caixa blocked us, or the attempts ran out on a day
 // that already ends FAILED or REJECTED_LIST. A day that ends NO_NEW_LIST / NO_UPDATE is decided at
 // the cutoff ("by the daily cutoff", BR-004-03), whatever the attempts used.
@@ -44,7 +46,7 @@ export type DecidedOutcome = 'FAILED' | 'REJECTED_LIST' | 'NO_NEW_LIST' | 'NO_UP
 export interface RunProgress {
   /** Some attempt got a list from Caixa (a newer one or not): Caixa was reachable. */
   listReached: boolean;
-  /** A validated list is being applied, or was when the process died: resume it, whatever else. */
+  /** A validated list is being applied, or was when the process died: the next attempt resumes it from the stored copy. */
   applying: boolean;
   /** The last apply of a validated list failed (its error class is in the failure reasons). */
   applyFailed: boolean;
@@ -127,7 +129,8 @@ export const APPLY_FAILED = 'APPLY_FAILED';
 /**
  * How a run that applied no list ends when the day is decided (BR-004-03, BR-004-10):
  *
- *  1. a validated list that could not be applied  -> FAILED (the apply is what failed);
+ *  1. a validated list that could not be applied (it threw, or the process died while applying
+ *     and the day ran out before a retry could finish it) -> FAILED (the apply is what failed);
  *  2. a list was published and refused            -> REJECTED_LIST with the validator's code;
  *  3. Caixa answered with a list that is not new  -> business day NO_NEW_LIST (a failure),
  *     weekend or holiday NO_UPDATE (not a failure: Caixa publishes nothing then);
@@ -142,7 +145,7 @@ export function endOfDay(
   calendar: DayCalendar,
 ): Extract<ImportDecision, { kind: 'finalize' }> {
   const { progress } = run;
-  if (progress.applyFailed) {
+  if (progress.applyFailed || progress.applying) {
     return finalize('FAILED', APPLY_FAILED);
   }
   if (progress.rejection !== null) {
@@ -171,15 +174,17 @@ function endsAsFailure(decision: Extract<ImportDecision, { kind: 'finalize' }>):
 /**
  * What to do now for the day `brasiliaDate`, given its run (null: none yet).
  *
- *  - no run: attempt when the window is open; otherwise wait. After the cutoff a day nobody
- *    attempted leaves no run at all (nothing was looked at, so nothing is decided);
+ *  - no run: attempt when the window is open and the cutoff has not come; before the window wait.
+ *    From the cutoff on, a business day nobody attempted is decided FAILED NO_ATTEMPT; a weekend
+ *    or holiday is left alone;
  *  - SUCCESS: complete the update (collection pass, then the signal) until it is done;
  *  - decided (FAILED, REJECTED_LIST, NO_NEW_LIST, NO_UPDATE): nothing, ever;
- *  - RUNNING with a list being applied: resume it, even past the cutoff and the attempts: the
- *    list passed validation and applying is idempotent (BR-004-07);
- *  - RUNNING otherwise: at the cutoff, decide the day (`endOfDay`); before it, decide early when
- *    the attempts are used up on a day that ends FAILED or REJECTED_LIST; else attempt when the
- *    window is open and the spacing since the last attempt has passed.
+ *  - RUNNING: at the cutoff, decide the day (`endOfDay`); before it, decide early when the
+ *    attempts are used up on a day that ends FAILED or REJECTED_LIST; else attempt when the window
+ *    is open and the spacing since the last attempt has passed. An attempt on a run whose list was
+ *    being applied is a `resume` (it reads the stored copy of that list and never asks Caixa,
+ *    SC-24); it obeys the spacing, the attempt cap and the cutoff like any other attempt. A list
+ *    still "being applied" when the day is decided is an apply that failed (`endOfDay`).
  */
 export function decideNextAction(
   state: { brasiliaDate: string; run: RunState | null },
@@ -193,8 +198,13 @@ export function decideNextAction(
 
   if (run === null) {
     if (!windowOpen) return { kind: 'wait', reason: 'BEFORE_WINDOW' };
-    if (pastCutoff) return { kind: 'wait', reason: 'AFTER_CUTOFF' };
-    return { kind: 'attempt', mode: 'search' };
+    if (!pastCutoff) return { kind: 'attempt', mode: 'search' };
+    // Nobody attempted the day (the process was down, or the import was switched off): on a
+    // business day that is a failure the admins must hear of (BR-004-03, BR-004-29); on a weekend
+    // or holiday nothing was expected, and "no update" needs Caixa to have been reached.
+    return calendar.isBusinessDay(brasiliaDate)
+      ? finalize('FAILED', NO_ATTEMPT)
+      : { kind: 'wait', reason: 'AFTER_CUTOFF' };
   }
   if (run.outcome === 'SUCCESS') {
     return run.updateCompletedAt === null
@@ -202,8 +212,6 @@ export function decideNextAction(
       : { kind: 'wait', reason: 'FINISHED' };
   }
   if (run.outcome !== 'RUNNING') return { kind: 'wait', reason: 'FINISHED' };
-  if (run.progress.applying) return { kind: 'attempt', mode: 'resume' };
-
   const decided = endOfDay(run, calendar);
   if (pastCutoff) return decided;
   const exhausted = run.attempts >= schedule.maxAttempts;
@@ -214,7 +222,7 @@ export function decideNextAction(
   if (run.nextAttemptAt !== null && now.getTime() < run.nextAttemptAt.getTime()) {
     return { kind: 'wait', reason: 'SPACING' };
   }
-  return { kind: 'attempt', mode: 'search' };
+  return { kind: 'attempt', mode: run.progress.applying ? 'resume' : 'search' };
 }
 
 /**

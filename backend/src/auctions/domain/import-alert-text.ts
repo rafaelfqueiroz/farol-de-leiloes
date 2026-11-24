@@ -51,7 +51,8 @@ export const REASON_TEXTS: Readonly<Record<KnownReason, string>> = {
     'O Caixa bloqueou o acesso à lista (proteção contra acesso automatizado). O sistema não tenta de novo no mesmo dia, para não insistir.',
   LIST_UNREACHABLE:
     'Não foi possível obter a lista do Caixa durante o dia: o site não respondeu, demorou demais ou devolveu um erro.',
-  NO_ATTEMPT: 'A importação do dia não chegou a registrar nenhuma tentativa.',
+  NO_ATTEMPT:
+    'Nenhuma tentativa de importação foi feita neste dia útil até o horário limite: o sistema estava parado ou a importação estava desligada.',
   APPLY_FAILED:
     'Uma lista nova foi validada, mas não pôde ser aplicada ao catálogo. Nenhum imóvel foi marcado como indisponível.',
   NO_NEW_LIST:

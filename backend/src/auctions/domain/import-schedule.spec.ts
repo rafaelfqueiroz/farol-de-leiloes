@@ -95,8 +95,23 @@ describe('a day with no run yet', () => {
   it.each([
     ['exactly the cutoff', '2026-11-23T15:00:00.000Z'],
     ['the evening', '2026-11-24T01:00:00.000Z'],
-  ])('leaves no run when nobody attempted by %s: nothing was looked at', (_name, now) => {
-    expect(decide(now, null)).toEqual({ kind: 'wait', reason: 'AFTER_CUTOFF' });
+  ])(
+    'decides a business day nobody attempted as FAILED NO_ATTEMPT at %s (BR-004-03)',
+    (_name, now) => {
+      expect(decide(now, null)).toEqual({
+        kind: 'finalize',
+        outcome: 'FAILED',
+        reason: NO_ATTEMPT,
+        nonBusinessReason: null,
+      });
+    },
+  );
+
+  it.each([
+    ['a Saturday', SATURDAY, '2026-11-21T15:00:00.000Z'],
+    ['a holiday', HOLIDAY, '2026-12-25T15:00:00.000Z'],
+  ])('leaves %s nobody attempted alone: nothing was expected', (_name, day, now) => {
+    expect(decide(now, null, day)).toEqual({ kind: 'wait', reason: 'AFTER_CUTOFF' });
   });
 });
 
@@ -264,10 +279,12 @@ describe('a run that crosses midnight keeps its date (BR-004-27)', () => {
     });
   });
 
-  it('is resumed, not decided, when its list was being applied (the process died at 23:59)', () => {
+  it('a list being applied when the day ends is an apply that failed: decided FAILED APPLY_FAILED', () => {
     expect(decide('2026-11-24T03:30:00.000Z', run({}, { applying: true }), MONDAY)).toEqual({
-      kind: 'attempt',
-      mode: 'resume',
+      kind: 'finalize',
+      outcome: 'FAILED',
+      reason: APPLY_FAILED,
+      nonBusinessReason: null,
     });
   });
 
@@ -279,19 +296,32 @@ describe('a run that crosses midnight keeps its date (BR-004-27)', () => {
   });
 });
 
-describe('a list being applied is finished whatever the clock says (BR-004-07)', () => {
-  it.each([
-    [
-      'before the spacing',
-      '2026-11-23T09:10:00.000Z',
-      { attempts: 1, nextAttemptAt: at('2026-11-23T09:30:00.000Z') },
-    ],
-    ['past the cutoff', '2026-11-23T18:00:00.000Z', { attempts: 3 }],
-    ['with the attempts used up', '2026-11-23T10:00:00.000Z', { attempts: 12 }],
-  ])('resumes %s', (_name, now, state) => {
-    expect(decide(now, run(state, { applying: true }))).toEqual({
+describe('a list being applied is resumed like any attempt (BR-004-07, SC-24)', () => {
+  const applying = { applying: true };
+
+  it('resumes from the stored copy once the spacing has passed, and not before', () => {
+    const state = run({ attempts: 1, nextAttemptAt: at('2026-11-23T09:30:00.000Z') }, applying);
+    expect(decide('2026-11-23T09:29:59.999Z', state)).toEqual({ kind: 'wait', reason: 'SPACING' });
+    expect(decide('2026-11-23T09:30:00.000Z', state)).toEqual({ kind: 'attempt', mode: 'resume' });
+  });
+
+  it('is not resumed past the cutoff: the day is decided FAILED APPLY_FAILED', () => {
+    expect(decide('2026-11-23T15:00:00.000Z', run({ attempts: 3 }, applying))).toMatchObject({
+      kind: 'finalize',
+      outcome: 'FAILED',
+      reason: APPLY_FAILED,
+    });
+    expect(decide('2026-11-23T14:59:59.999Z', run({ attempts: 3 }, applying))).toEqual({
       kind: 'attempt',
       mode: 'resume',
+    });
+  });
+
+  it('is not resumed with the attempts used up: decided at once', () => {
+    expect(decide('2026-11-23T10:00:00.000Z', run({ attempts: 12 }, applying))).toMatchObject({
+      kind: 'finalize',
+      outcome: 'FAILED',
+      reason: APPLY_FAILED,
     });
   });
 });

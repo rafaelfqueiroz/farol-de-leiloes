@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Clock } from '../../common/clock/clock.js';
+import { brasiliaToday } from '../../common/clock/brasilia-time.js';
+import { addCalendarDays } from '../../common/domain/business-day.js';
 import type { PageRequest, Paginated } from '../../common/pagination/paginated.js';
 import { paginated } from '../../common/pagination/paginated.js';
 import type { LastAppliedList } from '../domain/list-validator.js';
@@ -10,6 +12,9 @@ import type {
   NonBusinessReason,
 } from './import-run.js';
 import { ImportRunRepository } from './import-run.repository.js';
+
+/** An alert that could not be sent is retried for this many days, then dropped. */
+export const ALERT_LOOKBACK_DAYS = 2;
 
 /** How long a worker holds a run before another may take it over; renewed while it works. */
 export const RUN_LEASE_MS = 5 * 60_000;
@@ -76,9 +81,17 @@ export class ImportRunService {
     return this.runs.findOpen();
   }
 
-  /** The runs that may still owe the admins an alert (BR-004-29). */
+  /**
+   * The runs that may still owe the admins an alert (BR-004-29): those of the last
+   * `ALERT_LOOKBACK_DAYS` Brasília days. Older rows never email (a first deploy over history).
+   */
   findAlertCandidates(): Promise<ImportRunRecord[]> {
-    return this.runs.findAlertCandidates();
+    const since = addCalendarDays(brasiliaToday(this.clock), -ALERT_LOOKBACK_DAYS);
+    return this.runs.findAlertCandidates(since);
+  }
+
+  clearApplying(id: string, owner: string): Promise<boolean> {
+    return this.runs.clearApplying(id, owner);
   }
 
   /** The day's run, created if the day has none. */

@@ -23,7 +23,7 @@ import { validateList } from '../domain/list-validator.js';
 import { EnrichmentPass, type CollectionResult } from '../enrichment/enrichment-pass.js';
 import { DailyUpdateBus } from '../import-runs/daily-update-bus.js';
 import { ImportAlertService } from '../import-runs/import-alert.service.js';
-import type { ImportRunRecord } from '../import-runs/import-run.js';
+import type { ImportCounts, ImportRunRecord } from '../import-runs/import-run.js';
 import { RUN_LEASE_MS, ImportRunService } from '../import-runs/import-run.service.js';
 import { CsvCacheService } from './csv-cache.service.js';
 import { AUCTIONS_IMPORT_JOB } from './import-job.js';
@@ -72,6 +72,8 @@ class LeaseLostError extends Error {
 export class ImportOrchestrator {
   private readonly logger = new Logger(ImportOrchestrator.name);
   private readonly schedule: ImportSchedule;
+  /** How often a worker extends its lease; a spec shortens it to watch the heartbeat. */
+  leaseRenewMs = LEASE_RENEW_MS;
 
   constructor(
     private readonly runs: ImportRunService,
@@ -164,7 +166,7 @@ export class ImportOrchestrator {
         await this.finalizeDay(current, owner, decision, runMode);
         return;
       }
-      await this.attempt(current, owner, decision.mode);
+      await this.attempt(current, owner, decision.mode, runMode);
       const next = await this.runs.findById(current.id);
       if (next === null) return;
       current = next;
@@ -184,8 +186,19 @@ export class ImportOrchestrator {
       : decision;
   }
 
-  /** One attempt: one request to Caixa, then what the answer calls for. */
-  private async attempt(run: ImportRunRecord, owner: string, mode: 'search' | 'resume') {
+  /**
+   * One attempt. A `search` makes one request to Caixa (a fresh download: the stored copy would be
+   * the older list). A `resume` of a list that was being applied NEVER goes to Caixa (SC-24,
+   * BR-004-07): it reads the stored copy; with none it gives the half-applied state up
+   * (`applying` cleared) and falls back to a normal search in the same attempt. Whatever a resume
+   * finds that is not a valid list also clears `applying`, so a run cannot be stuck resuming.
+   */
+  private async attempt(
+    run: ImportRunRecord,
+    owner: string,
+    mode: 'search' | 'resume',
+    runMode: RunMode,
+  ) {
     const { id } = run;
     const now = this.clock.now();
     this.fence(
@@ -197,14 +210,23 @@ export class ImportOrchestrator {
     );
     this.logger.log(`Import attempt ${run.attempts + 1} of ${run.brasiliaDate} (${mode})`);
 
-    let csv: string;
-    try {
-      // A search looks for a NEWER list than any seen today, so it must reach Caixa; a resume
-      // reuses the copy of the list it was applying (BR-004-07, ADR-003).
-      csv = await this.csvCache.resolveCsv({ fresh: mode === 'search' });
-    } catch (error) {
-      await this.downloadFailed(run, owner, error);
-      return;
+    let csv: string | null = null;
+    if (mode === 'resume') {
+      // The half-applied state is given up at once, so nothing below can leave the run "applying";
+      // a valid stored list sets it again when its apply begins.
+      this.fence(await this.runs.clearApplying(id, owner));
+      csv = await this.csvCache.readStored();
+      if (csv === null) {
+        this.logger.warn('No stored copy of the list being applied: looking for a list again');
+      }
+    }
+    if (csv === null) {
+      try {
+        csv = await this.csvCache.resolveCsv({ fresh: true });
+      } catch (error) {
+        await this.downloadFailed(run, owner, error, runMode);
+        return;
+      }
     }
 
     const list = parseCaixaList(csv);
@@ -251,32 +273,40 @@ export class ImportOrchestrator {
     owner: string,
     list: ReturnType<typeof parseCaixaList>,
   ): Promise<void> {
-    const { rows, withoutCode, unknownModality, offSiteLinks } = toListRows(
-      normalizeRows(list.rows),
-    );
-    this.logger.log(
-      `List rows: ${list.rows.length}, without a property number: ${withoutCode}, unknown modality: ${unknownModality}, links off Caixa's site: ${offSiteLinks}`,
-    );
+    await this.assertHeld(run.id, owner); // a stalled worker must not start a long write
+    let counts: ImportCounts;
     try {
-      const counts = await this.applier.apply({
+      // Everything that can throw is in here, so `applying` is never left set by an exception.
+      const { rows, withoutCode, unknownModality, offSiteLinks } = toListRows(
+        normalizeRows(list.rows),
+      );
+      this.logger.log(
+        `List rows: ${list.rows.length}, without a property number: ${withoutCode}, unknown modality: ${unknownModality}, links off Caixa's site: ${offSiteLinks}`,
+      );
+      counts = await this.applier.apply({
         runId: run.id,
         rows,
         minRowRatio: this.business.import.minRowRatio,
       });
-      this.fence(await this.runs.markSuccess(run.id, owner, counts));
-      this.logger.log(`List applied for ${run.brasiliaDate}`);
     } catch (error) {
-      if (error instanceof LeaseLostError) throw error;
       // SC-15: the class, never the message. The list stays unapplied; the next attempt tries again.
       const code = jobErrorCode(error);
       this.logger.error(`Applying the list failed: ${code}`);
       captureException(error, { tags: { jobName: AUCTIONS_IMPORT_JOB } });
       this.fence(await this.runs.markApplyFailed(run.id, owner, code));
+      return;
     }
+    this.fence(await this.runs.markSuccess(run.id, owner, counts));
+    this.logger.log(`List applied for ${run.brasiliaDate}`);
   }
 
   /** A download that did not give a list: the way it failed decides what the day does next. */
-  private async downloadFailed(run: ImportRunRecord, owner: string, error: unknown) {
+  private async downloadFailed(
+    run: ImportRunRecord,
+    owner: string,
+    error: unknown,
+    runMode: RunMode,
+  ) {
     if (error instanceof CaixaBlockedError) {
       // BR-004-20, SC-24: stop for the day. No retry, no other address, no waiting for a better time.
       this.logger.warn(`Caixa blocked the list request: ${error.reason}; the day ends here`);
@@ -286,7 +316,7 @@ export class ImportOrchestrator {
         run,
         owner,
         { kind: 'finalize', outcome: 'FAILED', reason: LIST_BLOCKED, nonBusinessReason: null },
-        RunMode.AUTO,
+        runMode,
       );
       return;
     }
@@ -330,6 +360,7 @@ export class ImportOrchestrator {
     }
 
     let collection: CollectionResult = { collected: 0, failed: 0, blocked: false };
+    await this.assertHeld(run.id, owner); // never start a pass for a run another worker holds now
     try {
       collection = await this.enrichment.run({
         importRunId: run.id,
@@ -341,7 +372,9 @@ export class ImportOrchestrator {
     }
     this.fence(await this.runs.saveCollection(run.id, owner, collection));
 
-    // Exactly one caller wins this update, so the signal fires once per day (BR-004-23).
+    // Exactly one caller wins this update, so the signal fires once per day (BR-004-23). Only a
+    // worker that still holds the run completes it.
+    await this.assertHeld(run.id, owner);
     if (await this.runs.completeUpdate(run.id)) {
       this.logger.log(`Daily update of ${run.brasiliaDate} complete`);
       await this.recordHealth('SUCCESS', null, runMode);
@@ -399,9 +432,14 @@ export class ImportOrchestrator {
         .catch((error: unknown) => {
           this.logger.warn(`Could not renew a lease: ${jobErrorCode(error)}`);
         });
-    }, LEASE_RENEW_MS);
+    }, this.leaseRenewMs);
     timer.unref();
     return () => clearInterval(timer);
+  }
+
+  /** Before a fenced step that is long or has effects outside the row: still the holder? */
+  private async assertHeld(id: string, owner: string): Promise<void> {
+    this.fence(await this.runs.renewLease(id, owner));
   }
 
   private fence(written: boolean): void {
