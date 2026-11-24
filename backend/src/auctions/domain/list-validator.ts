@@ -33,6 +33,10 @@ export interface ListFacts {
   rowsWithoutCode: number;
   /** Rows whose price or appraisal cell is filled but not a pt-BR amount. */
   unreadableMoneyRows: number;
+  /** Syntax errors the CSV parser reported (an unterminated quote, ...): a count, never content. */
+  syntaxErrors: number;
+  /** Rows after the header whose number of cells is not the header's. */
+  irregularRows: number;
 }
 
 /** The list applied last: BR-004-02's reference. Null for the very first list. */
@@ -45,6 +49,7 @@ export type ListRejectionReason =
   | 'UNRECOGNISED_LAYOUT'
   | 'MISSING_COLUMNS'
   | 'NO_GENERATION_DATE'
+  | 'MALFORMED_CSV'
   | 'EMPTY_LIST'
   | 'GENERATION_DATE_IN_FUTURE'
   | 'TOO_MANY_ROWS_WITHOUT_CODE'
@@ -61,8 +66,8 @@ export type ListVerdict =
 /**
  * The checks, in order: layout, generation date (present, and not later than tomorrow in
  * Brasília: a mis-set date would make every real list "not new" afterwards), newer than the last
- * applied list, not empty, few rows without a property number, few unreadable prices, and at least
- * `minRowRatio` of the last applied list's rows. The ratio counts DISTINCT usable property numbers,
+ * applied list, well-formed CSV, not empty, few rows without a property number, few unreadable
+ * prices, and at least `minRowRatio` of the last applied list's rows. The ratio counts DISTINCT usable property numbers,
  * not raw lines, so a list of one repeated number or of rows with the number column renamed cannot
  * pass as a full one. A list that is not new is not judged on its content: it is simply not new.
  *
@@ -85,6 +90,12 @@ export function validateList(
   }
   if (last !== null && facts.generatedOn <= last.generatedOn) {
     return { kind: 'not_new', generatedOn: facts.generatedOn };
+  }
+  // DL-004-03: a list that does not parse cleanly is not trusted for absence, even when enough rows
+  // survive the ratio below: an unterminated quote swallows the rows after it into one cell, so
+  // the properties in them would be taken as gone and marked unavailable.
+  if (facts.syntaxErrors > 0 || facts.irregularRows > 0) {
+    return { kind: 'rejected', reason: 'MALFORMED_CSV' };
   }
   if (facts.rowCount === 0) return { kind: 'rejected', reason: 'EMPTY_LIST' };
   // AR-18: shares and ratios are Decimals. 0.7 x 10 is 7.000000000000001 in a float.

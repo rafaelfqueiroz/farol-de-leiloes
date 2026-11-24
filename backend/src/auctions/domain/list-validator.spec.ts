@@ -15,6 +15,8 @@ const GOOD: ListFacts = {
   usableCodeCount: 4000,
   rowsWithoutCode: 0,
   unreadableMoneyRows: 0,
+  syntaxErrors: 0,
+  irregularRows: 0,
 };
 const LAST: LastAppliedList = { generatedOn: '2025-11-09', rowCount: 5000 };
 const RATIO = 0.8;
@@ -96,6 +98,50 @@ describe('validateList', () => {
 
     it('does not judge the content of a list that is not new', () => {
       expect(check(facts({ generatedOn: '2025-11-09', rowCount: 0 }), LAST, RATIO).kind).toBe(
+        'not_new',
+      );
+    });
+  });
+
+  describe('malformed CSV (BR-004-04, DL-004-03)', () => {
+    it('rejects a list the parser reported a syntax error on, even above the row ratio', () => {
+      expect(check(facts({ syntaxErrors: 1 }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'MALFORMED_CSV',
+      });
+    });
+
+    it("rejects a list with a row whose cells are not the header's, even above the row ratio", () => {
+      expect(check(facts({ irregularRows: 1 }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'MALFORMED_CSV',
+      });
+    });
+
+    it('rejects a malformed first list too, with nothing to compare to', () => {
+      expect(check(facts({ syntaxErrors: 2 }), null, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'MALFORMED_CSV',
+      });
+    });
+
+    it('is judged before the row count: a malformed empty list is malformed', () => {
+      expect(check(facts({ syntaxErrors: 1, rowCount: 0 }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'MALFORMED_CSV',
+      });
+    });
+
+    it('is judged after the layout and the date, and a list that is not new is only not new', () => {
+      expect(check(facts({ syntaxErrors: 1, headerFound: false }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'UNRECOGNISED_LAYOUT',
+      });
+      expect(check(facts({ syntaxErrors: 1, generatedOn: null }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'NO_GENERATION_DATE',
+      });
+      expect(check(facts({ syntaxErrors: 1, generatedOn: '2025-11-09' }), LAST, RATIO).kind).toBe(
         'not_new',
       );
     });
