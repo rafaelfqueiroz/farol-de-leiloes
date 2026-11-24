@@ -54,3 +54,25 @@ const RELEVANT: ReadonlySet<ChangeType> = new Set<ChangeType>([
 export function isRelevantChange(type: ChangeType): boolean {
   return RELEVANT.has(type);
 }
+
+/** What `isRepeat` reads of an entry already recorded. */
+export type RecordedChange = Pick<ChangeDraft, 'type' | 'oldValue' | 'newValue'>;
+
+/**
+ * SPEC-004 BR-004-07, BR-004-25: whether a detail or clock entry only repeats the last thing
+ * recorded for that property and field, because an earlier run wrote the entry and died before the
+ * write it describes (or a retry runs under another run id). `recent` is what is recorded for the
+ * (property, field), newest first.
+ *
+ * It is a repeat when the newest entry of the SAME TYPE has the same old and new values, and
+ * nothing newer on that field says something else: an A to B change that was later undone
+ * (B to A) and happens again is a new change. Entries of other types that carry the same values
+ * are part of the same change (a collection that starts FGTS and financing writes both).
+ */
+export function isRepeat(draft: RecordedChange, recent: readonly RecordedChange[]): boolean {
+  const same = (entry: RecordedChange) =>
+    entry.oldValue === draft.oldValue && entry.newValue === draft.newValue;
+  const index = recent.findIndex((entry) => entry.type === draft.type);
+  if (index === -1 || !same(recent[index] as RecordedChange)) return false;
+  return recent.slice(0, index).every(same);
+}
