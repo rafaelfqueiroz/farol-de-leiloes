@@ -513,4 +513,139 @@ describe('ListApplier, the review cases (integration)', () => {
       expect(new Set(seen).size).toBe(5);
     });
   });
+
+  // BR-004-07 (review of #187): the unique key of an entry holds the run, and the next day's retry
+  // of an interrupted import is a NEW run. Whatever the entry is (NEW, RETURNED,
+  // BECAME_UNAVAILABLE, a price), an entry that repeats the newest of its field is not recorded
+  // again, so a consumer reading by cursor is told once.
+  describe('a replay under another run id records nothing twice (BR-004-07)', () => {
+    class Dying extends ListApplierRepository {
+      dyingApplyChunk = false;
+      dyingMarkUnavailable = false;
+      override applyChunk(writes: ChunkWrites): Promise<void> {
+        if (this.dyingApplyChunk) return Promise.reject(new Error('the process died'));
+        return super.applyChunk(writes);
+      }
+      override markUnavailable(...args: Parameters<ListApplierRepository['markUnavailable']>) {
+        if (this.dyingMarkUnavailable) return Promise.reject(new Error('the process died'));
+        return super.markUnavailable(...args);
+      }
+    }
+    const history = async (code: string) =>
+      (
+        await kit.changeModel.find({ propertyCode: code }).sort({ createdAt: 1, _id: 1 }).lean()
+      ).map((e) => `${e.type} ${String(e.oldValue)}>${String(e.newValue)}`);
+    function dying() {
+      const repository = new Dying(kit.auctionModel);
+      return { repository, applier: new ListApplier(repository, kit.changes, clock) };
+    }
+
+    it('NEW: a first list whose property write died is replayed the next day with one NEW each', async () => {
+      const { repository, applier } = dying();
+      repository.dyingApplyChunk = true;
+      await expect(
+        applier.apply({ runId: newRun(), rows: [aRow('P1'), aRow('P2')], minRowRatio: 0 }),
+      ).rejects.toThrow('the process died');
+      expect(await kit.auctionModel.countDocuments()).toBe(0);
+      clock.advance(DAY);
+
+      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1'), aRow('P2')], minRowRatio: 0 });
+
+      expect(await history('P1')).toEqual(['NEW null>true']);
+      expect(await history('P2')).toEqual(['NEW null>true']);
+      expect(await kit.auctionModel.countDocuments({ available: true })).toBe(2);
+    });
+
+    it('BECAME_UNAVAILABLE: a sweep that died after its entries is replayed the next day with one entry', async () => {
+      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1'), aRow('P2')], minRowRatio: 0 });
+      clock.advance(DAY);
+      const { repository, applier } = dying();
+      repository.dyingMarkUnavailable = true;
+      await expect(
+        applier.apply({ runId: newRun(), rows: [aRow('P1')], minRowRatio: 0 }),
+      ).rejects.toThrow('the process died');
+      expect((await raw('P2'))?.['available']).toBe(true);
+      clock.advance(DAY);
+
+      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1')], minRowRatio: 0 });
+
+      expect(await history('P2')).toEqual(['NEW null>true', 'BECAME_UNAVAILABLE true>false']);
+      expect((await raw('P2'))?.['available']).toBe(false);
+    });
+
+    it('RETURNED: a property back on the list whose write died is replayed the next day with one entry', async () => {
+      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1'), aRow('P2')], minRowRatio: 0 });
+      clock.advance(DAY);
+      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1')], minRowRatio: 0 });
+      clock.advance(DAY);
+      const { repository, applier } = dying();
+      repository.dyingApplyChunk = true;
+      await expect(
+        applier.apply({ runId: newRun(), rows: [aRow('P1'), aRow('P2')], minRowRatio: 0 }),
+      ).rejects.toThrow('the process died');
+      clock.advance(DAY);
+
+      await kit.applier.apply({ runId: newRun(), rows: [aRow('P1'), aRow('P2')], minRowRatio: 0 });
+
+      expect(await history('P2')).toEqual([
+        'NEW null>true',
+        'BECAME_UNAVAILABLE true>false',
+        'RETURNED false>true',
+      ]);
+    });
+
+    it('a second, genuine, disappearance after a return is recorded: the entries between are not a repeat', async () => {
+      const rows = [aRow('P1'), aRow('P2')];
+      await kit.applier.apply({ runId: newRun(), rows, minRowRatio: 0 });
+      for (const list of [[aRow('P1')], rows, [aRow('P1')]]) {
+        clock.advance(DAY);
+        await kit.applier.apply({ runId: newRun(), rows: list, minRowRatio: 0 });
+      }
+
+      expect(await history('P2')).toEqual([
+        'NEW null>true',
+        'BECAME_UNAVAILABLE true>false',
+        'RETURNED false>true',
+        'BECAME_UNAVAILABLE true>false',
+      ]);
+    });
+
+    it('reads the newest entries of many properties and fields in one go, at most N each, newest first', async () => {
+      const at = (offset: number) => new Date(START.getTime() + offset);
+      const draft = (code: string, field: string, oldValue: string, newValue: string) => ({
+        propertyCode: code,
+        source: 'LIST' as const,
+        type: 'OTHER_FIELD' as const,
+        relevant: false,
+        field,
+        oldValue,
+        newValue,
+      });
+      const run = newRun();
+      for (let i = 0; i < 5; i++) {
+        await kit.changes.record(newRun(), [draft('P1', 'f', `${i}`, `${i + 1}`)], at(i));
+      }
+      await kit.changes.record(
+        run,
+        [draft('P1', 'g', 'x', 'y'), draft('P2', 'f', 'a', 'b')],
+        at(9),
+      );
+
+      const found = await kit.changeRepository.findRecentByFields(['P1', 'P2', 'P3'], ['f'], 3);
+
+      expect([...found.keys()].sort()).toEqual(['P1', 'P2']);
+      expect(
+        found
+          .get('P1')
+          ?.get('f')
+          ?.map((e) => e.newValue),
+      ).toEqual(['5', '4', '3']);
+      expect(found.get('P1')?.has('g')).toBe(false);
+      expect(found.get('P2')?.get('f')).toEqual([
+        { type: 'OTHER_FIELD', oldValue: 'a', newValue: 'b' },
+      ]);
+      expect(await kit.changeRepository.findRecentByFields([], ['f'], 3)).toEqual(new Map());
+      expect(await kit.changeRepository.findRecentByFields(['P1'], [], 3)).toEqual(new Map());
+    });
+  });
 });

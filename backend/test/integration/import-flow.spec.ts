@@ -10,7 +10,10 @@ import {
   ListApplier,
   SweepAbortedError,
 } from '../../src/auctions/importer/list-applier.service.js';
-import { ListApplierRepository } from '../../src/auctions/importer/list-applier.repository.js';
+import {
+  type ChunkWrites,
+  ListApplierRepository,
+} from '../../src/auctions/importer/list-applier.repository.js';
 import { AUCTIONS_IMPORT_JOB } from '../../src/auctions/importer/import-job.js';
 import { AuctionEntity, AuctionSchema } from '../../src/auctions/schemas/auction.schema.js';
 import {
@@ -436,6 +439,81 @@ describe('the import flow (integration)', () => {
       expect(
         (await kit.auctionModel.collection.findOne({ code: '1000' }))?.['detailsUrl'],
       ).toBeNull();
+    });
+  });
+
+  describe('a retry on the next day is a new run (BR-004-07, review of #187)', () => {
+    /** The property write of the chunk dies once, AFTER the entries of the chunk were written. */
+    class DiesOnce extends ListApplierRepository {
+      dead = false;
+      override applyChunk(writes: ChunkWrites): Promise<void> {
+        if (!this.dead) {
+          this.dead = true;
+          return Promise.reject(new Error('the process died'));
+        }
+        return super.applyChunk(writes);
+      }
+    }
+    const price = (code: string) => kit.auctionModel.findOne({ code }).lean();
+    const entriesOf = async (code: string) =>
+      (
+        await kit.changeModel.find({ propertyCode: code }).sort({ createdAt: 1, _id: 1 }).lean()
+      ).map((e) => `${e.type} ${String(e.oldValue)}>${String(e.newValue)}`);
+    /** Day 2's list: 1000 drops from 100.000,00 to 90.000,00; the rest is as it was. */
+    const dayTwoList = () =>
+      list('11/11/2025', [['1000', 'Venda Online', '90.000,00'], ...TEN.slice(1)]);
+
+    it('records the 100 to 90 drop once when the next day replays the same CSV, and delivers it once', async () => {
+      await dayOneSucceeds();
+      const first = await kit.changes.findSince(null, { relevantOnly: false });
+      clock.advance(DAY);
+      csv = dayTwoList();
+
+      // Day 2: the entry is written, then the property write dies.
+      const dying = new ListApplier(new DiesOnce(kit.auctionModel), kit.changes, clock);
+      await expect(importer(dying).dailyJob()).rejects.toThrow('the process died');
+      expect(await runOf('2025-11-11')).toMatchObject({ outcome: 'FAILED' });
+      expect(await entriesOf('1000')).toEqual([
+        'NEW null>true',
+        'PRICE_DROPPED 100000.00>90000.00',
+      ]);
+      expect((await price('1000'))?.currentPhase?.minimumPrice?.toString()).toBe('100000');
+
+      // Day 3: the same CSV, a NEW Import Run (the id of the run is part of the unique key).
+      clock.advance(DAY);
+      await importer().dailyJob();
+
+      expect((await runOf('2025-11-12'))?.outcome).toBe('SUCCESS');
+      expect((await price('1000'))?.currentPhase?.minimumPrice?.toString()).toBe('90000');
+      expect(await entriesOf('1000')).toEqual([
+        'NEW null>true',
+        'PRICE_DROPPED 100000.00>90000.00',
+      ]);
+      const delivered = await kit.changes.findSince(first.cursor, { relevantOnly: false });
+      expect(delivered.items.map((e) => `${e.propertyCode} ${e.type}`)).toEqual([
+        '1000 PRICE_DROPPED',
+      ]);
+    });
+
+    it('still records a drop that happens again after it was undone: 100 to 90, 90 to 100, 100 to 90', async () => {
+      await dayOneSucceeds();
+      const at = (day: string, listed: string) => {
+        csv = list(day, [['1000', 'Venda Online', listed], ...TEN.slice(1)]);
+        return importer().dailyJob();
+      };
+      clock.advance(DAY);
+      await at('11/11/2025', '90.000,00');
+      clock.advance(DAY);
+      await at('12/11/2025', '100.000,00');
+      clock.advance(DAY);
+      await at('13/11/2025', '90.000,00');
+
+      expect(await entriesOf('1000')).toEqual([
+        'NEW null>true',
+        'PRICE_DROPPED 100000.00>90000.00',
+        'PRICE_RAISED 90000.00>100000.00',
+        'PRICE_DROPPED 100000.00>90000.00',
+      ]);
     });
   });
 

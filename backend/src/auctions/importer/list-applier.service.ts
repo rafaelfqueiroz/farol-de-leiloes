@@ -45,10 +45,13 @@ export interface ApplyInput {
  * in the state an uninterrupted run would have. The order is what makes it so:
  *
  *  1. per chunk of rows: read the stored state, diff in memory (domain), write the change entries
- *     FIRST (upsert on the unique run + property + field), then the property writes. A crash
+ *     FIRST (`recordUnlessRepeated`: the unique run + property + field + type, and no entry that
+ *     only repeats the newest of its property and field), then the property writes. A crash
  *     between the two leaves entries whose change the retry applies and records again, as the same
- *     entries; the other order would leave a change applied with no entry, and nothing could
- *     reconstruct the old value.
+ *     entries, whether the retry is the same run or, the next day, another run id (BR-004-07); the
+ *     other order would leave a change applied with no entry, and nothing could reconstruct the
+ *     old value. The counts of a run that replays another run's entries do not include them: they
+ *     belong to the run that wrote them.
  *  2. only after EVERY row was written: the properties the list did not contain are marked
  *     unavailable, entries first again (BR-004-08). Until then nothing is hidden, whatever
  *     happened to the run.
@@ -131,7 +134,7 @@ export class ListApplier {
       diffs.set(row.code, diff);
     }
 
-    await this.changes.record(runKey, entries, now);
+    await this.changes.recordUnlessRepeated(runKey, entries, now);
     await this.properties.applyChunk({ diffs, runId, now });
     return skipped;
   }
@@ -157,7 +160,7 @@ export class ListApplier {
       const codes = await this.properties.findUnseenAvailable(runId, after, chunkSize);
       const last = codes[codes.length - 1];
       if (last === undefined) return;
-      await this.changes.record(runKey, codes.map(becameUnavailableEntry), now);
+      await this.changes.recordUnlessRepeated(runKey, codes.map(becameUnavailableEntry), now);
       await this.properties.markUnavailable(runId, codes, now);
       after = last;
     }

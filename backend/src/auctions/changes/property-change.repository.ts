@@ -38,7 +38,8 @@ export class PropertyChangeRepository {
   /**
    * Writes the entries by upsert on the unique (run, property, field, type), `$setOnInsert` only: an
    * entry written once is never rewritten, so recording the same list's entries again, after a
-   * crash or from two processes, leaves one of each (BR-004-07).
+   * crash or from two processes of the SAME run, leaves one of each (BR-004-07). The key holds the
+   * run, so a retry under another run id is the service's `recordUnlessRepeated` to stop.
    */
   async upsertMany(
     runId: Types.ObjectId,
@@ -71,6 +72,44 @@ export class PropertyChangeRepository {
       })),
       { ordered: false },
     );
+  }
+
+  /**
+   * The newest entries of the given fields of the given properties, newest first, grouped by
+   * `code` then `field`, at most `perField` of each (what a replay compares with, `isRepeat`). One
+   * read for a whole chunk of rows, by the (propertyCode, createdAt) index.
+   */
+  async findRecentByFields(
+    codes: readonly string[],
+    fields: readonly string[],
+    perField: number,
+  ): Promise<
+    Map<string, Map<string, Pick<PropertyChangeRecord, 'type' | 'oldValue' | 'newValue'>[]>>
+  > {
+    const found = new Map<
+      string,
+      Map<string, Pick<PropertyChangeRecord, 'type' | 'oldValue' | 'newValue'>[]>
+    >();
+    if (codes.length === 0 || fields.length === 0) return found;
+    const rows = await this.model
+      .find({
+        propertyCode: serverOperators({ $in: [...codes] }),
+        field: serverOperators({ $in: [...fields] }),
+      })
+      .sort({ createdAt: -1, _id: -1 })
+      .select('propertyCode field type oldValue newValue')
+      .lean()
+      .exec();
+    for (const row of rows) {
+      const byField = found.get(row.propertyCode) ?? new Map();
+      const entries = byField.get(row.field) ?? [];
+      if (entries.length < perField) {
+        entries.push({ type: row.type, oldValue: row.oldValue, newValue: row.newValue });
+      }
+      byField.set(row.field, entries);
+      found.set(row.propertyCode, byField);
+    }
+    return found;
   }
 
   countByRunAndType(runId: Types.ObjectId, type: ChangeType): Promise<number> {
