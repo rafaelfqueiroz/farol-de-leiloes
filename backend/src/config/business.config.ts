@@ -53,6 +53,12 @@ export interface BusinessConfig {
 
 export const KEY = 'BusinessConfig';
 
+/** `06:30` -> 390: minutes after midnight (the schema guarantees the shape). */
+function minutesOfDay(hhmm: string): number {
+  const [hours, minutes] = hhmm.split(':').map(Number) as [number, number];
+  return hours * 60 + minutes;
+}
+
 /** The business settings out of the validated environment (AR-41, AR-43). */
 export function businessConfigFrom(env: Env): BusinessConfig {
   return {
@@ -70,8 +76,8 @@ export function businessConfigFrom(env: Env): BusinessConfig {
     },
     import: {
       minRowRatio: env.IMPORT_MIN_ROW_RATIO,
-      windowStartMinutes: env.IMPORT_WINDOW_START,
-      cutoffMinutes: env.IMPORT_CUTOFF,
+      windowStartMinutes: minutesOfDay(env.IMPORT_WINDOW_START),
+      cutoffMinutes: minutesOfDay(env.IMPORT_CUTOFF),
       maxAttempts: env.IMPORT_MAX_ATTEMPTS,
       attemptSpacingMinutes: env.IMPORT_ATTEMPT_SPACING_MINUTES,
     },

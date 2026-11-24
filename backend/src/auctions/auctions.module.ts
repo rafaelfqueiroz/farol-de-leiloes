@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuctionsController } from './auctions.controller.js';
+import { ImportRunsController } from './import-runs/import-runs.controller.js';
 import { AuctionsService } from './auctions.service.js';
 import { AuctionEntity, AuctionSchema } from './schemas/auction.schema.js';
 import { CsvUpload, CsvUploadSchema } from './importer/schemas/csv-upload.schema.js';
@@ -60,7 +61,7 @@ import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
     UsersModule, // BR-004-29: the admins to alert (AR-09)
     BusinessCalendarModule, // BR-004-31
   ],
-  controllers: [AuctionsController],
+  controllers: [AuctionsController, ImportRunsController],
   providers: [
     AuctionsService,
     AuctionsImporter,

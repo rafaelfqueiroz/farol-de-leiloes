@@ -2,6 +2,8 @@ import { Public } from '../auth/decorators/public.decorator.js';
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuctionsService } from './auctions.service.js';
+import { LastUpdateResponseDto } from './import-runs/import-run-response.dto.js';
+import { ImportRunService } from './import-runs/import-run.service.js';
 import { AuctionResponseDto } from './dto/auction-response.dto.js';
 import { ListAuctionsQueryDto, NeighborhoodsQueryDto } from './dto/auction-query.dto.js';
 import {
@@ -19,7 +21,10 @@ import { mapPage, type Paginated } from '../common/pagination/paginated.js';
 @Public()
 @Controller('auctions')
 export class AuctionsController {
-  constructor(private readonly auctions: AuctionsService) {}
+  constructor(
+    private readonly auctions: AuctionsService,
+    private readonly importRuns: ImportRunService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Search active auctions (paginated, AR-35)' })
@@ -28,6 +33,17 @@ export class AuctionsController {
     const { page, pageSize, ...filters } = query;
     const result = await this.auctions.query(filters, { page, pageSize });
     return mapPage(result, (auction) => new AuctionResponseDto(auction));
+  }
+
+  // SPEC-004 BR-004-24: public, shown wherever search results and property pages appear. Declared
+  // before `:code`, which would otherwise read "last-update" as a property number.
+  @Get('last-update')
+  @ApiOperation({
+    summary: 'When the last daily update finished (an instant; null before the first one)',
+  })
+  @ApiOkResponse({ type: LastUpdateResponseDto })
+  async getLastUpdate(): Promise<LastUpdateResponseDto> {
+    return new LastUpdateResponseDto(await this.importRuns.lastUpdateAt());
   }
 
   // AR-35 exemption (ARCHITECTURE §8): a lookup of a filter's options, needed whole.

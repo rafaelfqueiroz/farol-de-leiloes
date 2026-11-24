@@ -35,18 +35,14 @@ const holidayList = z
   })
   .transform((entries) => [...new Set(entries)].sort());
 
-// SPEC-004 BR-004-01..03: a Brasília time of day, `HH:mm` (24 h), read as minutes after midnight.
-// The error never echoes the value (SC-16).
+// SPEC-004 BR-004-01..03: a Brasília time of day, `HH:mm` (24 h). It stays the string it was
+// written as: the validated environment is written back to process.env and validated again by the
+// settings factories, so a transform here would have to survive being stringified (the holiday
+// list does; minutes would not). BusinessConfig reads it as minutes after midnight. The error never
+// echoes the value (SC-16).
 const timeOfDay = z
   .string()
-  .regex(
-    /^([01]\d|2[0-3]):([0-5]\d)$/,
-    'must be a Brasília time of day written HH:mm (00:00-23:59)',
-  )
-  .transform((value) => {
-    const [hours, minutes] = value.split(':').map(Number) as [number, number];
-    return hours * 60 + minutes;
-  });
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be a Brasília time of day written HH:mm (00:00-23:59)');
 
 // SPEC-004 / ADR-003: the optional proxy Caixa traffic leaves through. http(s) only: undici's
 // ProxyAgent speaks no SOCKS, and a SOCKS endpoint needs a bridge that is #108's decision. The
@@ -241,8 +237,8 @@ export const envSchema = z
     NATIONAL_HOLIDAYS: holidayList.default([]),
     // SPEC-004 BR-004-01..03 (AR-43): the daily import's window, Brasília time. No attempt before
     // IMPORT_WINDOW_START or from IMPORT_CUTOFF on; at the cutoff the day is decided.
-    IMPORT_WINDOW_START: timeOfDay.prefault('06:00'),
-    IMPORT_CUTOFF: timeOfDay.prefault('12:00'),
+    IMPORT_WINDOW_START: timeOfDay.default('06:00'),
+    IMPORT_CUTOFF: timeOfDay.default('12:00'),
     // SPEC-004 BR-004-02: at most this many attempts a day, IMPORT_ATTEMPT_SPACING_MINUTES apart.
     IMPORT_MAX_ATTEMPTS: positiveInt.default(12),
     IMPORT_ATTEMPT_SPACING_MINUTES: positiveInt.default(30),
@@ -269,9 +265,10 @@ export const envSchema = z
       }
       // BR-004-02: a window that closes before it opens would never attempt anything. (The
       // fields may have failed their own checks, hence the type guard.)
+      // (`HH:mm` is zero-padded, so the strings order as the times do.)
       if (
-        typeof env.IMPORT_WINDOW_START === 'number' &&
-        typeof env.IMPORT_CUTOFF === 'number' &&
+        typeof env.IMPORT_WINDOW_START === 'string' &&
+        typeof env.IMPORT_CUTOFF === 'string' &&
         env.IMPORT_WINDOW_START >= env.IMPORT_CUTOFF
       ) {
         ctx.addIssue({
