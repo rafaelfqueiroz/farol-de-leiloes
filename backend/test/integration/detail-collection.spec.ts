@@ -538,66 +538,6 @@ describe('the detail collection (integration)', () => {
       expect(await entriesOf(h, '0001', 'DETAILS')).toEqual([]);
     });
 
-    it('sends nothing after a block to the workers already in flight or waiting at the gate (SC-24)', async () => {
-      const gallery = ['/fotos/F1.jpg', '/fotos/F2.jpg', '/fotos/F3.jpg'];
-      servePages(
-        codes(6),
-        detailPage({
-          openBiddingDate: '30/12/2026 - 10h00',
-          photos: gallery,
-          edital: null,
-          matricula: null,
-        }),
-      );
-      for (const photo of gallery) {
-        h.caixa.serveFile(`https://venda-imoveis.caixa.gov.br${photo}`, {
-          body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
-          contentType: 'image/jpeg',
-        });
-      }
-      h.caixa.serveDetailPage(pageUrl('0001'), new CaixaBlockedError('HTTP_429'));
-
-      const run = await runDay(h, MON, csvList(MON, properties(6)), {
-        env: { ENRICHMENT_CONCURRENCY: '3', ENRICHMENT_MIN_PAUSE_MS: '1000' },
-      });
-
-      // The first request was refused: every worker waiting for its turn stops with it.
-      expect(h.caixa.requests.filter((request) => request.kind !== 'list')).toHaveLength(1);
-      expect(run?.collection).toEqual({
-        collected: 0,
-        failed: 0,
-        blocked: true,
-        pages: 1,
-        requests: 1,
-      });
-      expect(await h.kit.auctionModel.countDocuments({ fulfilled: true })).toBe(0);
-    });
-
-    it('stops the workers waiting at the gate when the failures in a row stop the pass', async () => {
-      servePages(codes(8));
-      for (const code of codes(8)) {
-        h.caixa.serveDetailPage(pageUrl(code), new CaixaUnreachableError('TIMEOUT'));
-      }
-
-      const run = await runDay(h, MON, csvList(MON, properties(8)), {
-        env: {
-          ENRICHMENT_CONCURRENCY: '4',
-          ENRICHMENT_MIN_PAUSE_MS: '1000',
-          ENRICHMENT_MAX_CONSECUTIVE_FAILURES: '2',
-        },
-      });
-
-      // Two requests failed in a row: the two that were admitted, and no third.
-      expect(pagesRequested(h)).toHaveLength(2);
-      expect(run?.collection).toMatchObject({
-        collected: 0,
-        failed: 2,
-        blocked: false,
-        pages: 2,
-        requests: 2,
-      });
-    });
-
     it('asks nothing more on a pass resumed after a block the same day', async () => {
       servePages(codes(3));
       const run = await runDay(h, MON, csvList(MON, properties(3)), {

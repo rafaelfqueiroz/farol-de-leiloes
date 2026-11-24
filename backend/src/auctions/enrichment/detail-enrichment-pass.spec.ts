@@ -80,6 +80,8 @@ function setup(env: Record<string, string> = {}, codes: string[] = ['0001', '000
           saved.push(progress);
         },
       }),
+      20_000,
+      1, // no database here: nothing is in flight between two timers
     );
   return { repository, caixa, run, saved, sleeper };
 }
@@ -399,7 +401,7 @@ describe('DetailEnrichmentPass', () => {
     const first = run();
     const second = run();
 
-    await sleeper.drive(Promise.all([first, second]));
+    await sleeper.drive(Promise.all([first, second]), 20_000, 1);
 
     // Pass one asked for both properties before pass two began (the fake repository forgets what
     // was collected, so pass two asks again), and every start was one pause after the last.
@@ -408,5 +410,90 @@ describe('DetailEnrichmentPass', () => {
     );
     expect(codes).toEqual(['0001', '0002', '0001', '0002']);
     expect(sleeper.sleeps).toEqual([2000, 2000, 2000]);
+  });
+
+  describe('workers in flight or waiting at the gate when the pass stops (SC-24)', () => {
+    const CODES = ['0001', '0002', '0003', '0004', '0005', '0006'];
+    const GALLERY = ['/fotos/F1.jpg', '/fotos/F2.jpg', '/fotos/F3.jpg'];
+    const photoPage = detailPage({
+      openBiddingDate: '30/12/2026 - 10h00',
+      photos: GALLERY,
+      edital: null,
+      matricula: null,
+    });
+
+    function withGallery(env: Record<string, string>) {
+      const setupEnv = setup(env, CODES);
+      for (const code of CODES) setupEnv.caixa.serveDetailPage(urlOf(code), photoPage);
+      for (const photo of GALLERY) {
+        setupEnv.caixa.serveFile(`https://venda-imoveis.caixa.gov.br${photo}`, {
+          body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
+          contentType: 'image/jpeg',
+        });
+      }
+      return setupEnv;
+    }
+
+    it('sends nothing after a page answered 429, with 3 workers and 6 properties of 3 photos each', async () => {
+      const { caixa, run } = withGallery({
+        ENRICHMENT_CONCURRENCY: '3',
+        ENRICHMENT_MIN_PAUSE_MS: '1000',
+      });
+      // The first page is refused; nothing is in flight but it, so every later admission is "after".
+      const first = new URL(urlOf('0001')).searchParams.get('hdnimovel');
+      caixa.serveDetailPage(urlOf(first ?? ''), new CaixaBlockedError('HTTP_429'));
+
+      const result = await run();
+
+      expect(caixa.requests).toHaveLength(1);
+      expect(result).toEqual({ collected: 0, failed: 0, blocked: true, pages: 1, requests: 1 });
+    });
+
+    it('sends nothing after a block that comes while photos are being copied', async () => {
+      const { caixa, run } = withGallery({
+        ENRICHMENT_CONCURRENCY: '3',
+        ENRICHMENT_MIN_PAUSE_MS: '1000',
+      });
+      // The 3rd photo of every property is refused: the first one to ask ends the day.
+      caixa.serveFile(
+        'https://venda-imoveis.caixa.gov.br/fotos/F3.jpg',
+        new CaixaBlockedError('HTTP_403'),
+      );
+
+      const capture = captureAllLogOutput();
+      let result: CollectionResult;
+      try {
+        result = await run();
+      } finally {
+        capture.restore();
+      }
+
+      const lines = [
+        ...capture
+          .text()
+          .matchAll(/collection\.request kind=\w+ code=\w+ outcome=(\S+) startMs=(\d+) endMs=\d+/g),
+      ].map(([, outcome, start]) => ({ outcome: outcome as string, start: Number(start) }));
+      const refused = lines.find((line) => line.outcome.startsWith('BLOCKED_'));
+      expect(result.blocked).toBe(true);
+      // Nothing STARTED after the instant of the refusal (what was admitted before it is in flight).
+      expect(refused).toBeDefined();
+      expect(lines.filter((line) => line.start > (refused?.start ?? 0))).toEqual([]);
+      expect(caixa.requests.length).toBeLessThan(CODES.length * 4);
+    });
+
+    it('sends nothing after the failures in a row stopped the pass', async () => {
+      const { caixa, run } = withGallery({
+        ENRICHMENT_CONCURRENCY: '4',
+        ENRICHMENT_MIN_PAUSE_MS: '1000',
+        ENRICHMENT_MAX_CONSECUTIVE_FAILURES: '2',
+      });
+      for (const code of CODES)
+        caixa.serveDetailPage(urlOf(code), new CaixaUnreachableError('TIMEOUT'));
+
+      const result = await run();
+
+      expect(caixa.requests).toHaveLength(2);
+      expect(result).toMatchObject({ collected: 0, failed: 2, blocked: false, pages: 2 });
+    });
   });
 });

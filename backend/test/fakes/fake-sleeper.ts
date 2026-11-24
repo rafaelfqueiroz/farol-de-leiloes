@@ -40,8 +40,11 @@ export class FakeSleeper extends Sleeper {
     return true;
   }
 
-  /** Runs fake time until `work` settles (it fails after `realTimeoutMs` of real time: a deadlock). */
-  async drive<T>(work: Promise<T>, realTimeoutMs = 20_000): Promise<T> {
+  /**
+   * Runs fake time until `work` settles (`quietMs`: 1 for a spec with no database, where nothing
+   * is in flight between two timers).
+   * (it fails after `realTimeoutMs` of real time: a deadlock). */
+  async drive<T>(work: Promise<T>, realTimeoutMs = 20_000, quietMs = QUIET_MS): Promise<T> {
     let settled = false;
     const watched = work.finally(() => {
       settled = true;
@@ -49,7 +52,7 @@ export class FakeSleeper extends Sleeper {
     watched.catch(() => undefined);
     const deadline = Date.now() + realTimeoutMs;
     while (!settled) {
-      await new Promise((resolve) => setTimeout(resolve, QUIET_MS)); // I/O and microtasks get their turn
+      await new Promise((resolve) => setTimeout(resolve, quietMs)); // I/O and microtasks get their turn
       if (settled) break;
       this.fireNext();
       if (Date.now() > deadline) throw new Error('FakeSleeper.drive: the work never settled');
