@@ -62,7 +62,7 @@ const UNSPECIFIC = new Set(['', 'application/octet-stream', 'binary/octet-stream
 
 /** The header's media type, lower-case, without parameters; `image/jpg` is `image/jpeg`. */
 function declaredType(header: string | null): string {
-  const media = (header ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  const media = (header ?? '').replace(/;.*$/s, '').trim().toLowerCase();
   return media === 'image/jpg' ? 'image/jpeg' : media;
 }
 
