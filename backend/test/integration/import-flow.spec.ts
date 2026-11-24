@@ -185,6 +185,30 @@ describe('the import flow (integration)', () => {
     });
   });
 
+  it('BR-004-04, DL-004-03 (review of #187): an unterminated quote in row 9 swallows property 10; the list is REJECTED_LIST and property 10 stays available', async () => {
+    await dayOneSucceeds();
+    clock.advance(DAY);
+    const before = await snapshot();
+    // The ninth row opens a quote it never closes: Papa reports MissingQuotes, 9 rows parse (above
+    // the 0.8 ratio, and every sweep guard passes), and property 10 is inside row 9's description.
+    csv = list('11/11/2025', TEN).replace(
+      ' 1008 ;SP ;CAMPINAS ;CENTRO ; RUA A, N. 1 ;100.000,00;200.000,00;50.00;Casa, 60 m2;',
+      ' 1008 ;SP ;CAMPINAS ;CENTRO ; RUA A, N. 1 ;100.000,00;200.000,00;50.00;"Casa, 60 m2;',
+    );
+    expect(csv).toContain('"Casa, 60 m2');
+
+    await importer().dailyJob();
+
+    expect(await snapshot()).toEqual(before); // nothing applied, no change entry
+    expect(await kit.auctionModel.findOne({ code: '1009' })).toMatchObject({ available: true });
+    expect(await kit.auctionModel.countDocuments({ available: false })).toBe(0);
+    expect(await runOf('2025-11-11')).toMatchObject({
+      outcome: 'REJECTED_LIST',
+      failureReasons: ['MALFORMED_CSV'],
+    });
+    expect(await kit.runs.lastAppliedList()).toEqual({ generatedOn: '2025-11-10', rowCount: 10 });
+  });
+
   it('BR-004-02, BR-004-10: a list not newer than the last applied is NO_NEW_LIST with zero writes', async () => {
     await dayOneSucceeds();
     clock.advance(DAY);
@@ -309,8 +333,10 @@ describe('the import flow (integration)', () => {
     });
 
     it('a list with its number column absent is rejected the same way, even as a first list', async () => {
+      // The column goes from the header and from every row (a row of another width is malformed).
       csv = list('10/11/2025', TEN)
         .replace('N° do imóvel;', '')
+        .replace(/^ \d+ ;/gm, '')
         .replace(/https:\/\/venda-imoveis[^\n]*/g, '');
 
       await importer().dailyJob();
