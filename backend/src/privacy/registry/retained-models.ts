@@ -5,10 +5,11 @@
 // (test/isolation/personal-data-registry.isolation.spec.ts) fails naming the model otherwise, and
 // fails for an entry that names no existing model or that a provider also claims.
 //
-// Every record below holds ids and instants only: no name, email or phone (SC-15, SC-25). That is
-// what makes keeping it compatible with "a database search for the account's name, email and phone
-// finds nothing" (SPEC-010 acceptance criteria). The periods are lawyer-set (Q-21); until set,
-// nothing here is deleted (SECURITY §9).
+// Every record below holds ids and instants only, no name, email or phone (SC-15, SC-25), with ONE
+// declared exception: the `reason` of an account status event is a line an admin typed (SPEC-009,
+// below). That is what makes keeping the rest compatible with "a database search for the account's
+// name, email and phone finds nothing" (SPEC-010 acceptance criteria). The periods are lawyer-set
+// (Q-21); until set, nothing here is deleted (SECURITY §9).
 export interface RetainedModel {
   /** The registered Mongoose model name. */
   readonly model: string;
@@ -54,6 +55,13 @@ export const RETAINED_MODELS: readonly RetainedModel[] = [
     rule: 'SECURITY §9: art. 7º I, art. 8º §5º',
     reason:
       'Proof of a consent that is specific, optional and revocable, kept until the lawyer sets a period (Q-21); ids, answers and instants only. Still exported (BR-010-09)',
+  },
+  {
+    model: 'AccountStatusEventEntity',
+    collection: 'accountStatusEvents',
+    rule: 'BR-009-16, BR-010-23',
+    reason:
+      'The history of an account’s deactivations and reactivations stays (SPEC-009 BR-009-16, BR-009-17: admin, instant and reason) until the lawyer sets a period (Q-21); ids and instants plus the reason line an admin typed, which is free text and the one exception to "ids only" here (SECURITY §9). Insert-only (AR-30)',
   },
   {
     model: 'MaintenanceWindowEntity',

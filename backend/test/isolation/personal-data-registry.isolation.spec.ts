@@ -95,6 +95,7 @@ describe('SPEC-010 SC-27: every model that holds a person is in the registry or 
 
   it('BR-010-22 / BR-010-23: the retained models are the declared ones, each with its rule and reason', () => {
     expect(RETAINED_MODELS.map((entry) => entry.model).sort()).toEqual([
+      'AccountStatusEventEntity',
       'AdminAccessLogEntity',
       'ConsentEntity',
       'MaintenanceWindowEntity',

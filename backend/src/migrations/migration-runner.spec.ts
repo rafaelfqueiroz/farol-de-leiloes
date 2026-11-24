@@ -170,6 +170,7 @@ describe('assertMigrationOrder', () => {
       '0010-retention-legal-indexes',
       '0011-erase-legacy-profile-fields',
       '0012-support-requests-indexes',
+      '0013-account-status-events-indexes',
     ]);
   });
 });

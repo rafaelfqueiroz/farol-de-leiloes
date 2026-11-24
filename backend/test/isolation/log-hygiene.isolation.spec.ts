@@ -31,6 +31,7 @@ import { type Connection, type Model, Types } from 'mongoose';
 import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
 import request from 'supertest';
 import type { OfficePlanState } from '../../src/access/sources/office-plan.source.js';
+import { AdminAccountsModule } from '../../src/admin-accounts/admin-accounts.module.js';
 import { AuctionEntity } from '../../src/auctions/schemas/auction.schema.js';
 import { AuctionsModule } from '../../src/auctions/auctions.module.js';
 import { Decimal } from '../../src/common/money/money.js';
@@ -87,6 +88,11 @@ const MARKERS = {
   profileName: 'MKR-PROFILE-NAME-QX7',
   supportSubject: 'MKR-SUPPORT-SUBJECT-QX7',
   supportMessage: 'MKR-SUPPORT-MESSAGE-QX7 a private message',
+  // SPEC-009 BR-009-14, BR-009-15: what an admin types into the account search and into the reason
+  // and the note of a deactivation and a reactivation; the log of the search keeps a keyed hash only.
+  searchTerm: 'mkr-search-term-qx7',
+  deactivationReason: 'MKR-DEACTIVATION-REASON-QX7',
+  reactivationNote: 'MKR-REACTIVATION-NOTE-QX7',
   filterName: 'MKR-FILTER-NAME-QX7',
   reminderNote: 'MKR-REMINDER-NOTE-QX7',
   probeName: 'MKR-PROBE-NAME-QX7',
@@ -140,6 +146,7 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
         AuctionsModule,
         RemindersModule,
         SupportModule,
+        AdminAccountsModule,
         SubscriptionsBillingModule,
         PrivacyRightsModule,
       ],
@@ -405,6 +412,50 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
       await call(as.post('/api/office/subscription/cancel').send({}));
       await moduleRef.get(SubscriptionsReconcileJob).run();
 
+      // SPEC-009 BR-009-13..BR-009-20: the admin's account administration. A search for a marker nobody
+      // has and one for the member's name (a marker), the record of the buyer, a deactivation with a
+      // reason, the buyer's refused sign-in, a refused self-deactivation, a reactivation with a note,
+      // a search with the log unable to write, and the support queue (the message is a marker).
+      const adminSession = app.as(admin);
+      await call(adminSession.get(`/api/admin/accounts?q=${MARKERS.searchTerm}`));
+      await call(
+        adminSession.get(`/api/admin/accounts?q=${encodeURIComponent(MARKERS.accountName)}`),
+      );
+      await call(adminSession.get('/api/admin/accounts?q=ab'));
+      await call(adminSession.get(`/api/admin/accounts/${buyer.id}`));
+      await call(adminSession.get(`/api/admin/accounts/${RANDOM_ID}`));
+      await call(
+        adminSession
+          .post(`/api/admin/accounts/${buyer.id}/deactivate`)
+          .send({ reason: MARKERS.deactivationReason }),
+      );
+      await call(
+        request(app.harness.app.getHttpServer() as Parameters<typeof request>[0])
+          .post('/api/auth/login')
+          .send({ email: buyer.email, password: 'correct horse battery' }),
+      );
+      await call(
+        adminSession
+          .post(`/api/admin/accounts/${admin.id}/deactivate`)
+          .send({ reason: MARKERS.deactivationReason }),
+      );
+      await call(
+        adminSession
+          .post(`/api/admin/accounts/${buyer.id}/reactivate`)
+          .send({ note: MARKERS.reactivationNote }),
+      );
+      await connection.db?.command({
+        collMod: 'adminAccessLogs',
+        validator: { $jsonSchema: { required: ['a field no entry has'] } },
+      });
+      await call(adminSession.get(`/api/admin/accounts?q=${MARKERS.searchTerm}`));
+      await call(adminSession.get(`/api/admin/accounts/${buyer.id}`));
+      await connection.db?.command({ collMod: 'adminAccessLogs', validator: {} });
+      await call(adminSession.get('/api/admin/support-requests'));
+      await call(adminSession.get(`/api/admin/support-requests/${supportId}`));
+      await call(adminSession.post(`/api/admin/support-requests/${supportId}/close`));
+      await call(adminSession.post(`/api/admin/support-requests/${supportId}/grant`));
+
       // The reminders job once, past the reminder's time (BR-002-29 delivers it to its account).
       clock.advance(6 * DAY);
       await moduleRef.get(RemindersScheduler).processReminders();
@@ -487,6 +538,31 @@ describe('BR-002-28 / SC-15: no client or personal data in logs or error answers
 
   it('no log line holds an account email', () => {
     for (const email of emails) expect(logged).not.toContain(email);
+  });
+
+  it('SPEC-009 BR-009-14: the access log of the searches and views holds no marker, no name and no address, only the keyed hash', async () => {
+    const connection = app.harness.moduleRef.get<Connection>(getConnectionToken());
+    const entries = await connection.db
+      ?.collection('adminAccessLogs')
+      .find({ action: { $in: ['account_search', 'account_view'] } })
+      .toArray();
+
+    expect(entries?.map((entry) => entry['action']).sort()).toEqual([
+      'account_search',
+      'account_search',
+      'account_view',
+    ]);
+    const text = JSON.stringify(entries);
+    for (const value of [...Object.values(MARKERS), ...emails]) {
+      expect(text.toLowerCase()).not.toContain(value.toLowerCase());
+    }
+  });
+
+  it('SPEC-009: the admin flows ran: a deactivated sign-in was refused with its code, and the reasons stayed out of every answer', () => {
+    expect(errorBodies).toContainEqual({ code: 'ACCOUNT_DEACTIVATED', context: {} });
+    expect(errorBodies).toContainEqual({ code: 'CANNOT_DEACTIVATE_OWN_ACCOUNT', context: {} });
+    expect(logged).toContain('Account deactivated by an admin');
+    expect(logged).toContain('Account reactivated by an admin');
   });
 
   it('no error answer holds a marker or an email (AR-40)', () => {

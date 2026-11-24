@@ -2,6 +2,10 @@
 // fails. Every member of the office gets the email, so the source answers the contact of each
 // CURRENT member, read now (AR-13).
 //
+// SPEC-009 BR-009-15: an account that is DEACTIVATED receives no notification, so an implementation
+// answers the contacts of ACTIVE accounts only (a deactivated member keeps their membership, BR-009-16,
+// but is not mailed).
+//
 // Until SPEC-011 binds a real implementation to OFFICE_MEMBERS_SOURCE (in SubscriptionsModule),
 // the default knows no member: nobody is emailed, and the loss is logged as a count (SC-15).
 import { Logger } from '@nestjs/common';
