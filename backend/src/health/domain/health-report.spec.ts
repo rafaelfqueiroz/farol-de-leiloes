@@ -53,20 +53,20 @@ describe('assessLastImport', () => {
     ).toBe(0.33);
   });
 
-  it('is stale only past 26 h: daily at 03:00 plus a 2 h margin', () => {
-    expect(IMPORT_STALE_AFTER_HOURS).toBe(26);
-    // 2026-01-14T10:00Z → 2026-01-15T12:00Z = 26 h exactly: not past it.
+  it('is stale only past 32 h: a record every day by the cutoff (30 h apart at most) plus 2 h', () => {
+    expect(IMPORT_STALE_AFTER_HOURS).toBe(32);
+    // 2026-01-14T04:00Z → 2026-01-15T12:00Z = 32 h exactly: not past it.
     const atEdge = assessLastImport(
-      { status: 'SUCCESS', finishedAt: new Date('2026-01-14T10:00:00.000Z') },
+      { status: 'SUCCESS', finishedAt: new Date('2026-01-14T04:00:00.000Z') },
       NOW,
     );
-    expect(atEdge).toMatchObject({ ageHours: 26, stale: false });
-    // One minute earlier, 09:59Z: 26 h 1 min = 26.0166… → 26.02 h, stale.
+    expect(atEdge).toMatchObject({ ageHours: 32, stale: false });
+    // One minute earlier, 03:59Z: 32 h 1 min = 32.0166… → 32.02 h, stale.
     const past = assessLastImport(
-      { status: 'SUCCESS', finishedAt: new Date('2026-01-14T09:59:00.000Z') },
+      { status: 'SUCCESS', finishedAt: new Date('2026-01-14T03:59:00.000Z') },
       NOW,
     );
-    expect(past).toMatchObject({ ageHours: 26.02, stale: true });
+    expect(past).toMatchObject({ ageHours: 32.02, stale: true });
   });
 });
 

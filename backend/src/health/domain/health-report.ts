@@ -3,10 +3,13 @@
 // ran, and is stale when older than the threshold below.
 
 /**
- * The import runs daily at 03:00 Brasília (24 h between runs), plus 2 h for a slow run and a late
- * scheduler tick: past 26 h, a run was missed.
+ * The import records a run every day between the window start and the cutoff (06:00-12:00
+ * Brasília by default, SPEC-004): a day's record can land at 06:00 and the next day's at 12:00, 30 h
+ * apart. Plus 2 h for a slow run and a late tick: past 32 h, a day was missed. A weekend or holiday
+ * with no list is recorded too (a NO_UPDATE day is a success of the pipeline), so quiet days do not
+ * make the report stale.
  */
-export const IMPORT_STALE_AFTER_HOURS = 26;
+export const IMPORT_STALE_AFTER_HOURS = 32;
 
 const HOUR_MS = 60 * 60 * 1000;
 

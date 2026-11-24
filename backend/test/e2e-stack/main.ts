@@ -2,9 +2,11 @@
 // replaced by a fake. It is the production AppModule — same controllers, guards, validation and
 // error shape through configureApp — compiled with the testing module's provider overrides:
 //
-//   Caixa       AuctionsImporter and AuctionDetailsScraper are inert values: no @Cron is
-//               registered and nothing runs at start-up, so the stack never reaches Caixa. The
-//               catalog comes from the reference-workload seed instead (BR-003-08).
+//   Caixa       AuctionsImporter (the only @Cron host of the import, SPEC-004 part 3),
+//               ImportOrchestrator (the tick it calls) and AuctionDetailsScraper are inert
+//               values: no @Cron is registered and nothing runs at start-up, so the stack never
+//               reaches Caixa and never sends an import alert. The catalog comes from the
+//               reference-workload seed instead (BR-003-08).
 //   Stripe      FakePaymentGateway (test/fakes), the port's own fake (AR-10).
 //   SMTP        E2eEmailSender: emails are recorded in memory, never sent.
 //   Google      Not overridden: GoogleStrategy only builds a redirect URL, and no E2E journey
@@ -23,6 +25,7 @@ import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/app.setup.js';
 import { AuctionsImporter } from '../../src/auctions/importer/scheduler.js';
+import { ImportOrchestrator } from '../../src/auctions/importer/import-orchestrator.service.js';
 import { AuctionDetailsScraper } from '../../src/auctions/scraper/scraper-scheduler.js';
 import { EmailService } from '../../src/email/email.service.js';
 import { PaymentGateway } from '../../src/payments/payment-gateway.js';
@@ -37,6 +40,8 @@ async function bootstrap(): Promise<void> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(AuctionsImporter)
     .useValue({})
+    .overrideProvider(ImportOrchestrator)
+    .useValue({ tick: () => Promise.resolve() })
     .overrideProvider(AuctionDetailsScraper)
     .useValue({})
     .overrideProvider(PaymentGateway)
