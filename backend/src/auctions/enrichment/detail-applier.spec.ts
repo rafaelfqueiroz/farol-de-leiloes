@@ -230,7 +230,7 @@ describe('DetailApplier', () => {
     const { repository, recorded, applier } = setup();
     const first = {
       label: '1º Leilão',
-      date: new Date('2026-11-24T13:00:00.000Z'),
+      date: new Date('2026-11-24T11:00:00.000Z'),
       minimumPrice: new Decimal('100.00'),
     };
     const second = { label: '2º Leilão', date: D2, minimumPrice: new Decimal('80.00') };
@@ -263,7 +263,7 @@ describe('DetailApplier', () => {
     const { repository, applier } = setup();
     const first = {
       label: '1º Leilão',
-      date: new Date('2026-11-24T13:00:00.000Z'),
+      date: new Date('2026-11-24T11:00:00.000Z'),
       minimumPrice: null,
     };
     const second = { label: '2º Leilão', date: D2, minimumPrice: null };
