@@ -1233,6 +1233,27 @@ describe('the import state machine (integration)', () => {
       expect(h.health.recordExecution).not.toHaveBeenCalled();
     });
 
+    it('a worker that loses the lease right after storing the pass result does not complete the day', async () => {
+      const original = h.kit.runs.saveCollection.bind(h.kit.runs);
+      const spy = vi
+        .spyOn(h.kit.runs, 'saveCollection')
+        .mockImplementation(async (...args: Parameters<typeof original>) => {
+          const stored = await original(...args);
+          await steal(FRIDAY);
+          return stored;
+        });
+      setClock(FRIDAY, HH(6));
+      try {
+        await h.orchestrator().tick();
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(await runOf(FRIDAY)).toMatchObject({ outcome: 'SUCCESS', updateCompletedAt: null });
+      expect(h.events).toHaveLength(0);
+      expect(h.health.recordExecution).not.toHaveBeenCalled();
+    });
+
     it('a long apply keeps its lease through the heartbeat: nobody takes the run over, one worker finishes the day', async () => {
       const real = h.kit.applier;
       let takeoverAttempt: unknown = 'not tried';
