@@ -8,6 +8,7 @@ import {
   currentRound,
   discountPercent,
   type Round,
+  keepKnownPrices,
   roundsFromPhaseDates,
 } from './rounds.js';
 
@@ -159,5 +160,40 @@ describe('roundsFromPhaseDates with the prices a page states (BR-004-11, BR-004-
     expect(
       roundsFromPhaseDates(PhaseModality.DIRECT_ONLINE_SALES, [], firstOnly)[0]?.minimumPrice,
     ).toEqual(d('50.00'));
+  });
+});
+
+describe('keepKnownPrices (BR-004-15)', () => {
+  const stored = [
+    round('1º Leilão', '2026-03-10T13:00:00Z', '100'),
+    round('2º Leilão', '2026-03-16T13:00:00Z', '80'),
+  ];
+
+  it('keeps the stored price of a round the page gives dates for but no price', () => {
+    const merged = keepKnownPrices(
+      [round('1º Leilão', '2026-03-11T13:00:00Z'), round('2º Leilão', '2026-03-16T13:00:00Z')],
+      stored,
+    );
+
+    expect(merged.map((r) => r.minimumPrice?.toString() ?? null)).toEqual(['100', '80']);
+    expect(merged.map((r) => r.date?.toISOString())).toEqual([
+      '2026-03-11T13:00:00.000Z',
+      '2026-03-16T13:00:00.000Z',
+    ]);
+  });
+
+  it('takes the page price when it states one, even a different one', () => {
+    const merged = keepKnownPrices([round('1º Leilão', '2026-03-10T13:00:00Z', '90')], stored);
+
+    expect(merged[0]?.minimumPrice?.toString()).toBe('90');
+  });
+
+  it('leaves unknown what was never known, and a round that was not stored', () => {
+    const merged = keepKnownPrices(
+      [round('1º Leilão', '2026-03-10T13:00:00Z'), round('Licitação', '2026-03-10T13:00:00Z')],
+      [round('1º Leilão', '2026-03-10T13:00:00Z')],
+    );
+
+    expect(merged.map((r) => r.minimumPrice)).toEqual([null, null]);
   });
 });

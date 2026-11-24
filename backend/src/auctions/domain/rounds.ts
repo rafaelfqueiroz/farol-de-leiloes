@@ -104,3 +104,17 @@ export function roundsFromPhaseDates(
       return [{ label: 'Venda Direta', minimumPrice: prices.single ?? prices.first, date: null }];
   }
 }
+
+/**
+ * BR-004-15: unknown never replaces known. A page that gives a round's date but not its price
+ * (or a layout this reader missed) must not wipe the price already stored for that round: the
+ * rounds `next` read are kept, each with the stored price of the round of the same label when the
+ * page stated none.
+ */
+export function keepKnownPrices(next: readonly Round[], stored: readonly Round[]): Round[] {
+  return next.map((round) => {
+    if (round.minimumPrice !== null) return round;
+    const known = stored.find((candidate) => candidate.label === round.label)?.minimumPrice ?? null;
+    return known === null ? round : { ...round, minimumPrice: known };
+  });
+}

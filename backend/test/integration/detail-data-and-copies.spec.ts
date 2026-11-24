@@ -135,6 +135,32 @@ describe('what a collection writes, records and copies (integration)', () => {
       expect(property?.phases?.[0]).toMatchObject({ paymentMethods: ['OWN_RESOURCES', 'FGTS'] });
     });
 
+    it('keeps a stored round price when a later page gives the dates but no price (never wipes a known value)', async () => {
+      serve('0001', sfiPage());
+      await runDay(h, MON, csvList(MON, five()), { env: DAILY });
+      // The page now shows the dates without the price lines.
+      serve(
+        '0001',
+        sfiPage({ firstPrice: undefined, secondPrice: undefined, singlePrice: undefined }),
+      );
+      h.caixa.serveDetailPage(
+        pageUrl('0001'),
+        detailPage(sfiPage({ firstPrice: undefined })).replace(
+          /<b>Valor mínimo de venda: [^<]*<\/b>/,
+          '',
+        ),
+      );
+
+      await runDay(h, TUE, csvList(TUE, five()), { env: DAILY });
+
+      const property = await stored(h, '0001');
+      expect(property?.rounds?.map((round) => round.minimumPrice?.toString())).toEqual([
+        '192622',
+        '170201.84',
+      ]);
+      expect(await entriesOf(h, '0001', 'DETAILS')).toEqual([]);
+    });
+
     it('leaves unknown what the page does not say: no payment methods, no occupancy, no default', async () => {
       serve('0001', sfiPage({ methods: null, occupancy: undefined }));
 

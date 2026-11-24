@@ -4,7 +4,7 @@ import type { ChangeDraft } from '../domain/change-types.js';
 import type { DetailPage } from '../domain/detail-data.js';
 import { clockChanges } from '../domain/clock-changes.js';
 import { diffDetails } from '../domain/detail-diff.js';
-import { currentRound, roundsFromPhaseDates } from '../domain/rounds.js';
+import { currentRound, keepKnownPrices, roundsFromPhaseDates } from '../domain/rounds.js';
 import {
   type CollectionWrite,
   EnrichmentRepository,
@@ -46,7 +46,10 @@ export class DetailApplier {
     const rounds =
       stored.modality === null
         ? []
-        : roundsFromPhaseDates(stored.modality, page.phaseDates, page.prices);
+        : keepKnownPrices(
+            roundsFromPhaseDates(stored.modality, page.phaseDates, page.prices),
+            stored.rounds,
+          );
 
     // BR-004-13, BR-004-26: the collection moves the recorded round (below). If the clock had not
     // yet looked at the property today, the move it is about to hide (the 1st round ended since the
