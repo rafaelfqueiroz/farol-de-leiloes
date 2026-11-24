@@ -48,6 +48,7 @@ const NONE: RunProgress = {
   applying: false,
   applyFailed: false,
   rejection: null,
+  blocked: null,
 };
 
 function run(overrides: Partial<RunState> = {}, progress: Partial<RunProgress> = {}): RunState {
@@ -293,6 +294,68 @@ describe('a run that crosses midnight keeps its date (BR-004-27)', () => {
       kind: 'wait',
       reason: 'BEFORE_WINDOW',
     });
+  });
+});
+
+// BR-004-20, SC-24, AR-03 (review of #189): a run that carries a recorded block is decided at once.
+// Whatever interrupted its finalization, the next tick must send no request.
+describe('a run with a recorded block is decided at once, at any time of day', () => {
+  const BLOCKED = {
+    kind: 'finalize',
+    outcome: 'FAILED',
+    reason: 'LIST_BLOCKED',
+    nonBusinessReason: null,
+  };
+  const blocked = (overrides: Partial<RunState> = {}, progress: Partial<RunProgress> = {}) =>
+    run(
+      { attempts: 1, nextAttemptAt: at('2026-11-23T09:30:00.000Z'), ...overrides },
+      { blocked: 'HTTP_403', ...progress },
+    );
+
+  it.each([
+    ['06:30, when the next attempt is due', '2026-11-23T09:30:00.000Z'],
+    ['06:10, while the spacing would wait', '2026-11-23T09:10:00.000Z'],
+    ['before the window opens', '2026-11-23T05:00:00.000Z'],
+    ['at the cutoff', '2026-11-23T15:00:00.000Z'],
+    ['after midnight, the run still open', '2026-11-24T03:30:00.000Z'],
+  ])('%s', (_when, now) => {
+    expect(decide(now, blocked())).toEqual(BLOCKED);
+  });
+
+  it('even with the attempts used up, and on a weekend', () => {
+    expect(decide('2026-11-23T10:00:00.000Z', blocked({ attempts: 12 }))).toEqual(BLOCKED);
+    expect(
+      decide('2026-11-21T10:00:00.000Z', blocked({ brasiliaDate: SATURDAY }), SATURDAY),
+    ).toEqual(BLOCKED);
+  });
+
+  it('before anything else the run says: a list being applied, a refusal, a list reached', () => {
+    expect(decide('2026-11-23T10:00:00.000Z', blocked({}, { applying: true }))).toEqual(BLOCKED);
+    expect(
+      decide('2026-11-23T15:00:00.000Z', blocked({}, { applyFailed: true, listReached: true })),
+    ).toEqual(BLOCKED);
+    expect(
+      decide(
+        '2026-11-23T15:00:00.000Z',
+        blocked({}, { rejection: { generatedOn: '2026-11-23', reason: 'TRUNCATED_LIST' } }),
+      ),
+    ).toEqual(BLOCKED);
+  });
+
+  it('is never an attempt: no request is the decision, whatever the window says', () => {
+    for (const now of ['2026-11-23T09:00:00.000Z', '2026-11-23T11:59:00.000Z']) {
+      expect(decide(now, blocked({ nextAttemptAt: null })).kind).toBe('finalize');
+    }
+  });
+
+  it('a run that is already decided stays decided, and an applied one is still collected', () => {
+    expect(decide('2026-11-23T10:00:00.000Z', blocked({ outcome: 'FAILED' }))).toEqual({
+      kind: 'wait',
+      reason: 'FINISHED',
+    });
+    expect(decide('2026-11-23T10:00:00.000Z', blocked({ outcome: 'SUCCESS' })).kind).toBe(
+      'collect',
+    );
   });
 });
 

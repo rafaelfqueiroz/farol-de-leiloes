@@ -74,6 +74,14 @@ export class ImportOrchestrator {
   private readonly schedule: ImportSchedule;
   /** How often a worker extends its lease; a spec shortens it to watch the heartbeat. */
   leaseRenewMs = LEASE_RENEW_MS;
+  /**
+   * Blocks Caixa answered with whose finalizing write failed, by the run's day: day -> the block's
+   * reason. The one write that records a block and ends the day (`finalizeBlocked`) can itself
+   * fail (the database went away); the process remembers the block meanwhile, so the next tick
+   * retries that write and asks Caixa nothing (SC-24). A restart loses it; that needs the write
+   * to fail AND the process to die before the retry. Dropped as soon as the run is decided.
+   */
+  private readonly unrecordedBlocks = new Map<string, string>();
 
   constructor(
     private readonly runs: ImportRunService,
@@ -174,16 +182,29 @@ export class ImportOrchestrator {
   }
 
   private decide(day: string, run: ImportRunRecord | null, force: boolean): ImportDecision {
+    if (run !== null && run.outcome !== 'RUNNING') this.unrecordedBlocks.delete(day);
     const decision = decideNextAction(
-      { brasiliaDate: day, run: run === null ? null : toState(run) },
+      { brasiliaDate: day, run: run === null ? null : this.stateOf(run) },
       this.clock.now(),
       this.schedule,
       this.calendar,
     );
     const undecided = run === null || run.outcome === 'RUNNING';
-    return force && undecided && decision.kind !== 'attempt'
+    // A forced attempt (the development startup import) replaces a "wait" or a decision of the day
+    // with one request, but never the end of a day Caixa blocked: no flag asks it again (SC-24).
+    const blocked = decision.kind === 'finalize' && decision.reason === LIST_BLOCKED;
+    return force && undecided && decision.kind !== 'attempt' && !blocked
       ? { kind: 'attempt', mode: 'search' }
       : decision;
+  }
+
+  /** What the schedule reads of a run: its persisted state, plus a block whose write failed. */
+  private stateOf(run: ImportRunRecord): RunState {
+    const state = toState(run);
+    const remembered = this.unrecordedBlocks.get(run.brasiliaDate);
+    return state.progress.blocked !== null || remembered === undefined
+      ? state
+      : { ...state, progress: { ...state.progress, blocked: remembered } };
   }
 
   /**
@@ -310,14 +331,10 @@ export class ImportOrchestrator {
     if (error instanceof CaixaBlockedError) {
       // BR-004-20, SC-24: stop for the day. No retry, no other address, no waiting for a better time.
       this.logger.warn(`Caixa blocked the list request: ${error.reason}; the day ends here`);
-      this.fence(await this.runs.recordFailureCode(run.id, owner, error.reason));
       captureException(error, { tags: { jobName: AUCTIONS_IMPORT_JOB } });
-      await this.finalizeDay(
-        run,
-        owner,
-        { kind: 'finalize', outcome: 'FAILED', reason: LIST_BLOCKED, nonBusinessReason: null },
-        runMode,
-      );
+      // The block and the end of the day are ONE write (AR-03): there is no moment at which the
+      // block is recorded and the day is still open.
+      await this.finalizeBlockedDay(run, owner, error.reason, runMode);
       return;
     }
     if (error instanceof CaixaUnreachableError) {
@@ -341,9 +358,43 @@ export class ImportOrchestrator {
     runMode: RunMode,
   ): Promise<void> {
     const { outcome, reason, nonBusinessReason } = decision;
+    if (reason === LIST_BLOCKED) {
+      // Recovery of a block: persisted on the run (a run left open by whatever wrote it) or
+      // remembered by this process after its write failed.
+      const block = run.progress.blocked ?? this.unrecordedBlocks.get(run.brasiliaDate);
+      if (block !== undefined) {
+        await this.finalizeBlockedDay(run, owner, block, runMode);
+        return;
+      }
+    }
     this.fence(await this.runs.finalize(run.id, owner, { outcome, reason, nonBusinessReason }));
     this.logger.log(`Import of ${run.brasiliaDate} ended ${outcome} (${reason})`);
     await this.recordHealth(outcome, reason, runMode);
+    await this.alertAbout(run.id);
+  }
+
+  /**
+   * The day ends because Caixa blocked us (BR-004-20, SC-24): the block and the end of the day in
+   * ONE fenced write. If the write throws, the block is remembered for this process, so the next
+   * tick retries it instead of asking Caixa again; the error is the tick's to report.
+   */
+  private async finalizeBlockedDay(
+    run: ImportRunRecord,
+    owner: string,
+    reason: string,
+    runMode: RunMode,
+  ): Promise<void> {
+    let written: boolean;
+    try {
+      written = await this.runs.finalizeBlocked(run.id, owner, { reason, code: LIST_BLOCKED });
+    } catch (error) {
+      this.unrecordedBlocks.set(run.brasiliaDate, reason);
+      throw error;
+    }
+    this.fence(written);
+    this.unrecordedBlocks.delete(run.brasiliaDate);
+    this.logger.log(`Import of ${run.brasiliaDate} ended FAILED (${LIST_BLOCKED})`);
+    await this.recordHealth('FAILED', LIST_BLOCKED, runMode);
     await this.alertAbout(run.id);
   }
 

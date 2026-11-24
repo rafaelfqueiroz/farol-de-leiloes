@@ -162,6 +162,18 @@ export class ImportRunService {
     return this.runs.finalize(id, owner, decision, this.clock.now());
   }
 
+  /**
+   * The block and the end of the day in ONE fenced write (BR-004-20, SC-24, AR-03): FAILED with the
+   * block's reason and `code` (LIST_BLOCKED) among the failure reasons.
+   */
+  finalizeBlocked(
+    id: string,
+    owner: string,
+    block: { reason: string; code: string },
+  ): Promise<boolean> {
+    return this.runs.finalizeBlocked(id, owner, block, this.clock.now());
+  }
+
   saveCollection(
     id: string,
     owner: string,

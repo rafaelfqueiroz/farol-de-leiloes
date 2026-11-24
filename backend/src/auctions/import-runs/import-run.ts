@@ -28,6 +28,8 @@ export interface RunProgressRecord {
   applying: boolean;
   applyFailed: boolean;
   rejection: { generatedOn: string | null; reason: string } | null;
+  /** The block reason Caixa answered with (`HTTP_403`...), null when it never blocked the day. */
+  blocked: string | null;
 }
 
 export const NO_PROGRESS: Readonly<RunProgressRecord> = {
@@ -35,6 +37,7 @@ export const NO_PROGRESS: Readonly<RunProgressRecord> = {
   applying: false,
   applyFailed: false,
   rejection: null,
+  blocked: null,
 };
 
 export interface ImportRunRecord {

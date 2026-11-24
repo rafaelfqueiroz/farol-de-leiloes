@@ -7,7 +7,7 @@
 //
 // Calendar of the scenarios (Brasília, no DST): 2026-11-20 Friday, 21 Saturday, 22 Sunday,
 // 23 Monday; 2026-12-24 Thursday, 12-25 Friday (a holiday only when configured), 12-28 Monday.
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { CaixaBlockedError, CaixaUnreachableError } from '../../src/auctions/caixa/caixa-access.js';
 import { brasiliaInstant } from '../../src/auctions/domain/import-schedule.js';
@@ -433,6 +433,103 @@ describe('the import state machine (integration)', () => {
         'AUTO',
         'LIST_BLOCKED',
       );
+    });
+
+    describe('the stop-on-block decision survives an interrupted finalization (BR-004-20, SC-24, AR-03; review of #189)', () => {
+      /** The first write that ends the run FAILED (the finalization) fails, as a dropped connection would. */
+      function failFirstFinalization() {
+        const original = h.kit.runModel.updateOne.bind(h.kit.runModel);
+        let failed = false;
+        return vi.spyOn(h.kit.runModel, 'updateOne').mockImplementation(((...args: unknown[]) => {
+          const update = args[1] as { $set?: { outcome?: string } } | undefined;
+          if (!failed && update?.$set?.outcome === 'FAILED') {
+            failed = true;
+            return { exec: () => Promise.reject(new Error('the connection dropped')) };
+          }
+          return (original as (...a: unknown[]) => unknown)(...args);
+        }) as never);
+      }
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('Caixa answers 403 and the first finalization write fails: the next spaced tick asks Caixa nothing, finalizes, and alerts once', async () => {
+        await fridayApplied();
+        h.caixa.serveList(new CaixaBlockedError('HTTP_403'));
+        failFirstFinalization();
+        const orchestrator = h.orchestrator();
+
+        setClock(MONDAY, HH(6));
+        await orchestrator.tick();
+        expect(listRequests()).toBe(1);
+
+        // The next attempt is due at 06:30: it must not become a second request.
+        setClock(MONDAY, HH(6, 30));
+        await orchestrator.tick();
+        await tickThrough(orchestrator, MONDAY, HH(6, 35), HH(12));
+
+        expect(listRequests()).toBe(1);
+        expect(await runOf(MONDAY)).toMatchObject({
+          outcome: 'FAILED',
+          failureReasons: expect.arrayContaining(['HTTP_403', 'LIST_BLOCKED']),
+          progress: { blocked: 'HTTP_403' },
+        });
+        expect(h.email.importAlertEmails).toHaveLength(2); // one alert: two admins, once
+        expect(h.health.recordFailure).toHaveBeenCalledTimes(1);
+        expect(h.health.recordFailure).toHaveBeenCalledWith(
+          'auctions-import',
+          'AUTO',
+          'LIST_BLOCKED',
+        );
+      });
+
+      it('a run left RUNNING with the block on it (any process, any restart) is finalized by the next tick without a request, forced or not', async () => {
+        await fridayApplied();
+        h.caixa.serveList(MONDAY_LIST);
+        const monday = await h.kit.runs.ensure(MONDAY);
+        await h.kit.runModel.updateOne(
+          { _id: new Types.ObjectId(monday.id) },
+          {
+            $set: {
+              attempts: 1,
+              nextAttemptAt: brasiliaInstant(MONDAY, HH(6, 30)),
+              'progress.blocked': 'CHALLENGE_PAGE',
+            },
+            $addToSet: { failureReasons: 'CHALLENGE_PAGE' },
+          },
+        );
+
+        setClock(MONDAY, HH(6, 30));
+        await h.orchestrator().tick({ force: true }); // a fresh instance: no memory of the block
+
+        expect(listRequests()).toBe(0);
+        expect(await runOf(MONDAY)).toMatchObject({
+          outcome: 'FAILED',
+          failureReasons: ['CHALLENGE_PAGE', 'LIST_BLOCKED'],
+          progress: { blocked: 'CHALLENGE_PAGE' },
+        });
+        expect(h.email.importAlertEmails).toHaveLength(2);
+      });
+
+      it('the block and the end of the day are one write: there is no state with one and not the other', async () => {
+        await fridayApplied();
+        h.caixa.serveList(new CaixaBlockedError('HTTP_403'));
+        const seen: unknown[] = [];
+        const original = h.kit.runModel.updateOne.bind(h.kit.runModel);
+        vi.spyOn(h.kit.runModel, 'updateOne').mockImplementation(((...args: unknown[]) => {
+          seen.push(args[1]);
+          return (original as (...a: unknown[]) => unknown)(...args);
+        }) as never);
+
+        setClock(MONDAY, HH(6));
+        await h.orchestrator().tick();
+
+        const withBlock = seen.filter((update) => JSON.stringify(update).includes('HTTP_403'));
+        expect(withBlock).toHaveLength(1);
+        expect(JSON.stringify(withBlock[0])).toContain('FAILED');
+        expect(JSON.stringify(withBlock[0])).toContain('LIST_BLOCKED');
+      });
     });
 
     it('a failure to read anything but Caixa (the cache, the storage) counts as an attempt without an answer', async () => {

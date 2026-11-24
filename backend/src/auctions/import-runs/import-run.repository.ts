@@ -319,6 +319,36 @@ export class ImportRunRepository {
     );
   }
 
+  /**
+   * Caixa blocked the list request (BR-004-20, SC-24): the block and the end of the day are ONE
+   * update (AR-03). RUNNING -> FAILED `LIST_BLOCKED`, with the block's reason code both on the
+   * progress (what recovery reads) and among the failure reasons. Written as two updates, a
+   * process that stopped between them (or a second one failing) left a RUNNING run whose next
+   * spaced tick asked Caixa again the same day.
+   */
+  async finalizeBlocked(
+    id: string,
+    owner: string,
+    block: { reason: string; code: string },
+    now: Date,
+  ): Promise<boolean> {
+    return this.write(
+      id,
+      owner,
+      {
+        $set: {
+          outcome: 'FAILED',
+          finishedAt: now,
+          nextAttemptAt: null,
+          'progress.applying': false,
+          'progress.blocked': block.reason,
+        },
+        $addToSet: { failureReasons: { $each: [block.reason, block.code] } },
+      },
+      { outcome: 'RUNNING' },
+    );
+  }
+
   /** The result of the day's collection pass (BR-004-23, BR-004-27). */
   async saveCollection(
     id: string,
@@ -409,6 +439,7 @@ function toRecord(row: RunRow): ImportRunRecord {
       ...NO_PROGRESS,
       ...(row.progress ?? {}),
       rejection: row.progress?.rejection ?? null,
+      blocked: row.progress?.blocked ?? null,
     },
     nonBusinessReason: row.nonBusinessReason ?? null,
     leaseOwner: row.leaseOwner ?? null,
