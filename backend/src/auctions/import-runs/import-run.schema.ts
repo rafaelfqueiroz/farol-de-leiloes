@@ -75,6 +75,32 @@ export class ImportRunEntity {
   /** When the next attempt is due (part 3). */
   @Prop({ type: Date, default: null })
   nextAttemptAt!: Date | null;
+
+  /**
+   * What the run knows of its day (part 3): codes and flags only (SC-15). `applying` is true from
+   * the moment a validated list starts to be applied until it ended: a process that died leaves it
+   * true and the next tick resumes the apply (BR-004-07).
+   */
+  @Prop({
+    type: {
+      listReached: Boolean,
+      applying: Boolean,
+      applyFailed: Boolean,
+      rejection: { type: { generatedOn: String, reason: String }, _id: false, default: null },
+    },
+    _id: false,
+    default: () => ({ listReached: false, applying: false, applyFailed: false, rejection: null }),
+  })
+  progress!: {
+    listReached: boolean;
+    applying: boolean;
+    applyFailed: boolean;
+    rejection: { generatedOn: string | null; reason: string } | null;
+  };
+
+  /** NO_UPDATE only: `WEEKEND` or `HOLIDAY`, as decided when the day ended (BR-004-03). */
+  @Prop({ type: String, enum: ['WEEKEND', 'HOLIDAY'], default: null })
+  nonBusinessReason!: 'WEEKEND' | 'HOLIDAY' | null;
 }
 
 export type ImportRunDocument = HydratedDocument<ImportRunEntity>;

@@ -19,6 +19,24 @@ export interface ImportCounts {
   active: number;
 }
 
+/** Why a NO_UPDATE day is not a business day (BR-004-03, BR-004-31). */
+export type NonBusinessReason = 'WEEKEND' | 'HOLIDAY';
+
+/** What the run remembers of its day so far (the schedule's RunProgress, SPEC-004 part 3). */
+export interface RunProgressRecord {
+  listReached: boolean;
+  applying: boolean;
+  applyFailed: boolean;
+  rejection: { generatedOn: string | null; reason: string } | null;
+}
+
+export const NO_PROGRESS: Readonly<RunProgressRecord> = {
+  listReached: false,
+  applying: false,
+  applyFailed: false,
+  rejection: null,
+};
+
 export interface ImportRunRecord {
   id: string;
   /** The Brasília calendar day of the run, `YYYY-MM-DD` (AR-22): one run per day. */
@@ -37,6 +55,14 @@ export interface ImportRunRecord {
   failureReasons: string[];
   alertedAt: Date | null;
   updateCompletedAt: Date | null;
+  /** When the next attempt is due; null when none is scheduled. */
+  nextAttemptAt: Date | null;
+  progress: RunProgressRecord;
+  /** For NO_UPDATE only: why the day is not a business day. */
+  nonBusinessReason: NonBusinessReason | null;
+  /** The lease: who holds the run and until when (part 3's overlap guard). */
+  leaseOwner: string | null;
+  leaseExpiresAt: Date | null;
 }
 
 export const NO_COUNTS: Readonly<ImportCounts> = { new: 0, changed: 0, unavailable: 0, active: 0 };
