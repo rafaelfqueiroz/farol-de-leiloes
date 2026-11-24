@@ -9,6 +9,7 @@
 // 11-30 Monday (D+6, the 2nd round ends 10h00).
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { brasiliaInstant } from '../../src/auctions/domain/import-schedule.js';
+import { EnrichmentRepository } from '../../src/auctions/enrichment/enrichment.repository.js';
 import { RoundClockService } from '../../src/auctions/enrichment/round-clock.service.js';
 import { detailPage } from '../support/detail-pages.js';
 import {
@@ -192,6 +193,38 @@ describe('the changes the clock makes (integration)', () => {
       .record({ importRunId: tuesday?.id ?? '', assertHeld: () => Promise.resolve() });
 
     expect(await clockEntries()).toHaveLength(2); // the unique key: the same two, not four
+    expect((await stored(h, '0001'))?.currentRoundLabel).toBe('2º Leilão');
+  });
+
+  it('does not record the same change twice when a write after the entries fails and another run retries (BR-004-07)', async () => {
+    await runDay(h, MON, list(MON));
+    // Tuesday: the entries are written, then moving the recorded round fails: a real fault on the
+    // write, not a state put back by hand.
+    class FailsOnce extends EnrichmentRepository {
+      failures = 1;
+      override async setCurrentRoundLabel(
+        ...args: Parameters<EnrichmentRepository['setCurrentRoundLabel']>
+      ) {
+        if (this.failures-- > 0) throw new Error('write failed');
+        return super.setCurrentRoundLabel(...args);
+      }
+    }
+    const faulty = new FailsOnce(h.kit.auctionModel);
+    const tuesday = await runDay(h, TUE, list(TUE), {
+      minutes: HH(11),
+      roundClock: new RoundClockService(faulty, h.kit.changes, h.clock),
+    });
+    expect(tuesday?.updateCompletedAt).not.toBeNull(); // the update does not wait on the clock
+    expect(await clockEntries()).toHaveLength(2);
+    expect((await stored(h, '0001'))?.currentRoundLabel).toBe('1º Leilão'); // not moved: the fault
+
+    // Wednesday's run finds the round still unmoved: it moves it, and the change is not told again.
+    const wednesday = await runDay(h, WED, list(WED));
+
+    const entries = await clockEntries();
+    expect(entries).toHaveLength(2);
+    expect(entries.every((entry) => entry.importRunId.toString() === tuesday?.id)).toBe(true);
+    expect(entries.some((entry) => entry.importRunId.toString() === wednesday?.id)).toBe(false);
     expect((await stored(h, '0001'))?.currentRoundLabel).toBe('2º Leilão');
   });
 

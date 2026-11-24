@@ -66,7 +66,7 @@ export class RoundClockService {
           });
         }
       }
-      await this.changes.record(input.importRunId, entries, now);
+      await this.changes.recordUnlessRepeated(input.importRunId, entries, now);
       for (const move of moves) {
         await this.properties.setCurrentRoundLabel(move.code, move.expected, move.label);
       }

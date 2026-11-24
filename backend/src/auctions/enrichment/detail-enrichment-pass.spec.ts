@@ -47,7 +47,7 @@ function setup(env: Record<string, string> = {}, codes: string[] = ['0001', '000
   const business = testBusinessConfig(env);
   const storage = new FakeCopyStorage();
   const applier = new DetailApplier(
-    { record: async () => undefined } as unknown as PropertyChangeService,
+    { recordUnlessRepeated: async () => undefined } as unknown as PropertyChangeService,
     repository as unknown as EnrichmentRepository,
   );
   const pass = new DetailEnrichmentPass(

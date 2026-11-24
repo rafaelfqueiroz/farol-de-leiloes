@@ -30,7 +30,7 @@ function setup() {
   const repository = new FakeEnrichmentRepository();
   const recorded: { runId: string; drafts: readonly ChangeDraft[] }[] = [];
   const changes = {
-    record: async (runId: string, drafts: readonly ChangeDraft[]) => {
+    recordUnlessRepeated: async (runId: string, drafts: readonly ChangeDraft[]) => {
       repository.calls.push('record');
       recorded.push({ runId, drafts });
     },

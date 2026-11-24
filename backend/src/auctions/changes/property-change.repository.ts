@@ -73,6 +73,22 @@ export class PropertyChangeRepository {
     );
   }
 
+  /** The newest entries of one field of a property, newest first (what a retry compares with). */
+  async findRecentByField(
+    code: string,
+    field: string,
+    limit: number,
+  ): Promise<Pick<PropertyChangeRecord, 'type' | 'oldValue' | 'newValue'>[]> {
+    const rows = await this.model
+      .find({ propertyCode: { $eq: code }, field: { $eq: field } })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .select('type oldValue newValue')
+      .lean()
+      .exec();
+    return rows.map((row) => ({ type: row.type, oldValue: row.oldValue, newValue: row.newValue }));
+  }
+
   countByRunAndType(runId: Types.ObjectId, type: ChangeType): Promise<number> {
     return this.model.countDocuments({ importRunId: runId, type }).exec();
   }

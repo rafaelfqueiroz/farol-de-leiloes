@@ -90,7 +90,7 @@ export class DetailApplier {
     if (copies.edital !== undefined) write.edital = copies.edital;
     if (copies.matricula !== undefined) write.matricula = copies.matricula;
 
-    await this.changes.record(runId, entries, now);
+    await this.changes.recordUnlessRepeated(runId, entries, now);
     await this.properties.applyCollection(stored.code, write);
     for (const check of copies.checked) {
       await this.properties.markVersionChecked(stored.code, check, now);

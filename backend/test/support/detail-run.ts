@@ -3,6 +3,7 @@
 // clock, mail, R2) and a real MongoDB. Everything is invented (TS-27).
 import { brasiliaInstant } from '../../src/auctions/domain/import-schedule.js';
 import { CAIXA_ORIGIN } from '../../src/common/caixa-site.js';
+import type { RoundClockService } from '../../src/auctions/enrichment/round-clock.service.js';
 import type { ImportHarness } from './import-harness.js';
 
 export const HH = (hours: number, minutes = 0) => hours * 60 + minutes;
@@ -48,6 +49,8 @@ export interface DayOptions {
   /** The settings of the pass and of the import (raw environment values). */
   env?: Record<string, string>;
   minutes?: number;
+  /** The round clock the completion step runs (a spec can make its writes fail). */
+  roundClock?: RoundClockService;
 }
 
 /**
@@ -59,7 +62,10 @@ export async function runDay(h: ImportHarness, day: string, csv: string, options
   const env = options.env ?? {};
   h.caixa.serveList(csv);
   h.clock.set(brasiliaInstant(day, options.minutes ?? HH(6)));
-  const orchestrator = h.orchestrator(env, { enrichment: h.realPass(env) });
+  const orchestrator = h.orchestrator(env, {
+    enrichment: h.realPass(env),
+    ...(options.roundClock === undefined ? {} : { roundClock: options.roundClock }),
+  });
   await h.sleeper.drive(orchestrator.tick());
   return h.kit.runs.findByDate(day);
 }
