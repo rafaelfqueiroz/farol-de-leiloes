@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuctionsController } from './auctions.controller.js';
 import { ImportRunsController } from './import-runs/import-runs.controller.js';
 import { AuctionDocumentsController } from './documents/auction-documents.controller.js';
+import { AuctionDocumentsThrottlerModule } from './documents/auction-documents-throttler.module.js';
 import { AuctionDocumentsService } from './documents/auction-documents.service.js';
 import { AuctionsService } from './auctions.service.js';
 import { AuctionEntity, AuctionSchema } from './schemas/auction.schema.js';
@@ -68,6 +69,7 @@ import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
     EmailModule, // BR-004-29: the alert email
     UsersModule, // BR-004-29: the admins to alert (AR-09)
     BusinessCalendarModule, // BR-004-31
+    AuctionDocumentsThrottlerModule, // SC-04: the matrícula link
   ],
   controllers: [AuctionsController, ImportRunsController, AuctionDocumentsController],
   providers: [

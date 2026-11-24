@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { DomainError } from '../../common/errors/domain-error.js';
 import {
   isPrivateFileKey,
@@ -16,6 +16,10 @@ import { AuctionsService } from '../auctions.service.js';
  */
 @Injectable()
 export class AuctionDocumentsService {
+  private readonly logger = new Logger(AuctionDocumentsService.name);
+  /** Links issued per property since the process started: the whole access log (SC-15). */
+  private readonly issued = new Map<string, number>();
+
   constructor(
     private readonly auctions: AuctionsService,
     private readonly storage: StorageService,
@@ -25,9 +29,12 @@ export class AuctionDocumentsService {
     const doc = await this.auctions.findDocumentByCode(code);
     const key = doc?.matricula?.storageKey;
     if (!isPrivateFileKey(key)) throw new DomainError('AUCTION_NOT_FOUND');
-    return {
-      url: await this.storage.issuePrivateFileLink(key),
-      expiresInSeconds: PRIVATE_FILE_LINK_SECONDS,
-    };
+    const url = await this.storage.issuePrivateFileLink(key);
+    // A counter and the property number, nothing about who asked (SC-15): neither the account, nor
+    // the key, nor the link.
+    const count = (this.issued.get(code) ?? 0) + 1;
+    this.issued.set(code, count);
+    this.logger.log(`matricula.link property=${code} issued=${count}`);
+    return { url, expiresInSeconds: PRIVATE_FILE_LINK_SECONDS };
   }
 }
