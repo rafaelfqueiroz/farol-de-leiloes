@@ -172,8 +172,11 @@ export const envSchema = z
     // Scheduled jobs
     IMPORT_ENABLED: flag.default(true),
     IMPORT_ON_START_UP: flag.default(false),
+    // SPEC-004 BR-004-18: the detail-page collection that runs inside the daily import (part 4).
+    // Off, the pass collects nothing and the daily update still completes. It replaces the old
+    // scraper cron, so there is no start-up switch of its own: IMPORT_ON_START_UP runs the whole
+    // day, collection included.
     SCRAPER_ENABLED: flag.default(true),
-    SCRAPER_ON_START_UP: flag.default(false),
     REMINDERS_ENABLED: flag.default(true),
     // SPEC-012 (ADR-005): the daily job that re-reads subscriptions from the payment provider.
     SUBSCRIPTIONS_RECONCILE_ENABLED: flag.default(true),
@@ -243,6 +246,27 @@ export const envSchema = z
     // (at least 5, the tick) apart: Caixa is asked politely, never in a tight loop (SC-24, ADR-003).
     IMPORT_MAX_ATTEMPTS: positiveInt.max(48).default(12),
     IMPORT_ATTEMPT_SPACING_MINUTES: positiveInt.min(5).default(30),
+
+    // SPEC-004 BR-004-18..21 (AR-43, SC-24): the daily detail-page collection budget. Caixa is asked
+    // politely: at most ENRICHMENT_DAILY_PAGES detail pages a Brasília day, ENRICHMENT_CONCURRENCY
+    // requests in flight (1-4) and ENRICHMENT_MIN_PAUSE_MS (at least 1000) between two request
+    // starts, fixed, never randomised. See docs/runbooks/caixa-import.md for how to size them.
+    ENRICHMENT_DAILY_PAGES: positiveInt.max(100_000).default(300),
+    ENRICHMENT_CONCURRENCY: positiveInt.max(4).default(1),
+    ENRICHMENT_MIN_PAUSE_MS: positiveInt.min(1000).max(3_600_000).default(5000),
+    // BR-004-19: every active property's detail data is refreshed at least this many days apart.
+    ENRICHMENT_MAX_STALENESS_DAYS: positiveInt.max(365).default(7),
+    // BR-004-21: a property whose page failed is left alone for this many days, doubling with each
+    // consecutive failure up to a bound (16 days or this value, whichever is larger).
+    ENRICHMENT_FAILURE_BACKOFF_DAYS: positiveInt.max(60).default(1),
+    // This many failures in a row (timeouts, unreachable, unreadable pages) stop the pass for the
+    // run: something is wrong on the way to Caixa. It is not a block (BR-004-20) and not an alert.
+    ENRICHMENT_MAX_CONSECUTIVE_FAILURES: positiveInt.max(1000).default(5),
+    // BR-004-22: the copies kept of a property's files. Photos per property, and the size above
+    // which a photo or a document (matrícula, edital) is refused instead of stored.
+    ENRICHMENT_MAX_PHOTOS: positiveInt.max(30).default(12),
+    ENRICHMENT_MAX_PHOTO_BYTES: positiveInt.max(20 * 1024 * 1024).default(5 * 1024 * 1024),
+    ENRICHMENT_MAX_DOCUMENT_BYTES: positiveInt.max(100 * 1024 * 1024).default(20 * 1024 * 1024),
 
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),

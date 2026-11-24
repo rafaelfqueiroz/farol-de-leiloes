@@ -43,8 +43,8 @@ export interface SchedulerImportConfig {
 }
 
 export interface SchedulerScraperConfig {
+  /** SCRAPER_ENABLED: whether the daily import's detail-collection pass collects anything. */
   enabled: boolean;
-  onStartup: boolean;
 }
 
 export interface CacheConfig {
@@ -58,7 +58,7 @@ export const KEY = 'SchedulerConfig';
 export function schedulerConfigFrom(env: Env): SchedulerConfig {
   return {
     import: { enabled: env.IMPORT_ENABLED, onStartup: env.IMPORT_ON_START_UP },
-    scraper: { enabled: env.SCRAPER_ENABLED, onStartup: env.SCRAPER_ON_START_UP },
+    scraper: { enabled: env.SCRAPER_ENABLED },
     cache: {
       neighborhoodsTtl: env.NEIGHBORHOODS_CACHE_TTL,
       neighborhoodsEnabled: env.NEIGHBORHOODS_CACHE_ENABLED,
