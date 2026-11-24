@@ -35,6 +35,20 @@ export type ScrapeResult =
 /** The photo links kept from a gallery: a sanity bound against a hostile page, not the copy cap. */
 const MAX_GALLERY_LINKS = 100;
 
+/**
+ * SC-24, SC-19: the page is untrusted, so what it can cost is bounded. A page over this is not
+ * parsed at all (a real detail page is about 50 KB; the cap is far above it and well below
+ * CAIXA_MAX_DOWNLOAD_BYTES), and what is kept of it is cut to these lengths.
+ */
+export const MAX_PAGE_CHARS = 2 * 1024 * 1024;
+export const MAX_DESCRIPTION_CHARS = 5000;
+export const MAX_TYPE_CHARS = 80;
+export const MAX_EXPENSE_RULES = 30;
+export const MAX_RULE_TYPE_CHARS = 80;
+export const MAX_RULE_DESCRIPTION_CHARS = 500;
+/** How far into a section its items are read, and how many methods or rules at most. */
+const MAX_SECTION_CHARS = 50_000;
+
 const UNAVAILABLE_TEXT = 'O imóvel que você procura não está mais disponível para venda';
 
 /** The text of an element, whitespace (NBSP included) collapsed. */
@@ -44,6 +58,7 @@ function squash(text: string): string {
 
 /** Reads one detail page (BR-004-11). Never throws for a page's content. */
 export function scrapeAuctionDetails(html: string): ScrapeResult {
+  if (html.length > MAX_PAGE_CHARS) return { kind: 'unrecognised' };
   if (isBotProtectionPage(html)) return { kind: 'blocked' };
 
   const $ = cheerio.load(html);
@@ -59,8 +74,8 @@ export function scrapeAuctionDetails(html: string): ScrapeResult {
   return {
     kind: 'page',
     page: {
-      description: extractDescription($, relatedBox),
-      propertyType: labelledValue($, 'Tipo de imóvel'),
+      description: extractDescription($),
+      propertyType: inertOrNull(labelledValue($, 'Tipo de imóvel'), MAX_TYPE_CHARS),
       occupancy: occupancyOf(labelledValue($, 'Situação')),
       phaseDates: extractPhaseDates(html),
       prices: extractPrices(text),
@@ -105,10 +120,13 @@ function occupancyOf(value: string | null): Occupancy | null {
  * Extracts the "Descrição:" paragraph of the related-box as plain text, or null when the page has
  * none. The text is what the browser would show: tags are never matched by pattern.
  */
-function extractDescription($: CheerioAPI, relatedBox: ReturnType<CheerioAPI>): string | null {
-  const label = relatedBox
-    .find('strong')
-    .filter((_, el) => $(el).text().trim() === 'Descrição:')
+function extractDescription($: CheerioAPI): string | null {
+  // `$('strong')` and a check that it sits in the box: cheerio's `.find` on a box with tens of
+  // thousands of children is what made a hostile page slow.
+  const label = $('strong')
+    .filter(
+      (_, el) => $(el).text().trim() === 'Descrição:' && $(el).closest('.related-box').length > 0,
+    )
     .first();
   const paragraph = label.parent('p').clone();
   if (paragraph.length === 0) return null;
@@ -119,14 +137,24 @@ function extractDescription($: CheerioAPI, relatedBox: ReturnType<CheerioAPI>): 
   paragraph.find('strong').first().remove();
   paragraph.find('br').first().remove();
   // Kept entity-encoded (&, < and > stay "&amp;", "&lt;", "&gt;"), so text that only looks like a
-  // tag after parsing is stored inert.
-  return paragraph
-    .text()
+  // tag after parsing is stored inert; cut to a length first.
+  return inert(paragraph.text(), MAX_DESCRIPTION_CHARS);
+}
+
+/** Text as kept: whitespace squashed at the edges, cut to `max`, entity-encoded (SC-19). */
+function inert(text: string, max: number): string {
+  return text
     .replace(/\u00a0/g, ' ')
+    .trim()
+    .slice(0, max)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .trim();
+}
+
+function inertOrNull(text: string | null, max: number): string | null {
+  return text === null ? null : inert(text, max);
 }
 
 /**
@@ -191,20 +219,47 @@ function extractEditalPublishedAt(text: string): Date | null {
 }
 
 /**
+ * The text after the first match of `start` up to the first of `ends` (or the cap): found by one
+ * pass for each pattern over the rest, never by a pattern that can restart at every position, so a
+ * page repeating a label with no end costs a scan, not a quadratic one (SC-24). Null: no section.
+ */
+function sectionAfter(html: string, start: RegExp, ends: readonly RegExp[]): string | null {
+  const found = start.exec(html);
+  if (found === null) return null;
+  const rest = html.slice(
+    found.index + found[0].length,
+    found.index + found[0].length + MAX_SECTION_CHARS,
+  );
+  const stops = ends.map((end) => end.exec(rest)?.index ?? rest.length);
+  return rest.slice(0, Math.min(...stops));
+}
+
+/** `<i ...></i>&nbsp;text` items of a section, in order, each at most `max` of them. */
+function sectionItems(section: string, max: number): string[] {
+  const items: string[] = [];
+  for (const [, text] of section.matchAll(/<i[^>]{0,200}><\/i>&nbsp;([^<]+)/gi)) {
+    if (items.length >= max) break;
+    items.push(text ?? '');
+  }
+  return items;
+}
+
+/**
  * Extracts payment methods from the related-box HTML. Looks for the "FORMAS DE PAGAMENTO
  * ACEITAS:" section; null when the page has none or names no method this product knows (BR-004-15:
  * a page that does not say is unknown, never "no financing").
  */
 function extractPaymentMethods(html: string): PaymentMethod[] | null {
-  const section = html.match(
-    /FORMAS DE PAGAMENTO ACEITAS:<br\s*\/?>([\s\S]*?)(?:REGRAS PARA PAGAMENTO|<\/p>)/i,
-  )?.[1];
-  if (section === undefined) return null;
+  const section = sectionAfter(html, /FORMAS DE PAGAMENTO ACEITAS:<br\s{0,10}\/?>/i, [
+    /REGRAS PARA PAGAMENTO/i,
+    /<\/p>/i,
+  ]);
+  if (section === null) return null;
 
   const methods: PaymentMethod[] = [];
   // Format: <i class="fa fa-info-circle"></i>&nbsp;Recursos próprios.<br>
-  for (const [, rawText] of section.matchAll(/<i[^>]*><\/i>&nbsp;([^<]+)/gi)) {
-    const text = (rawText ?? '').toLowerCase().trim();
+  for (const rawText of sectionItems(section, 20)) {
+    const text = rawText.toLowerCase().trim();
     let method: PaymentMethod | null = null;
     if (text.includes('recursos próprios') || text.includes('recursos proprios')) {
       method = PaymentMethod.OWN_RESOURCES;
@@ -220,26 +275,29 @@ function extractPaymentMethods(html: string): PaymentMethod[] | null {
 
 /**
  * Extracts expense rules from the related-box HTML: the "REGRAS PARA PAGAMENTO DAS DESPESAS"
- * section; null when the page has none or lists nothing.
+ * section; null when the page has none or lists nothing. At most MAX_EXPENSE_RULES, each cut and
+ * entity-encoded like the description.
  */
 function extractExpenseRules(html: string): ExpenseRule[] | null {
-  const section = html.match(
-    /REGRAS PARA PAGAMENTO DAS DESPESAS[^:]*:<br\s*\/?>([\s\S]*?)(?:<span|<\/p>|$)/i,
-  )?.[1];
-  if (section === undefined) return null;
+  const section = sectionAfter(
+    html,
+    /REGRAS PARA PAGAMENTO DAS DESPESAS[^:]{0,100}:<br\s{0,10}\/?>/i,
+    [/<span/i, /<\/p>/i],
+  );
+  if (section === null) return null;
 
   const rules: ExpenseRule[] = [];
   // Format: <i class="fa fa-info-circle"></i>&nbsp;Condomínio: Sob responsabilidade do comprador.<br>
-  for (const [, rawText] of section.matchAll(/<i[^>]*><\/i>&nbsp;([^<]+)/gi)) {
-    const text = (rawText ?? '').trim();
+  for (const rawText of sectionItems(section, MAX_EXPENSE_RULES)) {
+    const text = rawText.trim();
     const colon = text.indexOf(':');
     if (colon > 0) {
       rules.push({
-        type: text.substring(0, colon).trim(),
-        description: text.substring(colon + 1).trim(),
+        type: inert(text.substring(0, colon), MAX_RULE_TYPE_CHARS),
+        description: inert(text.substring(colon + 1), MAX_RULE_DESCRIPTION_CHARS),
       });
     } else if (text !== '') {
-      rules.push({ type: 'Geral', description: text });
+      rules.push({ type: 'Geral', description: inert(text, MAX_RULE_DESCRIPTION_CHARS) });
     }
   }
   return rules.length > 0 ? rules : null;

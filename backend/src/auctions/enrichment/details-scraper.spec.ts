@@ -394,4 +394,80 @@ describe('Details Scraper', () => {
       ).toBeNull();
     });
   });
+
+  // SC-24, SC-19: Caixa's HTML is untrusted. A hostile or broken page must cost little and must not
+  // fill the database.
+  describe('a hostile page', () => {
+    const MiB = 1024 * 1024;
+    const bare = (inner: string) =>
+      `<html><body><div class="related-box">${inner}</div></body></html>`;
+
+    it('is refused before it is parsed when it is over the page cap', () => {
+      const started = performance.now();
+
+      const result = scrapeAuctionDetails(bare('x'.repeat(2 * MiB + 1)));
+
+      expect(result).toEqual({ kind: 'unrecognised' });
+      expect(performance.now() - started).toBeLessThan(200);
+    });
+
+    it.each([
+      ['payment sections that never end', 'FORMAS DE PAGAMENTO ACEITAS:<br>'],
+      ['expense sections that never end', 'REGRAS PARA PAGAMENTO DAS DESPESAS (caso existam):<br>'],
+      ['open-ended items', '<i class="x"></i>&nbsp;Recursos próprios'],
+    ])('is read in linear time for 1 MiB of %s', (_, unit) => {
+      const html = bare(unit.repeat(Math.ceil(MiB / unit.length)));
+      const started = performance.now();
+
+      const result = scrapeAuctionDetails(html);
+
+      expect(result.kind).toBe('page');
+      expect(performance.now() - started).toBeLessThan(200);
+    });
+
+    it('bounds the length of what it keeps: description, type, expense rules', () => {
+      const long = 'a'.repeat(100_000);
+      const rules = Array.from(
+        { length: 500 },
+        (_, i) => `<i class="x"></i>&nbsp;Tipo${i}: ${long.slice(0, 2000)}<br>`,
+      ).join('');
+      const result = scrapeAuctionDetails(
+        `<html><body><div class="related-box"><p><strong>Descrição:</strong><br>${long}</p>
+        REGRAS PARA PAGAMENTO DAS DESPESAS:<br>${rules}</p></div>
+        <span>Tipo de imóvel: <strong>${long}</strong></span></body></html>`,
+      );
+
+      const page = pageOf(result);
+      expect(page.description?.length).toBeLessThanOrEqual(5000);
+      expect(page.propertyType?.length).toBeLessThanOrEqual(80);
+      expect(page.expenseRules?.length).toBeLessThanOrEqual(30);
+      for (const rule of page.expenseRules ?? []) {
+        expect(rule.type.length).toBeLessThanOrEqual(80);
+        expect(rule.description.length).toBeLessThanOrEqual(500);
+      }
+    });
+
+    it('keeps the property type and the expense rules inert, as it does the description (SC-19)', () => {
+      const page = pageOf(
+        scrapeAuctionDetails(
+          `<html><body><div class="related-box">REGRAS PARA PAGAMENTO DAS DESPESAS:<br><i></i>&nbsp;Taxa &amp; <b>x</b>: a &lt;script&gt;<br></p></div>
+          <span>Tipo de imóvel: <strong>Casa &amp; &lt;b&gt;</strong></span></body></html>`,
+        ),
+      );
+
+      expect(page.propertyType).toBe('Casa &amp; &lt;b&gt;');
+      for (const rule of page.expenseRules ?? [])
+        expect(`${rule.type}${rule.description}`).not.toMatch(/[<>]/);
+    });
+
+    it('keeps a gallery of exactly 100, and caps one of 101', () => {
+      const gallery = (n: number) =>
+        bare(
+          `<div class="thumbnails">${Array.from({ length: n }, (_, i) => `<img src="/fotos/F${i}.jpg">`).join('')}</div>`,
+        );
+
+      expect(pageOf(scrapeAuctionDetails(gallery(100))).photoUrls).toHaveLength(100);
+      expect(pageOf(scrapeAuctionDetails(gallery(101))).photoUrls).toHaveLength(100);
+    });
+  });
 });
