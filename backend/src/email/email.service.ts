@@ -7,6 +7,8 @@ import {
   getPasswordResetEmailTemplate,
 } from './templates/verification.template.js';
 import { getPaymentFailedEmailTemplate } from './templates/payment-failed.template.js';
+import { getImportAlertEmailTemplate } from './templates/import-alert.template.js';
+import type { ImportAlertContent } from '../auctions/domain/import-alert-text.js';
 import {
   getAuctionReminderEmailTemplate,
   ReminderEmailPayload,
@@ -168,5 +170,29 @@ export class EmailService {
     });
 
     this.logger.log('Payment failed email sent');
+  }
+
+  /**
+   * SPEC-004 BR-004-29: tells a platform admin that the Caixa import of a Brasília day ended badly
+   * (failed, rejected list, no new list on a business day, or a blocked collection). The content is
+   * the catalogue text of the run's reason code, never an error message (SC-15); no address is
+   * logged. Throws when SMTP refuses, so the caller can release its claim.
+   */
+  async sendImportAlertEmail(email: string, alert: ImportAlertContent): Promise<void> {
+    if (!this.transporter) {
+      this.logSimulatedEmail('Import alert email');
+      return;
+    }
+
+    const emailFrom = this.configService.get('EMAIL_FROM', { infer: true });
+
+    await this.transporter.sendMail({
+      from: emailFrom,
+      to: email,
+      subject: `Importação do Caixa: ${alert.outcomeLabel.toLowerCase()} em ${alert.date} - Farol dos Leilões`,
+      html: getImportAlertEmailTemplate(alert),
+    });
+
+    this.logger.log('Import alert email sent');
   }
 }

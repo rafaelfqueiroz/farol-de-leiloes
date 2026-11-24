@@ -641,6 +641,25 @@ export class UsersService {
   }
 
   /**
+   * SPEC-004 BR-004-29: the addresses every platform admin is alerted at: accounts with the admin
+   * capability, a confirmed email and an active status (SC-09: the same bar as AdminGuard, so an
+   * unconfirmed or closed account is never told anything). Addresses only, nothing else of the
+   * account leaves; callers must never log them (SC-15).
+   */
+  async findAdminEmails(): Promise<string[]> {
+    const admins = await this.userRepository
+      .find({
+        isAdmin: { $eq: true },
+        emailVerified: { $eq: true },
+        status: activeStatusFilter(),
+      })
+      .select('email')
+      .lean()
+      .exec();
+    return admins.map((admin) => admin.email);
+  }
+
+  /**
    * SPEC-010 BR-010-27: the one-time WhatsApp consent request is answered, whatever the answer. Set
    * once: the first answer's instant stays, and only under the `consentResetAt` the answer was given
    * under (null: never reset). Written only by the privacy module's
