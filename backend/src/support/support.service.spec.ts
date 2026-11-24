@@ -216,6 +216,43 @@ describe('SupportService.withdrawDataAccess (BR-009-08, BR-002-26)', () => {
     expect(endedFor).toEqual([]);
   });
 
+  it('BR-009-12: a close that lands between the read and the conditional write makes the withdrawal SUPPORT_REQUEST_CLOSED, records nothing and still ends the grant', async () => {
+    const { service, owner, requests, endedFor } = await setup();
+    const { request } = await service.create(owner, dto({ allowDataAccess: true }));
+    const id = request._id.toHexString();
+    const write = requests.markDataAccessWithdrawn;
+    requests.markDataAccessWithdrawn = (ctx, requestId, at) => {
+      const row = requests.rows[0];
+      if (row) row.status = 'closed'; // the admin's close, between the service's read and its write
+      return write(ctx, requestId, at);
+    };
+
+    await expect(service.withdrawDataAccess(owner, id)).rejects.toMatchObject({
+      code: 'SUPPORT_REQUEST_CLOSED',
+    });
+
+    expect(requests.rows[0]?.dataAccessWithdrawnAt).toBeUndefined();
+    expect(endedFor).toEqual([[id, 'withdrawn']]);
+  });
+
+  it('a withdrawal that loses to ANOTHER withdrawal of the same request still answers the request, withdrawn once', async () => {
+    const { service, owner, requests, clock } = await setup();
+    const { request } = await service.create(owner, dto({ allowDataAccess: true }));
+    const id = request._id.toHexString();
+    const at = new Date(clock.now().getTime());
+    const write = requests.markDataAccessWithdrawn;
+    requests.markDataAccessWithdrawn = (ctx, requestId, when) => {
+      const row = requests.rows[0];
+      if (row) row.dataAccessWithdrawnAt = at; // the other tab's withdrawal got there first
+      return write(ctx, requestId, when);
+    };
+
+    const after = await service.withdrawDataAccess(owner, id);
+
+    expect(after.dataAccessWithdrawnAt).toEqual(at);
+    expect(after.status).toBe('open');
+  });
+
   it('answers NOT_FOUND, and ends nothing, for another account’s request (AR-14)', async () => {
     const { service, owner, other, requests, endedFor } = await setup();
     const { request } = await service.create(owner, dto({ allowDataAccess: true }));

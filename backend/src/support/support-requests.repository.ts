@@ -175,6 +175,53 @@ export class SupportRequestsRepository extends AccountScopedRepository<SupportRe
   }
 
   /**
+   * AR-12 / BR-009-12: ACROSS ACCOUNTS, for the admin's support queue only (`SupportAdminService`,
+   * behind `@AdminOnly()`): one page of the requests of every account, newest first, optionally of one
+   * status, and how many match. A request is the message sent to support, so the admin reads it without
+   * a grant; the requester's CLIENT data stays behind grants (BR-002-24).
+   */
+  async pageAcrossAccounts(
+    filter: { readonly status?: SupportRequestStatus },
+    page: PageRequest,
+  ): Promise<{ items: SupportRequestRecord[]; total: number }> {
+    const where = filter.status ? { status: { $eq: filter.status } } : {};
+    const [items, total] = await Promise.all([
+      this.entities
+        .find(where)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skipOf(page))
+        .limit(page.pageSize)
+        .lean()
+        .exec(),
+      this.entities.countDocuments(where).exec(),
+    ]);
+    return { items: items as unknown as SupportRequestRecord[], total };
+  }
+
+  /**
+   * AR-12 / BR-009-12: ACROSS ACCOUNTS, for the admin's close only: `open` -> `closed` in ONE conditional
+   * update (`closedAt`, `closedBy`), so two closes, or a close against a withdrawal, end in one valid
+   * state. `closed`: this call closed it; `already_closed`: it was closed before (nothing written, the
+   * first closer and date stay); `not_found`: no such request, or a malformed id.
+   */
+  async closeAcrossAccounts(
+    id: string,
+    adminUserId: string,
+    at: Date,
+  ): Promise<'closed' | 'already_closed' | 'not_found'> {
+    if (!isObjectIdString(id)) return 'not_found';
+    const result = await this.entities
+      .updateOne(
+        { _id: { $eq: id }, status: { $eq: 'open' } },
+        { $set: { status: 'closed', closedAt: at, closedBy: adminUserId } },
+      )
+      .exec();
+    if (result.matchedCount > 0) return 'closed';
+    const exists = await this.entities.exists({ _id: { $eq: id } }).exec();
+    return exists ? 'already_closed' : 'not_found';
+  }
+
+  /**
    * BR-009-07: takes the delivery of ONE request, or of the oldest due one when `id` is absent, in one
    * conditional update: the request must owe an email whose time has come and be held by nobody (or by
    * a lease that ran out). So two workers, or a worker and the request's own first attempt, never both

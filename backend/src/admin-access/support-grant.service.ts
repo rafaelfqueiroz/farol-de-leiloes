@@ -195,6 +195,26 @@ export class SupportGrantService {
     return this.grants.endOpenForSupportRequest(supportRequestId, this.clock.now(), reason);
   }
 
+  /**
+   * SPEC-009 BR-009-12: the grant THIS admin holds on a support request, if it is open and still
+   * valid now (re-checked like a read, AR-13), for the admin's request screen; null otherwise. It
+   * never answers about another admin's grant, and does not tell "none" from "someone else's"
+   * (no oracle, as `open`). Writes nothing: a grant found ended is left for the next read or open.
+   */
+  async ownGrantFor(
+    adminCtx: AccessContext,
+    supportRequestId: string,
+  ): Promise<OpenedGrant | null> {
+    if (!adminCtx.isAdmin || adminCtx.readOnly) return null;
+    if (!isObjectIdString(supportRequestId)) return null;
+    const existing = await this.grants.findOpenForSupportRequest(supportRequestId);
+    if (!existing || existing.adminUserId !== adminCtx.accountId) return null;
+    const request = await this.supportRequests.findForGrant(supportRequestId);
+    const sameRequest = request && request.requesterUserId === existing.requesterUserId;
+    const validity = grantValidity(existing, sameRequest ? request : null, this.clock.now());
+    return validity.valid ? toOpened(existing) : null;
+  }
+
   /** The request when a grant may be opened on it now; null for every other case alike. */
   private async shareableRequest(supportRequestId: string): Promise<SupportRequestForGrant | null> {
     if (!isObjectIdString(supportRequestId)) return null; // SC-10: never a query operator
