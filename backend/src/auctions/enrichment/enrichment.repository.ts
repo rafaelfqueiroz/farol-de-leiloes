@@ -130,7 +130,15 @@ export class EnrichmentRepository {
             { fulfilled: true },
             activeAuctionFilter(now),
             {
-              detailsCollectedAt: serverOperators({ $lt: refreshDueBefore(now, maxStalenessDays) }),
+              // Due by age, or a failed collection whose back-off is over (a retry, BR-004-21).
+              $or: [
+                {
+                  detailsCollectedAt: serverOperators({
+                    $lt: refreshDueBefore(now, maxStalenessDays),
+                  }),
+                },
+                { detailsFailures: serverOperators({ $gt: 0 }) },
+              ],
             },
           ],
         },
@@ -142,7 +150,7 @@ export class EnrichmentRepository {
       const docs = await this.model
         .find(filter)
         .select(
-          'code available detailsUrl fulfilled detailsCollectedAt lastChangedRunId detailsRetryAfter rounds',
+          'code available detailsUrl fulfilled detailsCollectedAt lastChangedRunId detailsRetryAfter detailsFailures rounds',
         )
         .sort(sort)
         .limit(limit)
@@ -161,6 +169,7 @@ export class EnrichmentRepository {
           detailsCollectedAt: doc.detailsCollectedAt ?? null,
           lastChangedRunId: doc.lastChangedRunId?.toString() ?? null,
           detailsRetryAfter: doc.detailsRetryAfter ?? null,
+          detailsFailures: doc.detailsFailures ?? 0,
         });
       }
     }

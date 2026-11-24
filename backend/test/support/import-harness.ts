@@ -32,8 +32,15 @@ import {
   EnrichmentPass,
   type EnrichmentPassInput,
 } from '../../src/auctions/enrichment/enrichment-pass.js';
+import { DetailApplier } from '../../src/auctions/enrichment/detail-applier.js';
+import { DetailEnrichmentPass } from '../../src/auctions/enrichment/detail-enrichment-pass.js';
 import { EnrichmentRepository } from '../../src/auctions/enrichment/enrichment.repository.js';
+import { FileCopier } from '../../src/auctions/enrichment/file-copier.js';
+import { PropertyCopier } from '../../src/auctions/enrichment/property-copier.js';
 import { RoundClockService } from '../../src/auctions/enrichment/round-clock.service.js';
+import { schedulerConfigFrom } from '../../src/config/scheduler.config.js';
+import { FakeCopyStorage } from '../fakes/fake-copy-storage.js';
+import { FakeSleeper } from '../fakes/fake-sleeper.js';
 import { AuctionEntity, AuctionSchema } from '../../src/auctions/schemas/auction.schema.js';
 import {
   ImportRunEntity,
@@ -49,7 +56,7 @@ import { FakeCaixaAccess } from '../fakes/fake-caixa-access.js';
 import { FakeClock } from '../fakes/fake-clock.js';
 import { FakeEmailSender } from '../fakes/fake-email-sender.js';
 import { type ImportKit, importKit } from './list-applier.js';
-import { testBusinessConfig } from './test-env.js';
+import { testBusinessConfig, testEnv } from './test-env.js';
 
 /** A hand-written EnrichmentPass (TS-03): the result it answers, and the calls it received. */
 export class FakeEnrichmentPass extends EnrichmentPass {
@@ -81,6 +88,14 @@ export interface ImportHarness {
   events: DailyUpdateCompleted[];
   /** The R2 copy of the list (fake) and the record of the upload (real collection). */
   storage: FakeListStorage;
+  /** Fake time for the pauses of the detail collection; `drive` runs a tick through them. */
+  sleeper: FakeSleeper;
+  /** The R2 copies of photos, editais and matrículas (SPEC-004 part 4): public and private. */
+  copyStorage: FakeCopyStorage;
+  properties: EnrichmentRepository;
+  /** The REAL detail-collection pass, over the fakes above; `env` overrides settings (a flag, a budget). */
+  realPass(env?: Record<string, string>): DetailEnrichmentPass;
+  roundClock(): RoundClockService;
   csvUploads: Model<CsvUploadDocument>;
   /** The neighborhoods-cache invalidation stub: the first thing completing a day calls. */
   auctions: { invalidateNeighborhoodsCache: ReturnType<typeof vi.fn> };
@@ -149,7 +164,30 @@ export async function createImportHarness(uri: string, start: Date): Promise<Imp
   );
   const auctions = { invalidateNeighborhoodsCache: vi.fn().mockResolvedValue(undefined) };
 
+  const sleeper = new FakeSleeper(clock);
+  const copyStorage = new FakeCopyStorage();
+  const properties = new EnrichmentRepository(kit.auctionModel);
   const harness: ImportHarness = {
+    sleeper,
+    copyStorage,
+    properties,
+    realPass: (env = {}) => {
+      const business = testBusinessConfig(env);
+      return new DetailEnrichmentPass(
+        caixa,
+        properties,
+        new PropertyCopier(
+          new FileCopier(copyStorage as unknown as StorageService, business),
+          business,
+        ),
+        new DetailApplier(kit.changes, properties),
+        clock,
+        sleeper,
+        schedulerConfigFrom(testEnv(env)),
+        business,
+      );
+    },
+    roundClock: () => new RoundClockService(properties, kit.changes, clock),
     moduleRef,
     kit,
     clock,
@@ -177,7 +215,7 @@ export async function createImportHarness(uri: string, start: Date): Promise<Imp
         overrides.enrichment ?? enrichment,
         bus,
         alerts,
-        new RoundClockService(new EnrichmentRepository(kit.auctionModel), kit.changes, clock),
+        new RoundClockService(properties, kit.changes, clock),
       );
       if (overrides.leaseRenewMs !== undefined) orchestrator.leaseRenewMs = overrides.leaseRenewMs;
       return orchestrator;

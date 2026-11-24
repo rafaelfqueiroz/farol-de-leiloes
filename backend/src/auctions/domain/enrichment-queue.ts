@@ -7,6 +7,7 @@
 //                  dropped when it came back), `detailsCollectedAt` null or `fulfilled` false;
 //   2. CHANGED   - its list row changed in today's run (`lastChangedRunId` is the run's);
 //   3. REFRESH   - every other ACTIVE property whose detail data is N or more Brasília days old,
+//                  or whose last collection failed and whose back-off is over (a retry, BR-004-21),
 //                  oldest first. N is ENRICHMENT_MAX_STALENESS_DAYS: a budget of at least
 //                  (active properties / N) pages a day keeps every one of them within N days.
 //
@@ -36,6 +37,8 @@ export interface QueueCandidate {
   lastChangedRunId: string | null;
   /** After this instant a failed page may be asked for again; null when it is not in back-off. */
   detailsRetryAfter: Date | null;
+  /** Page failures in a row (BR-004-21); 0 when the last collection succeeded. */
+  detailsFailures: number;
 }
 
 export interface QueueInput {
@@ -79,7 +82,8 @@ function tierOf(candidate: QueueCandidate, input: QueueInput, dueBefore: Date): 
   // Collected today (this run, an earlier pass of it): nothing more to ask of the page.
   if (collectedAt.getTime() >= brasiliaDayStartBefore(input.now, 0).getTime()) return null;
   if (candidate.lastChangedRunId === input.runId) return 'CHANGED';
-  if (candidate.active && collectedAt.getTime() < dueBefore.getTime()) return 'REFRESH';
+  const stale = collectedAt.getTime() < dueBefore.getTime();
+  if (candidate.active && (stale || candidate.detailsFailures > 0)) return 'REFRESH';
   return null;
 }
 

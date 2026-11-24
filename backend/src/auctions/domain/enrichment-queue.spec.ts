@@ -28,6 +28,7 @@ function property(code: string, overrides: Partial<QueueCandidate> = {}): QueueC
     detailsCollectedAt: at('2026-11-20'),
     lastChangedRunId: null,
     detailsRetryAfter: null,
+    detailsFailures: 0,
     ...overrides,
   };
 }
@@ -241,6 +242,28 @@ describe('selectEnrichmentBatch: what is never collected', () => {
     );
 
     expect(batch).toEqual([{ code: '0002', tier: 'REFRESH' }]);
+  });
+
+  it('retries a property whose last collection failed once its back-off is over, even if its data is recent', () => {
+    const batch = selectEnrichmentBatch(
+      [
+        property('0001', { detailsCollectedAt: at('2026-11-23'), detailsFailures: 2 }),
+        property('0002', { detailsCollectedAt: at('2026-11-23'), detailsFailures: 0 }),
+        property('0003', {
+          detailsCollectedAt: at('2026-11-23'),
+          detailsFailures: 1,
+          active: false,
+        }),
+        property('0004', {
+          detailsCollectedAt: at('2026-11-23'),
+          detailsFailures: 1,
+          detailsRetryAfter: new Date(NOW.getTime() + 1),
+        }),
+      ],
+      input(),
+    );
+
+    expect(batch).toEqual([{ code: '0001', tier: 'REFRESH' }]);
   });
 
   it('refreshes every day when N is one', () => {

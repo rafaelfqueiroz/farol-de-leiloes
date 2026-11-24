@@ -25,6 +25,15 @@ export class FakeCaixaAccess extends CaixaAccess {
   private readonly detailPages = new Map<string, Answer<string>>();
   private readonly files = new Map<string, Answer<CaixaFile>>();
 
+  /** Forgets every answer and every request (a spec that reuses one fake across its cases). */
+  reset(): this {
+    this.requests.length = 0;
+    this.list = undefined;
+    this.detailPages.clear();
+    this.files.clear();
+    return this;
+  }
+
   serveList(listOrError: Answer<string>): this {
     this.list = listOrError;
     return this;
