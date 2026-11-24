@@ -1,13 +1,13 @@
-# Caixa import — how Caixa is reached, the holiday calendar, the manual live test
+# Caixa import — how Caixa is reached, the detail collection, the holiday calendar, the manual live test
 
 **Use when:** the Caixa list did not arrive or the import says it was blocked, Caixa has to be reached another way, the holiday calendar needs its yearly edit, or the owner wants to try Caixa by hand.
 
-**Governs:** SPEC-004 (BR-004-01 to BR-004-04, BR-004-10, BR-004-18, BR-004-20, BR-004-23, BR-004-24, BR-004-27 to BR-004-29, BR-004-31), ARCHITECTURE AR-10 (the `CaixaAccess` port), SECURITY SC-24, [ADR-003](../adr/003-reaching-caixa-from-the-vps.md) (Proposed).
+**Governs:** SPEC-004 (BR-004-01 to BR-004-04, BR-004-10, BR-004-18 to BR-004-22, BR-004-30, BR-004-20, BR-004-23, BR-004-24, BR-004-27 to BR-004-29, BR-004-31), ARCHITECTURE AR-10 (the `CaixaAccess` port), SECURITY SC-24, [ADR-003](../adr/003-reaching-caixa-from-the-vps.md) (Proposed).
 
 ## Known gaps
 
-- **Only the list goes through the port today.** The daily list download (`CaixaAccess.downloadList()`) does. The detail-page scraper (puppeteer) and the storage copies of photos and matrículas still reach Caixa on their own; they move behind the port with SPEC-004 part 4. A block seen by them is not yet recorded as a block.
-- **Detail collection is not there yet.** The run applies the daily list, then runs the collection pass through the `EnrichmentPass` port; until SPEC-004 part 4 that pass is a no-op that collects nothing and is never blocked. The daily update still completes and signals (below); `detailsCollected` is 0 in every Import Run until then.
+- **Everything goes through the port now.** The list, the detail pages, the photos and the documents all use `CaixaAccess` (SPEC-004 part 4); nothing in `src/` drives a browser any more, and the scraper cron is gone. Two leftovers wait for #108: the `puppeteer` dependency and the Chromium in `backend/Dockerfile` / `deploy/compose.production.yml` (`shm_size`) are no longer used by the code and are not removed here, because a browser-backed adapter may be #108's outcome.
+- **The collection is off in production.** `IMPORT_ENABLED` and `SCRAPER_ENABLED` stay `false` in `deploy-production` until the transport is decided; nothing below runs there yet.
 - **The cleanup job's filter is wrong under `sanitizeFilter`, and is left as is on purpose.** `AuctionCleanupService` builds its `$or` the way `verifyAvailability` used to (a wrapper around the array, bare operators inside), so under the production setting it throws a CastError instead of running. Fixing it would make a deletion run that contradicts SPEC-004 (BR-004-17: the import never deletes a property), so it waits for the owner's answer on #120. Do not "fix" the filter on its own.
 - **How production reaches Caixa is not decided.** Azion blocked the Hostinger VPS in the tests of ADR-003. Until #108 decides, the import stays off in production (`IMPORT_ENABLED` false in `deploy-production`).
 
@@ -145,6 +145,30 @@ A property that came back on the list, changed modality, or is listed with every
 
 A property is **active** (shown in search and favorites) when it is available and (no sale round was collected yet, or a round date is still ahead, or its round is open-ended). A property that is new and not yet collected is active with its photos, payment methods and occupancy **unknown**, never "no".
 
+## Detail collection: the budget, a block, the log (SPEC-004 part 4)
+
+After the day's list is applied, the same run collects detail pages (photos, round dates and prices, payment methods, occupancy, expense rules, the edital and the matrícula) through the port, then records the clock's round changes, then completes the update. `SCRAPER_ENABLED=false` skips the collection and nothing else: **that is how to pause it** (set it in `deploy-production`, redeploy; the day still completes and signals). To pause everything, `IMPORT_ENABLED=false`.
+
+**The budget.** `ENRICHMENT_DAILY_PAGES` pages per Brasília day (across the day's passes: a pass resumed after a restart takes what is left, `detailsPages` on the Import Run), `ENRICHMENT_CONCURRENCY` in flight (1 to 4) and `ENRICHMENT_MIN_PAUSE_MS` (at least 1000) between two request starts, fixed. Photos, editais and matrículas are requests too and go through the same gate, so one new property costs its page plus up to 12 photos and 2 documents, and the pause applies to every one: at the defaults (5 s) a pass of 300 new properties can take several hours, and the lease is renewed meanwhile. Sizing: the budget must be at least **active properties / `ENRICHMENT_MAX_STALENESS_DAYS`** pages a day to keep every one within N days, plus the new ones of the day; with 20 000 active properties and N = 7 that is about 2 900 pages a day, which at a 5 s pause is about 4 hours of page requests alone before photos. Raise the budget slowly, watch the log and the Import Runs, and prefer a longer N over a shorter pause. The order when the budget is smaller than the work: new or returned properties, then those whose list row changed today, then the oldest data.
+
+**Reading the collection log.** One line per request, from `DetailEnrichmentPass`:
+
+```
+collection.request kind=page code=8787708003668 outcome=OK startMs=0 endMs=412
+collection.request kind=file code=8787708003668 outcome=OK startMs=5000 endMs=5230
+collection.property code=8787708003668 outcome=COLLECTED changes=0
+```
+
+`startMs`/`endMs` are milliseconds from the start of the pass. Check the rate by sorting the `startMs` of one pass: consecutive values must differ by at least `ENRICHMENT_MIN_PAUSE_MS`, and at most `ENRICHMENT_CONCURRENCY` requests may overlap (`startMs <= t < endMs`). There is no URL and no page text in the log, only property numbers and codes (`outcome` is `OK`, `BLOCKED_<reason>`, `UNREACHABLE_<reason>`, `URL_REFUSED`, `ERROR_<class>`; per property also `PAGE_UNAVAILABLE`, `PAGE_UNRECOGNISED`; per copy `collection.copy ... outcome=FILE_WRONG_TYPE | FILE_TOO_LARGE | FILE_TYPE_MISMATCH | FILE_EMPTY | OFF_SITE | UNREACHABLE | STORE_FAILED | PRIVATE_STORAGE_UNCONFIGURED | STORAGE_UNCONFIGURED | UNSAFE_CODE`). The pass ends with `Detail collection ended (DONE | OUT_OF_BUDGET | BLOCKED | CONSECUTIVE_FAILURES)`.
+
+**What a blocked collection means.** Caixa answered a page, a photo or a document with a 401/403/407/429/451, a Radware or ShieldSquare challenge page or a redirect off its site. The pass stops at once for the day (`blocked` true on the Import Run, `collection.blocked reason=...` in the log), every admin gets one email, the day's update still completes (the list was applied) and the next day's run resumes, the refused property first. What the operator does: read the reason code, note it on #108 with the date, and wait. **Never** switch the address, add or change `CAIXA_PROXY_URL`, change the user agent or lower the pause to "get past" it: that is evasion (SC-24). If it recurs, lower `ENRICHMENT_DAILY_PAGES` or raise `ENRICHMENT_MIN_PAUSE_MS`, or set `SCRAPER_ENABLED=false` and ask Caixa.
+
+**Failures that are not a block.** A page that times out, is unreachable, is unreadable or says the property is "no longer available" keeps the property's previous data, counts as `failed`, and is left alone for 1, 2, 4... days (bounded at 16; `ENRICHMENT_FAILURE_BACKOFF_DAYS`), then retried. `ENRICHMENT_MAX_CONSECUTIVE_FAILURES` (5) in a row stop that day's pass without an alert: look at `failed` on the run and at the log codes (a network fault on the way, or a page layout that changed: `PAGE_UNRECOGNISED`). Only the daily list decides whether a property is available.
+
+**Copies, versions and the matrícula rule.** Photos and editais are public catalogue files in `R2_BUCKET`; keys carry the property number and a content-hash prefix (`auctions/{code}/photos/{hash}.jpg`, `auctions/{code}/edital/{hash}.pdf`), so a new version never overwrites an old one and nothing is deleted. The **matrícula** names people (SC-18, SC-25): it is copied only to `R2_PRIVATE_BUCKET` under `private/auctions/{code}/matricula/{hash}.pdf` and linked per request (`GET /api/auctions/:code/matricula-link`, 60 s, signed-in accounts). **If `R2_PRIVATE_BUCKET` is not set the matrícula is not copied at all** (`collection.copy kind=MATRICULA outcome=PRIVATE_STORAGE_UNCONFIGURED`), it stays unknown, and it never falls back to the public bucket. Files are kept only if they pass the type allowlist (JPEG, PNG, WebP; PDF for documents), the magic-byte check and the size caps (`ENRICHMENT_MAX_PHOTO_BYTES`, `ENRICHMENT_MAX_DOCUMENT_BYTES`); a redirect off Caixa's site is a block. A new edital or matrícula (another address, another publication date, or another content found by the 30-day re-check) is appended to `documentVersions`; the old version stays stored and a history-only change entry (`OTHER_FIELD`, field `edital` or `matricula`) records it.
+
+**The clock's round changes.** When an SFI property's 1st round date passes, the next run records `MODALITY_OR_ROUND_CHANGED` and `PRICE_DROPPED` (source `CLOCK`) for it before the update completes, so the Radar and the digest see what the search already shows. No cron.
+
 ## The holiday calendar
 
 `NATIONAL_HOLIDAYS` is a comma-separated list of Brasília days, `YYYY-MM-DD`, for example `2026-12-25,2027-01-01,2027-02-16,2027-02-17`. A business day (BR-004-31) is a day that is not Saturday, not Sunday and not in the list; the calendar is configuration, never fetched from the internet at run time.
@@ -173,8 +197,16 @@ An empty variable and an unset one are the same: no holidays.
 | `IMPORT_CUTOFF`            | 12:00    | Brasília `HH:mm`, later than the start: no attempt from it on, and the day is decided (BR-004-03). |
 | `IMPORT_MAX_ATTEMPTS`      | 12       | Attempts a day at most, 1 to 48 (BR-004-02). |
 | `IMPORT_ATTEMPT_SPACING_MINUTES` | 30 | Minutes between two attempts, at least 5 (the tick; no tight loop on Caixa, BR-004-02, SC-24). |
+| `SCRAPER_ENABLED`          | true     | Kill switch of the detail collection (runs inside the import; no start-up switch any more). |
+| `ENRICHMENT_DAILY_PAGES`   | 300      | Detail pages a Brasília day, across passes (BR-004-18). Sizing above. |
+| `ENRICHMENT_CONCURRENCY`   | 1        | Requests in flight, 1 to 4. |
+| `ENRICHMENT_MIN_PAUSE_MS`  | 5000     | Milliseconds between request starts, at least 1000, fixed. |
+| `ENRICHMENT_MAX_STALENESS_DAYS` | 7   | Days between two collections of an active property, at most (BR-004-19). |
+| `ENRICHMENT_FAILURE_BACKOFF_DAYS` | 1 | First back-off of a failed page, doubling to 16 days (BR-004-21). |
+| `ENRICHMENT_MAX_CONSECUTIVE_FAILURES` | 5 | Failures in a row that stop the day's pass (not a block). |
+| `ENRICHMENT_MAX_PHOTOS` / `_MAX_PHOTO_BYTES` / `_MAX_DOCUMENT_BYTES` | 12 / 5 MiB / 20 MiB | Copy limits (BR-004-22); `CAIXA_MAX_DOWNLOAD_BYTES` also bounds what the adapter reads. |
 
-All are in `backend/.env.example` and, for production, the `deploy-production` environment (`deploy/render-env.sh`). `IMPORT_ENABLED` and `SCRAPER_ENABLED` stay `false` there until the transport is decided.
+All are in `backend/.env.example` and, for production, the `deploy-production` environment (`deploy/render-env.sh`). `IMPORT_ENABLED` and `SCRAPER_ENABLED` stay `false` there until the transport is decided; the `ENRICHMENT_*` variables are optional there (defaults above) and are `vars` of the environment.
 
 ## The manual live test (the owner runs it; nothing automates it)
 

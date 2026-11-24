@@ -27,7 +27,7 @@ One approved choice per concern. Adding a dependency that overlaps one of these 
 | Logging / errors | `nestjs-pino`, `@sentry/nestjs`                                                                        | `@sentry/nextjs`                                                                             |
 | Payments         | `stripe`                                                                                               | `@stripe/stripe-js`                                                                          |
 | Files            | `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` (R2)                                             | —                                                                                            |
-| Scraping         | `puppeteer`, `cheerio`                                                                                 | —                                                                                            |
+| Scraping         | `cheerio` (Caixa pages via `CaixaAccess`)                                                                                 | —                                                                                            |
 | Tests            | `vitest`, `@testcontainers/mongodb`, `supertest`                                                       | `vitest`, `@testing-library/react`, `vitest-axe`, `@playwright/test`, `@axe-core/playwright` |
 | Lint / format    | `eslint`, `typescript-eslint`, `prettier`                                                              | `eslint`, `eslint-config-next`, `prettier`                                                   |
 | Git hooks        | `husky`, `lint-staged` (repository root, in a minimal `package.json` that holds only the hook tooling) |                                                                                              |
@@ -288,7 +288,7 @@ Runs never overlap: the workflow-level `concurrency` group queues them. A publis
 
 The images:
 
-- `backend/Dockerfile` — multi-stage on `node:<.node-version>-slim`; the runtime stage holds the compiled `dist/` and production dependencies, runs as `node`, and installs Debian's `chromium` for the scraper (`PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`; puppeteer's own download is skipped). bcrypt loads the prebuilt binding in its package, so no compiler is installed.
+- `backend/Dockerfile` — multi-stage on `node:<.node-version>-slim`; the runtime stage holds the compiled `dist/` and production dependencies, runs as `node`, and still installs Debian's `chromium` (`PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`; puppeteer's own download is skipped), which nothing in `src/` uses since SPEC-004 part 4 moved the detail collection behind `CaixaAccess`; removing it waits for #108. bcrypt loads the prebuilt binding in its package, so no compiler is installed.
 - `frontend/Dockerfile` — Next.js `output: 'standalone'`, runs `node server.js` as `node` on `PORT=3001`. The `NEXT_PUBLIC_*` values are inlined at build time, so `ci.yml` and `deploy.yml` pass them, to the frontend leg only, as build arguments from the repository variables `NEXT_PUBLIC_AUCTIONS_API_URL`, `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_SENTRY_DSN` — public values only (SC-16). The backend Dockerfile declares no build arguments.
 - Each package's `.dockerignore` keeps `.env*` out of the build context; runtime configuration and secrets come from the env files the deploy job delivers, never the image (SC-16, DV-35).
 
