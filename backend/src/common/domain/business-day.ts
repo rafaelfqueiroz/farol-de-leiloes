@@ -66,6 +66,18 @@ export function isBusinessDay(brasiliaDate: string, holidays: ReadonlySet<string
   return !isWeekend(brasiliaDate) && !holidays.has(brasiliaDate);
 }
 
+/**
+ * Why a day is not a business day (BR-004-31): `WEEKEND` (a holiday that falls on a weekend is
+ * still a weekend), `HOLIDAY`, or null for a business day.
+ */
+export function nonBusinessReason(
+  brasiliaDate: string,
+  holidays: ReadonlySet<string>,
+): 'WEEKEND' | 'HOLIDAY' | null {
+  if (isWeekend(brasiliaDate)) return 'WEEKEND';
+  return holidays.has(brasiliaDate) ? 'HOLIDAY' : null;
+}
+
 /** Whether the calendar has at least one entry in `year` (BR-004-31: otherwise it is not set up). */
 export function hasHolidaysInYear(year: number, holidays: ReadonlySet<string>): boolean {
   const prefix = `${String(year).padStart(4, '0')}-`;
