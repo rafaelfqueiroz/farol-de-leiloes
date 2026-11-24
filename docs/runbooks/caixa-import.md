@@ -70,6 +70,10 @@ An empty variable and an unset one are the same: no holidays.
 | `NATIONAL_HOLIDAYS`        | empty    | The holiday calendar, above.                                                                                                     |
 | `IMPORT_MIN_ROW_RATIO`     | 0.8      | A new list with fewer rows than this share of the last applied list is rejected as truncated (BR-004-04). Above 0 and at most 1. |
 
+## A list that does not parse cleanly (`MALFORMED_CSV`)
+
+The list validator rejects, with the reason `MALFORMED_CSV`, a list whose CSV is not well formed, however many rows survive the row ratio (BR-004-04, DL-004-03): an unterminated or stray quote swallows the lines after it into one cell, so the properties in them would look gone. Two facts decide it, both read by the parser and carried as counts, never content (SC-15): PapaParse's syntax errors (the delimiter is fixed to `;` and there is no header option, so only quote errors occur, and any error of any type counts), and the rows after the header whose number of cells is not the header's (this catches a download cut in the middle of a row, and an unquoted `;` inside a cell). Not errors: `;` and line breaks inside a quoted cell, a BOM, the metadata rows above the header, blank lines (including a trailing one) and a quote in the middle of an unquoted cell. If Caixa starts sending rows of another width on purpose, the list is rejected every day until the validator is changed; the alert then names `MALFORMED_CSV`.
+
 All are in `backend/.env.example` and, for production, the `deploy-production` environment (`deploy/render-env.sh`). `IMPORT_ENABLED` and `SCRAPER_ENABLED` stay `false` there until the transport is decided.
 
 ## The manual live test (the owner runs it; nothing automates it)

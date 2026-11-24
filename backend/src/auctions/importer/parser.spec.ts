@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { listFacts, normalizeRows, parseCaixaList, parseCaixaMoney, parseCsv } from './parser.js';
-import { readCaixaFixture } from '../../../test/support/fixtures.js';
+import { readFileSync } from 'fs';
+import { validateList } from '../domain/list-validator.js';
+import { caixaFixturePath, readCaixaFixture } from '../../../test/support/fixtures.js';
 
 describe('CSV parser', () => {
   it('parses Lista_imoveis_geral.csv and returns 4 rows', () => {
@@ -137,6 +139,8 @@ describe('parseCaixaList', () => {
       missingColumns: [],
       generatedOn: '2025-11-10',
       rowCount: 4,
+      syntaxErrors: 0,
+      irregularRows: 0,
     });
   });
 
@@ -183,6 +187,8 @@ describe('parseCaixaList', () => {
       missingColumns: [],
       generatedOn: '2025-11-10',
       rowCount: 0,
+      syntaxErrors: 0,
+      irregularRows: 0,
     });
   });
 
@@ -208,7 +214,13 @@ describe('parseCaixaList', () => {
   });
 
   it('reports an empty text as an unrecognised layout', () => {
-    expect(parseCaixaList('')).toEqual({ rows: [], header: null, generatedOn: null });
+    expect(parseCaixaList('')).toEqual({
+      rows: [],
+      header: null,
+      generatedOn: null,
+      syntaxErrors: [],
+      irregularRows: 0,
+    });
     expect(parseCsv('')).toEqual([]);
   });
 
@@ -233,6 +245,94 @@ describe('parseCaixaList', () => {
     expect(listFacts(parseCaixaList(full)).rowCount).toBe(10);
     expect(listFacts(parseCaixaList(truncated)).rowCount).toBe(3);
   });
+});
+
+// BR-004-04 / DL-004-03 (owner's review of #185): the syntax of the CSV is part of its verdict. An
+// unterminated quote in row 9 of a 10-row list swallows property 10 into row 9's cell, and 9 of 10
+// rows is above the 0.8 ratio, so the row count alone declared the list valid.
+describe('malformed CSV reaches the verdict', () => {
+  const HEAD =
+    'Data de geração:;10/11/2025;;\n' +
+    'N° do imóvel;UF;Cidade;Bairro;Endereço;Preço;Valor de avaliação;Desconto;Descrição;Modalidade de venda;Link de acesso\n';
+  const row = (n: number, description = 'Casa, 3 quartos') =>
+    `${1000 + n};SP;CAMPINAS;CENTRO;RUA A;100.000,00;200.000,00;50,00;${description};Venda Online;https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=${1000 + n}\n`;
+  const list = (rows: string[]) => HEAD + rows.join('');
+  const ten = Array.from({ length: 10 }, (_, i) => row(i + 1));
+  const LAST = { generatedOn: '2025-11-09', rowCount: 10 };
+
+  it('rejects an unterminated quote in row 9 although 9 of 10 rows still parse', () => {
+    const csv = list([...ten.slice(0, 8), row(9, '"Casa sem fim'), ten[9] as string]);
+    const parsed = parseCaixaList(csv);
+
+    expect(parsed.rows).toHaveLength(9); // property 10 is swallowed into row 9
+    expect(parsed.syntaxErrors).toEqual(['MissingQuotes']);
+    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({
+      kind: 'rejected',
+      reason: 'MALFORMED_CSV',
+    });
+  });
+
+  it('carries the codes of the errors and never the text of the row (SC-15)', () => {
+    const csv = list([row(1, '"SEGREDO-DA-LINHA'), row(2)]);
+    const parsed = parseCaixaList(csv);
+
+    expect(JSON.stringify(listFacts(parsed))).not.toContain('SEGREDO');
+    expect(JSON.stringify(parsed.syntaxErrors)).not.toContain('SEGREDO');
+  });
+
+  it('rejects a stray quote at the start of a cell (InvalidQuotes)', () => {
+    const parsed = parseCaixaList(list([row(1, '"Casa"x'), ...ten.slice(1)]));
+
+    expect(parsed.syntaxErrors.length).toBeGreaterThan(0);
+    expect(validateList(listFacts(parsed), LAST, 0.8).kind).toBe('rejected');
+  });
+
+  it('rejects a row with fewer cells than the header, as a download cut in a row has', () => {
+    const cut = list(ten.slice(0, 9)) + '1010;SP;CAMPINAS;CEN';
+    const parsed = parseCaixaList(cut);
+
+    expect(parsed.syntaxErrors).toEqual([]);
+    expect(parsed.irregularRows).toBe(1);
+    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({
+      kind: 'rejected',
+      reason: 'MALFORMED_CSV',
+    });
+  });
+
+  it('rejects a row with more cells than the header, as an unquoted ; in a cell makes', () => {
+    const parsed = parseCaixaList(list([row(1, 'Casa; sem aspas'), ...ten.slice(1)]));
+
+    expect(parsed.irregularRows).toBe(1);
+    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({
+      kind: 'rejected',
+      reason: 'MALFORMED_CSV',
+    });
+  });
+
+  it('accepts what is not an error: quoted cells holding ; and new lines, a trailing empty line', () => {
+    const quoted = row(1, '"Casa; com ponto e vírgula\ne linha"');
+    const csv = list([quoted, ...ten.slice(1)]) + '\n\n';
+    const parsed = parseCaixaList(csv);
+
+    expect(parsed.rows).toHaveLength(10);
+    expect(parsed.syntaxErrors).toEqual([]);
+    expect(parsed.irregularRows).toBe(0);
+    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({ kind: 'valid' });
+  });
+
+  it.each(['Lista_imoveis_geral.csv', 'Lista_imoveis_geral.latin1.csv', 'lista-bom-reordered.csv'])(
+    'keeps the captured list %s valid',
+    (name) => {
+      const text = name.includes('latin1')
+        ? readFileSync(caixaFixturePath(name)).toString('latin1')
+        : readCaixaFixture(name);
+      const parsed = parseCaixaList(text);
+
+      expect(parsed.syntaxErrors).toEqual([]);
+      expect(parsed.irregularRows).toBe(0);
+      expect(validateList(listFacts(parsed), null, 0.8)).toEqual({ kind: 'valid' });
+    },
+  );
 });
 
 describe('normalizeRows property type (BR-004-11 fallback)', () => {

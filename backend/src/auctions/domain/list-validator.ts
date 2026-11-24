@@ -14,6 +14,10 @@ export interface ListFacts {
   generatedOn: string | null;
   /** Property rows after the header, blank lines excluded. */
   rowCount: number;
+  /** Syntax errors the CSV parser reported (an unterminated quote, ...): a count, never content. */
+  syntaxErrors: number;
+  /** Rows after the header whose number of cells is not the header's. */
+  irregularRows: number;
 }
 
 /** The list applied last: BR-004-02's reference. Null for the very first list. */
@@ -26,6 +30,7 @@ export type ListRejectionReason =
   | 'UNRECOGNISED_LAYOUT'
   | 'MISSING_COLUMNS'
   | 'NO_GENERATION_DATE'
+  | 'MALFORMED_CSV'
   | 'EMPTY_LIST'
   | 'TRUNCATED_LIST';
 
@@ -37,9 +42,9 @@ export type ListVerdict =
   | { kind: 'rejected'; reason: ListRejectionReason };
 
 /**
- * The checks, in order: layout, generation date, newer than the last applied list, not empty, and
- * at least `minRowRatio` of the last applied list's rows. A list that is not new is not judged on
- * its content: it is simply not new.
+ * The checks, in order: layout, generation date, newer than the last applied list, well-formed CSV,
+ * not empty, and at least `minRowRatio` of the last applied list's rows. A list that is not new is
+ * not judged on its content: it is simply not new.
  *
  *   last applied: 5000 rows; minRowRatio 0.8 -> 4000 rows is valid, 3999 is TRUNCATED_LIST
  */
@@ -54,6 +59,12 @@ export function validateList(
   // `YYYY-MM-DD` strings order as the days do.
   if (last !== null && facts.generatedOn <= last.generatedOn) {
     return { kind: 'not_new', generatedOn: facts.generatedOn };
+  }
+  // DL-004-03: a list that does not parse cleanly is not trusted for absence, even when enough rows
+  // survive the ratio below: an unterminated quote swallows the rows after it into one cell, so
+  // the properties in them would be taken as gone and marked unavailable.
+  if (facts.syntaxErrors > 0 || facts.irregularRows > 0) {
+    return { kind: 'rejected', reason: 'MALFORMED_CSV' };
   }
   if (facts.rowCount === 0) return { kind: 'rejected', reason: 'EMPTY_LIST' };
   // AR-18: a ratio is a Decimal. 0.7 x 10 is 7.000000000000001 in a float, which would refuse 7.

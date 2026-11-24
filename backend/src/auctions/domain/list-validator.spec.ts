@@ -7,6 +7,8 @@ const GOOD: ListFacts = {
   missingColumns: [],
   generatedOn: '2025-11-10',
   rowCount: 4000,
+  syntaxErrors: 0,
+  irregularRows: 0,
 };
 const LAST: LastAppliedList = { generatedOn: '2025-11-09', rowCount: 5000 };
 const RATIO = 0.8;
@@ -77,6 +79,50 @@ describe('validateList', () => {
     it('does not judge the content of a list that is not new', () => {
       expect(
         validateList(facts({ generatedOn: '2025-11-09', rowCount: 0 }), LAST, RATIO).kind,
+      ).toBe('not_new');
+    });
+  });
+
+  describe('malformed CSV (BR-004-04, DL-004-03)', () => {
+    it('rejects a list the parser reported a syntax error on, even above the row ratio', () => {
+      expect(validateList(facts({ syntaxErrors: 1 }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'MALFORMED_CSV',
+      });
+    });
+
+    it("rejects a list with a row whose cells are not the header's, even above the row ratio", () => {
+      expect(validateList(facts({ irregularRows: 1 }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'MALFORMED_CSV',
+      });
+    });
+
+    it('rejects a malformed first list too, with nothing to compare to', () => {
+      expect(validateList(facts({ syntaxErrors: 2 }), null, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'MALFORMED_CSV',
+      });
+    });
+
+    it('is judged before the row count: a malformed empty list is malformed', () => {
+      expect(validateList(facts({ syntaxErrors: 1, rowCount: 0 }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'MALFORMED_CSV',
+      });
+    });
+
+    it('is judged after the layout and the date, and a list that is not new is only not new', () => {
+      expect(validateList(facts({ syntaxErrors: 1, headerFound: false }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'UNRECOGNISED_LAYOUT',
+      });
+      expect(validateList(facts({ syntaxErrors: 1, generatedOn: null }), LAST, RATIO)).toEqual({
+        kind: 'rejected',
+        reason: 'NO_GENERATION_DATE',
+      });
+      expect(
+        validateList(facts({ syntaxErrors: 1, generatedOn: '2025-11-09' }), LAST, RATIO).kind,
       ).toBe('not_new');
     });
   });
