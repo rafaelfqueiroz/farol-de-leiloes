@@ -118,3 +118,46 @@ describe('roundsFromPhaseDates', () => {
     ]);
   });
 });
+
+describe('roundsFromPhaseDates with the prices a page states (BR-004-11, BR-004-13)', () => {
+  const first = new Date('2026-03-10T13:00:00Z');
+  const second = new Date('2026-03-16T13:00:00Z');
+  const third = new Date('2026-03-20T13:00:00Z');
+  const prices = { first: d('192622.00'), second: d('170201.84'), single: null };
+
+  it('gives each SFI round its own price, and never more than two rounds', () => {
+    expect(roundsFromPhaseDates(PhaseModality.SFI_AUCTION, [first, second, third], prices)).toEqual(
+      [
+        { label: '1º Leilão', minimumPrice: d('192622.00'), date: first },
+        { label: '2º Leilão', minimumPrice: d('170201.84'), date: second },
+      ],
+    );
+  });
+
+  it('takes the 1st round price from the single price when the page has no 1st-round price', () => {
+    const singleOnly = { first: null, second: null, single: d('100.00') };
+
+    expect(roundsFromPhaseDates(PhaseModality.SFI_AUCTION, [first, second], singleOnly)).toEqual([
+      { label: '1º Leilão', minimumPrice: d('100.00'), date: first },
+      { label: '2º Leilão', minimumPrice: null, date: second },
+    ]);
+  });
+
+  it('gives the single price to the one round of the other modalities, the 1st as a fallback', () => {
+    const single = { first: null, second: null, single: d('89575.84') };
+    const firstOnly = { first: d('50.00'), second: null, single: null };
+
+    expect(
+      roundsFromPhaseDates(PhaseModality.OPEN_BIDDING, [first], single)[0]?.minimumPrice,
+    ).toEqual(d('89575.84'));
+    expect(
+      roundsFromPhaseDates(PhaseModality.ONLINE_SALES, [first], firstOnly)[0]?.minimumPrice,
+    ).toEqual(d('50.00'));
+    expect(roundsFromPhaseDates(PhaseModality.DIRECT_ONLINE_SALES, [], single)).toEqual([
+      { label: 'Venda Direta', minimumPrice: d('89575.84'), date: null },
+    ]);
+    expect(
+      roundsFromPhaseDates(PhaseModality.DIRECT_ONLINE_SALES, [], firstOnly)[0]?.minimumPrice,
+    ).toEqual(d('50.00'));
+  });
+});

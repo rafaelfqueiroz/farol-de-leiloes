@@ -5,6 +5,9 @@ import { markIsolation } from '../../access/isolation-mark.js';
 // The enum lives in domain/ (AR-05: no framework import there); re-exported for this module.
 export { PhaseModality } from '../domain/modality.js';
 import type { PhaseModality } from '../domain/modality.js';
+export { PaymentMethod } from '../domain/detail-data.js';
+export type { ExpenseRule, Occupancy } from '../domain/detail-data.js';
+import type { ExpenseRule, Occupancy, PaymentMethod } from '../domain/detail-data.js';
 
 export interface Address {
   street?: string;
@@ -14,11 +17,6 @@ export interface Address {
   zipcode?: string;
 }
 
-export interface ExpenseRule {
-  type: string; // e.g., 'Condomínio', 'Tributos'
-  description: string;
-}
-
 export interface AuctionFile {
   originalUrl: string; // Caixa URL (kept for reference/fallback)
   storageKey?: string; // R2 object key (for signed URL generation)
@@ -26,12 +24,6 @@ export interface AuctionFile {
   mimeType: string; // e.g., 'image/jpeg', 'application/pdf'
   size?: number; // File size in bytes
   uploadedAt?: Date; // When uploaded to R2
-}
-
-export enum PaymentMethod {
-  OWN_RESOURCES = 'OWN_RESOURCES', // Recursos próprios
-  FGTS = 'FGTS', // Permite utilização de FGTS
-  FINANCING = 'FINANCING', // Financiamento
 }
 
 /**
@@ -55,8 +47,6 @@ export interface StoredRound {
   /** The instant the round ends; null = open-ended. */
   date: Date | null;
 }
-
-export type Occupancy = 'OCCUPIED' | 'UNOCCUPIED';
 
 const RoundSchema = new MongooseSchema<StoredRound>(
   {
