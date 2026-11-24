@@ -29,7 +29,7 @@ import { FileCopier } from './file-copier.js';
 import { PropertyCopier } from './property-copier.js';
 
 const START = new Date('2026-11-24T12:00:00.000Z');
-const ZERO: CollectionResult = { collected: 0, failed: 0, blocked: false, pages: 0 };
+const ZERO: CollectionResult = { collected: 0, failed: 0, blocked: false, pages: 0, requests: 0 };
 const urlOf = (code: string) =>
   `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=${code}`;
 const PAGE = detailPage({
@@ -90,26 +90,37 @@ describe('DetailEnrichmentPass', () => {
 
     const result = await run();
 
-    expect(result).toEqual({ collected: 3, failed: 0, blocked: false, pages: 3 });
+    expect(result).toEqual({ collected: 3, failed: 0, blocked: false, pages: 3, requests: 3 });
     expect(caixa.requests.map((request) => request.kind)).toEqual(['detail', 'detail', 'detail']);
     expect(repository.applied.map((entry) => entry.code)).toEqual(['0001', '0002', '0003']);
-    expect(saved.map((progress) => progress.collected)).toEqual([1, 2, 3]);
+    // Saved before each request is sent (the count), and after each property (the result).
+    expect(saved[saved.length - 1]).toEqual({
+      collected: 3,
+      failed: 0,
+      blocked: false,
+      pages: 3,
+      requests: 3,
+    });
+    expect(saved.map((progress) => progress.requests)).toEqual(
+      [...saved.map((p) => p.requests)].sort(),
+    );
+    expect(saved[0]).toMatchObject({ pages: 1, requests: 1, collected: 0 }); // counted before it was sent
   });
 
   it('takes only the budget the day has left, across passes', async () => {
     const { repository, run } = setup({ ENRICHMENT_DAILY_PAGES: '5' });
 
-    const result = await run({ collected: 3, failed: 0, blocked: false, pages: 4 });
+    const result = await run({ collected: 3, failed: 0, blocked: false, pages: 4, requests: 4 });
 
     expect(repository.queries).toEqual([{ limit: 1 }]);
-    expect(result).toEqual({ collected: 4, failed: 0, blocked: false, pages: 5 });
+    expect(result).toEqual({ collected: 4, failed: 0, blocked: false, pages: 5, requests: 5 });
   });
 
   it('asks nothing when the budget is spent or Caixa already blocked the day, and nothing when the pass is off', async () => {
     const spent = setup({ ENRICHMENT_DAILY_PAGES: '3' });
     const blocked = setup();
     const off = setup({ SCRAPER_ENABLED: 'false' });
-    const previous = { collected: 1, failed: 0, blocked: false, pages: 3 };
+    const previous = { collected: 1, failed: 0, blocked: false, pages: 3, requests: 3 };
 
     expect(await spent.run(previous)).toEqual(previous);
     expect(await blocked.run({ ...ZERO, blocked: true })).toEqual({ ...ZERO, blocked: true });
@@ -136,7 +147,7 @@ describe('DetailEnrichmentPass', () => {
 
     const result = await run();
 
-    expect(result).toEqual({ collected: 1, failed: 0, blocked: true, pages: 2 });
+    expect(result).toEqual({ collected: 1, failed: 0, blocked: true, pages: 2, requests: 2 });
     expect(caixa.requests).toHaveLength(2);
     expect(repository.applied.map((entry) => entry.code)).toEqual(['0001']);
     expect(saved[saved.length - 1]?.blocked).toBe(true);
@@ -146,7 +157,7 @@ describe('DetailEnrichmentPass', () => {
     const { caixa, run } = setup();
     caixa.serveDetailPage(urlOf('0001'), readCaixaFixture('bot-protection.html'));
 
-    expect(await run()).toEqual({ collected: 0, failed: 0, blocked: true, pages: 1 });
+    expect(await run()).toEqual({ collected: 0, failed: 0, blocked: true, pages: 1, requests: 1 });
   });
 
   it('backs a failed page off, counting the failures in a row', async () => {
@@ -156,7 +167,7 @@ describe('DetailEnrichmentPass', () => {
 
     const result = await run();
 
-    expect(result).toEqual({ collected: 0, failed: 1, blocked: false, pages: 1 });
+    expect(result).toEqual({ collected: 0, failed: 1, blocked: false, pages: 1, requests: 1 });
     // The 3rd failure waits 4 days, until midnight Brasília (2026-11-28T03:00Z).
     expect(repository.failures).toEqual([
       { code: '0001', failures: 3, retryAfter: new Date('2026-11-28T03:00:00.000Z') },
@@ -195,8 +206,20 @@ describe('DetailEnrichmentPass', () => {
       reset.caixa.serveDetailPage(urlOf(code), new CaixaUnreachableError('NETWORK'));
     }
 
-    expect(await stop.run()).toEqual({ collected: 0, failed: 2, blocked: false, pages: 2 });
-    expect(await reset.run()).toEqual({ collected: 2, failed: 2, blocked: false, pages: 4 });
+    expect(await stop.run()).toEqual({
+      collected: 0,
+      failed: 2,
+      blocked: false,
+      pages: 2,
+      requests: 2,
+    });
+    expect(await reset.run()).toEqual({
+      collected: 2,
+      failed: 2,
+      blocked: false,
+      pages: 4,
+      requests: 4,
+    });
   });
 
   it('counts a fault after the page (the database) as that property failing, by code', async () => {
@@ -205,7 +228,7 @@ describe('DetailEnrichmentPass', () => {
     const capture = captureAllLogOutput();
     try {
       const result = await run();
-      expect(result).toEqual({ collected: 0, failed: 1, blocked: false, pages: 1 });
+      expect(result).toEqual({ collected: 0, failed: 1, blocked: false, pages: 1, requests: 1 });
     } finally {
       capture.restore();
     }
@@ -265,5 +288,125 @@ describe('DetailEnrichmentPass', () => {
     }
 
     expect(capture.text()).toContain('outcome=UNREACHABLE_TIMEOUT');
+  });
+
+  it('counts the page and persists the count BEFORE sending it, so a lease lost right after cannot exceed the budget', async () => {
+    const { caixa, run, saved } = setup({}, ['0001']);
+    let countedWhenSent = 0;
+    const serve = caixa.fetchDetailPage.bind(caixa);
+    caixa.fetchDetailPage = (url) => {
+      countedWhenSent = saved[saved.length - 1]?.pages ?? 0;
+      return serve(url);
+    };
+
+    await run();
+
+    expect(countedWhenSent).toBe(1);
+  });
+
+  it('stops at the daily request cap, counting photos and documents too', async () => {
+    const { caixa, run } = setup({ ENRICHMENT_DAILY_REQUESTS: '2' }, ['0001', '0002', '0003']);
+    for (const code of ['0001', '0002', '0003']) {
+      caixa.serveDetailPage(
+        urlOf(code),
+        detailPage({
+          openBiddingDate: '30/12/2026 - 10h00',
+          photos: ['/fotos/a.jpg'],
+          edital: null,
+          matricula: null,
+        }),
+      );
+    }
+    caixa.serveFile('https://venda-imoveis.caixa.gov.br/fotos/a.jpg', {
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1]),
+      contentType: 'image/jpeg',
+    });
+
+    const result = await run();
+
+    // The page and its photo are the two requests of the day; the second property sends nothing.
+    expect(caixa.requests).toHaveLength(2);
+    expect(result).toEqual({ collected: 1, failed: 0, blocked: false, pages: 1, requests: 2 });
+    // A resumed pass the same day asks nothing more.
+    caixa.requests.length = 0;
+    expect(await run(result)).toEqual(result);
+    expect(caixa.requests).toEqual([]);
+  });
+
+  it('does not count sold-out or unreadable pages toward the failures in a row: the good pages after them are collected', async () => {
+    const codes = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010'];
+    const { caixa, repository, run } = setup({ ENRICHMENT_MAX_CONSECUTIVE_FAILURES: '5' }, codes);
+    for (const code of codes.slice(0, 3)) {
+      caixa.serveDetailPage(urlOf(code), readCaixaFixture('unavailable-property.html'));
+    }
+    for (const code of codes.slice(3, 5)) caixa.serveDetailPage(urlOf(code), '<html>x</html>');
+
+    const result = await run();
+
+    expect(result).toEqual({ collected: 5, failed: 5, blocked: false, pages: 10, requests: 10 });
+    expect(repository.failures).toHaveLength(5); // each one backed off all the same
+  });
+
+  it('logs the reason code of each kind of failed page', async () => {
+    const { caixa, run } = setup({}, ['0001', '0002']);
+    caixa.serveDetailPage(urlOf('0001'), readCaixaFixture('unavailable-property.html'));
+    caixa.serveDetailPage(urlOf('0002'), '<html>x</html>');
+    const capture = captureAllLogOutput();
+    try {
+      await run();
+    } finally {
+      capture.restore();
+    }
+
+    expect(capture.text()).toContain('code=0001 outcome=PAGE_UNAVAILABLE');
+    expect(capture.text()).toContain('code=0002 outcome=PAGE_UNRECOGNISED');
+  });
+
+  it('counts a photo that times out toward the failures in a row, a missing photo not', async () => {
+    const codes = ['0001', '0002', '0003', '0004'];
+    const timeouts = setup({ ENRICHMENT_MAX_CONSECUTIVE_FAILURES: '2' }, codes);
+    const missing = setup({ ENRICHMENT_MAX_CONSECUTIVE_FAILURES: '2' }, codes);
+    const withPhoto = detailPage({
+      openBiddingDate: '30/12/2026 - 10h00',
+      photos: ['/fotos/a.jpg'],
+      edital: null,
+      matricula: null,
+    });
+    for (const env of [timeouts, missing]) {
+      for (const code of codes) env.caixa.serveDetailPage(urlOf(code), withPhoto);
+    }
+    timeouts.caixa.serveFile(
+      'https://venda-imoveis.caixa.gov.br/fotos/a.jpg',
+      new CaixaUnreachableError('TIMEOUT'),
+    );
+    // `missing` serves no file at all: Caixa answers 404.
+
+    const stopped = await timeouts.run();
+    const all = await missing.run();
+
+    // A page succeeds (resets), its photo times out (1), the next page succeeds (resets): never 2 in
+    // a row unless two requests fail back to back.
+    expect(stopped.collected).toBe(4);
+    expect(all.collected).toBe(4);
+  });
+
+  it('runs one pass at a time, and every pass through the same gate', async () => {
+    const { caixa, repository, run, sleeper } = setup({ ENRICHMENT_MIN_PAUSE_MS: '2000' }, [
+      '0001',
+      '0002',
+    ]);
+    repository.candidates = [aCandidate('0001'), aCandidate('0002')];
+    const first = run();
+    const second = run();
+
+    await sleeper.drive(Promise.all([first, second]));
+
+    // Pass one asked for both properties before pass two began (the fake repository forgets what
+    // was collected, so pass two asks again), and every start was one pause after the last.
+    const codes = caixa.requests.map((request) =>
+      new URL(request.url ?? '').searchParams.get('hdnimovel'),
+    );
+    expect(codes).toEqual(['0001', '0002', '0001', '0002']);
+    expect(sleeper.sleeps).toEqual([2000, 2000, 2000]);
   });
 });

@@ -252,6 +252,9 @@ export const envSchema = z
     // requests in flight (1-4) and ENRICHMENT_MIN_PAUSE_MS (at least 1000) between two request
     // starts, fixed, never randomised. See docs/runbooks/caixa-import.md for how to size them.
     ENRICHMENT_DAILY_PAGES: positiveInt.max(100_000).default(300),
+    // A second, wider bound: every request to Caixa a Brasília day counts (pages, photos and
+    // documents), so a day of properties with many files cannot ask Caixa for more than this.
+    ENRICHMENT_DAILY_REQUESTS: positiveInt.max(1_000_000).default(2000),
     ENRICHMENT_CONCURRENCY: positiveInt.max(4).default(1),
     ENRICHMENT_MIN_PAUSE_MS: positiveInt.min(1000).max(3_600_000).default(5000),
     // BR-004-19: every active property's detail data is refreshed at least this many days apart.

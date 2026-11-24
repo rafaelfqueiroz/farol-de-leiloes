@@ -50,7 +50,13 @@ export interface ImportRunRecord {
   attempts: number;
   counts: ImportCounts;
   /** Detail collection (BR-004-18..21): totals of the day's passes; zeros until one ran. */
-  collection: { collected: number; failed: number; blocked: boolean; pages: number };
+  collection: {
+    collected: number;
+    failed: number;
+    blocked: boolean;
+    pages: number;
+    requests: number;
+  };
   /** Stable codes only (SC-15). */
   failureReasons: string[];
   alertedAt: Date | null;

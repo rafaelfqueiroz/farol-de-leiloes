@@ -9,8 +9,10 @@ export interface CollectionResult {
   failed: number;
   /** Caixa answered with a block or challenge: collection stopped for the run (BR-004-20). */
   blocked: boolean;
-  /** Detail pages requested today, across the day's passes: what the daily budget counts. */
+  /** Detail pages requested today, across the day's passes: what the daily page budget counts. */
   pages: number;
+  /** Requests of every kind (page, photo, document) made today: what the request cap counts. */
+  requests: number;
 }
 
 /** The pass for one applied Import Run. */

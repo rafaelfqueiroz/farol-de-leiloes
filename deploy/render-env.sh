@@ -96,6 +96,7 @@ readonly ENTRIES=(
   "IMPORT_MAX_ATTEMPTS          variable  backend  optional"
   "IMPORT_ATTEMPT_SPACING_MINUTES variable backend  optional"
   "ENRICHMENT_DAILY_PAGES       variable  backend  optional"
+  "ENRICHMENT_DAILY_REQUESTS    variable  backend  optional"
   "ENRICHMENT_CONCURRENCY       variable  backend  optional"
   "ENRICHMENT_MIN_PAUSE_MS      variable  backend  optional"
   "ENRICHMENT_MAX_STALENESS_DAYS variable backend  optional"

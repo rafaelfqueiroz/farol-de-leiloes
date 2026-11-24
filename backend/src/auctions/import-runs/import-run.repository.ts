@@ -323,7 +323,13 @@ export class ImportRunRepository {
   async saveCollection(
     id: string,
     owner: string,
-    collection: { collected: number; failed: number; blocked: boolean; pages: number },
+    collection: {
+      collected: number;
+      failed: number;
+      blocked: boolean;
+      pages: number;
+      requests: number;
+    },
   ): Promise<boolean> {
     return this.write(id, owner, { $set: { detailCollection: collection } });
   }
@@ -406,6 +412,7 @@ function toRecord(row: RunRow): ImportRunRecord {
       failed: row.detailCollection?.failed ?? 0,
       blocked: row.detailCollection?.blocked ?? false,
       pages: row.detailCollection?.pages ?? 0,
+      requests: row.detailCollection?.requests ?? 0,
     },
     failureReasons: [...(row.failureReasons ?? [])],
     alertedAt: row.alertedAt ?? null,

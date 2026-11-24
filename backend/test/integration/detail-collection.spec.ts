@@ -97,7 +97,7 @@ describe('the detail collection (integration)', () => {
       });
       expect(monday).toMatchObject({
         outcome: 'SUCCESS',
-        collection: { collected: 3, failed: 0, blocked: false, pages: 3 },
+        collection: { collected: 3, failed: 0, blocked: false, pages: 3, requests: 6 },
       });
       expect(pagesRequested(h)).toEqual(['0001', '0002', '0003']);
       expect((await stored(h, '0003'))?.fulfilled).toBe(true);
@@ -113,7 +113,13 @@ describe('the detail collection (integration)', () => {
         env: { ENRICHMENT_DAILY_PAGES: '3' },
       });
       expect(pagesRequested(h)).toEqual(['0004', '0005', '0002']);
-      expect(tuesday?.collection).toEqual({ collected: 3, failed: 0, blocked: false, pages: 3 });
+      expect(tuesday?.collection).toEqual({
+        collected: 3,
+        failed: 0,
+        blocked: false,
+        pages: 3,
+        requests: 5, // the third property's photo is the one already stored
+      });
 
       // Wednesday: everything is collected and fresh (N = 7): nothing to ask.
       h.caixa.requests.length = 0;
@@ -123,7 +129,7 @@ describe('the detail collection (integration)', () => {
       expect(pagesRequested(h)).toEqual([]);
       expect(wednesday).toMatchObject({
         outcome: 'SUCCESS',
-        collection: { collected: 0, failed: 0, blocked: false, pages: 0 },
+        collection: { collected: 0, failed: 0, blocked: false, pages: 0, requests: 0 },
       });
     });
 
@@ -207,14 +213,14 @@ describe('the detail collection (integration)', () => {
         pass.run({
           importRunId: run?.id ?? '',
           brasiliaDate: MON,
-          previous: { collected: 0, failed: 0, blocked: false, pages: 0 },
+          previous: { collected: 0, failed: 0, blocked: false, pages: 0, requests: 0 },
           assertHeld: () => Promise.resolve(),
           saveProgress: () => Promise.resolve(),
         }),
       );
 
       expect(pagesRequested(h)).toEqual([]);
-      expect(result).toEqual({ collected: 0, failed: 0, blocked: false, pages: 0 });
+      expect(result).toEqual({ collected: 0, failed: 0, blocked: false, pages: 0, requests: 0 });
     });
 
     it('keeps the daily budget across passes of the same day: a resumed pass takes only what is left', async () => {
@@ -227,7 +233,7 @@ describe('the detail collection (integration)', () => {
       const env = { ENRICHMENT_DAILY_PAGES: '4' };
 
       // First pass: the lease is lost after two pages.
-      let saved = { collected: 0, failed: 0, blocked: false, pages: 0 };
+      let saved = { collected: 0, failed: 0, blocked: false, pages: 0, requests: 0 };
       let held = 0;
       const first = h.realPass(env).run({
         importRunId: run?.id ?? '',
@@ -244,7 +250,7 @@ describe('the detail collection (integration)', () => {
         },
       });
       await expect(h.sleeper.drive(first)).rejects.toBeInstanceOf(LeaseLostError);
-      expect(saved).toMatchObject({ collected: 2, pages: 2 });
+      expect(saved).toMatchObject({ collected: 2, pages: 2, requests: 4 });
       expect(pagesRequested(h)).toEqual(['0001', '0002']); // the lease check before the third stopped it
 
       // Second pass: two pages are left of the four; the two collected are not asked again.
@@ -262,7 +268,7 @@ describe('the detail collection (integration)', () => {
         }),
       );
       expect(pagesRequested(h)).toEqual(['0003', '0004']);
-      expect(second).toEqual({ collected: 4, failed: 0, blocked: false, pages: 4 });
+      expect(second).toEqual({ collected: 4, failed: 0, blocked: false, pages: 4, requests: 8 });
 
       // Third pass the same day: the budget is spent, no request at all.
       h.caixa.requests.length = 0;
@@ -289,10 +295,60 @@ describe('the detail collection (integration)', () => {
       expect(h.caixa.requests.filter((request) => request.kind !== 'list')).toEqual([]);
       expect(run).toMatchObject({
         outcome: 'SUCCESS',
-        collection: { collected: 0, failed: 0, blocked: false, pages: 0 },
+        collection: { collected: 0, failed: 0, blocked: false, pages: 0, requests: 0 },
       });
       expect(run?.updateCompletedAt).not.toBeNull();
       expect(h.events).toHaveLength(1);
+    });
+  });
+
+  describe('overlapping runs (SC-24)', () => {
+    it("does not start the next day's run while the day's pass is still working", async () => {
+      servePages(codes(3));
+      // The pass of Monday is held inside its second page request.
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let inPass: () => void = () => undefined;
+      const reached = new Promise<void>((resolve) => {
+        inPass = resolve;
+      });
+      const serve = h.caixa.fetchDetailPage.bind(h.caixa);
+      let served = 0;
+      vi.spyOn(h.caixa, 'fetchDetailPage').mockImplementation(async (url) => {
+        if (++served === 2) {
+          inPass();
+          await held;
+        }
+        return serve(url);
+      });
+      h.caixa.serveList(csvList(MON, properties(3)));
+      h.clock.set(brasiliaInstant(MON, HH(6)));
+      const orchestrator = h.orchestrator({}, { enrichment: h.realPass({}) });
+
+      const monday = h.sleeper.drive(orchestrator.tick());
+      await reached;
+      // Tuesday's cron tick arrives while Monday's pass is held: it does nothing.
+      h.caixa.serveList(csvList(TUE, properties(3)));
+      h.clock.set(brasiliaInstant(TUE, HH(6)));
+      const listRequestsBefore = h.caixa.requests.filter(
+        (request) => request.kind === 'list',
+      ).length;
+      await orchestrator.tick();
+      expect(h.caixa.requests.filter((request) => request.kind === 'list')).toHaveLength(
+        listRequestsBefore,
+      );
+      expect(await h.kit.runs.findByDate(TUE)).toBeNull();
+
+      release();
+      await monday;
+      vi.restoreAllMocks();
+      expect(pagesRequested(h)).toEqual(['0001', '0002', '0003']);
+
+      // Once Monday's tick is over, Tuesday's goes on as usual.
+      await h.sleeper.drive(orchestrator.tick());
+      expect(await h.kit.runs.findByDate(TUE)).toMatchObject({ outcome: 'SUCCESS' });
     });
   });
 
@@ -400,7 +456,7 @@ describe('the detail collection (integration)', () => {
       expect(pagesRequested(h)).toEqual(['0001', '0002', '0003']);
       expect(run).toMatchObject({
         outcome: 'SUCCESS',
-        collection: { collected: 2, failed: 0, blocked: true, pages: 3 },
+        collection: { collected: 2, failed: 0, blocked: true, pages: 3, requests: 5 },
       });
       // The day's update still completes (part 3): the list is applied, the pass ended.
       expect(run?.updateCompletedAt).not.toBeNull();
@@ -433,7 +489,13 @@ describe('the detail collection (integration)', () => {
       h.caixa.requests.length = 0;
       const tuesday = await runDay(h, TUE, csvList(TUE, properties(5)));
       expect(pagesRequested(h)).toEqual(['0003', '0004', '0005']);
-      expect(tuesday?.collection).toEqual({ collected: 3, failed: 0, blocked: false, pages: 3 });
+      expect(tuesday?.collection).toEqual({
+        collected: 3,
+        failed: 0,
+        blocked: false,
+        pages: 3,
+        requests: 6,
+      });
       expect(h.email.importAlertEmails).toHaveLength(2); // no new alert: Tuesday was not blocked
     });
 
@@ -444,7 +506,13 @@ describe('the detail collection (integration)', () => {
       const run = await runDay(h, MON, csvList(MON, properties(3)));
 
       expect(pagesRequested(h)).toEqual(['0001', '0002']);
-      expect(run?.collection).toEqual({ collected: 1, failed: 0, blocked: true, pages: 2 });
+      expect(run?.collection).toEqual({
+        collected: 1,
+        failed: 0,
+        blocked: true,
+        pages: 2,
+        requests: 3,
+      });
       expect(h.email.importAlertEmails).toHaveLength(2);
       expect((await stored(h, '0002'))?.detailsCollectedAt ?? null).toBeNull();
     });
@@ -459,9 +527,75 @@ describe('the detail collection (integration)', () => {
       const run = await runDay(h, MON, csvList(MON, properties(3)));
 
       expect(pagesRequested(h)).toEqual(['0001']);
-      expect(run?.collection).toEqual({ collected: 0, failed: 0, blocked: true, pages: 1 });
+      expect(run?.collection).toEqual({
+        collected: 0,
+        failed: 0,
+        blocked: true,
+        pages: 1,
+        requests: 2,
+      });
       expect((await stored(h, '0001'))?.detailsCollectedAt ?? null).toBeNull();
       expect(await entriesOf(h, '0001', 'DETAILS')).toEqual([]);
+    });
+
+    it('sends nothing after a block to the workers already in flight or waiting at the gate (SC-24)', async () => {
+      const gallery = ['/fotos/F1.jpg', '/fotos/F2.jpg', '/fotos/F3.jpg'];
+      servePages(
+        codes(6),
+        detailPage({
+          openBiddingDate: '30/12/2026 - 10h00',
+          photos: gallery,
+          edital: null,
+          matricula: null,
+        }),
+      );
+      for (const photo of gallery) {
+        h.caixa.serveFile(`https://venda-imoveis.caixa.gov.br${photo}`, {
+          body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
+          contentType: 'image/jpeg',
+        });
+      }
+      h.caixa.serveDetailPage(pageUrl('0001'), new CaixaBlockedError('HTTP_429'));
+
+      const run = await runDay(h, MON, csvList(MON, properties(6)), {
+        env: { ENRICHMENT_CONCURRENCY: '3', ENRICHMENT_MIN_PAUSE_MS: '1000' },
+      });
+
+      // The first request was refused: every worker waiting for its turn stops with it.
+      expect(h.caixa.requests.filter((request) => request.kind !== 'list')).toHaveLength(1);
+      expect(run?.collection).toEqual({
+        collected: 0,
+        failed: 0,
+        blocked: true,
+        pages: 1,
+        requests: 1,
+      });
+      expect(await h.kit.auctionModel.countDocuments({ fulfilled: true })).toBe(0);
+    });
+
+    it('stops the workers waiting at the gate when the failures in a row stop the pass', async () => {
+      servePages(codes(8));
+      for (const code of codes(8)) {
+        h.caixa.serveDetailPage(pageUrl(code), new CaixaUnreachableError('TIMEOUT'));
+      }
+
+      const run = await runDay(h, MON, csvList(MON, properties(8)), {
+        env: {
+          ENRICHMENT_CONCURRENCY: '4',
+          ENRICHMENT_MIN_PAUSE_MS: '1000',
+          ENRICHMENT_MAX_CONSECUTIVE_FAILURES: '2',
+        },
+      });
+
+      // Two requests failed in a row: the two that were admitted, and no third.
+      expect(pagesRequested(h)).toHaveLength(2);
+      expect(run?.collection).toMatchObject({
+        collected: 0,
+        failed: 2,
+        blocked: false,
+        pages: 2,
+        requests: 2,
+      });
     });
 
     it('asks nothing more on a pass resumed after a block the same day', async () => {
@@ -470,7 +604,7 @@ describe('the detail collection (integration)', () => {
         env: { SCRAPER_ENABLED: 'false' },
       });
       h.caixa.requests.length = 0;
-      const blocked = { collected: 1, failed: 0, blocked: true, pages: 2 };
+      const blocked = { collected: 1, failed: 0, blocked: true, pages: 2, requests: 2 };
 
       const result = await h.sleeper.drive(
         h.realPass().run({
@@ -524,7 +658,7 @@ describe('the detail collection (integration)', () => {
 
       expect(tuesday).toMatchObject({
         outcome: 'SUCCESS',
-        collection: { collected: 0, failed: 1, blocked: false, pages: 1 },
+        collection: { collected: 0, failed: 1, blocked: false, pages: 1, requests: 1 },
       });
       expect(tuesday?.updateCompletedAt).not.toBeNull();
       const after = await stored(h, '0002');
@@ -601,7 +735,13 @@ describe('the detail collection (integration)', () => {
 
         const run = await runDay(h, MON, csvList(MON, properties(2)));
 
-        expect(run?.collection).toEqual({ collected: 1, failed: 1, blocked: false, pages: 2 });
+        expect(run?.collection).toEqual({
+          collected: 1,
+          failed: 1,
+          blocked: false,
+          pages: 2,
+          requests: 3,
+        });
         const property = await stored(h, '0001');
         expect(property?.available).toBe(true); // only the list decides (BR-004-08)
         expect(property?.detailsFailures).toBe(1);
@@ -622,7 +762,7 @@ describe('the detail collection (integration)', () => {
       expect(pagesRequested(h)).toEqual(['0001', '0002', '0003']);
       expect(run).toMatchObject({
         outcome: 'SUCCESS',
-        collection: { collected: 0, failed: 3, blocked: false, pages: 3 },
+        collection: { collected: 0, failed: 3, blocked: false, pages: 3, requests: 3 },
       });
       expect(run?.updateCompletedAt).not.toBeNull();
       expect(h.email.importAlertEmails).toEqual([]);
@@ -640,7 +780,13 @@ describe('the detail collection (integration)', () => {
 
       // fail, fail, ok, fail, fail, ok: never three in a row.
       expect(pagesRequested(h)).toHaveLength(6);
-      expect(run?.collection).toEqual({ collected: 2, failed: 4, blocked: false, pages: 6 });
+      expect(run?.collection).toEqual({
+        collected: 2,
+        failed: 4,
+        blocked: false,
+        pages: 6,
+        requests: 8,
+      });
     });
   });
 
@@ -708,7 +854,7 @@ describe('the detail collection (integration)', () => {
       // Quiet: no request after the lease was lost, nothing completed, no fault reported.
       expect(pagesRequested(h)).toEqual(['0001', '0002']);
       expect(interrupted?.updateCompletedAt).toBeNull();
-      expect(interrupted?.collection).toMatchObject({ collected: 1, pages: 1 }); // what was saved
+      expect(interrupted?.collection).toMatchObject({ collected: 1, pages: 2, requests: 3 }); // what was saved
       expect(h.events).toEqual([]);
       expect(log.loggedText()).not.toContain('The collection pass failed');
       expect(log.loggedText()).toContain('lease of the run');
@@ -724,7 +870,14 @@ describe('the detail collection (integration)', () => {
       const resumed = await runDay(h, MON, csvList(MON, properties(5)), { minutes: HH(6, 5) });
 
       expect(pagesRequested(h)).toEqual(['0002', '0003', '0004', '0005']);
-      expect(resumed?.collection).toEqual({ collected: 5, failed: 0, blocked: false, pages: 5 });
+      expect(resumed?.collection).toEqual({
+        collected: 5,
+        failed: 0,
+        blocked: false,
+        // 0002's page was counted before it was sent, then the lease was lost: asked again.
+        pages: 6,
+        requests: 11,
+      });
       expect(resumed?.updateCompletedAt).not.toBeNull();
       expect(h.events).toHaveLength(1);
       expect(filesRequested(h)).toHaveLength(4);

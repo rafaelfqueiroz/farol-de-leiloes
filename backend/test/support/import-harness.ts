@@ -63,7 +63,7 @@ export class FakeEnrichmentPass extends EnrichmentPass {
   readonly calls: { importRunId: string; brasiliaDate: string }[] = [];
   /** The whole input of each call, for specs about what the orchestrator hands the pass. */
   readonly inputs: EnrichmentPassInput[] = [];
-  result: CollectionResult = { collected: 0, failed: 0, blocked: false, pages: 0 };
+  result: CollectionResult = { collected: 0, failed: 0, blocked: false, pages: 0, requests: 0 };
   failWith: Error | null = null;
   /** Runs before the pass answers: a spec can simulate a slow or a dying pass. */
   hook: ((input: EnrichmentPassInput) => Promise<void>) | null = null;

@@ -52,7 +52,7 @@ describe('AuctionsModule wiring (SPEC-004 part 3)', () => {
 
   it('collects nothing from an empty catalogue, whatever SCRAPER_ENABLED says, and asks Caixa nothing', async () => {
     const pass = moduleRef.get(EnrichmentPass);
-    const previous = { collected: 0, failed: 0, blocked: false, pages: 0 };
+    const previous = { collected: 0, failed: 0, blocked: false, pages: 0, requests: 0 };
 
     const result = await pass.run({
       importRunId: '0123456789abcdef01234567',

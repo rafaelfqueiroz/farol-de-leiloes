@@ -48,6 +48,8 @@ export interface BusinessConfig {
   enrichment: {
     /** SPEC-004 BR-004-18: detail pages a Brasília day, at most (counted across the day's passes). */
     dailyPages: number;
+    /** BR-004-18: requests of every kind (page, photo, document) a Brasília day, at most. */
+    dailyRequests: number;
     /** BR-004-18: requests in flight at once, at most (1-4). */
     concurrency: number;
     /** BR-004-18: milliseconds between two request starts, at least (>= 1000). */
@@ -103,6 +105,7 @@ export function businessConfigFrom(env: Env): BusinessConfig {
     },
     enrichment: {
       dailyPages: env.ENRICHMENT_DAILY_PAGES,
+      dailyRequests: env.ENRICHMENT_DAILY_REQUESTS,
       concurrency: env.ENRICHMENT_CONCURRENCY,
       minPauseMs: env.ENRICHMENT_MIN_PAUSE_MS,
       maxStalenessDays: env.ENRICHMENT_MAX_STALENESS_DAYS,

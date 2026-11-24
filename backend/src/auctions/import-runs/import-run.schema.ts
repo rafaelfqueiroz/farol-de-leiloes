@@ -45,11 +45,17 @@ export class ImportRunEntity {
    * Mongoose path (it is the document's own collection handle); the issue's `collection` object.
    */
   @Prop({
-    type: { collected: Number, failed: Number, blocked: Boolean, pages: Number },
+    type: { collected: Number, failed: Number, blocked: Boolean, pages: Number, requests: Number },
     _id: false,
-    default: () => ({ collected: 0, failed: 0, blocked: false, pages: 0 }),
+    default: () => ({ collected: 0, failed: 0, blocked: false, pages: 0, requests: 0 }),
   })
-  detailCollection!: { collected: number; failed: number; blocked: boolean; pages: number };
+  detailCollection!: {
+    collected: number;
+    failed: number;
+    blocked: boolean;
+    pages: number;
+    requests: number;
+  };
 
   /** Stable codes only (SC-15). */
   @Prop({ type: [String], default: [] })

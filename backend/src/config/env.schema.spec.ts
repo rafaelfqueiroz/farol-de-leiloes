@@ -359,6 +359,7 @@ describe('namespaced configs built from the validated environment', () => {
       },
       enrichment: {
         dailyPages: 300,
+        dailyRequests: 2000,
         concurrency: 1,
         minPauseMs: 5000,
         maxStalenessDays: 7,
@@ -402,6 +403,7 @@ describe('namespaced configs built from the validated environment', () => {
       },
       enrichment: {
         dailyPages: 300,
+        dailyRequests: 2000,
         concurrency: 1,
         minPauseMs: 5000,
         maxStalenessDays: 7,
@@ -448,6 +450,7 @@ describe('the detail-collection budget (SPEC-004 BR-004-18, SC-24)', () => {
   it('defaults to a slow, single, spaced collection', () => {
     expect(testEnv()).toMatchObject({
       ENRICHMENT_DAILY_PAGES: 300,
+      ENRICHMENT_DAILY_REQUESTS: 2000,
       ENRICHMENT_CONCURRENCY: 1,
       ENRICHMENT_MIN_PAUSE_MS: 5000,
       ENRICHMENT_MAX_STALENESS_DAYS: 7,
@@ -476,6 +479,7 @@ describe('the detail-collection budget (SPEC-004 BR-004-18, SC-24)', () => {
   it('refuses a zero or fractional budget and a zero staleness bound', () => {
     for (const name of [
       'ENRICHMENT_DAILY_PAGES',
+      'ENRICHMENT_DAILY_REQUESTS',
       'ENRICHMENT_MAX_STALENESS_DAYS',
       'ENRICHMENT_FAILURE_BACKOFF_DAYS',
       'ENRICHMENT_MAX_CONSECUTIVE_FAILURES',

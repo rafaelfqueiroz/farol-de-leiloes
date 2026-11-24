@@ -71,6 +71,7 @@ export class ImportOrchestrator {
   private readonly schedule: ImportSchedule;
   /** How often a worker extends its lease; a spec shortens it to watch the heartbeat. */
   leaseRenewMs = LEASE_RENEW_MS;
+  private ticking = false;
 
   constructor(
     private readonly runs: ImportRunService,
@@ -92,6 +93,24 @@ export class ImportOrchestrator {
   }
 
   async tick(options: TickOptions = {}): Promise<void> {
+    // One tick at a time in this process (SC-24): a collection pass can outlast the next cron tick,
+    // and the next day's run must not start working (and asking Caixa) while the day's pass still
+    // runs. Several processes are kept apart by the lease per run, but they would each pace
+    // themselves: more than one API instance is unsupported until the rate gate is shared through
+    // the database (docs/runbooks/caixa-import.md).
+    if (this.ticking) {
+      this.logger.debug('A tick is still working: this one does nothing');
+      return;
+    }
+    this.ticking = true;
+    try {
+      await this.tickOnce(options);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async tickOnce(options: TickOptions): Promise<void> {
     const runMode = options.force === true ? RunMode.MANUAL : RunMode.AUTO;
     try {
       const today = brasiliaToday(this.clock); // AR-23, AR-24

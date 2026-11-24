@@ -7,6 +7,13 @@ import type { FakeClock } from './fake-clock.js';
  * first) until `work` settles. Between two steps it gives real I/O (a database round trip) a
  * moment to finish, so the specs that run the collection against MongoDB use it too.
  */
+/**
+ * Real milliseconds of quiet before fake time moves on: a database round trip in flight (a few ms
+ * on a local container) finishes first, so a request that is still being recorded is not overtaken
+ * by the pause timer of the next one.
+ */
+const QUIET_MS = 30;
+
 export class FakeSleeper extends Sleeper {
   /** Every pause that was asked for, in order. */
   readonly sleeps: number[] = [];
@@ -42,7 +49,7 @@ export class FakeSleeper extends Sleeper {
     watched.catch(() => undefined);
     const deadline = Date.now() + realTimeoutMs;
     while (!settled) {
-      await new Promise((resolve) => setTimeout(resolve, 2)); // I/O and microtasks get their turn
+      await new Promise((resolve) => setTimeout(resolve, QUIET_MS)); // I/O and microtasks get their turn
       if (settled) break;
       this.fireNext();
       if (Date.now() > deadline) throw new Error('FakeSleeper.drive: the work never settled');

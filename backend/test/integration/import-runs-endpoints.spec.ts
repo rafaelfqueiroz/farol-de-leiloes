@@ -120,6 +120,7 @@ describe('the Import Run endpoints (integration, SPEC-004 BR-004-24, BR-004-28)'
         failed: 1,
         blocked: true,
         pages: 0,
+        requests: 0,
       });
       if (complete) await service.completeUpdate(run.id);
     } else {
@@ -178,6 +179,7 @@ describe('the Import Run endpoints (integration, SPEC-004 BR-004-24, BR-004-28)'
         detailsCollected: 5,
         detailsFailed: 1,
         detailsPages: 0,
+        detailsRequests: 0,
         blocked: true,
         failureReasons: [],
         nonBusinessReason: null,

@@ -199,6 +199,7 @@ An empty variable and an unset one are the same: no holidays.
 | `IMPORT_ATTEMPT_SPACING_MINUTES` | 30 | Minutes between two attempts, at least 5 (the tick; no tight loop on Caixa, BR-004-02, SC-24). |
 | `SCRAPER_ENABLED`          | true     | Kill switch of the detail collection (runs inside the import; no start-up switch any more). |
 | `ENRICHMENT_DAILY_PAGES`   | 300      | Detail pages a Brasília day, across passes (BR-004-18). Sizing above. |
+| `ENRICHMENT_DAILY_REQUESTS` | 2000    | Requests of every kind a day (pages, photos, documents), across passes: the wider bound. |
 | `ENRICHMENT_CONCURRENCY`   | 1        | Requests in flight, 1 to 4. |
 | `ENRICHMENT_MIN_PAUSE_MS`  | 5000     | Milliseconds between request starts, at least 1000, fixed. |
 | `ENRICHMENT_MAX_STALENESS_DAYS` | 7   | Days between two collections of an active property, at most (BR-004-19). |
