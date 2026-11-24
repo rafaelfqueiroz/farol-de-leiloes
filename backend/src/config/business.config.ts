@@ -36,6 +36,14 @@ export interface BusinessConfig {
   import: {
     /** SPEC-004 BR-004-04: least share (0-1] of the last applied list's rows a new list must hold. */
     minRowRatio: number;
+    /** SPEC-004 BR-004-01: no attempt before this time, minutes after midnight in Brasília. */
+    windowStartMinutes: number;
+    /** SPEC-004 BR-004-03: the day is decided from this time on, minutes after midnight (Brasília). */
+    cutoffMinutes: number;
+    /** SPEC-004 BR-004-02: attempts a day, at most. */
+    maxAttempts: number;
+    /** SPEC-004 BR-004-02: minutes between two attempts. */
+    attemptSpacingMinutes: number;
   };
   calendar: {
     /** SPEC-004 BR-004-31: national holidays as sorted `YYYY-MM-DD` Brasília days; may be empty. */
@@ -60,7 +68,13 @@ export function businessConfigFrom(env: Env): BusinessConfig {
       exportTtlDays: env.EXPORT_TTL_DAYS,
       documentRetentionYears: env.DOCUMENT_RETENTION_YEARS,
     },
-    import: { minRowRatio: env.IMPORT_MIN_ROW_RATIO },
+    import: {
+      minRowRatio: env.IMPORT_MIN_ROW_RATIO,
+      windowStartMinutes: env.IMPORT_WINDOW_START,
+      cutoffMinutes: env.IMPORT_CUTOFF,
+      maxAttempts: env.IMPORT_MAX_ATTEMPTS,
+      attemptSpacingMinutes: env.IMPORT_ATTEMPT_SPACING_MINUTES,
+    },
     calendar: { nationalHolidays: env.NATIONAL_HOLIDAYS },
   };
 }

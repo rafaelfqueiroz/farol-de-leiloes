@@ -35,6 +35,19 @@ const holidayList = z
   })
   .transform((entries) => [...new Set(entries)].sort());
 
+// SPEC-004 BR-004-01..03: a Brasília time of day, `HH:mm` (24 h), read as minutes after midnight.
+// The error never echoes the value (SC-16).
+const timeOfDay = z
+  .string()
+  .regex(
+    /^([01]\d|2[0-3]):([0-5]\d)$/,
+    'must be a Brasília time of day written HH:mm (00:00-23:59)',
+  )
+  .transform((value) => {
+    const [hours, minutes] = value.split(':').map(Number) as [number, number];
+    return hours * 60 + minutes;
+  });
+
 // SPEC-004 / ADR-003: the optional proxy Caixa traffic leaves through. http(s) only: undici's
 // ProxyAgent speaks no SOCKS, and a SOCKS endpoint needs a bridge that is #108's decision. The
 // URL may carry credentials, so no message below echoes it (SC-16).
@@ -226,6 +239,13 @@ export const envSchema = z
     // Brasília. A holiday is not a business day, so a day with no new Caixa list is not a failure.
     // Default empty: only weekends then count as non-business days, with a warning in the log.
     NATIONAL_HOLIDAYS: holidayList.default([]),
+    // SPEC-004 BR-004-01..03 (AR-43): the daily import's window, Brasília time. No attempt before
+    // IMPORT_WINDOW_START or from IMPORT_CUTOFF on; at the cutoff the day is decided.
+    IMPORT_WINDOW_START: timeOfDay.prefault('06:00'),
+    IMPORT_CUTOFF: timeOfDay.prefault('12:00'),
+    // SPEC-004 BR-004-02: at most this many attempts a day, IMPORT_ATTEMPT_SPACING_MINUTES apart.
+    IMPORT_MAX_ATTEMPTS: positiveInt.default(12),
+    IMPORT_ATTEMPT_SPACING_MINUTES: positiveInt.default(30),
 
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
@@ -245,6 +265,19 @@ export const envSchema = z
           code: 'custom',
           path: ['LOG_HASH_SECRET'],
           message: 'required when NODE_ENV is production',
+        });
+      }
+      // BR-004-02: a window that closes before it opens would never attempt anything. (The
+      // fields may have failed their own checks, hence the type guard.)
+      if (
+        typeof env.IMPORT_WINDOW_START === 'number' &&
+        typeof env.IMPORT_CUTOFF === 'number' &&
+        env.IMPORT_WINDOW_START >= env.IMPORT_CUTOFF
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['IMPORT_CUTOFF'],
+          message: 'must be later than IMPORT_WINDOW_START',
         });
       }
       // BR-010-15: an alert after the ceiling would never warn anybody in time.

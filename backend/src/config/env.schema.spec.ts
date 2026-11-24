@@ -351,7 +351,13 @@ describe('namespaced configs built from the validated environment', () => {
         exportTtlDays: 7,
         documentRetentionYears: 5,
       },
-      import: { minRowRatio: 0.8 },
+      import: {
+        minRowRatio: 0.8,
+        windowStartMinutes: 360,
+        cutoffMinutes: 720,
+        maxAttempts: 12,
+        attemptSpacingMinutes: 30,
+      },
       calendar: { nationalHolidays: [] },
     });
     expect(
@@ -377,7 +383,13 @@ describe('namespaced configs built from the validated environment', () => {
         exportTtlDays: 3,
         documentRetentionYears: 6,
       },
-      import: { minRowRatio: 0.8 },
+      import: {
+        minRowRatio: 0.8,
+        windowStartMinutes: 360,
+        cutoffMinutes: 720,
+        maxAttempts: 12,
+        attemptSpacingMinutes: 30,
+      },
       calendar: { nationalHolidays: [] },
     });
   });
