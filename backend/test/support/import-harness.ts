@@ -113,6 +113,8 @@ export interface ImportHarness {
 interface Collaborators {
   applier: ImportKit['applier'];
   enrichment: EnrichmentPass;
+  /** The round clock the completion step runs (a spec can make it fail). */
+  roundClock: RoundClockService;
   /** A short heartbeat, to watch a lease being renewed in real time. */
   leaseRenewMs: number;
 }
@@ -215,7 +217,7 @@ export async function createImportHarness(uri: string, start: Date): Promise<Imp
         overrides.enrichment ?? enrichment,
         bus,
         alerts,
-        new RoundClockService(properties, kit.changes, clock),
+        overrides.roundClock ?? new RoundClockService(properties, kit.changes, clock),
       );
       if (overrides.leaseRenewMs !== undefined) orchestrator.leaseRenewMs = overrides.leaseRenewMs;
       return orchestrator;
