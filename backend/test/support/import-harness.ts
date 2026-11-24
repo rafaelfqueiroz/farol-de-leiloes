@@ -3,8 +3,17 @@
 // Caixa (FakeCaixaAccess), time (FakeClock), mail (FakeEmailSender), the admins' addresses, the
 // enrichment pass, the health record and the neighborhoods cache.
 import { vi } from 'vitest';
+import { getModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
 import type { TestingModule } from '@nestjs/testing';
 import { MongooseModule } from '@nestjs/mongoose';
+import {
+  CsvUpload,
+  CsvUploadSchema,
+  type CsvUploadDocument,
+} from '../../src/auctions/importer/schemas/csv-upload.schema.js';
+import type { StorageService } from '../../src/storage/storage.service.js';
+import { FakeListStorage } from '../fakes/fake-list-storage.js';
 import { Test } from '@nestjs/testing';
 import type { EmailService } from '../../src/email/email.service.js';
 import type { UsersService } from '../../src/users/users.service.js';
@@ -64,6 +73,11 @@ export interface ImportHarness {
   enrichment: FakeEnrichmentPass;
   bus: DailyUpdateBus;
   events: DailyUpdateCompleted[];
+  /** The R2 copy of the list (fake) and the record of the upload (real collection). */
+  storage: FakeListStorage;
+  csvUploads: Model<CsvUploadDocument>;
+  /** The neighborhoods-cache invalidation stub: the first thing completing a day calls. */
+  auctions: { invalidateNeighborhoodsCache: ReturnType<typeof vi.fn> };
   health: { recordExecution: ReturnType<typeof vi.fn>; recordFailure: ReturnType<typeof vi.fn> };
   /** The admins' addresses `findAdminEmails` answers. */
   admins: string[];
@@ -78,6 +92,8 @@ export interface ImportHarness {
 interface Collaborators {
   applier: ImportKit['applier'];
   enrichment: EnrichmentPass;
+  /** A short heartbeat, to watch a lease being renewed in real time. */
+  leaseRenewMs: number;
 }
 
 export async function createImportHarness(uri: string, start: Date): Promise<ImportHarness> {
@@ -89,6 +105,7 @@ export async function createImportHarness(uri: string, start: Date): Promise<Imp
         { name: AuctionEntity.name, schema: AuctionSchema },
         { name: ImportRunEntity.name, schema: ImportRunSchema },
         { name: PropertyChangeEntity.name, schema: PropertyChangeSchema },
+        { name: CsvUpload.name, schema: CsvUploadSchema },
       ]),
     ],
   }).compile();
@@ -116,9 +133,11 @@ export async function createImportHarness(uri: string, start: Date): Promise<Imp
     users as unknown as UsersService,
     email as unknown as EmailService,
   );
+  const storage = new FakeListStorage();
+  const csvUploads = moduleRef.get<Model<CsvUploadDocument>>(getModelToken(CsvUpload.name));
   const csvCache = new CsvCacheService(
-    {} as never,
-    { isConfigured: () => false } as never,
+    csvUploads,
+    storage as unknown as StorageService,
     clock as Clock,
     caixa,
   );
@@ -133,11 +152,14 @@ export async function createImportHarness(uri: string, start: Date): Promise<Imp
     enrichment,
     bus,
     events,
+    storage,
+    csvUploads,
+    auctions,
     health,
     admins,
     alerts,
-    orchestrator: (business = {}, overrides = {}) =>
-      new ImportOrchestrator(
+    orchestrator: (business = {}, overrides = {}) => {
+      const orchestrator = new ImportOrchestrator(
         kit.runs,
         csvCache,
         overrides.applier ?? kit.applier,
@@ -149,7 +171,10 @@ export async function createImportHarness(uri: string, start: Date): Promise<Imp
         overrides.enrichment ?? enrichment,
         bus,
         alerts,
-      ),
+      );
+      if (overrides.leaseRenewMs !== undefined) orchestrator.leaseRenewMs = overrides.leaseRenewMs;
+      return orchestrator;
+    },
   };
   return harness;
 }
