@@ -9,12 +9,14 @@ import type { ExecutionContext } from '@nestjs/common';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { type Connection, type Model, Types } from 'mongoose';
 import request from 'supertest';
+import { AccessContextFactory } from '../../src/access/access-context.js';
 import { AdminAccessLogRepository } from '../../src/admin-access/admin-access-log.repository.js';
 import { AdminAccessModule } from '../../src/admin-access/admin-access.module.js';
 import {
   type AdminAccessLogDocument,
   AdminAccessLogEntity,
 } from '../../src/admin-access/schemas/admin-access-log.schema.js';
+import { SupportGrantService } from '../../src/admin-access/support-grant.service.js';
 import { AccountStatusEventsRepository } from '../../src/admin-accounts/account-status-events.repository.js';
 import { AdminAccountsModule } from '../../src/admin-accounts/admin-accounts.module.js';
 import {
@@ -1453,6 +1455,288 @@ describe('SPEC-009 account administration through the API (BR-009-13..BR-009-21)
       expect(await eventsOf(target.id)).toEqual([]);
       await me(target).expect(200);
       await deactivate(boss, target.id).expect(200);
+    });
+  });
+
+  describe('security review of #192', () => {
+    const scheduler = () => harness.moduleRef.get(RemindersScheduler);
+    const mailsTo = (account: Account) =>
+      harness.mailbox.reminderEmails.filter((mail) => mail.email === account.email);
+    const statusOf = async (id: string) => (await reminders.findById(id).lean().exec())?.status;
+    const grantsCollection = () => connection.db?.collection('supportAccessGrants');
+
+    /** Holds the NEXT history append inside its transaction until `release()`. */
+    function holdAppend() {
+      const repository = harness.moduleRef.get(AccountStatusEventsRepository);
+      const original = repository.append.bind(repository);
+      let reached!: () => void;
+      const reachedIt = new Promise<void>((resolve) => (reached = resolve));
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      vi.spyOn(repository, 'append').mockImplementationOnce(async (entry, session) => {
+        reached();
+        await held;
+        return original(entry, session);
+      });
+      return { reachedIt, release };
+    }
+
+    /**
+     * Runs `second` while `first` is held uncommitted: lets it go as soon as the second request has
+     * either answered or been retried by the driver after a write conflict, then answers both.
+     */
+    async function overlapping(first: () => request.Test, second: () => request.Test) {
+      const attempts = vi.spyOn(harness.moduleRef.get(UsersService), 'deactivateAccount');
+      const hold = holdAppend();
+      const one = first().then((res) => res);
+      await hold.reachedIt;
+      let settled = false;
+      const two = second().then((res) => {
+        settled = true;
+        return res;
+      });
+      await vi.waitFor(() => expect(settled || attempts.mock.calls.length >= 3).toBe(true));
+      hold.release();
+      return Promise.all([one, two]);
+    }
+
+    it('P2, BR-009-19: an admin’s OWN id in another letter case is still their own account: 403, nothing written', async () => {
+      const boss = await admin('maiusculas');
+      const upper = boss.id.toUpperCase();
+      const mixed = [...boss.id].map((c, i) => (i % 2 ? c.toUpperCase() : c)).join('');
+
+      for (const spelling of [upper, mixed]) {
+        const res = await deactivate(boss, spelling);
+        expect([spelling, res.status, res.body]).toEqual([
+          spelling,
+          403,
+          { code: 'CANNOT_DEACTIVATE_OWN_ACCOUNT', context: {} },
+        ]);
+      }
+      expect((await stored(boss.id))?.status).toBe('active');
+      expect(await eventsOf(boss.id)).toEqual([]);
+      await me(boss).expect(200);
+    });
+
+    it('P2: another account’s id in upper case is that account: the answer, the history and the log hold the canonical id', async () => {
+      const boss = await admin();
+      const target = await register('alvo-maiusculo');
+      await clearLogs();
+
+      const res = await deactivate(boss, target.id.toUpperCase()).expect(200);
+      const record = await get(boss, `/api/admin/accounts/${target.id.toUpperCase()}`).expect(200);
+
+      expect((res.body as { id: string }).id).toBe(target.id);
+      expect((record.body as RecordBody).id).toBe(target.id);
+      expect((record.body as RecordBody).history).toHaveLength(1);
+    });
+
+    it('P2, BR-002-24: the support routes take the id in any letter case: the grant opens and shows', async () => {
+      const boss = await admin();
+      const requester = await register('grant-maiusculo');
+      const created = await post(requester, '/api/support', {
+        subject: 'Assunto ficticio',
+        message: 'Mensagem ficticia de teste',
+        allowDataAccess: true,
+      }).expect(201);
+      const id = (created.body as { id: string }).id;
+
+      const grant = await post(
+        boss,
+        `/api/admin/support-requests/${id.toUpperCase()}/grant`,
+      ).expect(200);
+      const detail = await get(boss, `/api/admin/support-requests/${id.toUpperCase()}`).expect(200);
+
+      expect((grant.body as { supportRequestId: string }).supportRequestId).toBe(id);
+      expect((detail.body as { grant: { id: string } }).grant.id).toBe(
+        (grant.body as { id: string }).id,
+      );
+    });
+
+    it('P2, BR-009-17: a reminder cancelled by a reactivation that happens DURING a scheduler run is not sent from the batch already loaded, and stays CANCELLED', async () => {
+      const boss = await admin();
+      const earlier = await register('lote-primeiro');
+      const target = await register('lote-reativado');
+      await reminders.deleteMany({});
+      await seedReminder(earlier.id, -2 * DAY); // sent first (oldest due)
+      const late = await seedReminder(target.id, -DAY);
+      await deactivate(boss, target.id).expect(200);
+      const service = harness.moduleRef.get(RemindersService);
+      const log = service.logNotification.bind(service);
+      vi.spyOn(service, 'logNotification').mockImplementationOnce(async (...args) => {
+        await reactivate(boss, target.id).expect(200); // the whole reactivation, mid-run
+        return log(...args);
+      });
+
+      await scheduler().processReminders();
+
+      expect(mailsTo(earlier)).toHaveLength(1);
+      expect(mailsTo(target)).toEqual([]);
+      expect(await statusOf(late)).toBe(ReminderStatus.CANCELLED);
+    });
+
+    it.each([
+      [
+        'deleted by its owner',
+        (id: string) => reminders.deleteOne({ _id: id }).then(() => undefined),
+        undefined,
+      ],
+      [
+        'rescheduled by its owner to the future',
+        (id: string) =>
+          reminders
+            .updateOne({ _id: id }, { $set: { scheduledAt: new Date('2099-12-01T12:00:00Z') } })
+            .then(() => undefined),
+        ReminderStatus.PENDING,
+      ],
+    ])(
+      'P2: a reminder %s after the batch was loaded is not sent from the stale copy',
+      async (_label, change, after) => {
+        const earlier = await register('lote-antes');
+        const target = await register('lote-mudado');
+        await reminders.deleteMany({});
+        await seedReminder(earlier.id, -2 * DAY);
+        const changed = await seedReminder(target.id, -DAY);
+        const service = harness.moduleRef.get(RemindersService);
+        const log = service.logNotification.bind(service);
+        vi.spyOn(service, 'logNotification').mockImplementationOnce(async (...args) => {
+          await change(changed);
+          return log(...args);
+        });
+
+        await scheduler().processReminders();
+
+        expect(mailsTo(target)).toEqual([]);
+        expect(await statusOf(changed)).toBe(after);
+      },
+    );
+
+    it('P2: a reminder cancelled WHILE it is being sent stays CANCELLED: the send never overwrites it with SENT', async () => {
+      const target = await register('lote-envio');
+      await reminders.deleteMany({});
+      const reminder = await seedReminder(target.id, -DAY);
+      const send = harness.mailbox.sendReminderEmail.bind(harness.mailbox);
+      vi.spyOn(harness.mailbox, 'sendReminderEmail').mockImplementationOnce(async (...args) => {
+        await reminders.updateOne(
+          { _id: reminder },
+          { $set: { status: ReminderStatus.CANCELLED } },
+        );
+        return send(...args);
+      });
+
+      await scheduler().processReminders();
+
+      expect(await statusOf(reminder)).toBe(ReminderStatus.CANCELLED);
+    });
+
+    async function permittedRequest(label: string) {
+      const requester = await register(label);
+      const created = await post(requester, '/api/support', {
+        subject: 'Assunto ficticio',
+        message: 'Mensagem ficticia de teste',
+        allowDataAccess: true,
+      }).expect(201);
+      return (created.body as { id: string }).id;
+    }
+    const openGrant = (by: Account, id: string) =>
+      post(by, `/api/admin/support-requests/${id}/grant`);
+
+    it('P3, BR-002-24: deactivating an admin ends their open grants, so another admin can open one on the same request at once', async () => {
+      const [holder, other] = [await admin('grant-preso'), await admin('grant-outro')];
+      const requestId = await permittedRequest('grant-preso-req');
+      const held = (await openGrant(holder, requestId).expect(200)).body as { id: string };
+
+      await deactivate(other, holder.id).expect(200);
+      const opened = await openGrant(other, requestId);
+
+      expect(opened.status).toBe(200);
+      expect((opened.body as { id: string }).id).not.toBe(held.id);
+      const old = await grantsCollection()?.findOne({ _id: new Types.ObjectId(held.id) });
+      expect(old).toMatchObject({ status: 'ended', endReason: 'holder_inactive' });
+    });
+
+    it('P3: were ending the grants to fail at the deactivation, the grant of a deactivated admin still blocks nobody and the deactivation stands', async () => {
+      const [holder, other] = [await admin('grant-falha'), await admin('grant-falha-outro')];
+      const requestId = await permittedRequest('grant-falha-req');
+      const held = (await openGrant(holder, requestId).expect(200)).body as { id: string };
+      const grants = harness.moduleRef.get(SupportGrantService, { strict: false });
+      vi.spyOn(grants, 'endAllOfAdmin').mockRejectedValueOnce(new Error('the database is down'));
+
+      await deactivate(other, holder.id).expect(200);
+      const opened = await openGrant(other, requestId).expect(200);
+
+      expect((opened.body as { id: string }).id).not.toBe(held.id);
+      const old = await grantsCollection()?.findOne({ _id: new Types.ObjectId(held.id) });
+      expect(old).toMatchObject({ status: 'ended', endReason: 'holder_inactive' });
+    });
+
+    it('P3, BR-002-26: a reactivated admin does not get an earlier grant back', async () => {
+      const [holder, other] = [await admin('grant-volta'), await admin('grant-volta-outro')];
+      const requestId = await permittedRequest('grant-volta-req');
+      const held = (await openGrant(holder, requestId).expect(200)).body as { id: string };
+
+      await deactivate(other, holder.id).expect(200);
+      await reactivate(other, holder.id).expect(200);
+      const grants = harness.moduleRef.get(SupportGrantService, { strict: false });
+      const contexts = harness.moduleRef.get(AccessContextFactory, { strict: false });
+      const read = await grants
+        .contextForRead(await contexts.forAccount({ userId: holder.id, isAdmin: true }), held.id)
+        .then(
+          () => 'read',
+          (error: unknown) => (error as { code: string }).code,
+        );
+
+      expect(read).toBe('NOT_FOUND');
+    });
+
+    it('P3, BR-009-19: two admins deactivating EACH OTHER at once: one succeeds, the other is refused, and an active admin remains', async () => {
+      const [first, second] = [await admin('mutuo-a'), await admin('mutuo-b')];
+
+      const [a, b] = await overlapping(
+        () => deactivate(first, second.id),
+        () => deactivate(second, first.id),
+      );
+
+      expect([a.status, b.status]).toEqual([200, 403]);
+      expect(b.body).toEqual({ code: 'FORBIDDEN', context: {} });
+      expect((await stored(first.id))?.status).toBe('active');
+      expect((await stored(second.id))?.status).toBe('deactivated');
+      expect(await eventsOf(first.id)).toEqual([]);
+      expect(await eventsOf(second.id)).toHaveLength(1);
+    });
+
+    it('P3: an admin who is being deactivated cannot finish one more deactivation', async () => {
+      const [boss, leaving] = [await admin('saindo-a'), await admin('saindo-b')];
+      const bystander = await register('saindo-alvo');
+
+      const [a, b] = await overlapping(
+        () => deactivate(boss, leaving.id),
+        () => deactivate(leaving, bystander.id),
+      );
+
+      expect([a.status, b.status]).toEqual([200, 403]);
+      expect((await stored(bystander.id))?.status).toBe('active');
+      expect(await eventsOf(bystander.id)).toEqual([]);
+    });
+
+    it.each([
+      ['a NUL byte', 'abc%00def'],
+      ['other control characters', 'abc%01%1f%7fdef'],
+    ])('P3: terms with %s are searched without them, never a 500', async (_label, q) => {
+      const boss = await admin();
+
+      const res = await get(boss, `/api/admin/accounts?q=${q}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ total: 0 });
+    });
+
+    it('P3: terms made only of control characters are too short: VALIDATION_FAILED', async () => {
+      const boss = await admin();
+
+      const res = await get(boss, '/api/admin/accounts?q=%00%00%00%00').expect(400);
+
+      expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
     });
   });
 

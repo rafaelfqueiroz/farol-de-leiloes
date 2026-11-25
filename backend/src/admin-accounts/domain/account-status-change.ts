@@ -10,9 +10,13 @@ export type StatusAction = (typeof STATUS_ACTIONS)[number];
 export const REASON_LENGTH = { min: 3, max: 500 } as const;
 export const NOTE_LENGTH = { max: 500 } as const;
 
-/** BR-009-19: an admin cannot deactivate the account they are signed in with. */
+/**
+ * BR-009-19: an admin cannot deactivate the account they are signed in with. The ids are hexadecimal,
+ * and the database reads every letter case as the same record, so they are compared without case: an
+ * admin typing their own id in capitals is still themselves.
+ */
 export function isOwnAccount(adminAccountId: string, targetAccountId: string): boolean {
-  return adminAccountId === targetAccountId;
+  return adminAccountId.toLowerCase() === targetAccountId.toLowerCase();
 }
 
 /** What the admin asks of an account in `status`: nothing but `active` -> `deactivated` and `deactivated` -> `active` (BR-009-21). */

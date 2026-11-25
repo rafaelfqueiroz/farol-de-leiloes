@@ -12,6 +12,11 @@ describe('BR-009-19: an admin and their own account', () => {
     expect(isOwnAccount('64b000000000000000000001', '64b000000000000000000001')).toBe(true);
   });
 
+  it('is the same account whatever the letter case of the id typed: the database reads both as one', () => {
+    expect(isOwnAccount('64b0000000000000000000ab', '64B0000000000000000000AB')).toBe(true);
+    expect(isOwnAccount('64b0000000000000000000ab', '64b0000000000000000000aB')).toBe(true);
+  });
+
   it('is another account when they differ, even by one character', () => {
     expect(isOwnAccount('64b000000000000000000001', '64b000000000000000000002')).toBe(false);
   });

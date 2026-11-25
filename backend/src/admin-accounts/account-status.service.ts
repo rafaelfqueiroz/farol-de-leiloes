@@ -2,26 +2,29 @@
 // status is changed on an admin's behalf; every other write to an account stays in its own flow
 // (BR-009-21: no route edits a profile, an email, personas, memberships or a plan).
 //
-// A change is ONE transaction of two writes: the conditional update of the account's status (which also
-// moves its credential version, so every older session is dead for good: SC-03, DL-001-02) and the
-// insert of the history entry. They commit together or not at all, so a status never changes without
-// its entry and an entry never exists for a change that did not happen. The conditional update decides
-// a race: of two admins deactivating the same account exactly one matches; the other's transaction ends
-// in ACCOUNT_STATE_CONFLICT with nothing written. Two transactions that touch the account at once
+// A change is ONE transaction: the conditional update of the account's status (which also moves its
+// credential version, so every older session is dead for good: SC-03, DL-001-02), a write on the ACTING
+// admin's own account (they must still be an active admin when it commits, BR-009-19) and the insert of
+// the history entry. They commit together or not at all, so a status never changes without its entry
+// and an entry never exists for a change that did not happen. The conditional update decides a race: of
+// two admins deactivating the same account exactly one matches; the other's transaction ends in
+// ACCOUNT_STATE_CONFLICT with nothing written. Two transactions that touch the same account at once
 // conflict in MongoDB (a transient write conflict) and the driver retries the loser, which then meets
-// the winner's state.
+// the winner's state: so two admins deactivating each other cannot both succeed.
 //
-// After the commit: the sessions are revoked through the auth module's exported API (tidy-up on top of
-// the version, so a failure here is logged and does not undo the change), and a reactivation cancels
-// the account's reminders already due (BR-009-17), once BEFORE the status flips (no sign-in or job can
-// see the account active with its past reminders still pending) and once after, for the instant in
-// between. Nothing is deleted or moved: favorites, reminders yet to come, memberships, the
-// subscription and the journeys are not touched (BR-009-16).
+// After the commit: a deactivated account's open support grants end (BR-002-26) and its sessions are
+// revoked through the auth module's exported API (both tidy-ups on top of what already refuses them, so
+// a failure is logged and does not undo the change). A reactivation ends any grant left and cancels the
+// account's reminders already due (BR-009-17) BEFORE the status flips (nothing can see the account
+// active with them), and cancels the reminders once more after, for the instant in between. Nothing is
+// deleted or moved: favorites, reminders yet to come, memberships, the subscription and the journeys are
+// not touched (BR-009-16).
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { type Connection } from 'mongoose';
 import type { AccessContext } from '../access/access-context.js';
-import { isObjectIdString } from '../access/owner-filter.js';
+import { canonicalObjectId, isObjectIdString } from '../access/owner-filter.js';
+import { SupportGrantService } from '../admin-access/support-grant.service.js';
 import { AuthService } from '../auth/auth.service.js';
 import { Clock } from '../common/clock/clock.js';
 import { DomainError } from '../common/errors/domain-error.js';
@@ -48,6 +51,7 @@ export class AccountStatusService {
     private readonly events: AccountStatusEventsRepository,
     private readonly auth: AuthService,
     private readonly reminders: RemindersService,
+    private readonly grants: SupportGrantService,
     private readonly clock: Clock, // AR-24
   ) {}
 
@@ -60,10 +64,11 @@ export class AccountStatusService {
    */
   async deactivate(
     admin: AccessContext,
-    accountId: string,
+    requestedId: string,
     reason: string,
   ): Promise<AccountStatusChanged> {
-    if (!isObjectIdString(accountId)) throw new DomainError('NOT_FOUND');
+    if (!isObjectIdString(requestedId)) throw new DomainError('NOT_FOUND');
+    const accountId = canonicalObjectId(requestedId);
     if (isOwnAccount(admin.accountId, accountId)) {
       throw new DomainError('CANNOT_DEACTIVATE_OWN_ACCOUNT');
     }
@@ -75,6 +80,13 @@ export class AccountStatusService {
         `Sessions of a deactivated account not all revoked (${logSafeError(error)})`,
       );
     });
+    // BR-002-24, BR-002-26: a deactivated admin's open support grants end with the account, so they
+    // block no other admin and do not come back with a reactivation. A failure is logged and does not
+    // undo the change: `SupportGrantService.open` also ends a grant whose holder is no longer an
+    // active admin, and the reactivation ends them again before the account can be used.
+    await this.grants.endAllOfAdmin(accountId).catch((error: unknown) => {
+      this.logger.warn(`Grants of a deactivated account not all ended (${logSafeError(error)})`);
+    });
     return { id: accountId, status: 'deactivated', at };
   }
 
@@ -85,16 +97,18 @@ export class AccountStatusService {
    */
   async reactivate(
     admin: AccessContext,
-    accountId: string,
+    requestedId: string,
     note: string,
   ): Promise<AccountStatusChanged> {
-    if (!isObjectIdString(accountId)) throw new DomainError('NOT_FOUND');
+    if (!isObjectIdString(requestedId)) throw new DomainError('NOT_FOUND');
+    const accountId = canonicalObjectId(requestedId);
     // Only an account that IS deactivated has its reminders touched: a reactivation aimed at an active
     // one is a conflict that changes nothing at all.
     const record = await this.users.findAccountRecord(accountId);
     if (!record) throw new DomainError('NOT_FOUND');
     if (record.status !== 'deactivated') throw new DomainError('ACCOUNT_STATE_CONFLICT');
     await this.reminders.cancelDueOfAccount(accountId); // BR-009-17, before the account can be active
+    await this.grants.endAllOfAdmin(accountId); // BR-002-26: no earlier grant comes back
     const at = await this.change(admin, accountId, 'reactivated', note);
     await this.reminders.cancelDueOfAccount(accountId).catch((error: unknown) => {
       this.logger.warn(
@@ -118,6 +132,13 @@ export class AccountStatusService {
           : await this.users.reactivateAccount(accountId, { session });
       if (outcome.result === 'not_found') throw new DomainError('NOT_FOUND');
       if (outcome.result === 'conflict') throw new DomainError('ACCOUNT_STATE_CONFLICT');
+      // BR-009-19: the ACTING admin must still be an active admin when the change commits. The write on
+      // their own document is what makes two admins deactivating each other (or an admin being
+      // deactivated while still acting) conflict, so one of the two transactions meets the other's
+      // result and is refused: account administration never ends with no active admin.
+      if (!(await this.users.recordAdminAction(admin.accountId, { session }))) {
+        throw new DomainError('FORBIDDEN');
+      }
       await this.events.append(
         { userId: accountId, action, adminUserId: admin.accountId, reason, at },
         session,

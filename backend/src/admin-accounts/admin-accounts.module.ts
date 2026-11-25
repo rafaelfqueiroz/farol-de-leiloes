@@ -37,7 +37,7 @@ import {
     ]),
     UsersModule,
     AuthModule, // AuthService.endAllSessionsAndLinks: the sessions of a deactivated account
-    AdminAccessModule, // AccountLookupLogger: BR-009-14
+    AdminAccessModule, // AccountLookupLogger (BR-009-14); SupportGrantService.endAllOfAdmin (BR-002-26)
     RemindersModule, // RemindersService.cancelDueOfAccount: BR-009-17
     SubscriptionsModule, // SubscriptionsService.displayedPlanOfAccount: BR-009-13
     CommonModule, // AR-24: the Clock

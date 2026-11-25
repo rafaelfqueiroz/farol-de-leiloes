@@ -1004,6 +1004,29 @@ export class UsersService {
     return this.transitionStatus(userId, { $eq: 'deactivated' }, 'active', options);
   }
 
+  /**
+   * SPEC-009 BR-009-19: a write on the ACTING admin's own account, inside the transaction of the change
+   * they make, only while it is still an active admin; false when it is not (nothing written). It exists
+   * to be a WRITE: two transactions that each change the other admin then touch the same documents, so
+   * one of them conflicts, retries and meets the other's result. It counts the admin's account changes
+   * and leaves `updatedAt` alone. A read would not do: transactions that only read each other's admin
+   * both commit.
+   */
+  async recordAdminAction(
+    adminId: string,
+    { session }: AccountStatusChangeOptions = {},
+  ): Promise<boolean> {
+    if (!isObjectIdString(adminId)) return false;
+    const result = await this.userRepository
+      .updateOne(
+        { _id: { $eq: adminId }, isAdmin: { $eq: true }, status: activeStatusFilter() },
+        { $inc: { adminActionCount: 1 } },
+        { timestamps: false, ...(session ? { session } : {}) },
+      )
+      .exec();
+    return result.matchedCount > 0;
+  }
+
   private async transitionStatus(
     userId: string,
     from: QueryFilter<UserDocument>['status'],
