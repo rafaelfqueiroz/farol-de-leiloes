@@ -2,6 +2,7 @@
 // injected clock — not the UTC date, which rolls over at 21:00 in Brasília.
 import { describe, expect, it, vi } from 'vitest';
 import { CsvCacheService } from './csv-cache.service.js';
+import { FakeCaixaAccess } from '../../../test/fakes/fake-caixa-access.js';
 import { FakeClock } from '../../../test/fakes/fake-clock.js';
 
 type ServiceDeps = ConstructorParameters<typeof CsvCacheService>;
@@ -17,6 +18,7 @@ function build(now: string, lastUpload?: string) {
     model as unknown as ServiceDeps[0],
     storage as unknown as ServiceDeps[1],
     new FakeClock(new Date(now)),
+    new FakeCaixaAccess(),
   );
   // isTodaysUpload is private; bracket access keeps its signature type-checked.
   const isTodaysUpload = (at: string) => service['isTodaysUpload'](new Date(at));

@@ -14,6 +14,7 @@ import schedulerConfig, { SchedulerConfig } from '../config/scheduler.config.js'
 import { errorMessage } from '../common/error-message.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { decimalFilter, serverOperators } from '../common/mongo/query-safety.js';
+import { missingFromListFilter } from './utils/job-queries.js';
 import { Clock } from '../common/clock/clock.js';
 import type { Decimal } from '../common/money/money.js';
 import { toDecimal128OrNull } from '../common/money/decimal128.js';
@@ -420,16 +421,7 @@ export class AuctionsService {
   ): Promise<{ checked: number; unavailable: number; errors: number }> {
     const cutoff = subHours(this.clock.now(), 24); // AR-24
     const missingAuctions = await this.auctionRepository
-      .find({
-        fulfilled: true,
-        available: true,
-        detailsUrl: serverOperators({ $exists: true, $ne: null }),
-        code: serverOperators({ $nin: csvCodes }),
-        $or: serverOperators([
-          { availabilityCheckedAt: { $exists: false } },
-          { availabilityCheckedAt: { $lt: cutoff } },
-        ]),
-      })
+      .find(missingFromListFilter(csvCodes, cutoff))
       .select('code detailsUrl')
       .sort({ availabilityCheckedAt: 1 })
       .limit(1000)

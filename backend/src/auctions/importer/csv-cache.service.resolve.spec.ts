@@ -1,13 +1,11 @@
-// TS-07: the Caixa download never leaves the process. downloader.ts is a function module with no
-// port (TS-03: the rare case where vi.mock is allowed), so it is replaced by a stub returning
-// canned CSV text; its own behaviour is covered by downloader.spec.ts.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+// TS-07: the Caixa download never leaves the process. The list comes from FakeCaixaAccess, the
+// hand-written fake of the CaixaAccess port (TS-03); the HTTP adapter has its own spec.
+import { describe, expect, it, vi } from 'vitest';
 import { CsvCacheService } from './csv-cache.service.js';
-import { downloadCsvAllStates } from './downloader.js';
+import { CaixaBlockedError, CaixaUnreachableError } from '../caixa/caixa-access.js';
+import { FakeCaixaAccess } from '../../../test/fakes/fake-caixa-access.js';
 import { FakeClock } from '../../../test/fakes/fake-clock.js';
 import { spyOnLogger } from '../../../test/support/logger-spy.js';
-
-vi.mock('./downloader.js', () => ({ downloadCsvAllStates: vi.fn() }));
 
 type Deps = ConstructorParameters<typeof CsvCacheService>;
 
@@ -15,6 +13,7 @@ const NOW = new Date('2026-01-15T15:00:00.000Z'); // 12:00 on 15/01 in Brasília
 const R2_KEY = 'importer/Lista_imoveis_geral.csv';
 
 function build(opts: { configured?: boolean; lastUpload?: Date; r2?: Buffer | Error } = {}) {
+  const caixa = new FakeCaixaAccess().serveList('fresh;csv');
   const record = opts.lastUpload ? { lastUpload: opts.lastUpload } : null;
   const model = {
     findOne: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(record) }),
@@ -33,21 +32,19 @@ function build(opts: { configured?: boolean; lastUpload?: Date; r2?: Buffer | Er
     model as unknown as Deps[0],
     storage as unknown as Deps[1],
     new FakeClock(NOW),
+    caixa,
   );
-  return { service, model, storage };
+  return { service, model, storage, caixa };
 }
-
-beforeEach(() => {
-  vi.mocked(downloadCsvAllStates).mockResolvedValue('fresh;csv');
-});
 
 describe('CsvCacheService.resolveCsv without R2', () => {
   it('downloads straight from Caixa and caches nothing', async () => {
     const logger = spyOnLogger();
-    const { service, model, storage } = build({ configured: false });
+    const { service, model, storage, caixa } = build({ configured: false });
 
     await expect(service.resolveCsv()).resolves.toBe('fresh;csv');
 
+    expect(caixa.requests).toEqual([{ kind: 'list' }]);
     expect(logger.loggedText()).toContain('R2 not configured');
     expect(model.findOne).not.toHaveBeenCalled();
     expect(storage.uploadBuffer).not.toHaveBeenCalled();
@@ -56,12 +53,12 @@ describe('CsvCacheService.resolveCsv without R2', () => {
 
 describe('CsvCacheService.resolveCsv with R2', () => {
   it('serves the copy cached today without calling Caixa', async () => {
-    const { service, storage } = build({ lastUpload: new Date('2026-01-15T09:00:00.000Z') });
+    const { service, storage, caixa } = build({ lastUpload: new Date('2026-01-15T09:00:00.000Z') });
 
     await expect(service.resolveCsv()).resolves.toBe('cached');
 
     expect(storage.downloadBuffer).toHaveBeenCalledWith(R2_KEY);
-    expect(downloadCsvAllStates).not.toHaveBeenCalled();
+    expect(caixa.requests).toEqual([]);
   });
 
   it('downloads from Caixa, caches the bytes and records the upload when there is no record', async () => {
@@ -115,10 +112,19 @@ describe('CsvCacheService.resolveCsv with R2', () => {
   });
 
   it('fails when Caixa cannot be downloaded and there is nothing cached', async () => {
-    vi.mocked(downloadCsvAllStates).mockRejectedValue(new Error('caixa down'));
-    const { service, storage } = build();
+    const { service, storage, caixa } = build();
+    caixa.serveList(new CaixaUnreachableError('NETWORK'));
 
-    await expect(service.resolveCsv()).rejects.toThrow('caixa down');
+    await expect(service.resolveCsv()).rejects.toBeInstanceOf(CaixaUnreachableError);
     expect(storage.uploadBuffer).not.toHaveBeenCalled();
+  });
+
+  it('lets a block through to the run and caches nothing (BR-004-20)', async () => {
+    const { service, storage, model, caixa } = build();
+    caixa.serveList(new CaixaBlockedError('CHALLENGE_PAGE'));
+
+    await expect(service.resolveCsv()).rejects.toBeInstanceOf(CaixaBlockedError);
+    expect(storage.uploadBuffer).not.toHaveBeenCalled();
+    expect(model.findOneAndUpdate).not.toHaveBeenCalled();
   });
 });

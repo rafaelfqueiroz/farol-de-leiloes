@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { parseCsv, normalizeRows, parseCaixaMoney } from './parser.js';
-import { readCaixaFixture } from '../../../test/support/fixtures.js';
+import { listFacts, normalizeRows, parseCaixaList, parseCaixaMoney, parseCsv } from './parser.js';
+import { readFileSync } from 'fs';
+import { validateList } from '../domain/list-validator.js';
+import { caixaFixturePath, readCaixaFixture } from '../../../test/support/fixtures.js';
 
 describe('CSV parser', () => {
   it('parses Lista_imoveis_geral.csv and returns 4 rows', () => {
@@ -121,5 +123,230 @@ describe('parseCaixaMoney', () => {
     const sum = parseCaixaMoney('0,10')?.plus(parseCaixaMoney('0,20') ?? 0);
 
     expect(sum?.toFixed()).toBe('0.3');
+  });
+});
+
+// SPEC-004 BR-004-02, BR-004-04, TS-12: the awkward lists Caixa has sent or could send. The
+// fixtures are derived from the captured list, trimmed (TS-28); none holds personal data.
+describe('parseCaixaList', () => {
+  it('reads the generation date of the captured list as a Brasília calendar day', () => {
+    const list = parseCaixaList(readCaixaFixture('Lista_imoveis_geral.csv'));
+
+    expect(list.generatedOn).toBe('2025-11-10');
+    expect(list.rows).toHaveLength(4);
+    expect(listFacts(list)).toEqual({
+      headerFound: true,
+      missingColumns: [],
+      generatedOn: '2025-11-10',
+      rowCount: 4,
+      syntaxErrors: 0,
+      irregularRows: 0,
+    });
+  });
+
+  it('reads a list that starts with a BOM, has extra metadata rows and reordered columns', () => {
+    const csv = readCaixaFixture('lista-bom-reordered.csv');
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+
+    const list = parseCaixaList(csv);
+    const normalized = normalizeRows(list.rows);
+
+    expect(list.generatedOn).toBe('2025-11-10');
+    expect(listFacts(list).missingColumns).toEqual([]);
+    expect(normalized.map((row) => [row.code, row.state, row.city])).toEqual([
+      ['1444419970935', 'AC', 'CRUZEIRO DO SUL'],
+      ['1444418010407', 'TO', 'PARAISO DO TOCANTINS'],
+      ['1444416160541', 'TO', 'PARAISO DO TOCANTINS'],
+    ]);
+    expect(normalized[1]?.minimumPrice?.toFixed()).toBe('235000');
+    expect(normalized[1]?.detailsUrl).toContain('hdnimovel=1444418010407');
+  });
+
+  it('names the required column a list lacks', () => {
+    const list = parseCaixaList(readCaixaFixture('lista-missing-column.csv'));
+
+    expect(list.rows).toHaveLength(3);
+    expect(listFacts(list).missingColumns).toEqual(['appraisalPrice']);
+    // The rows are still read: the validator, not the parser, rejects the list.
+    expect(normalizeRows(list.rows)[0]?.appraisalPrice).toBeNull();
+  });
+
+  it('reads a malformed price as unknown (null), never as a wrong amount (AR-17)', () => {
+    const rows = normalizeRows(parseCaixaList(readCaixaFixture('lista-malformed-prices.csv')).rows);
+
+    expect(rows.map((row) => row.minimumPrice)).toEqual([null, null, null, null]);
+    expect(rows[0]?.appraisalPrice).toBeNull(); // an empty cell
+    expect(rows[1]?.appraisalPrice?.toFixed()).toBe('235000');
+  });
+
+  it('finds the header of a list with no rows, and counts none', () => {
+    const list = parseCaixaList(readCaixaFixture('lista-empty.csv'));
+
+    expect(listFacts(list)).toEqual({
+      headerFound: true,
+      missingColumns: [],
+      generatedOn: '2025-11-10',
+      rowCount: 0,
+      syntaxErrors: 0,
+      irregularRows: 0,
+    });
+  });
+
+  it('has no generation date when the line is absent, or the day does not exist', () => {
+    expect(parseCaixaList(readCaixaFixture('lista-no-generation-date.csv')).generatedOn).toBeNull();
+    expect(
+      parseCaixaList(readCaixaFixture('lista-invalid-generation-date.csv')).generatedOn,
+    ).toBeNull();
+  });
+
+  it('has no generation date when the label has no value after it', () => {
+    const csv = 'Data de geração:;;\nN° do imóvel;UF;Cidade;Modalidade de venda\n1;AC;X;Y\n';
+
+    expect(parseCaixaList(csv).generatedOn).toBeNull();
+  });
+
+  it('reports an unrecognised layout: no header row, no rows', () => {
+    const list = parseCaixaList(readCaixaFixture('lista-unrecognised-layout.csv'));
+
+    expect(list.header).toBeNull();
+    expect(list.rows).toEqual([]);
+    expect(listFacts(list)).toMatchObject({ headerFound: false, rowCount: 0 });
+  });
+
+  it('reports an empty text as an unrecognised layout', () => {
+    expect(parseCaixaList('')).toEqual({
+      rows: [],
+      header: null,
+      generatedOn: null,
+      syntaxErrors: [],
+      irregularRows: 0,
+    });
+    expect(parseCsv('')).toEqual([]);
+  });
+
+  it('does not parse the Radware page as a list (TS-12, BR-004-20)', () => {
+    const list = parseCaixaList(readCaixaFixture('bot-protection.html'));
+
+    expect(list.header).toBeNull();
+    expect(list.rows).toEqual([]);
+    // The port refuses this body before it gets here (http-caixa-access.spec.ts); if it ever did
+    // arrive, it would still be an unrecognised layout and nothing would be applied.
+  });
+
+  it('counts 30% of a list’s rows when it is cut short', () => {
+    const [metadata, header, ...body] = readCaixaFixture('Lista_imoveis_geral.csv')
+      .split('\n')
+      .filter((line) => line.trim() !== '');
+    const rows = Array.from({ length: 10 }, (_, i) => body[i % body.length] as string);
+
+    const full = [metadata, header, ...rows].join('\n');
+    const truncated = [metadata, header, ...rows.slice(0, 3)].join('\n');
+
+    expect(listFacts(parseCaixaList(full)).rowCount).toBe(10);
+    expect(listFacts(parseCaixaList(truncated)).rowCount).toBe(3);
+  });
+});
+
+// BR-004-04 / DL-004-03 (owner's review of #185): the syntax of the CSV is part of its verdict. An
+// unterminated quote in row 9 of a 10-row list swallows property 10 into row 9's cell, and 9 of 10
+// rows is above the 0.8 ratio, so the row count alone declared the list valid.
+describe('malformed CSV reaches the verdict', () => {
+  const HEAD =
+    'Data de geração:;10/11/2025;;\n' +
+    'N° do imóvel;UF;Cidade;Bairro;Endereço;Preço;Valor de avaliação;Desconto;Descrição;Modalidade de venda;Link de acesso\n';
+  const row = (n: number, description = 'Casa, 3 quartos') =>
+    `${1000 + n};SP;CAMPINAS;CENTRO;RUA A;100.000,00;200.000,00;50,00;${description};Venda Online;https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=${1000 + n}\n`;
+  const list = (rows: string[]) => HEAD + rows.join('');
+  const ten = Array.from({ length: 10 }, (_, i) => row(i + 1));
+  const LAST = { generatedOn: '2025-11-09', rowCount: 10 };
+
+  it('rejects an unterminated quote in row 9 although 9 of 10 rows still parse', () => {
+    const csv = list([...ten.slice(0, 8), row(9, '"Casa sem fim'), ten[9] as string]);
+    const parsed = parseCaixaList(csv);
+
+    expect(parsed.rows).toHaveLength(9); // property 10 is swallowed into row 9
+    expect(parsed.syntaxErrors).toEqual(['MissingQuotes']);
+    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({
+      kind: 'rejected',
+      reason: 'MALFORMED_CSV',
+    });
+  });
+
+  it('carries the codes of the errors and never the text of the row (SC-15)', () => {
+    const csv = list([row(1, '"SEGREDO-DA-LINHA'), row(2)]);
+    const parsed = parseCaixaList(csv);
+
+    expect(JSON.stringify(listFacts(parsed))).not.toContain('SEGREDO');
+    expect(JSON.stringify(parsed.syntaxErrors)).not.toContain('SEGREDO');
+  });
+
+  it('rejects a stray quote at the start of a cell (InvalidQuotes)', () => {
+    const parsed = parseCaixaList(list([row(1, '"Casa"x'), ...ten.slice(1)]));
+
+    expect(parsed.syntaxErrors.length).toBeGreaterThan(0);
+    expect(validateList(listFacts(parsed), LAST, 0.8).kind).toBe('rejected');
+  });
+
+  it('rejects a row with fewer cells than the header, as a download cut in a row has', () => {
+    const cut = list(ten.slice(0, 9)) + '1010;SP;CAMPINAS;CEN';
+    const parsed = parseCaixaList(cut);
+
+    expect(parsed.syntaxErrors).toEqual([]);
+    expect(parsed.irregularRows).toBe(1);
+    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({
+      kind: 'rejected',
+      reason: 'MALFORMED_CSV',
+    });
+  });
+
+  it('rejects a row with more cells than the header, as an unquoted ; in a cell makes', () => {
+    const parsed = parseCaixaList(list([row(1, 'Casa; sem aspas'), ...ten.slice(1)]));
+
+    expect(parsed.irregularRows).toBe(1);
+    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({
+      kind: 'rejected',
+      reason: 'MALFORMED_CSV',
+    });
+  });
+
+  it('accepts what is not an error: quoted cells holding ; and new lines, a trailing empty line', () => {
+    const quoted = row(1, '"Casa; com ponto e vírgula\ne linha"');
+    const csv = list([quoted, ...ten.slice(1)]) + '\n\n';
+    const parsed = parseCaixaList(csv);
+
+    expect(parsed.rows).toHaveLength(10);
+    expect(parsed.syntaxErrors).toEqual([]);
+    expect(parsed.irregularRows).toBe(0);
+    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({ kind: 'valid' });
+  });
+
+  it.each(['Lista_imoveis_geral.csv', 'Lista_imoveis_geral.latin1.csv', 'lista-bom-reordered.csv'])(
+    'keeps the captured list %s valid',
+    (name) => {
+      const text = name.includes('latin1')
+        ? readFileSync(caixaFixturePath(name)).toString('latin1')
+        : readCaixaFixture(name);
+      const parsed = parseCaixaList(text);
+
+      expect(parsed.syntaxErrors).toEqual([]);
+      expect(parsed.irregularRows).toBe(0);
+      expect(validateList(listFacts(parsed), null, 0.8)).toEqual({ kind: 'valid' });
+    },
+  );
+});
+
+describe('normalizeRows property type (BR-004-11 fallback)', () => {
+  it('takes the type the description begins with, and null for a description that gives none', () => {
+    const rows = normalizeRows(parseCsv(readCaixaFixture('Lista_imoveis_geral.csv')));
+
+    expect(rows.map((row) => row.propertyType)).toEqual(['Terreno', 'Casa', 'Casa', 'Casa']);
+    expect(
+      normalizeRows([
+        { UF: 'AC', Cidade: 'X', 'Modalidade de venda': 'Y', Descrição: 'sem tipo' },
+      ])[0]?.propertyType,
+    ).toBeNull();
+    expect(
+      normalizeRows([{ UF: 'AC', Cidade: 'X', 'Modalidade de venda': 'Y' }])[0]?.propertyType,
+    ).toBeNull();
   });
 });

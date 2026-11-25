@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { AuctionsService } from './auctions.service.js';
 import { fetchAndCheckAvailability } from './scraper/details-scraper.js';
+import { missingFromListFilter } from './utils/job-queries.js';
 import { PhaseModality } from './schemas/auction.schema.js';
 import { serverOperators } from '../common/mongo/query-safety.js';
 import { Decimal } from '../common/money/money.js';
@@ -352,15 +353,9 @@ describe('AuctionsService.verifyAvailability', () => {
       errors: 0,
     });
 
-    const query = repo.find.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(query['fulfilled']).toBe(true);
-    expect(query['available']).toBe(true);
-    expect(query['code']).toEqual(serverOperators({ $nin: ['X1'] }));
-    expect(query['$or']).toEqual(
-      serverOperators([
-        { availabilityCheckedAt: { $exists: false } },
-        { availabilityCheckedAt: { $lt: new Date(NOW.getTime() - DAY) } },
-      ]),
+    // The filter itself is proven against MongoDB under sanitizeFilter (job-queries.spec.ts, #100).
+    expect(repo.find.mock.calls[0]?.[0]).toEqual(
+      missingFromListFilter(['X1'], new Date(NOW.getTime() - DAY)),
     );
     // Oldest check first, at most 1000 a run.
     expect(repo.query.calls['sort']).toEqual([[{ availabilityCheckedAt: 1 }]]);

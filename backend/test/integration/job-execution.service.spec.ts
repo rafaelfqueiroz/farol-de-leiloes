@@ -6,6 +6,7 @@ import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import { Clock } from '../../src/common/clock/clock.js';
+import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
 import { CommonModule } from '../../src/common/common.module.js';
 import {
   JobExecution,
@@ -28,6 +29,9 @@ describe('JobExecutionService (integration)', () => {
   let executions: Model<JobExecutionDocument>;
 
   beforeAll(async () => {
+    // SC-10: the production setting (sanitizeFilter on), so a bare `$ne` in a job filter fails
+    // here as it did in production (#100).
+    applyMongooseDefaults();
     moduleRef = await Test.createTestingModule({
       imports: [MongooseModule.forRoot(db.uri), CommonModule],
     })
@@ -130,6 +134,44 @@ describe('JobExecutionService (integration)', () => {
       expect((await executions.findOne({ jobName: JOB }).lean())?.status).toBeUndefined();
 
       await expect(service.hasRunRecently(JOB, RunMode.AUTO, 24)).resolves.toBe(true);
+    });
+  });
+
+  describe('under sanitizeFilter (SC-10, #100)', () => {
+    it('getLastExecution reads the last non-failed run instead of throwing a CastError', async () => {
+      await executions.create([
+        aJobExecution().named(JOB).finishedAt(new Date('2026-01-15T03:00:00.000Z')).build(),
+        aJobExecution()
+          .named(JOB)
+          .failed()
+          .finishedAt(new Date('2026-01-15T09:00:00.000Z'))
+          .build(),
+      ]);
+
+      await expect(service.getLastExecution(JOB, RunMode.AUTO)).resolves.toMatchObject({
+        jobName: JOB,
+        status: JobStatus.SUCCESS,
+        finishedAt: new Date('2026-01-15T03:00:00.000Z'),
+      });
+    });
+
+    it('getLastExecution counts a row without a status as a success', async () => {
+      await executions.create(
+        aJobExecution()
+          .named(JOB)
+          .legacy()
+          .finishedAt(new Date('2026-01-15T03:00:00.000Z'))
+          .build(),
+      );
+
+      await expect(service.getLastExecution(JOB, RunMode.AUTO)).resolves.toMatchObject({
+        jobName: JOB,
+        finishedAt: new Date('2026-01-15T03:00:00.000Z'),
+      });
+    });
+
+    it('hasRunRecently resolves instead of throwing a CastError', async () => {
+      await expect(service.hasRunRecently(JOB, RunMode.AUTO, 24)).resolves.toBe(false);
     });
   });
 

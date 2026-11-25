@@ -351,6 +351,8 @@ describe('namespaced configs built from the validated environment', () => {
         exportTtlDays: 7,
         documentRetentionYears: 5,
       },
+      import: { minRowRatio: 0.8 },
+      calendar: { nationalHolidays: [] },
     });
     expect(
       businessConfigFrom(
@@ -375,6 +377,8 @@ describe('namespaced configs built from the validated environment', () => {
         exportTtlDays: 3,
         documentRetentionYears: 6,
       },
+      import: { minRowRatio: 0.8 },
+      calendar: { nationalHolidays: [] },
     });
   });
 

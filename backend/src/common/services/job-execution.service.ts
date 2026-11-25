@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Clock } from '../clock/clock.js';
+import { serverOperators } from '../mongo/query-safety.js';
 import { JobExecution, JobExecutionDocument } from '../schemas/job-execution.schema.js';
 import { type JobExecutionRecord, type JobOutcome, JobStatus, RunMode } from '../job-execution.js';
 
@@ -43,11 +44,17 @@ export class JobExecutionService {
 
   /**
    * Get the last successful execution for a specific job and run mode. A row without a status
-   * predates #36 and was a success, hence `$ne` rather than `SUCCESS`.
+   * predates #36 and was a success, hence `$ne` rather than `SUCCESS`. The `$ne` is server-written,
+   * so it is wrapped in `serverOperators` (SC-10): with `sanitizeFilter` on, a bare operator is
+   * wrapped in `$eq` and cast as a string (#100).
    */
   async getLastExecution(jobName: string, runMode: RunMode): Promise<JobExecutionRecord | null> {
     const execution = await this.jobExecutionRepository
-      .findOne({ jobName, runMode, status: { $ne: JobStatus.FAILED } })
+      .findOne({
+        jobName,
+        runMode,
+        status: serverOperators({ $ne: JobStatus.FAILED }),
+      })
       .sort({ finishedAt: -1 })
       .lean()
       .exec();

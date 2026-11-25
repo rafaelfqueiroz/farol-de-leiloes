@@ -5,6 +5,9 @@ import type { CheerioAPI } from 'cheerio';
 import puppeteer from 'puppeteer';
 import { PaymentMethod, ExpenseRule } from '../schemas/auction.schema.js';
 import { brasiliaWallClockToInstant } from '../../common/clock/brasilia-time.js';
+import { isBotProtectionPage } from '../caixa/bot-protection.js';
+import { CaixaUrlRefusedError } from '../caixa/caixa-access.js';
+import { resolveOnCaixaSite } from '../../common/caixa-site.js';
 
 export interface ScrapedPhaseDetails {
   paymentMethods?: PaymentMethod[];
@@ -276,46 +279,14 @@ function extractPhaseDetails(relatedBoxHtml: string, fullHtml: string): ScrapedP
   };
 }
 
-// Host of the Radware bot-protection CDN. Compared exactly, never as a substring (SC-19).
-const RADWARE_CDN_HOST = 'cdn.perfdrive.com';
-
-/** True when a URL-valued attribute points at the Radware CDN over http(s). */
-function loadsFromRadwareCdn(rawUrl: string): boolean {
-  try {
-    // The base makes a protocol-relative URL ("//host/x") parse; a relative one lands on Caixa.
-    const url = new URL(rawUrl.trim(), 'https://venda-imoveis.caixa.gov.br');
-    return (
-      (url.protocol === 'https:' || url.protocol === 'http:') && url.hostname === RADWARE_CDN_HOST
-    );
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Recognises the Radware / ShieldSquare challenge page served in place of the auction page.
- * SC-19 / CodeQL js/incomplete-url-substring-sanitization: the CDN is recognised by the parsed
- * host of a resource the page loads, so a look-alike host or the name in a query string or in
- * text does not count.
- */
-function isBotProtectionPage(html: string): boolean {
-  if (html.includes('Radware Bot Manager') || html.includes('ShieldSquare')) return true;
-
-  const $ = cheerio.load(html);
-  return $('[src], [href]')
-    .toArray()
-    .some((el) => {
-      const node = $(el);
-      return [node.attr('src'), node.attr('href')].some(
-        (value) => value !== undefined && loadsFromRadwareCdn(value),
-      );
-    });
-}
-
 /**
  * Fetches the HTML content of an auction details page from Caixa website
  */
 async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
+  // SC-24: the link comes from Caixa's list; the browser opens only Caixa's own site.
+  const target = resolveOnCaixaSite(detailsUrl);
+  if (!target) throw new CaixaUrlRefusedError();
+
   // The sandbox flags are needed to run Chrome as root in a container; they disguise nothing.
   const browser = await puppeteer.launch({
     headless: true,
@@ -324,7 +295,10 @@ async function fetchAuctionDetailHtml(detailsUrl: string): Promise<string> {
 
   try {
     const page = await browser.newPage();
-    const response = await page.goto(detailsUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const response = await page.goto(target.href, {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000,
+    });
     if (!response) {
       throw new Error('No response received from navigation');
     }
@@ -353,9 +327,8 @@ export async function fetchAndScrapeDetails(detailsUrl: string): Promise<Scraped
     const html = await fetchAuctionDetailHtml(detailsUrl);
     return scrapeAuctionDetails(html);
   } catch (error) {
-    throw new Error(
-      `Failed to scrape details from ${detailsUrl}: ${error instanceof Error ? error.message : error}`,
-    );
+    // SC-15: the URL stays out of the message, it comes from Caixa's data (it may carry anything).
+    throw new Error(`Failed to scrape details: ${error instanceof Error ? error.message : error}`);
   }
 }
 

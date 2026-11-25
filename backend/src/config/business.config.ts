@@ -33,6 +33,14 @@ export interface BusinessConfig {
      */
     documentRetentionYears: number;
   };
+  import: {
+    /** SPEC-004 BR-004-04: least share (0-1] of the last applied list's rows a new list must hold. */
+    minRowRatio: number;
+  };
+  calendar: {
+    /** SPEC-004 BR-004-31: national holidays as sorted `YYYY-MM-DD` Brasília days; may be empty. */
+    nationalHolidays: readonly string[];
+  };
 }
 
 export const KEY = 'BusinessConfig';
@@ -52,6 +60,8 @@ export function businessConfigFrom(env: Env): BusinessConfig {
       exportTtlDays: env.EXPORT_TTL_DAYS,
       documentRetentionYears: env.DOCUMENT_RETENTION_YEARS,
     },
+    import: { minRowRatio: env.IMPORT_MIN_ROW_RATIO },
+    calendar: { nationalHolidays: env.NATIONAL_HOLIDAYS },
   };
 }
 

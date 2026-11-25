@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { JobExecutionService } from './job-execution.service.js';
 import { JobStatus, RunMode } from '../job-execution.js';
+import { serverOperators } from '../mongo/query-safety.js';
 import { FakeClock, HOUR } from '../../../test/fakes/fake-clock.js';
 import { FakeQuery } from '../../../test/fakes/fake-query.js';
 import { aJobExecution } from '../../../test/builders/job-execution.builder.js';
@@ -74,7 +75,7 @@ describe('JobExecutionService.getLastExecution', () => {
     expect(Model.findOne).toHaveBeenCalledWith({
       jobName: 'import-csv',
       runMode: RunMode.AUTO,
-      status: { $ne: JobStatus.FAILED },
+      status: serverOperators({ $ne: JobStatus.FAILED }), // SC-10, #100
     });
     expect(query.calls['sort']).toEqual([[{ finishedAt: -1 }]]);
   });
