@@ -4,14 +4,20 @@
 // it and the access log hashes it (admin-access/domain/search-log-query.ts): one normalisation, so
 // "the same search typed two ways" is one search everywhere.
 
+import { singleLine } from '../../common/text/single-line.js';
+
 /** BR-009-13: no search of fewer than 3 characters (a broad scan), none of more than 100. */
 export const SEARCH_LENGTH = { min: 3, max: 100 } as const;
 
 export type AccountSearchKind = 'email' | 'name';
 
-/** NFKC, lower-case, trimmed, inner runs of whitespace collapsed to one space. */
+/**
+ * NFKC, then one line (control characters, the NUL byte included, and bidirectional marks become
+ * spaces: MongoDB refuses a pattern with a NUL, and none of them can be part of a name or an address),
+ * runs of whitespace collapsed, trimmed, lower-case.
+ */
 export function normaliseSearchTerms(typed: string): string {
-  return typed.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+  return singleLine(typed.normalize('NFKC')).toLowerCase();
 }
 
 /** A search with an `@` looks for an address; anything else for a name (or part of an address). */

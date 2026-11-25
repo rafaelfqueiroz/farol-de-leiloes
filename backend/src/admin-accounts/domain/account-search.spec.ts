@@ -21,6 +21,12 @@ describe('BR-009-13: normalising the terms of an account search', () => {
     );
   });
 
+  it('turns control characters, the NUL byte included, into spaces: the database refuses a pattern holding one', () => {
+    expect(normaliseSearchTerms('abc\u0000def')).toBe('abc def');
+    expect(normaliseSearchTerms('\u0001ana\u001f\u007f silva\u0000')).toBe('ana silva');
+    expect(normaliseSearchTerms('\u0000\u0000\u0000')).toBe('');
+  });
+
   it('leaves nothing for a text of only spaces', () => {
     expect(normaliseSearchTerms('   \t ')).toBe('');
   });
