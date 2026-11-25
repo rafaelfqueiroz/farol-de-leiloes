@@ -68,6 +68,14 @@ class InMemoryGrants {
     );
   }
 
+  findOpenIdsOfAdmin(adminUserId: string): Promise<string[]> {
+    return Promise.resolve(
+      this.rows
+        .filter((r) => r.adminUserId === adminUserId && r.status === 'open')
+        .map((r) => r.id),
+    );
+  }
+
   findOpenForSupportRequest(supportRequestId: string): Promise<StoredGrant | null> {
     return Promise.resolve(
       this.rows.find((r) => r.supportRequestId === supportRequestId && r.status === 'open') ?? null,
@@ -125,6 +133,7 @@ describe('SupportGrantService (SPEC-002 BR-002-23..BR-002-26)', () => {
   let requests: FakeSupportRequests;
   let clock: FakeClock;
   let service: SupportGrantService;
+  let accounts: Map<string, { isAdmin?: boolean; status?: string }>;
   let admin: AccessContext;
   let otherAdmin: AccessContext;
 
@@ -132,7 +141,9 @@ describe('SupportGrantService (SPEC-002 BR-002-23..BR-002-26)', () => {
     grants = new InMemoryGrants();
     requests = new FakeSupportRequests();
     clock = new FakeClock();
-    const accounts = new Map<string, { isAdmin?: boolean; status?: string }>([
+    accounts = new Map([
+      [ADMIN, { isAdmin: true }],
+      [OTHER_ADMIN, { isAdmin: true }],
       [REQUESTER, {}],
       [ADMIN_REQUESTER, { isAdmin: true }],
       [CLOSED_ACCOUNT, { status: 'closed' }],
@@ -203,6 +214,51 @@ describe('SupportGrantService (SPEC-002 BR-002-23..BR-002-26)', () => {
       clock.advance(MINUTE);
       expect(await service.open(admin, REQUEST)).toEqual(first);
       expect(grants.rows).toHaveLength(1);
+    });
+
+    it.each([
+      ['deactivated', { isAdmin: true, status: 'deactivated' }],
+      ['no longer an admin', { isAdmin: false }],
+      ['gone', undefined],
+    ])(
+      'BR-002-26: a grant whose holder is %s blocks nobody: it is ended as holder_inactive and a new one opens',
+      async (_label, holder) => {
+        requests.set(shared());
+        const held = await service.open(admin, REQUEST);
+        if (holder) accounts.set(ADMIN, holder);
+        else accounts.delete(ADMIN);
+
+        const opened = await service.open(otherAdmin, REQUEST);
+
+        expect(opened.id).not.toBe(held.id);
+        expect(grants.rows.map((row) => [row.id, row.status, row.endReason])).toEqual([
+          [held.id, 'ended', 'holder_inactive'],
+          [opened.id, 'open', undefined],
+        ]);
+      },
+    );
+
+    it('SPEC-009 BR-009-15: endAllOfAdmin ends every open grant of that admin only, once, and answers how many', async () => {
+      requests.set(shared());
+      requests.set(shared({ id: OTHER_REQUEST }));
+      const mine = await service.open(admin, REQUEST);
+      const theirs = await service.open(otherAdmin, OTHER_REQUEST);
+
+      expect(await service.endAllOfAdmin(ADMIN)).toBe(1);
+      expect(await service.endAllOfAdmin(ADMIN)).toBe(0);
+
+      expect(grants.rows.map((row) => [row.id, row.status, row.endReason])).toEqual([
+        [mine.id, 'ended', 'holder_inactive'],
+        [theirs.id, 'open', undefined],
+      ]);
+    });
+
+    it('takes the support request id in any letter case: it is one request', async () => {
+      requests.set(shared());
+
+      const opened = await service.open(admin, REQUEST.toUpperCase());
+
+      expect(opened.supportRequestId).toBe(REQUEST);
     });
 
     it('answers NOT_FOUND, like a nonexistent request, while another admin holds its open grant (no oracle)', async () => {

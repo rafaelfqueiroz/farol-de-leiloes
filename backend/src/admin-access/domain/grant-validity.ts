@@ -21,7 +21,9 @@
 export const GRANT_LIFETIME_DAYS = 7;
 export const GRANT_LIFETIME_MS = GRANT_LIFETIME_DAYS * 24 * 60 * 60 * 1000;
 
-export const GRANT_END_REASONS = ['closed', 'withdrawn', 'expired'] as const;
+// A fourth reason is recorded by the service rather than found here: `holder_inactive`, the admin who
+// holds the grant is no longer an active admin (their account was deactivated, SPEC-009).
+export const GRANT_END_REASONS = ['closed', 'withdrawn', 'expired', 'holder_inactive'] as const;
 export type GrantEndReason = (typeof GRANT_END_REASONS)[number];
 
 /** The grant, as stored. */

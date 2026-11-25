@@ -108,6 +108,18 @@ export class SupportAccessGrantRepository {
     return row ? toStored(row) : null;
   }
 
+  /** The ids of the open grants an admin holds (served by the `{ adminUserId, openedAt }` index). */
+  async findOpenIdsOfAdmin(adminUserId: string): Promise<string[]> {
+    if (!isObjectIdString(adminUserId)) return [];
+    const rows = await this.grants
+      .find({ adminUserId: { $eq: adminUserId }, status: { $eq: 'open' } })
+      .sort({ openedAt: -1 })
+      .select('_id')
+      .lean<Array<{ _id: { toHexString(): string } }>>()
+      .exec();
+    return rows.map((row) => row._id.toHexString());
+  }
+
   /**
    * THE END TRANSITION (BR-002-26), by grant: 'open' → 'ended', only if still open, so a grant ends
    * once and its first recorded reason stays. True when this call ended it.

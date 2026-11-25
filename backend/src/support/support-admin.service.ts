@@ -6,6 +6,7 @@
 // path of its own to anything the requester keeps in the product.
 import { Injectable } from '@nestjs/common';
 import type { AccessContext } from '../access/access-context.js';
+import { canonicalObjectId, isObjectIdString } from '../access/owner-filter.js';
 import { type OpenedGrant, SupportGrantService } from '../admin-access/support-grant.service.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { type PageRequest, type Paginated, paginated } from '../common/pagination/paginated.js';
@@ -17,6 +18,12 @@ import {
   type SupportRequestRecord,
   SupportRequestsRepository,
 } from './support-requests.repository.js';
+
+/** The request's id in its one spelling; a malformed one is the same NOT_FOUND as a missing one (AR-14). */
+function requestId(requested: string): string {
+  if (!isObjectIdString(requested)) throw new DomainError('NOT_FOUND');
+  return canonicalObjectId(requested);
+}
 
 /** BR-002-23: every method acts for an admin; the route's `@AdminOnly()` is the first check, this the second. */
 function assertAdmin(admin: AccessContext): void {
@@ -46,8 +53,9 @@ export class SupportAdminService {
   }
 
   /** One request, the requester's name and email, and the grant THIS admin holds on it (null if none). */
-  async detail(admin: AccessContext, id: string): Promise<SupportRequestAdminDetailDto> {
+  async detail(admin: AccessContext, requested: string): Promise<SupportRequestAdminDetailDto> {
     assertAdmin(admin);
+    const id = requestId(requested);
     const request = await this.requests.findByIdAcrossAccounts(id);
     if (!request) throw new DomainError('NOT_FOUND'); // a malformed id is the same
     const [requester, grant] = await Promise.all([
@@ -68,8 +76,9 @@ export class SupportAdminService {
    * read under a grant re-reads the request, so a grant opened between the two writes is refused on its
    * first read.
    */
-  async close(admin: AccessContext, id: string): Promise<SupportRequestAdminDetailDto> {
+  async close(admin: AccessContext, requested: string): Promise<SupportRequestAdminDetailDto> {
     assertAdmin(admin);
+    const id = requestId(requested);
     const outcome = await this.requests.closeAcrossAccounts(id, admin.accountId, this.clock.now());
     if (outcome === 'not_found') throw new DomainError('NOT_FOUND');
     await this.grants.endForSupportRequest(id, 'closed');
@@ -81,8 +90,8 @@ export class SupportAdminService {
    * refuses with the same NOT_FOUND an unknown, closed, never-permitted, withdrawn or another admin's
    * request (no oracle). The route answers the grant and nothing of the requester's data.
    */
-  openGrant(admin: AccessContext, id: string): Promise<OpenedGrant> {
+  async openGrant(admin: AccessContext, requested: string): Promise<OpenedGrant> {
     assertAdmin(admin);
-    return this.grants.open(admin, id);
+    return this.grants.open(admin, requestId(requested));
   }
 }
