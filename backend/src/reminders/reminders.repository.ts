@@ -153,10 +153,29 @@ export class RemindersRepository extends AccountScopedRepository<ReminderRecord>
     );
   }
 
-  /** AR-12: CROSS-ACCOUNT, for the reminders scheduler only: one reminder, by its id, is sent. */
+  /**
+   * AR-12 / BR-009-17: CROSS-ACCOUNT, for the reminders scheduler only: the reminder as it is NOW, with
+   * its auction, if it is still pending and due; null when it was cancelled, sent, deleted or moved to
+   * a later time since the due batch was read. The scheduler reads it again right before sending.
+   */
+  findStillDueAcrossAccounts(reminderId: string, now: Date): Promise<PopulatedReminder | null> {
+    return this.reminders
+      .findOne({
+        _id: { $eq: reminderId },
+        status: ReminderStatus.PENDING,
+        scheduledAt: serverOperators({ $lte: now }),
+      })
+      .populate<{ auction: ReminderAuction }>('auction')
+      .exec();
+  }
+
+  /**
+   * AR-12: CROSS-ACCOUNT, for the reminders scheduler only: one reminder, by its id, is sent. Only
+   * while it is still pending, so one cancelled while it was being sent stays cancelled.
+   */
   async markSentAcrossAccounts(reminderId: string): Promise<void> {
     await this.updateAcrossAccountsForJob(
-      { _id: { $eq: reminderId } },
+      { _id: { $eq: reminderId }, status: { $eq: ReminderStatus.PENDING } },
       { status: ReminderStatus.SENT },
     );
   }

@@ -73,13 +73,22 @@ export class RemindersScheduler implements OnModuleInit {
     }
   }
 
-  private async processReminder(reminder: PopulatedReminder): Promise<void> {
+  /**
+   * One reminder of the due batch. The batch is read once and worked through one send at a time, so by
+   * a reminder's turn it may have been cancelled, deleted, edited or its account changed. Its owner
+   * and then the reminder itself are therefore read AGAIN right before sending, and what is sent is
+   * the reminder as it is then. The owner is read FIRST: a reactivation cancels the due reminders
+   * before it makes the account active, so an active owner means that cancel is already visible.
+   * Not covered (issue #157): there is no claim before the send, so two overlapping runs can both send,
+   * and a change made during the send itself is not seen.
+   */
+  private async processReminder(due: PopulatedReminder): Promise<void> {
     try {
-      const user = await this.usersService.findByIdFull(reminder.userId.toString());
+      const user = await this.usersService.findByIdFull(due.userId.toString());
       if (!user) {
         // The account is gone for good (never comes back): the reminder can never be sent.
-        await this.remindersService.markAsCancelled(reminder._id.toString());
-        this.logger.warn(`User not found for reminder ${reminder._id}`);
+        await this.remindersService.markAsCancelled(due._id.toString());
+        this.logger.warn(`User not found for reminder ${due._id}`);
         return;
       }
       // SPEC-010 BR-010-14 / BR-001-16, SPEC-009 BR-009-15, BR-009-17: nothing is sent to an account
@@ -90,8 +99,14 @@ export class RemindersScheduler implements OnModuleInit {
       // crowd out other accounts' reminders. A reminder not yet due is untouched: it is read only
       // once its time comes, so the account's future reminders survive a deactivation.
       if ((user.status ?? 'active') !== 'active') {
-        await this.remindersService.markAsCancelled(reminder._id.toString());
-        this.logger.warn(`Reminder ${reminder._id} cancelled, not sent: the account is not active`);
+        await this.remindersService.markAsCancelled(due._id.toString());
+        this.logger.warn(`Reminder ${due._id} cancelled, not sent: the account is not active`);
+        return;
+      }
+
+      const reminder = await this.remindersService.findStillDue(due._id.toString());
+      if (!reminder) {
+        this.logger.log(`Reminder ${due._id} not sent: it is no longer pending and due`);
         return;
       }
 
@@ -160,7 +175,7 @@ export class RemindersScheduler implements OnModuleInit {
         this.logger.error(`Reminder ${reminder._id} failed: ${result.errorMessage}`);
       }
     } catch (error) {
-      this.logger.error(`Error processing reminder ${reminder._id}: ${jobErrorCode(error)}`);
+      this.logger.error(`Error processing reminder ${due._id}: ${jobErrorCode(error)}`);
     }
   }
 
