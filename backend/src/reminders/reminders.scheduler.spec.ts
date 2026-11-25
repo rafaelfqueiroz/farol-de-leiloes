@@ -8,7 +8,11 @@ type SchedulerDeps = ConstructorParameters<typeof RemindersScheduler>;
 
 describe('RemindersScheduler.processReminder', () => {
   function build() {
-    const remindersService = { logNotification: vi.fn(), markAsSent: vi.fn() };
+    const remindersService = {
+      logNotification: vi.fn(),
+      markAsSent: vi.fn(),
+      findStillDue: vi.fn(),
+    };
     const usersService = {
       findByIdFull: vi.fn().mockResolvedValue({
         _id: 'user-1',
@@ -41,6 +45,7 @@ describe('RemindersScheduler.processReminder', () => {
         channel,
         auction: null,
       } as unknown as PopulatedReminder;
+      remindersService.findStillDue.mockResolvedValue(reminder);
 
       await scheduler['processReminder'](reminder);
 
@@ -71,6 +76,8 @@ describe('RemindersScheduler.processReminder', () => {
       channel: ReminderChannel.SMS,
       auction: null,
     } as unknown as PopulatedReminder;
+
+    remindersService.findStillDue.mockResolvedValue(reminder);
 
     await scheduler['processReminder'](reminder);
 

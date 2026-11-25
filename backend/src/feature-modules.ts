@@ -22,6 +22,7 @@ import { SupportModule } from './support/support.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MaintenanceModule } from './maintenance/maintenance.module.js';
 import { AdminAccessModule } from './admin-access/admin-access.module.js';
+import { AdminAccountsModule } from './admin-accounts/admin-accounts.module.js';
 import { PlansModule } from './plans/plans.module.js';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module.js';
 import { SubscriptionsBillingModule } from './subscriptions/subscriptions-billing.module.js';
@@ -44,6 +45,7 @@ export const FEATURE_MODULES = [
   HealthModule,
   MaintenanceModule,
   AdminAccessModule,
+  AdminAccountsModule,
   PlansModule,
   SubscriptionsModule,
   SubscriptionsBillingModule,

@@ -296,26 +296,35 @@ describe('Google linking decision table (BR-001-10, BR-001-11, BR-001-16, DL-001
     expect(existing.googleId).toBe('g-other');
   });
 
-  it.each(['deactivated', 'closed'] as const)(
-    'BR-001-16: an account %s is refused by email, and its sessions and password stay untouched',
-    async (status) => {
+  it.each([
+    ['deactivated', 'ACCOUNT_DEACTIVATED'],
+    ['closed', 'GOOGLE_SIGN_IN_FAILED'],
+  ] as const)(
+    'BR-001-16, BR-009-20: an account %s is refused by email with %s, and its sessions and password stay untouched',
+    async (status, code) => {
       const existing = ctx.users.seed(account({ status, emailVerified: false }));
 
       await expect(ctx.service.beginGoogleSignIn(identity())).rejects.toEqual(
-        new DomainError('GOOGLE_SIGN_IN_FAILED'),
+        new DomainError(code),
       );
       expect(existing).toMatchObject({ password: 'the-password', providers: ['local'] });
       expect(existing.googleId).toBeUndefined();
     },
   );
 
-  it('BR-001-16: an inactive account already linked to this Google identity is refused', async () => {
-    ctx.users.seed(account({ googleId: 'g-1', providers: ['google'], status: 'deactivated' }));
+  it.each([
+    ['deactivated', 'ACCOUNT_DEACTIVATED'],
+    ['closed', 'GOOGLE_SIGN_IN_FAILED'],
+  ] as const)(
+    'BR-001-16, BR-009-20: an %s account already linked to this Google identity is refused with %s',
+    async (status, code) => {
+      ctx.users.seed(account({ googleId: 'g-1', providers: ['google'], status }));
 
-    await expect(ctx.service.beginGoogleSignIn(identity())).rejects.toEqual(
-      new DomainError('GOOGLE_SIGN_IN_FAILED'),
-    );
-  });
+      await expect(ctx.service.beginGoogleSignIn(identity())).rejects.toEqual(
+        new DomainError(code),
+      );
+    },
+  );
 });
 
 describe('AuthService.exchangeGoogleCode (BR-001-20, BR-001-09)', () => {
@@ -357,16 +366,20 @@ describe('AuthService.exchangeGoogleCode (BR-001-20, BR-001-09)', () => {
     });
   });
 
-  it('BR-001-16: an account deactivated after the redirect gets no session', async () => {
-    const existing = ctx.users.seed(account());
-    const code = await ctx.service.beginGoogleSignIn(identity());
-    existing.status = 'closed';
+  it.each([
+    ['closed', 'GOOGLE_SIGN_IN_FAILED'],
+    ['deactivated', 'ACCOUNT_DEACTIVATED'],
+  ] as const)(
+    'BR-001-16, BR-009-20: an account %s after the redirect gets no session, and the answer is %s',
+    async (status, answer) => {
+      const existing = ctx.users.seed(account());
+      const code = await ctx.service.beginGoogleSignIn(identity());
+      existing.status = status;
 
-    await expect(ctx.service.exchangeGoogleCode(code)).rejects.toEqual(
-      new DomainError('GOOGLE_SIGN_IN_FAILED'),
-    );
-    expect(ctx.sessionRepo.stored).toEqual([]);
-  });
+      await expect(ctx.service.exchangeGoogleCode(code)).rejects.toEqual(new DomainError(answer));
+      expect(ctx.sessionRepo.stored).toEqual([]);
+    },
+  );
 
   it('BR-001-09: a signup code answers terms_required with email and name, and spends nothing', async () => {
     const code = await ctx.service.beginGoogleSignIn(identity());

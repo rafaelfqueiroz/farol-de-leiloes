@@ -98,7 +98,15 @@ export class SupportService {
     const outcome = withdrawalOutcome(request);
     if (outcome === 'closed') throw new DomainError('SUPPORT_REQUEST_CLOSED');
     if (outcome === 'withdraw') {
-      await this.requests.markDataAccessWithdrawn(ctx, id, this.clock.now());
+      const withdrawn = await this.requests.markDataAccessWithdrawn(ctx, id, this.clock.now());
+      // The conditional write matched nothing: the admin CLOSED the request (BR-009-12) between the
+      // read above and it. The permission is moot and nothing was recorded, so the answer is the
+      // closed request's, never a 200 that claims a withdrawal that did not happen. (Another
+      // withdrawal that got there first leaves it open and withdrawn: the re-read below says so.)
+      if (!withdrawn && (await this.getMine(ctx, id)).status === 'closed') {
+        await this.grants.endForSupportRequest(id, 'withdrawn');
+        throw new DomainError('SUPPORT_REQUEST_CLOSED');
+      }
     }
     await this.grants.endForSupportRequest(id, 'withdrawn');
     return this.getMine(ctx, id);

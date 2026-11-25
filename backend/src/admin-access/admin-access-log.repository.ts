@@ -20,6 +20,8 @@ export interface NewAdminAccessLogEntry {
   readonly supportRequestId?: string;
   readonly owner?: { readonly type: LoggedOwnerType; readonly id: string };
   readonly resource?: { readonly type: string; readonly id: string };
+  /** `account_search` only: `<kind>:<length>:<hmac>`, never the terms (SPEC-009, search-log-query.ts). */
+  readonly query?: string;
   readonly at: Date;
 }
 
@@ -50,6 +52,7 @@ export class AdminAccessLogRepository {
         ...(entry.resource
           ? { resource: { type: entry.resource.type, id: objectId(entry.resource.id) } }
           : {}),
+        ...(entry.query ? { query: entry.query } : {}),
         at: entry.at,
       })),
       { ordered: true },

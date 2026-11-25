@@ -27,6 +27,7 @@ import {
 } from '../payments/payment-gateway.js';
 import type { Plan } from '../plans/plan.js';
 import { PlansService } from '../plans/plans.service.js';
+import { pickDisplayedSubscription } from './domain/displayed-subscription.js';
 import { isLaterSubscription } from './domain/duplicate.js';
 import { isInEffect } from './domain/subscription-status.js';
 import { type PlanFacts, reconcile, type ReconcileInput } from './domain/provider-state.js';
@@ -184,6 +185,28 @@ export class SubscriptionsService {
     if (record.stripeSubscriptionId === null) return record;
     const result = await this.syncFromProvider(record.stripeSubscriptionId, record.id);
     return result.kind === 'synced' ? result.record : this.reload(record.id);
+  }
+
+  /**
+   * SPEC-009 BR-009-13: the plan and subscription status an admin's account record shows (AR-09: the
+   * account administration asks through this service, never the repository). A plan belongs to an
+   * OFFICE (BR-012-06), so it is the displayed subscription of the first office of the account that
+   * has one (the one in effect, else the latest that lapsed after being paid, BR-012-11); an account
+   * that bought a first plan and has no office yet shows that subscription. Null when there is none.
+   * Never the legacy per-user `role` or `subscriptionStatus` (BR-012-14). Money-free: the plan code
+   * and the status only.
+   */
+  async displayedPlanOfAccount(
+    accountId: string,
+    officeIds: readonly string[],
+  ): Promise<{ readonly code: string; readonly status: StoredSubscription['status'] } | null> {
+    for (const officeId of officeIds) {
+      const recent = await this.subscriptions.findRecentForOffice(officeId, 5);
+      const shown = pickDisplayedSubscription(recent);
+      if (shown) return { code: shown.planCode, status: shown.status };
+    }
+    const first = await this.subscriptions.findInEffectByBuyerWithoutOffice(accountId);
+    return first ? { code: first.planCode, status: first.status } : null;
   }
 
   /** Resolves true when this delivery did the work, false when another sync covers it. */

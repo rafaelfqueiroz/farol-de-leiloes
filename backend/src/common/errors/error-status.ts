@@ -44,6 +44,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   INVALID_GOOGLE_CODE: HttpStatus.BAD_REQUEST,
   // BR-001-15: too many failed sign-ins; the throttle answers even when the password is right.
   TOO_MANY_ATTEMPTS: HttpStatus.TOO_MANY_REQUESTS,
+  // SPEC-009 BR-009-20: the credentials (or the Google identity) are right and the account is
+  // deactivated; the frontend shows the support address. 403, not 401: 401 means "not signed in" to
+  // the frontend, and this is a sign-in that was understood and refused.
+  ACCOUNT_DEACTIVATED: HttpStatus.FORBIDDEN,
 
   // SPEC-002: refusals that involve no record, so a 403 reveals nothing (AR-14 covers records).
   // BR-002-14: the route needs a persona the account's relationships do not give.
@@ -109,6 +113,12 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // withdrawn because there is nothing left to withdraw. Only the owner ever sees it: another
   // account's id is the same 404 as a missing one (AR-14).
   SUPPORT_REQUEST_CLOSED: HttpStatus.CONFLICT,
+  // SPEC-009 BR-009-15, BR-009-17: the account is not in the state the change needs (deactivating a
+  // deactivated or closed account, reactivating one that is not deactivated). Only an admin sees it.
+  ACCOUNT_STATE_CONFLICT: HttpStatus.CONFLICT,
+  // SPEC-009 BR-009-19: an admin cannot deactivate the account they are signed in with. No record is
+  // involved that the caller may not know (it is their own), so a 403 reveals nothing.
+  CANNOT_DEACTIVATE_OWN_ACCOUNT: HttpStatus.FORBIDDEN,
 
   REMINDER_ALREADY_SENT: HttpStatus.CONFLICT,
   REMINDER_DATE_IN_PAST: HttpStatus.BAD_REQUEST,

@@ -561,15 +561,17 @@ describe('SPEC-001 sessions, tokens and sign-in (integration)', () => {
       expect(wrong.body).toEqual({ code: 'INVALID_CREDENTIALS', context: {} });
     });
 
-    it('BR-001-16: a deactivated account cannot sign in, with no hint, and a session opened before is refused', async () => {
+    it('BR-001-16, BR-009-20: a deactivated account cannot sign in: right credentials are told it is deactivated, wrong ones get no hint, and a session opened before is refused', async () => {
       const email = freshEmail('deactivated');
       const { accessToken } = await signUp(email);
       await me(accessToken).expect(200);
 
       await users.updateOne({ email }, { $set: { status: 'deactivated' } });
 
-      const attempt = await signIn(email).expect(401);
-      expect(attempt.body).toEqual({ code: 'INVALID_CREDENTIALS', context: {} });
+      const attempt = await signIn(email).expect(403);
+      expect(attempt.body).toEqual({ code: 'ACCOUNT_DEACTIVATED', context: {} });
+      const wrong = await signIn(email, 'a wrong password').expect(401);
+      expect(wrong.body).toEqual({ code: 'INVALID_CREDENTIALS', context: {} });
       await me(accessToken).expect(401);
     });
 

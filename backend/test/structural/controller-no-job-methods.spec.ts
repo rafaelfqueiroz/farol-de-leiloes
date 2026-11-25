@@ -93,8 +93,10 @@ describe('AR-12: no controller reaches a job-only or across-accounts repository 
     // Everything that takes no AccessContext is marked; what takes one is the requester's own.
     expect(publicMethods.filter((name) => MARKED.test(name)).sort()).toEqual([
       'claimDeliveryByJob',
+      'closeAcrossAccounts', // SPEC-009 BR-009-12: the admin's close
       'findByIdAcrossAccounts',
       'markMailSettledByJob',
+      'pageAcrossAccounts', // SPEC-009 BR-009-12: the admin's queue
       'purgeAccountByJob',
       'releaseClaimByJob',
     ]);

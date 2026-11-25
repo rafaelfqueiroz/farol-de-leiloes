@@ -70,3 +70,27 @@ export interface UserAccount {
   createdAt: Date;
   updatedAt: Date;
 }
+
+/** SPEC-009 BR-009-13: the account fields an admin's record shows, as plain values (AR-09). */
+export interface AccountRecordFacts {
+  readonly id: string;
+  /** Null for a purged account: its personal data is gone (SPEC-010 BR-010-15). */
+  readonly name: string | null;
+  readonly email: string | null;
+  readonly phone: string | null;
+  readonly createdAt: Date;
+  readonly providers: readonly string[];
+  readonly emailVerified: boolean;
+  /** Never `pending`: a sign-up in flight is not an account an admin can see. */
+  readonly status: Exclude<AccountStatus, 'pending'>;
+  readonly isAdmin: boolean;
+}
+
+/** One row of an admin's account search (BR-009-13): enough to pick the record to open. */
+export interface AccountSummaryFacts {
+  readonly id: string;
+  readonly name: string | null;
+  readonly email: string | null;
+  readonly status: Exclude<AccountStatus, 'pending'>;
+  readonly createdAt: Date;
+}

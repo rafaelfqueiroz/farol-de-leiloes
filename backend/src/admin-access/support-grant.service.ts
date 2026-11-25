@@ -16,7 +16,7 @@
 // before it is returned (BR-002-27). See ARCHITECTURE §4 for the route pattern.
 import { Inject, Injectable } from '@nestjs/common';
 import { type AccessContext, AccessContextFactory } from '../access/access-context.js';
-import { isObjectIdString } from '../access/owner-filter.js';
+import { canonicalObjectId, isObjectIdString } from '../access/owner-filter.js';
 import {
   SUPPORT_REQUEST_SOURCE,
   type SupportRequestForGrant,
@@ -137,7 +137,14 @@ export class SupportGrantService {
         await this.grants.endIfOpen(existing.id, validity.endedAt, validity.reason);
         continue;
       }
-      if (existing.adminUserId !== adminCtx.accountId) throw new DomainError('NOT_FOUND');
+      if (existing.adminUserId !== adminCtx.accountId) {
+        // A grant whose holder can no longer use it (deactivated, or no longer an admin) blocks nobody:
+        // it is ended and a new one opened. The deactivation ends them itself (`endAllOfAdmin`); this
+        // covers one that failed to, and a grant opened by a request already in flight.
+        if (await this.isActiveAdmin(existing.adminUserId)) throw new DomainError('NOT_FOUND');
+        await this.grants.endIfOpen(existing.id, now, 'holder_inactive');
+        continue;
+      }
       return toOpened(existing);
     }
     // Only a pathological race lands here (the grant keeps ending and reappearing): a fault.
@@ -195,13 +202,52 @@ export class SupportGrantService {
     return this.grants.endOpenForSupportRequest(supportRequestId, this.clock.now(), reason);
   }
 
+  /**
+   * BR-002-26 / SPEC-009 BR-009-15: ends every open grant this admin holds, when their account is
+   * deactivated (and again before it is reactivated), so a grant never outlives its holder's access,
+   * blocks another admin, or comes back. Each is the one end transition, once. Answers how many ended.
+   */
+  async endAllOfAdmin(adminUserId: string): Promise<number> {
+    let ended = 0;
+    for (const grantId of await this.grants.findOpenIdsOfAdmin(adminUserId)) {
+      if (await this.grants.endIfOpen(grantId, this.clock.now(), 'holder_inactive')) ended += 1;
+    }
+    return ended;
+  }
+
+  /**
+   * SPEC-009 BR-009-12: the grant THIS admin holds on a support request, if it is open and still
+   * valid now (re-checked like a read, AR-13), for the admin's request screen; null otherwise. It
+   * never answers about another admin's grant, and does not tell "none" from "someone else's"
+   * (no oracle, as `open`). Writes nothing: a grant found ended is left for the next read or open.
+   */
+  async ownGrantFor(adminCtx: AccessContext, requestedId: string): Promise<OpenedGrant | null> {
+    if (!adminCtx.isAdmin || adminCtx.readOnly) return null;
+    if (!isObjectIdString(requestedId)) return null;
+    const supportRequestId = canonicalObjectId(requestedId);
+    const existing = await this.grants.findOpenForSupportRequest(supportRequestId);
+    if (!existing || existing.adminUserId !== adminCtx.accountId) return null;
+    const request = await this.supportRequests.findForGrant(supportRequestId);
+    const sameRequest = request && request.requesterUserId === existing.requesterUserId;
+    const validity = grantValidity(existing, sameRequest ? request : null, this.clock.now());
+    return validity.valid ? toOpened(existing) : null;
+  }
+
   /** The request when a grant may be opened on it now; null for every other case alike. */
-  private async shareableRequest(supportRequestId: string): Promise<SupportRequestForGrant | null> {
-    if (!isObjectIdString(supportRequestId)) return null; // SC-10: never a query operator
+  private async shareableRequest(requestedId: string): Promise<SupportRequestForGrant | null> {
+    if (!isObjectIdString(requestedId)) return null; // SC-10: never a query operator
+    const supportRequestId = canonicalObjectId(requestedId); // the source answers the one spelling
     const request = await this.supportRequests.findForGrant(supportRequestId);
     if (!request || request.id !== supportRequestId) return null;
     if (!request.open || !request.dataAccessAllowed) return null;
     return isObjectIdString(request.requesterUserId) ? request : null;
+  }
+
+  /** Whether this account can still use a grant it holds: an active account with the admin capability. */
+  private async isActiveAdmin(userId: string): Promise<boolean> {
+    if (!isObjectIdString(userId)) return false;
+    const user = await this.users.findById(userId);
+    return !!user && user.isAdmin === true && isAccountActive(user);
   }
 
   /** BR-002-21: the requester is an active account without the admin capability. */

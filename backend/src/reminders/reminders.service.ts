@@ -173,6 +173,14 @@ export class RemindersService {
   }
 
   /**
+   * Scheduler (AR-12, BR-009-17): the reminder as it is now, if it is still pending and due; null when
+   * it is not. Read right before sending: the due batch may be minutes old by a reminder's turn.
+   */
+  findStillDue(reminderId: string): Promise<PopulatedReminder | null> {
+    return this.reminders.findStillDueAcrossAccounts(reminderId, this.clock.now());
+  }
+
+  /**
    * SPEC-010 BR-010-14 (closure effect, repeated by the purge): the closed account's pending
    * reminders are cancelled so the scheduler never selects them. Idempotent; answers how many.
    */
@@ -180,7 +188,15 @@ export class RemindersService {
     return this.reminders.cancelPendingOfAccountByJob(userId);
   }
 
-  /** Scheduler (AR-12): the reminder's account is closed; it will never be sent. */
+  /**
+   * SPEC-009 BR-009-17: a reactivated account's reminders whose time passed while it was deactivated
+   * are cancelled, never sent late; the ones still in the future stay. Idempotent; answers how many.
+   */
+  cancelDueOfAccount(userId: string): Promise<number> {
+    return this.reminders.cancelDueOfAccountByJob(userId, this.clock.now());
+  }
+
+  /** Scheduler (AR-12): the reminder's account is not active; it will never be sent. */
   async markAsCancelled(reminderId: string): Promise<void> {
     await this.reminders.markCancelledAcrossAccounts(reminderId);
   }

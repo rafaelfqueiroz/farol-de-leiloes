@@ -79,3 +79,13 @@ export function investorScopeFilter(
 export function isObjectIdString(id: unknown): id is string {
   return typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id) && Types.ObjectId.isValid(id);
 }
+
+/**
+ * The ONE spelling of an id: lower-case hex, as the database and a session write it. An id from a
+ * request may use any letter case and still names the same record, so an id that is compared, kept or
+ * echoed is first put in this form (two spellings compared as text are two ids to the code and one to
+ * the database). Call it on a value `isObjectIdString` accepted.
+ */
+export function canonicalObjectId(id: string): string {
+  return id.toLowerCase();
+}

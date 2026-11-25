@@ -31,6 +31,7 @@ interface UsersPort {
   findByIdFull(...args: Args<'findByIdFull'>): Promise<FakeAccount | null>;
   findByEmail(...args: Args<'findByEmail'>): Promise<FakeAccount | null>;
   validatePassword(...args: Args<'validatePassword'>): Promise<FakeAccount | null>;
+  verifyPassword(...args: Args<'verifyPassword'>): Promise<FakeAccount | null>;
   update(...args: Args<'update'>): Promise<FakeAccount>;
   updateProfile(...args: Args<'updateProfile'>): Promise<FakeAccount>;
   setPassword(...args: Args<'setPassword'>): Promise<FakeAccount>;
@@ -148,11 +149,16 @@ export class FakeUsersService implements UsersPort {
    * holds the credential version it proved even if the account moves on afterwards.
    */
   async validatePassword(email: string, password: string): Promise<FakeAccount | null> {
+    const account = await this.verifyPassword(email, password);
+    return account !== null && isAccountActive(account) ? account : null;
+  }
+
+  /** The account whose password this is whatever its status (SPEC-009 BR-009-20); a snapshot, like `validatePassword`. */
+  async verifyPassword(email: string, password: string): Promise<FakeAccount | null> {
     const account = await this.findByEmail(email);
-    const active = account !== null && isAccountActive(account);
     const signsInByPassword =
       account?.providers.includes('local') === true && account.password !== undefined;
-    return active && signsInByPassword && account.password === password
+    return account !== null && signsInByPassword && account.password === password
       ? { ...account, providers: [...account.providers] }
       : null;
   }

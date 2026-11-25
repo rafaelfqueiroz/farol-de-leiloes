@@ -1,13 +1,16 @@
 import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, type QueryFilter } from 'mongoose';
+import { type ClientSession, Model, type QueryFilter, Types } from 'mongoose';
 import { UserEntity, UserDocument } from './schemas/user.schema.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import { DomainError } from '../common/errors/domain-error.js';
 import { isReservedEmailDomain, normalizeEmail } from '../common/normalize-email.js';
+import { isObjectIdString } from '../access/owner-filter.js';
+import { escapeRegex } from '../common/mongo/escape-regex.js';
 import { serverOperators } from '../common/mongo/query-safety.js';
+import { skipOf, type PageRequest } from '../common/pagination/paginated.js';
 import { decideGoogleLink } from './domain/google-link.js';
 import {
   CLOSABLE_STATUSES,
@@ -17,7 +20,13 @@ import {
   purgedEmailWithSuffix,
   residueSweepDueAt,
 } from './domain/account-closure.js';
-import { abandonedPendingCutoff, isAccountActive } from './user-account.js';
+import {
+  type AccountRecordFacts,
+  type AccountStatus,
+  type AccountSummaryFacts,
+  abandonedPendingCutoff,
+  isAccountActive,
+} from './user-account.js';
 
 // SC-10: the only text fields UsersService.update writes (UpdateUserDto, AR-34). Nothing that
 // decides how the account signs in is here (`password`, `providers`, `googleId`): those change only
@@ -61,6 +70,24 @@ function liveStatusFilter() {
 export type GoogleLinkOutcome =
   | { result: 'linked_confirmed' | 'linked_unconfirmed'; account: UserDocument }
   | { result: 'inactive' | 'google_conflict' | 'not_found' };
+
+/**
+ * What `deactivateAccount` / `reactivateAccount` did (SPEC-009 BR-009-15, BR-009-17): `changed`; or
+ * `conflict`, the account is not in the state the change needs (nothing was written; `status` is the
+ * one it has); or `not_found`.
+ */
+export type AccountStatusChange =
+  | { readonly result: 'changed' }
+  | { readonly result: 'conflict'; readonly status: AccountStatus }
+  | { readonly result: 'not_found' };
+
+/** Options of a status change: the transaction it joins, when it is one step of several (SPEC-009). */
+export interface AccountStatusChangeOptions {
+  readonly session?: ClientSession;
+}
+
+/** SPEC-009 BR-009-13: the statuses an admin's account search and record show; never `pending`. */
+const ADMIN_VISIBLE_STATUSES = ['active', 'deactivated', 'closed'] as const;
 
 @Injectable()
 export class UsersService {
@@ -560,6 +587,18 @@ export class UsersService {
    * is as unknown as a missing email even if a hash is still in the document.
    */
   async validatePassword(email: string, password: string): Promise<UserDocument | null> {
+    const account = await this.verifyPassword(email, password);
+    return account && isAccountActive(account) ? account : null;
+  }
+
+  /**
+   * SPEC-009 BR-009-20: the account whose password this is WHATEVER its status, or null. The same
+   * single bcrypt comparison as `validatePassword` (which is this plus the status check), so the
+   * time does not tell a deactivated account from an active one. Only the sign-in uses it, to tell a
+   * deactivated account whose credentials were right from every other refusal; every other caller
+   * goes through `validatePassword` and keeps "not active means null".
+   */
+  async verifyPassword(email: string, password: string): Promise<UserDocument | null> {
     const user = await this.userRepository
       .findOne({
         email: { $eq: normalizeEmail(email) },
@@ -570,7 +609,7 @@ export class UsersService {
     const hash = user?.password ?? (await this.getDummyHash());
     const matches = await bcrypt.compare(password, hash);
     if (!user?.password || !matches) return null;
-    return isAccountActive(user) ? user : null;
+    return user;
   }
 
   private getDummyHash(): Promise<string> {
@@ -931,5 +970,183 @@ export class UsersService {
   async isEmailVerified(userId: string): Promise<boolean> {
     const user = await this.userRepository.findById(userId).exec();
     return user?.emailVerified ?? false;
+  }
+
+  /**
+   * SPEC-009 BR-009-15, SC-03: `active` -> `deactivated` in ONE conditional update that also moves the
+   * credential version. A session is stamped with the version it was issued for and `JwtStrategy`
+   * refuses it once the account's differs, so every session the account has, and one a sign-in that
+   * already passed its checks opens a moment later, is dead for good: even a failed or racing
+   * revocation write cannot leave one, and reactivating the account does not bring any back. The same
+   * write decides a race between two deactivations: exactly one matches. A missing status is active
+   * (AR-28); `pending`, `closed` and an account already deactivated are a `conflict`, nothing written.
+   *
+   * With `options.session` it is one step of a transaction (the admin's change and its history entry
+   * commit together or not at all); a conflict is then the caller's to turn into an abort.
+   */
+  deactivateAccount(
+    userId: string,
+    options: AccountStatusChangeOptions = {},
+  ): Promise<AccountStatusChange> {
+    return this.transitionStatus(userId, activeStatusFilter(), 'deactivated', options);
+  }
+
+  /**
+   * SPEC-009 BR-009-17: `deactivated` -> `active`, one conditional update. The credential version
+   * moves again, so no session survives from before either change (the deactivation already ended
+   * them; this keeps that true whatever a racing sign-in did in between). Memberships, the
+   * subscription and the account's data are not touched here, or anywhere in the deactivation.
+   */
+  reactivateAccount(
+    userId: string,
+    options: AccountStatusChangeOptions = {},
+  ): Promise<AccountStatusChange> {
+    return this.transitionStatus(userId, { $eq: 'deactivated' }, 'active', options);
+  }
+
+  /**
+   * SPEC-009 BR-009-19: a write on the ACTING admin's own account, inside the transaction of the change
+   * they make, only while it is still an active admin; false when it is not (nothing written). It exists
+   * to be a WRITE: two transactions that each change the other admin then touch the same documents, so
+   * one of them conflicts, retries and meets the other's result. It counts the admin's account changes
+   * and leaves `updatedAt` alone. A read would not do: transactions that only read each other's admin
+   * both commit.
+   */
+  async recordAdminAction(
+    adminId: string,
+    { session }: AccountStatusChangeOptions = {},
+  ): Promise<boolean> {
+    if (!isObjectIdString(adminId)) return false;
+    const result = await this.userRepository
+      .updateOne(
+        { _id: { $eq: adminId }, isAdmin: { $eq: true }, status: activeStatusFilter() },
+        { $inc: { adminActionCount: 1 } },
+        { timestamps: false, ...(session ? { session } : {}) },
+      )
+      .exec();
+    return result.matchedCount > 0;
+  }
+
+  private async transitionStatus(
+    userId: string,
+    from: QueryFilter<UserDocument>['status'],
+    to: 'active' | 'deactivated',
+    { session }: AccountStatusChangeOptions,
+  ): Promise<AccountStatusChange> {
+    if (!isObjectIdString(userId)) return { result: 'not_found' };
+    const inSession = session ? { session } : {};
+    const changed = await this.userRepository
+      .findOneAndUpdate(
+        { _id: { $eq: userId }, status: from },
+        // SC-03, DL-001-02: the version moves in the same atomic write as the status.
+        { $set: { status: to }, $inc: { credentialVersion: 1 } },
+        { returnDocument: 'after', ...inSession },
+      )
+      .select('_id')
+      .lean()
+      .exec();
+    if (changed) return { result: 'changed' };
+    // Nothing matched: it does not exist, or it is not in the state the change needs.
+    const current = await this.userRepository
+      .findOne({ _id: { $eq: userId } }, null, inSession)
+      .select('status')
+      .lean()
+      .exec();
+    if (!current) return { result: 'not_found' };
+    return { result: 'conflict', status: current.status ?? 'active' };
+  }
+
+  /**
+   * SPEC-009 BR-009-13: the admin's search of accounts by name or email, case-insensitively and by
+   * CONTAINS: the text is escaped, so it is literal (SC-10). `kind` `email` (the text has an `@`)
+   * looks at the address only; `name` looks at the name and the address. Never a `pending` sign-up
+   * and never a purged tombstone; sorted by name then id; one page and the number of matches. The
+   * rows carry the fields of a list row and nothing else (`select`), no password and no hash.
+   *
+   * It scans: a contains-search cannot use an index, so the cost grows with the number of accounts;
+   * the route's per-account limit, the 3-character minimum and the page size bound what one admin can
+   * ask. Revisit with a search index when the collection outgrows that (ARCHITECTURE §4).
+   */
+  async searchAccounts(
+    search: { readonly kind: 'email' | 'name'; readonly text: string },
+    page: PageRequest,
+  ): Promise<{ items: AccountSummaryFacts[]; total: number }> {
+    const matching = serverOperators({ $regex: escapeRegex(search.text), $options: 'i' });
+    const filter: QueryFilter<UserDocument> = {
+      $and: [
+        { status: serverOperators({ $in: [...ADMIN_VISIBLE_STATUSES, null] }) },
+        { purgedAt: serverOperators({ $exists: false }) },
+        search.kind === 'email'
+          ? { email: matching }
+          : { $or: [{ name: matching }, { email: matching }] },
+      ],
+    };
+    const [rows, total] = await Promise.all([
+      this.userRepository
+        .find(filter)
+        .select('name email status createdAt')
+        .sort({ name: 1, _id: 1 })
+        .skip(skipOf(page))
+        .limit(page.pageSize)
+        .lean()
+        .exec(),
+      this.userRepository.countDocuments(filter).exec(),
+    ]);
+    return {
+      items: rows.map((row) => ({
+        id: row._id.toHexString(),
+        name: row.name ?? null,
+        email: row.email,
+        status: (row.status ?? 'active') as AccountSummaryFacts['status'],
+        createdAt: row.createdAt,
+      })),
+      total,
+    };
+  }
+
+  /**
+   * SPEC-009 BR-009-13: the account fields an admin's record shows, and no others: the projection
+   * names them, so nothing added to the schema later reaches the record. Null for an unknown or
+   * malformed id and for a `pending` sign-up. A purged tombstone answers with no name, address or
+   * phone (SPEC-010 BR-010-15).
+   */
+  async findAccountRecord(userId: string): Promise<AccountRecordFacts | null> {
+    if (!isObjectIdString(userId)) return null;
+    const row = await this.userRepository
+      .findOne({
+        _id: { $eq: userId },
+        status: serverOperators({ $in: [...ADMIN_VISIBLE_STATUSES, null] }),
+      })
+      .select('name email phone createdAt providers emailVerified status isAdmin purgedAt')
+      .lean()
+      .exec();
+    if (!row) return null;
+    const purged = row.purgedAt !== undefined;
+    return {
+      id: row._id.toHexString(),
+      name: purged ? null : (row.name ?? null),
+      email: purged ? null : row.email,
+      phone: purged ? null : (row.phone ?? null),
+      createdAt: row.createdAt,
+      providers: [...(row.providers ?? [])],
+      emailVerified: row.emailVerified === true,
+      status: (row.status ?? 'active') as AccountRecordFacts['status'],
+      isAdmin: row.isAdmin === true,
+    };
+  }
+
+  /**
+   * SPEC-009 BR-009-17: the current names of the accounts with these ids (an admin's name next to a
+   * history entry), by id. An id with no account, or a purged one, is simply absent.
+   */
+  async namesOf(userIds: readonly string[]): Promise<Map<string, string>> {
+    const ids = [...new Set(userIds)].filter(isObjectIdString).map((id) => new Types.ObjectId(id));
+    if (ids.length === 0) return new Map();
+    const rows = await this.userRepository
+      .find({ _id: serverOperators({ $in: ids }), purgedAt: serverOperators({ $exists: false }) })
+      .select('name')
+      .lean()
+      .exec();
+    return new Map(rows.flatMap((row) => (row.name ? [[row._id.toHexString(), row.name]] : [])));
   }
 }

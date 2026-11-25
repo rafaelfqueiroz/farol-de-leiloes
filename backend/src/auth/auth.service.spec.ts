@@ -528,16 +528,46 @@ describe('AuthService with fake collaborators', () => {
       },
     );
 
-    it('BR-001-16: a deactivated account gets the same INVALID_CREDENTIALS and keeps the reserved count', async () => {
-      const { service, users, attemptRepo } = build();
+    it('BR-009-20: valid credentials of a DEACTIVATED account answer ACCOUNT_DEACTIVATED, sign nothing and keep the reserved count', async () => {
+      const { service, users, attemptRepo, sessionRepo, sign } = build();
       users.seed(localAccount({ status: 'deactivated' }));
 
       await expectDomainError(
         service.login({ email: 'local@example.test', password: 'correct-password' }, IP),
+        'ACCOUNT_DEACTIVATED',
+      );
+
+      expect(sign).not.toHaveBeenCalled();
+      expect(sessionRepo.stored).toEqual([]);
+      // Counted like any other attempt (SC-04): it is not given back, so the answer is no free oracle.
+      expect(attemptRepo.reserved.get('email:local@example.test')).toBe(1);
+      expect(attemptRepo.cleared).toEqual([]);
+      expect(attemptRepo.released).toEqual([]);
+    });
+
+    it('BR-009-20, BR-001-14: a WRONG password on a deactivated account is the usual INVALID_CREDENTIALS, the same as for any account', async () => {
+      const { service, users } = build();
+      users.seed(localAccount({ status: 'deactivated' }));
+
+      await expectDomainError(
+        service.login({ email: 'local@example.test', password: 'wrong-password' }, IP),
         'INVALID_CREDENTIALS',
       );
-      expect(attemptRepo.reserved.get('email:local@example.test')).toBe(1);
     });
+
+    it.each(['closed', 'pending'] as const)(
+      'BR-001-16: a %s account keeps today’s answer, INVALID_CREDENTIALS, even with the right password',
+      async (status) => {
+        const { service, users, sessionRepo } = build();
+        users.seed(localAccount({ status }));
+
+        await expectDomainError(
+          service.login({ email: 'local@example.test', password: 'correct-password' }, IP),
+          'INVALID_CREDENTIALS',
+        );
+        expect(sessionRepo.stored).toEqual([]);
+      },
+    );
 
     it.each([
       ['email', 'email:local@example.test'],
@@ -561,7 +591,7 @@ describe('AuthService with fake collaborators', () => {
       const { service, users, attemptRepo } = build();
       users.seed(localAccount());
       attemptRepo.block('email:local@example.test');
-      const compared = vi.spyOn(users, 'validatePassword');
+      const compared = vi.spyOn(users, 'verifyPassword');
 
       await expectDomainError(
         service.login({ email: 'local@example.test', password: 'correct-password' }, IP),
@@ -1215,8 +1245,8 @@ describe('AuthService with fake collaborators', () => {
     it('a reset that completes between the password check and the session leaves a session of the OLD version', async () => {
       const { service, users, sessionRepo } = build();
       users.seed(localAccount({ credentialVersion: 1 }));
-      const check = users.validatePassword.bind(users);
-      vi.spyOn(users, 'validatePassword').mockImplementation(async (mail, password) => {
+      const check = users.verifyPassword.bind(users);
+      vi.spyOn(users, 'verifyPassword').mockImplementation(async (mail, password) => {
         const verified = await check(mail, password);
         await users.setPassword(ID, 'reset-password'); // the whole reset lands in the gap
         return verified;

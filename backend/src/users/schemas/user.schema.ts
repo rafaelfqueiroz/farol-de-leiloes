@@ -43,6 +43,12 @@ export class UserEntity extends Document implements UserAccount {
   @Prop({ type: Number, required: false, default: 0, min: 0 })
   credentialVersion?: number;
 
+  // SPEC-009 BR-009-19: how many account status changes this admin has made. Written inside each
+  // change's transaction (UsersService.recordAdminAction) so that two admins acting on each other
+  // conflict; no request reaches it (BR-001-30). A count, no personal content.
+  @Prop({ type: Number, required: false, min: 0 })
+  adminActionCount?: number;
+
   // SPEC-010 BR-010-27: when the account first answered the one-time WhatsApp consent request
   // (granted, declined or withdrawn; the answers themselves are in `whatsappConsents`). Absent =
   // not asked yet: the next sign-in of an account that predates the channel is asked once. Set by

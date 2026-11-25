@@ -151,8 +151,8 @@ describe('SPEC-001 credential version (integration)', () => {
       await signUp(email);
       // Pause the real sign-in between its password check and its session creation, and finish
       // a whole reset (token consumed, new password, all sessions revoked) in that gap.
-      const original = usersService.validatePassword.bind(usersService);
-      vi.spyOn(usersService, 'validatePassword').mockImplementation(async (mail, password) => {
+      const original = usersService.verifyPassword.bind(usersService);
+      vi.spyOn(usersService, 'verifyPassword').mockImplementation(async (mail, password) => {
         const verified = await original(mail, password); // the OLD password, still valid here
         await completeReset(email, OTHER_PASSWORD);
         return verified;

@@ -134,6 +134,69 @@ isolationSpecFor('SupportRequestEntity', () => {
     );
   });
 
+  it('TS-16 / BR-009-12: an account that is not an admin gets the same 403 on the admin queue for B’s request and for a random id: the answer never depends on the id', async () => {
+    const as = app.as(a);
+
+    const foreign = await answerOf(as.get(`/api/admin/support-requests/${bRequest}`));
+    const random = await answerOf(as.get(`/api/admin/support-requests/${RANDOM_ID}`));
+
+    expect(foreign).toEqual(random);
+    expect(random).toEqual({ status: 403, body: { code: 'FORBIDDEN', context: {} } });
+    expect(await answerOf(as.post(`/api/admin/support-requests/${bRequest}/close`))).toEqual(
+      random,
+    );
+    expect(await answerOf(as.get('/api/admin/support-requests'))).toEqual(random);
+    expect((await app.as(b).get(`/api/support/mine/${bRequest}`).expect(200)).body).toMatchObject({
+      status: 'open',
+    });
+  });
+
+  it('BR-009-12 / BR-002-23: the admin reads every account’s requests through the admin queue ONLY, and the requester routes still show an admin none', async () => {
+    const queue = (await app.as(admin).get('/api/admin/support-requests?pageSize=100').expect(200))
+      .body as Page;
+
+    expect(queue.items.map((item) => item.subject).sort()).toEqual([
+      'Assunto de A',
+      'Assunto de B',
+      'Segundo assunto de A',
+    ]);
+    expect((await pageOf(admin)).total).toBe(0);
+  });
+
+  it('BR-009-12: after the admin closes B’s request, B’s own routes show it closed and never who closed it, the grant or any admin field', async () => {
+    await app.as(admin).post(`/api/admin/support-requests/${bRequest}/close`).expect(200);
+
+    const own = (await app.as(b).get(`/api/support/mine/${bRequest}`).expect(200)).body as Record<
+      string,
+      unknown
+    >;
+    const row = (await pageOf(b)).items[0] as Record<string, unknown>;
+
+    expect(Object.keys(own).sort()).toEqual([
+      'closedAt',
+      'createdAt',
+      'dataAccess',
+      'id',
+      'message',
+      'protocol',
+      'status',
+      'subject',
+    ]);
+    expect(Object.keys(row).sort()).toEqual([
+      'createdAt',
+      'dataAccess',
+      'id',
+      'protocol',
+      'status',
+      'subject',
+    ]);
+    expect(JSON.stringify([own, row])).not.toContain(admin.id);
+    // A's request is not touched by the close of B's.
+    expect((await app.as(a).get(`/api/support/mine/${aRequest}`).expect(200)).body).toMatchObject({
+      status: 'open',
+    });
+  });
+
   it('BR-002-11: an account id in the body, query or a header is refused or ignored', async () => {
     const as = app.as(a);
     for (const planted of [{ userId: b.id }, { ownerId: b.id }, { requesterUserId: b.id }]) {

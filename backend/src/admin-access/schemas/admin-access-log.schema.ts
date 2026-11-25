@@ -43,7 +43,7 @@ const LoggedResourceSchema = new MongooseSchema<LoggedResource>(
 
 /**
  * SPEC-002 BR-002-27 / AR-30: the admin access log. One entry per record an admin read under a
- * support access grant (`grant_read`), and, from SPEC-009, per account search or account view.
+ * support access grant (`grant_read`), and, from SPEC-009, per account search (`account_search`) or account record viewed (`account_view`, `resource { type: 'account' }`).
  *
  * INSERT-ONLY. No product action edits or deletes an entry, the admin's included: the repository
  * exposes `append` only, the update/delete query middleware below throws, and
@@ -74,9 +74,10 @@ export class AdminAccessLogEntity {
   resource?: LoggedResource;
 
   /**
-   * `account_search` only (SPEC-009): what the admin searched for. SC-15 / SC-25: SPEC-009 must
-   * not put personal data in it (an email or a name typed in the search), or must justify it in
-   * the LGPD inventory (SECURITY.md §9) before it does. Nothing writes it yet.
+   * `account_search` only (SPEC-009 BR-009-14, SC-15, SC-25): `<kind>:<length>:<hmac>` of the
+   * NORMALISED terms the admin searched for (`kind` is `email` or `name`; the hash is keyed with
+   * LOG_HASH_SECRET, domain/search-log-query.ts). Never the terms themselves: no name and no address
+   * is in the log. Justified in SECURITY.md §9 (admin access log).
    */
   @Prop({ type: String })
   query?: string;

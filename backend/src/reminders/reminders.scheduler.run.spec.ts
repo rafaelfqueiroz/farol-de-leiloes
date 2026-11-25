@@ -33,8 +33,14 @@ function aReminder(overrides: Record<string, unknown> = {}): PopulatedReminder {
 }
 
 function build(reminders = { enabled: true }) {
+  const getDueReminders = vi.fn().mockResolvedValue([]);
   const remindersService = {
-    getDueReminders: vi.fn().mockResolvedValue([]),
+    getDueReminders,
+    // Read again right before sending: by default the reminder of the batch, unchanged.
+    findStillDue: vi.fn(async (id: string): Promise<PopulatedReminder | null> => {
+      const batch = (await getDueReminders.mock.results.slice(-1)[0]?.value) as PopulatedReminder[];
+      return batch.find((reminder) => String(reminder._id) === id) ?? null;
+    }),
     logNotification: vi.fn().mockResolvedValue(undefined),
     markAsSent: vi.fn().mockResolvedValue(undefined),
     markAsCancelled: vi.fn().mockResolvedValue(undefined),
@@ -53,7 +59,13 @@ function build(reminders = { enabled: true }) {
     jobExecutionService as unknown as Deps[5],
     { reminders } as unknown as Deps[6],
   );
+  /** One reminder handed to the scheduler directly, unchanged when it is read again at its turn. */
+  const deliver = (reminder: PopulatedReminder) => {
+    remindersService.findStillDue.mockResolvedValue(reminder);
+    return scheduler['processReminder'](reminder);
+  };
   return {
+    deliver,
     scheduler,
     remindersService,
     usersService,
@@ -156,19 +168,53 @@ describe('RemindersScheduler.processReminders', () => {
     },
   );
 
-  it('BR-010-14: a CLOSED account’s reminders are cancelled so they are never read again; a deactivated one’s stay pending', async () => {
-    const closed = build();
-    closed.usersService.findByIdFull.mockResolvedValue({ ...USER, status: 'closed' });
-    closed.remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r1' })]);
-    const deactivated = build();
-    deactivated.usersService.findByIdFull.mockResolvedValue({ ...USER, status: 'deactivated' });
-    deactivated.remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r2' })]);
+  it.each(['closed', 'deactivated'])(
+    'BR-010-14, BR-009-15, BR-009-17: a due reminder of a %s account is CANCELLED when found, so it is never read again, never sent late and never crowds out other accounts',
+    async (status) => {
+      const { scheduler, remindersService, usersService } = build();
+      usersService.findByIdFull.mockResolvedValue({ ...USER, status });
+      remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r1' })]);
 
-    await closed.scheduler.processReminders();
-    await deactivated.scheduler.processReminders();
+      await scheduler.processReminders();
 
-    expect(closed.remindersService.markAsCancelled).toHaveBeenCalledWith('r1');
-    expect(deactivated.remindersService.markAsCancelled).not.toHaveBeenCalled();
+      expect(remindersService.markAsCancelled).toHaveBeenCalledWith('r1');
+    },
+  );
+
+  it('BR-009-17: a reminder no longer pending and due when its turn comes is not sent and not marked', async () => {
+    const { scheduler, remindersService, emailService } = build();
+    remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r1' })]);
+    remindersService.findStillDue.mockResolvedValue(null);
+
+    await scheduler.processReminders();
+
+    expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+    expect(remindersService.logNotification).not.toHaveBeenCalled();
+    expect(remindersService.markAsSent).not.toHaveBeenCalled();
+  });
+
+  it('sends the reminder as it is read at its turn, not the copy of the batch', async () => {
+    const { scheduler, remindersService, emailService, smsService } = build();
+    remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r1' })]);
+    remindersService.findStillDue.mockResolvedValue(
+      aReminder({ _id: 'r1', channel: ReminderChannel.SMS }), // the owner changed the channel
+    );
+
+    await scheduler.processReminders();
+
+    expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
+    expect(smsService.sendReminderSms).toHaveBeenCalledTimes(1);
+  });
+
+  it('BR-009-15: an ACTIVE account’s reminder is not cancelled', async () => {
+    const { scheduler, remindersService, usersService } = build();
+    usersService.findByIdFull.mockResolvedValue({ ...USER, status: 'active' });
+    remindersService.getDueReminders.mockResolvedValue([aReminder({ _id: 'r1' })]);
+
+    await scheduler.processReminders();
+
+    expect(remindersService.markAsCancelled).not.toHaveBeenCalled();
+    expect(remindersService.markAsSent).toHaveBeenCalledWith('r1');
   });
 
   it('a reminder whose account no longer exists is cancelled too: it can never be sent', async () => {
@@ -205,9 +251,9 @@ describe('RemindersScheduler.processReminders', () => {
 
 describe('RemindersScheduler per-channel delivery', () => {
   it('sends an e-mail reminder with the auction details and marks it sent', async () => {
-    const { scheduler, remindersService, emailService } = build();
+    const { remindersService, emailService, deliver } = build();
 
-    await scheduler['processReminder'](aReminder());
+    await deliver(aReminder());
 
     expect(emailService.sendReminderEmail).toHaveBeenCalledWith('fulana.ficticia@example.test', {
       userName: 'Fulana Ficticia',
@@ -231,9 +277,9 @@ describe('RemindersScheduler per-channel delivery', () => {
   });
 
   it('falls back to nulls and an empty code when the auction is gone', async () => {
-    const { scheduler, emailService } = build();
+    const { emailService, deliver } = build();
 
-    await scheduler['processReminder'](aReminder({ auction: null, description: undefined }));
+    await deliver(aReminder({ auction: null, description: undefined }));
 
     expect(emailService.sendReminderEmail).toHaveBeenCalledWith('fulana.ficticia@example.test', {
       userName: 'Fulana Ficticia',
@@ -249,10 +295,10 @@ describe('RemindersScheduler per-channel delivery', () => {
 
   it('records a failed e-mail by its code, leaves the reminder pending and logs the failure', async () => {
     const logger = spyOnLogger();
-    const { scheduler, remindersService, emailService } = build();
+    const { remindersService, emailService, deliver } = build();
     emailService.sendReminderEmail.mockRejectedValue(new TypeError('smtp rejected fulana'));
 
-    await scheduler['processReminder'](aReminder());
+    await deliver(aReminder());
 
     expect(remindersService.logNotification.mock.calls[0]?.slice(4)).toEqual([false, 'TypeError']);
     expect(remindersService.markAsSent).not.toHaveBeenCalled();
@@ -260,10 +306,10 @@ describe('RemindersScheduler per-channel delivery', () => {
   });
 
   it('sends an SMS with the auction title, or its code when it has no title', async () => {
-    const { scheduler, smsService, remindersService } = build();
+    const { smsService, remindersService, deliver } = build();
 
-    await scheduler['processReminder'](aReminder({ channel: ReminderChannel.SMS }));
-    await scheduler['processReminder'](
+    await deliver(aReminder({ channel: ReminderChannel.SMS }));
+    await deliver(
       aReminder({
         channel: ReminderChannel.SMS,
         description: undefined,
@@ -297,9 +343,9 @@ describe('RemindersScheduler per-channel delivery', () => {
   });
 
   it('sends a WhatsApp message with the user name and the details link', async () => {
-    const { scheduler, whatsAppService, remindersService } = build();
+    const { whatsAppService, remindersService, deliver } = build();
 
-    await scheduler['processReminder'](aReminder({ channel: ReminderChannel.WHATSAPP }));
+    await deliver(aReminder({ channel: ReminderChannel.WHATSAPP }));
 
     expect(whatsAppService.sendReminderWhatsApp).toHaveBeenCalledWith('+5500000000000', {
       userName: 'Fulana Ficticia',
@@ -314,9 +360,9 @@ describe('RemindersScheduler per-channel delivery', () => {
   });
 
   it('uses nulls for a WhatsApp reminder whose auction is gone', async () => {
-    const { scheduler, whatsAppService } = build();
+    const { whatsAppService, deliver } = build();
 
-    await scheduler['processReminder'](
+    await deliver(
       aReminder({ channel: ReminderChannel.WHATSAPP, auction: null, description: undefined }),
     );
 
@@ -333,10 +379,10 @@ describe('RemindersScheduler per-channel delivery', () => {
 
   it('skips a reminder whose user no longer exists, leaving it pending', async () => {
     const logger = spyOnLogger();
-    const { scheduler, usersService, remindersService, emailService } = build();
+    const { usersService, remindersService, emailService, deliver } = build();
     usersService.findByIdFull.mockResolvedValue(null);
 
-    await scheduler['processReminder'](aReminder());
+    await deliver(aReminder());
 
     expect(logger.loggedText()).toContain('User not found for reminder reminder-1');
     expect(emailService.sendReminderEmail).not.toHaveBeenCalled();
@@ -345,9 +391,9 @@ describe('RemindersScheduler per-channel delivery', () => {
 
   it('refuses a channel it does not know without sending or marking anything', async () => {
     const logger = spyOnLogger();
-    const { scheduler, remindersService, emailService, smsService, whatsAppService } = build();
+    const { remindersService, emailService, smsService, whatsAppService, deliver } = build();
 
-    await scheduler['processReminder'](aReminder({ channel: 'PIGEON' }));
+    await deliver(aReminder({ channel: 'PIGEON' }));
 
     expect(logger.loggedText()).toContain('Unknown channel: PIGEON');
     expect(emailService.sendReminderEmail).not.toHaveBeenCalled();

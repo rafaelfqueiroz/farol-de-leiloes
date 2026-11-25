@@ -73,25 +73,40 @@ export class RemindersScheduler implements OnModuleInit {
     }
   }
 
-  private async processReminder(reminder: PopulatedReminder): Promise<void> {
+  /**
+   * One reminder of the due batch. The batch is read once and worked through one send at a time, so by
+   * a reminder's turn it may have been cancelled, deleted, edited or its account changed. Its owner
+   * and then the reminder itself are therefore read AGAIN right before sending, and what is sent is
+   * the reminder as it is then. The owner is read FIRST: a reactivation cancels the due reminders
+   * before it makes the account active, so an active owner means that cancel is already visible.
+   * Not covered (issue #157): there is no claim before the send, so two overlapping runs can both send,
+   * and a change made during the send itself is not seen.
+   */
+  private async processReminder(due: PopulatedReminder): Promise<void> {
     try {
-      const user = await this.usersService.findByIdFull(reminder.userId.toString());
+      const user = await this.usersService.findByIdFull(due.userId.toString());
       if (!user) {
         // The account is gone for good (never comes back): the reminder can never be sent.
-        await this.remindersService.markAsCancelled(reminder._id.toString());
-        this.logger.warn(`User not found for reminder ${reminder._id}`);
+        await this.remindersService.markAsCancelled(due._id.toString());
+        this.logger.warn(`User not found for reminder ${due._id}`);
         return;
       }
-      // SPEC-010 BR-010-14 / BR-001-16: no notification is sent again to a closed (or deactivated)
-      // account. A CLOSED account never comes back, so its reminder is cancelled (the closure and the
-      // purge do it too; this catches a straggler) and is never read again, which keeps a closed
-      // account's backlog from crowding out other accounts'. A DEACTIVATED account may be reactivated
-      // (SPEC-009), so its reminder stays pending and is only skipped now.
+      // SPEC-010 BR-010-14 / BR-001-16, SPEC-009 BR-009-15, BR-009-17: nothing is sent to an account
+      // that is not active, and a reminder found DUE for one is CANCELLED, whatever the status: a
+      // closed account never comes back, and a deactivated one's reminder whose time has passed must
+      // never be sent late after a reactivation (it is not "pending" any more, so reactivating
+      // cannot revive it) and must not stay in the due window, re-read every run, where it would
+      // crowd out other accounts' reminders. A reminder not yet due is untouched: it is read only
+      // once its time comes, so the account's future reminders survive a deactivation.
       if ((user.status ?? 'active') !== 'active') {
-        if (user.status === 'closed') {
-          await this.remindersService.markAsCancelled(reminder._id.toString());
-        }
-        this.logger.warn(`Reminder ${reminder._id} not sent: the account is not active`);
+        await this.remindersService.markAsCancelled(due._id.toString());
+        this.logger.warn(`Reminder ${due._id} cancelled, not sent: the account is not active`);
+        return;
+      }
+
+      const reminder = await this.remindersService.findStillDue(due._id.toString());
+      if (!reminder) {
+        this.logger.log(`Reminder ${due._id} not sent: it is no longer pending and due`);
         return;
       }
 
@@ -160,7 +175,7 @@ export class RemindersScheduler implements OnModuleInit {
         this.logger.error(`Reminder ${reminder._id} failed: ${result.errorMessage}`);
       }
     } catch (error) {
-      this.logger.error(`Error processing reminder ${reminder._id}: ${jobErrorCode(error)}`);
+      this.logger.error(`Error processing reminder ${due._id}: ${jobErrorCode(error)}`);
     }
   }
 
