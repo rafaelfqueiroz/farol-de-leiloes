@@ -22,6 +22,11 @@ import {
 /** The national list, all states: `Lista_imoveis_geral.csv`. */
 export const CAIXA_LIST_PATH = '/listaweb/Lista_imoveis_geral.csv';
 
+/**
+ * One call of the port is at most MAX_REDIRECTS + 1 requests to Caixa (the redirects are followed
+ * inside it, on its own site). The collection's rate gate admits the call as ONE request, so the
+ * bound of a slot is 4 requests: documented in docs/runbooks/caixa-import.md.
+ */
 const MAX_REDIRECTS = 3;
 /** Statuses that are Caixa (or the proxy, or the law) saying no: stop, as for a challenge. */
 const BLOCK_STATUS: Readonly<Record<number, CaixaBlockReason>> = {
@@ -30,6 +35,7 @@ const BLOCK_STATUS: Readonly<Record<number, CaixaBlockReason>> = {
   407: 'HTTP_407',
   429: 'HTTP_429',
   451: 'HTTP_451',
+  503: 'HTTP_503',
 };
 /** A 5xx body is read only far enough to see whether it is a challenge page. */
 const ERROR_BODY_PROBE_BYTES = 64 * 1024;
@@ -95,6 +101,12 @@ export class HttpCaixaAccess extends CaixaAccess implements OnModuleDestroy {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const response = await this.request(url, accept);
       const status = response.status;
+      // A Retry-After, on any status, is Caixa (or its protection) asking us to come back later:
+      // a rate limit. Stop; never wait it out inside the run (SC-24, BR-004-20).
+      if (response.headers.has('retry-after')) {
+        await response.body?.cancel();
+        throw new CaixaBlockedError('RETRY_AFTER');
+      }
       if (status >= 300 && status < 400) {
         const location = response.headers.get('location');
         await response.body?.cancel();
@@ -106,6 +118,8 @@ export class HttpCaixaAccess extends CaixaAccess implements OnModuleDestroy {
         url = next;
         continue;
       }
+      // A 503 is a rate limit too, unless its page says it is a challenge (a more precise reason).
+      if (status === 503) await this.refuseServerErrorPage(response);
       const blocked = BLOCK_STATUS[status];
       if (blocked) {
         await response.body?.cancel();

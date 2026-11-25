@@ -45,6 +45,28 @@ export interface BusinessConfig {
     /** SPEC-004 BR-004-02: minutes between two attempts. */
     attemptSpacingMinutes: number;
   };
+  enrichment: {
+    /** SPEC-004 BR-004-18: detail pages a Brasília day, at most (counted across the day's passes). */
+    dailyPages: number;
+    /** BR-004-18: requests of every kind (page, photo, document) a Brasília day, at most. */
+    dailyRequests: number;
+    /** BR-004-18: requests in flight at once, at most (1-4). */
+    concurrency: number;
+    /** BR-004-18: milliseconds between two request starts, at least (>= 1000). */
+    minPauseMs: number;
+    /** BR-004-19: days between two collections of an active property, at most. */
+    maxStalenessDays: number;
+    /** BR-004-21: the first back-off, in days, of a property whose page failed; it doubles. */
+    failureBackoffDays: number;
+    /** Failures in a row that stop the pass (not a block). */
+    maxConsecutiveFailures: number;
+    /** BR-004-22: photos kept per property. */
+    maxPhotos: number;
+    /** BR-004-22: bytes above which a photo is refused. */
+    maxPhotoBytes: number;
+    /** BR-004-22: bytes above which a matrícula or an edital is refused. */
+    maxDocumentBytes: number;
+  };
   calendar: {
     /** SPEC-004 BR-004-31: national holidays as sorted `YYYY-MM-DD` Brasília days; may be empty. */
     nationalHolidays: readonly string[];
@@ -80,6 +102,18 @@ export function businessConfigFrom(env: Env): BusinessConfig {
       cutoffMinutes: minutesOfDay(env.IMPORT_CUTOFF),
       maxAttempts: env.IMPORT_MAX_ATTEMPTS,
       attemptSpacingMinutes: env.IMPORT_ATTEMPT_SPACING_MINUTES,
+    },
+    enrichment: {
+      dailyPages: env.ENRICHMENT_DAILY_PAGES,
+      dailyRequests: env.ENRICHMENT_DAILY_REQUESTS,
+      concurrency: env.ENRICHMENT_CONCURRENCY,
+      minPauseMs: env.ENRICHMENT_MIN_PAUSE_MS,
+      maxStalenessDays: env.ENRICHMENT_MAX_STALENESS_DAYS,
+      failureBackoffDays: env.ENRICHMENT_FAILURE_BACKOFF_DAYS,
+      maxConsecutiveFailures: env.ENRICHMENT_MAX_CONSECUTIVE_FAILURES,
+      maxPhotos: env.ENRICHMENT_MAX_PHOTOS,
+      maxPhotoBytes: env.ENRICHMENT_MAX_PHOTO_BYTES,
+      maxDocumentBytes: env.ENRICHMENT_MAX_DOCUMENT_BYTES,
     },
     calendar: { nationalHolidays: env.NATIONAL_HOLIDAYS },
   };

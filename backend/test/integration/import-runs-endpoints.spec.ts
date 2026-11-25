@@ -115,7 +115,13 @@ describe('the Import Run endpoints (integration, SPEC-004 BR-004-24, BR-004-28)'
     await service.acquireLease(run.id, 'w');
     if (outcome === 'SUCCESS') {
       await service.markSuccess(run.id, 'w', { new: 3, changed: 2, unavailable: 1, active: 40 });
-      await service.saveCollection(run.id, 'w', { collected: 5, failed: 1, blocked: true });
+      await service.saveCollection(run.id, 'w', {
+        collected: 5,
+        failed: 1,
+        blocked: true,
+        pages: 0,
+        requests: 0,
+      });
       if (complete) await service.completeUpdate(run.id);
     } else {
       await service.finalize(run.id, 'w', {
@@ -172,6 +178,8 @@ describe('the Import Run endpoints (integration, SPEC-004 BR-004-24, BR-004-28)'
         activeCount: 40,
         detailsCollected: 5,
         detailsFailed: 1,
+        detailsPages: 0,
+        detailsRequests: 0,
         blocked: true,
         failureReasons: [],
         nonBusinessReason: null,

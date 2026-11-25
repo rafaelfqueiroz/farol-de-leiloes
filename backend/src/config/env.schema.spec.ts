@@ -87,7 +87,6 @@ describe('validateEnv', () => {
       IMPORT_ENABLED: true,
       IMPORT_ON_START_UP: false,
       SCRAPER_ENABLED: true,
-      SCRAPER_ON_START_UP: false,
       REMINDERS_ENABLED: true,
       SUBSCRIPTIONS_RECONCILE_ENABLED: true,
       ACCOUNT_PURGE_ENABLED: true,
@@ -264,13 +263,13 @@ describe('namespaced configs built from the validated environment', () => {
     const config = schedulerConfigFrom(
       testEnv({
         IMPORT_ENABLED: 'false',
-        SCRAPER_ON_START_UP: 'true',
+        SCRAPER_ENABLED: 'false',
         NEIGHBORHOODS_CACHE_TTL: '5',
       }),
     );
     expect(config).toEqual({
       import: { enabled: false, onStartup: false },
-      scraper: { enabled: true, onStartup: true },
+      scraper: { enabled: false },
       cache: { neighborhoodsTtl: 5, neighborhoodsEnabled: false },
       reminders: { enabled: true },
       subscriptionsReconcile: { enabled: true },
@@ -358,6 +357,18 @@ describe('namespaced configs built from the validated environment', () => {
         maxAttempts: 12,
         attemptSpacingMinutes: 30,
       },
+      enrichment: {
+        dailyPages: 300,
+        dailyRequests: 2000,
+        concurrency: 1,
+        minPauseMs: 5000,
+        maxStalenessDays: 7,
+        failureBackoffDays: 1,
+        maxConsecutiveFailures: 5,
+        maxPhotos: 12,
+        maxPhotoBytes: 5 * 1024 * 1024,
+        maxDocumentBytes: 20 * 1024 * 1024,
+      },
       calendar: { nationalHolidays: [] },
     });
     expect(
@@ -390,6 +401,18 @@ describe('namespaced configs built from the validated environment', () => {
         maxAttempts: 12,
         attemptSpacingMinutes: 30,
       },
+      enrichment: {
+        dailyPages: 300,
+        dailyRequests: 2000,
+        concurrency: 1,
+        minPauseMs: 5000,
+        maxStalenessDays: 7,
+        failureBackoffDays: 1,
+        maxConsecutiveFailures: 5,
+        maxPhotos: 12,
+        maxPhotoBytes: 5 * 1024 * 1024,
+        maxDocumentBytes: 20 * 1024 * 1024,
+      },
       calendar: { nationalHolidays: [] },
     });
   });
@@ -420,5 +443,62 @@ describe('namespaced configs built from the validated environment', () => {
       bucket: TEST_ENV.R2_BUCKET,
       privateBucket: 'test-private-bucket',
     });
+  });
+});
+
+describe('the detail-collection budget (SPEC-004 BR-004-18, SC-24)', () => {
+  it('defaults to a slow, single, spaced collection', () => {
+    expect(testEnv()).toMatchObject({
+      ENRICHMENT_DAILY_PAGES: 300,
+      ENRICHMENT_DAILY_REQUESTS: 2000,
+      ENRICHMENT_CONCURRENCY: 1,
+      ENRICHMENT_MIN_PAUSE_MS: 5000,
+      ENRICHMENT_MAX_STALENESS_DAYS: 7,
+      ENRICHMENT_FAILURE_BACKOFF_DAYS: 1,
+      ENRICHMENT_MAX_CONSECUTIVE_FAILURES: 5,
+    });
+  });
+
+  it('refuses more than 4 requests in flight', () => {
+    expect(testEnv({ ENRICHMENT_CONCURRENCY: '4' }).ENRICHMENT_CONCURRENCY).toBe(4);
+    expect(errorOf({ ...TEST_ENV, ENRICHMENT_CONCURRENCY: '5' })).toContain(
+      'ENRICHMENT_CONCURRENCY',
+    );
+    expect(errorOf({ ...TEST_ENV, ENRICHMENT_CONCURRENCY: '0' })).toContain(
+      'ENRICHMENT_CONCURRENCY',
+    );
+  });
+
+  it('refuses a pause shorter than one second', () => {
+    expect(testEnv({ ENRICHMENT_MIN_PAUSE_MS: '1000' }).ENRICHMENT_MIN_PAUSE_MS).toBe(1000);
+    expect(errorOf({ ...TEST_ENV, ENRICHMENT_MIN_PAUSE_MS: '999' })).toContain(
+      'ENRICHMENT_MIN_PAUSE_MS',
+    );
+  });
+
+  it('refuses a zero or fractional budget and a zero staleness bound', () => {
+    for (const name of [
+      'ENRICHMENT_DAILY_PAGES',
+      'ENRICHMENT_DAILY_REQUESTS',
+      'ENRICHMENT_MAX_STALENESS_DAYS',
+      'ENRICHMENT_FAILURE_BACKOFF_DAYS',
+      'ENRICHMENT_MAX_CONSECUTIVE_FAILURES',
+      'ENRICHMENT_MAX_PHOTOS',
+    ]) {
+      expect(errorOf({ ...TEST_ENV, [name]: '0' })).toContain(name);
+      expect(errorOf({ ...TEST_ENV, [name]: '1.5' })).toContain(name);
+    }
+  });
+
+  it('bounds the photo count and the file sizes', () => {
+    expect(errorOf({ ...TEST_ENV, ENRICHMENT_MAX_PHOTOS: '31' })).toContain(
+      'ENRICHMENT_MAX_PHOTOS',
+    );
+    expect(errorOf({ ...TEST_ENV, ENRICHMENT_MAX_PHOTO_BYTES: '20971521' })).toContain(
+      'ENRICHMENT_MAX_PHOTO_BYTES',
+    );
+    expect(errorOf({ ...TEST_ENV, ENRICHMENT_MAX_DOCUMENT_BYTES: '104857601' })).toContain(
+      'ENRICHMENT_MAX_DOCUMENT_BYTES',
+    );
   });
 });

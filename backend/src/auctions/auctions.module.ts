@@ -4,6 +4,9 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuctionsController } from './auctions.controller.js';
 import { ImportRunsController } from './import-runs/import-runs.controller.js';
+import { AuctionDocumentsController } from './documents/auction-documents.controller.js';
+import { AuctionDocumentsThrottlerModule } from './documents/auction-documents-throttler.module.js';
+import { AuctionDocumentsService } from './documents/auction-documents.service.js';
 import { AuctionsService } from './auctions.service.js';
 import { AuctionEntity, AuctionSchema } from './schemas/auction.schema.js';
 import { CsvUpload, CsvUploadSchema } from './importer/schemas/csv-upload.schema.js';
@@ -12,7 +15,14 @@ import { AuctionsImporter } from './importer/scheduler.js';
 import { ImportOrchestrator } from './importer/import-orchestrator.service.js';
 import { DailyUpdateBus } from './import-runs/daily-update-bus.js';
 import { ImportAlertService } from './import-runs/import-alert.service.js';
-import { EnrichmentPass, NoopEnrichmentPass } from './enrichment/enrichment-pass.js';
+import { EnrichmentPass } from './enrichment/enrichment-pass.js';
+import { DetailEnrichmentPass } from './enrichment/detail-enrichment-pass.js';
+import { DetailApplier } from './enrichment/detail-applier.js';
+import { EnrichmentRepository } from './enrichment/enrichment.repository.js';
+import { FileCopier } from './enrichment/file-copier.js';
+import { PropertyCopier } from './enrichment/property-copier.js';
+import { RoundClockService } from './enrichment/round-clock.service.js';
+import { Sleeper, SystemSleeper } from '../common/clock/sleeper.js';
 import { EmailModule } from '../email/email.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { BusinessCalendarModule } from '../common/business-calendar.module.js';
@@ -24,7 +34,6 @@ import { ImportRunService } from './import-runs/import-run.service.js';
 import { PropertyChangeEntity, PropertyChangeSchema } from './changes/property-change.schema.js';
 import { PropertyChangeRepository } from './changes/property-change.repository.js';
 import { PropertyChangeService } from './changes/property-change.service.js';
-import { AuctionDetailsScraper } from './scraper/scraper-scheduler.js';
 import { AuctionCleanupService } from './cleanup/auction-cleanup.service.js';
 import { CommonModule } from '../common/common.module.js';
 import { StorageModule } from '../storage/storage.module.js';
@@ -60,16 +69,25 @@ import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
     EmailModule, // BR-004-29: the alert email
     UsersModule, // BR-004-29: the admins to alert (AR-09)
     BusinessCalendarModule, // BR-004-31
+    AuctionDocumentsThrottlerModule, // SC-04: the matrícula link
   ],
-  controllers: [AuctionsController, ImportRunsController],
+  controllers: [AuctionsController, ImportRunsController, AuctionDocumentsController],
   providers: [
     AuctionsService,
+    AuctionDocumentsService,
     AuctionsImporter,
     ImportOrchestrator,
     DailyUpdateBus,
     ImportAlertService,
-    // Part 4 provides the real pass; until then nothing is collected (SPEC-004 BR-004-23).
-    { provide: EnrichmentPass, useClass: NoopEnrichmentPass },
+    // SPEC-004 part 4: the detail-page collection that runs after the list is applied (BR-004-18),
+    // gated by SCRAPER_ENABLED; the clock's round changes run in the same completion step.
+    { provide: EnrichmentPass, useClass: DetailEnrichmentPass },
+    EnrichmentRepository,
+    DetailApplier,
+    PropertyCopier,
+    FileCopier,
+    RoundClockService,
+    { provide: Sleeper, useClass: SystemSleeper }, // SC-24: the pause between requests is real
     ListApplier,
     ListApplierRepository,
     ImportRunService,
@@ -83,7 +101,6 @@ import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
       useFactory: (config: CaixaConfig) => new HttpCaixaAccess(config),
       inject: [caixaConfig.KEY],
     },
-    AuctionDetailsScraper,
     AuctionCleanupService,
   ],
   // SPEC-008 / SPEC-013 read the change entries and the Import Runs through these services (AR-09).

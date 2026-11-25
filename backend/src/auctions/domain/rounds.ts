@@ -1,6 +1,7 @@
 // SPEC-004 BR-004-13, BR-004-14: the sale rounds of a property, its current round and discount.
 // Pure (AR-05): "now" is an argument (AR-24), money is a Decimal (AR-17).
 import { Decimal } from '../../common/money/money.js';
+import type { RoundPrices } from './detail-data.js';
 import { PhaseModality } from './modality.js';
 
 /**
@@ -64,24 +65,56 @@ export function discountPercent(
   return appraisalPrice.minus(minimumPrice).div(appraisalPrice).times(100);
 }
 
+const NO_PRICES: RoundPrices = { first: null, second: null, single: null };
+
 /**
- * The rounds a detail page's dates make, by modality (BR-004-13). An SFI auction has a 1st and a
- * 2nd round; open bidding and online sale one dated round each; a direct online sale has no end
- * date, so one open-ended round. No dates for a modality that needs them is unknown: no rounds.
+ * The rounds a detail page's dates and prices make, by modality (BR-004-13). An SFI auction has a
+ * 1st and a 2nd round, each with the price the page states for it; open bidding and online sale one
+ * dated round each, with the page's single price; a direct online sale has no end date, so one
+ * open-ended round. No dates for a modality that needs them is unknown: no rounds (BR-004-15).
+ *
+ *   roundsFromPhaseDates(SFI_AUCTION, [d1, d2], { first: 192622, second: 170201.84, single: null })
+ *     -> [{ '1º Leilão', 192622, d1 }, { '2º Leilão', 170201.84, d2 }]
  */
-export function roundsFromPhaseDates(modality: PhaseModality, dates: readonly Date[]): Round[] {
+export function roundsFromPhaseDates(
+  modality: PhaseModality,
+  dates: readonly Date[],
+  prices: RoundPrices = NO_PRICES,
+): Round[] {
   switch (modality) {
     case PhaseModality.SFI_AUCTION:
-      return dates.map((date, index) => ({
+      return dates.slice(0, 2).map((date, index) => ({
         label: `${index + 1}º Leilão`,
-        minimumPrice: null,
+        minimumPrice: index === 0 ? (prices.first ?? prices.single) : prices.second,
         date,
       }));
     case PhaseModality.OPEN_BIDDING:
-      return dates.slice(0, 1).map((date) => ({ label: 'Licitação', minimumPrice: null, date }));
+      return dates.slice(0, 1).map((date) => ({
+        label: 'Licitação',
+        minimumPrice: prices.single ?? prices.first,
+        date,
+      }));
     case PhaseModality.ONLINE_SALES:
-      return dates.slice(0, 1).map((date) => ({ label: 'Venda Online', minimumPrice: null, date }));
+      return dates.slice(0, 1).map((date) => ({
+        label: 'Venda Online',
+        minimumPrice: prices.single ?? prices.first,
+        date,
+      }));
     case PhaseModality.DIRECT_ONLINE_SALES:
-      return [{ label: 'Venda Direta', minimumPrice: null, date: null }];
+      return [{ label: 'Venda Direta', minimumPrice: prices.single ?? prices.first, date: null }];
   }
+}
+
+/**
+ * BR-004-15: unknown never replaces known. A page that gives a round's date but not its price
+ * (or a layout this reader missed) must not wipe the price already stored for that round: the
+ * rounds `next` read are kept, each with the stored price of the round of the same label when the
+ * page stated none.
+ */
+export function keepKnownPrices(next: readonly Round[], stored: readonly Round[]): Round[] {
+  return next.map((round) => {
+    if (round.minimumPrice !== null) return round;
+    const known = stored.find((candidate) => candidate.label === round.label)?.minimumPrice ?? null;
+    return known === null ? round : { ...round, minimumPrice: known };
+  });
 }

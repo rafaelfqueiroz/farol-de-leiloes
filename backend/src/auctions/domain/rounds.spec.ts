@@ -8,6 +8,7 @@ import {
   currentRound,
   discountPercent,
   type Round,
+  keepKnownPrices,
   roundsFromPhaseDates,
 } from './rounds.js';
 
@@ -116,5 +117,83 @@ describe('roundsFromPhaseDates', () => {
     expect(roundsFromPhaseDates(PhaseModality.DIRECT_ONLINE_SALES, [])).toEqual([
       { label: 'Venda Direta', minimumPrice: null, date: null },
     ]);
+  });
+});
+
+describe('roundsFromPhaseDates with the prices a page states (BR-004-11, BR-004-13)', () => {
+  const first = new Date('2026-03-10T13:00:00Z');
+  const second = new Date('2026-03-16T13:00:00Z');
+  const third = new Date('2026-03-20T13:00:00Z');
+  const prices = { first: d('192622.00'), second: d('170201.84'), single: null };
+
+  it('gives each SFI round its own price, and never more than two rounds', () => {
+    expect(roundsFromPhaseDates(PhaseModality.SFI_AUCTION, [first, second, third], prices)).toEqual(
+      [
+        { label: '1º Leilão', minimumPrice: d('192622.00'), date: first },
+        { label: '2º Leilão', minimumPrice: d('170201.84'), date: second },
+      ],
+    );
+  });
+
+  it('takes the 1st round price from the single price when the page has no 1st-round price', () => {
+    const singleOnly = { first: null, second: null, single: d('100.00') };
+
+    expect(roundsFromPhaseDates(PhaseModality.SFI_AUCTION, [first, second], singleOnly)).toEqual([
+      { label: '1º Leilão', minimumPrice: d('100.00'), date: first },
+      { label: '2º Leilão', minimumPrice: null, date: second },
+    ]);
+  });
+
+  it('gives the single price to the one round of the other modalities, the 1st as a fallback', () => {
+    const single = { first: null, second: null, single: d('89575.84') };
+    const firstOnly = { first: d('50.00'), second: null, single: null };
+
+    expect(
+      roundsFromPhaseDates(PhaseModality.OPEN_BIDDING, [first], single)[0]?.minimumPrice,
+    ).toEqual(d('89575.84'));
+    expect(
+      roundsFromPhaseDates(PhaseModality.ONLINE_SALES, [first], firstOnly)[0]?.minimumPrice,
+    ).toEqual(d('50.00'));
+    expect(roundsFromPhaseDates(PhaseModality.DIRECT_ONLINE_SALES, [], single)).toEqual([
+      { label: 'Venda Direta', minimumPrice: d('89575.84'), date: null },
+    ]);
+    expect(
+      roundsFromPhaseDates(PhaseModality.DIRECT_ONLINE_SALES, [], firstOnly)[0]?.minimumPrice,
+    ).toEqual(d('50.00'));
+  });
+});
+
+describe('keepKnownPrices (BR-004-15)', () => {
+  const stored = [
+    round('1º Leilão', '2026-03-10T13:00:00Z', '100'),
+    round('2º Leilão', '2026-03-16T13:00:00Z', '80'),
+  ];
+
+  it('keeps the stored price of a round the page gives dates for but no price', () => {
+    const merged = keepKnownPrices(
+      [round('1º Leilão', '2026-03-11T13:00:00Z'), round('2º Leilão', '2026-03-16T13:00:00Z')],
+      stored,
+    );
+
+    expect(merged.map((r) => r.minimumPrice?.toString() ?? null)).toEqual(['100', '80']);
+    expect(merged.map((r) => r.date?.toISOString())).toEqual([
+      '2026-03-11T13:00:00.000Z',
+      '2026-03-16T13:00:00.000Z',
+    ]);
+  });
+
+  it('takes the page price when it states one, even a different one', () => {
+    const merged = keepKnownPrices([round('1º Leilão', '2026-03-10T13:00:00Z', '90')], stored);
+
+    expect(merged[0]?.minimumPrice?.toString()).toBe('90');
+  });
+
+  it('leaves unknown what was never known, and a round that was not stored', () => {
+    const merged = keepKnownPrices(
+      [round('1º Leilão', '2026-03-10T13:00:00Z'), round('Licitação', '2026-03-10T13:00:00Z')],
+      [round('1º Leilão', '2026-03-10T13:00:00Z')],
+    );
+
+    expect(merged.map((r) => r.minimumPrice)).toEqual([null, null]);
   });
 });

@@ -42,7 +42,17 @@ export interface Auction {
   detailsCollectedAt: Date | null;
   detailsUrl: string | null;
   imageUrl: string | null;
+  /** BR-004-22: our copies of the gallery, in page order (public catalogue files); empty = none kept. */
+  photoUrls: string[];
+  /**
+   * A matrícula we do NOT hold a private copy of (a legacy public one, or none): Caixa's own link
+   * or ours. A private copy has no URL here (SC-18): `hasMatricula` says it exists and the signed
+   * link is issued per request.
+   */
   matriculaUrl: string | null;
+  /** BR-004-22, SC-18: the platform keeps a private copy of the matrícula, linked per request. */
+  hasMatricula: boolean;
+  /** BR-004-30: the CURRENT edital, our public copy; null when none was kept. */
   editalUrl: string | null;
   description: string | null;
   fulfilled: boolean;
@@ -76,7 +86,9 @@ export interface AuctionRecord {
   detailsCollectedAt?: Date | null;
   detailsUrl?: string | null;
   image?: AuctionFile | null;
+  photos?: AuctionFile[];
   matricula?: AuctionFile | null;
+  edital?: AuctionFile | null;
   description?: string | null;
   fulfilled?: boolean;
   available?: boolean;

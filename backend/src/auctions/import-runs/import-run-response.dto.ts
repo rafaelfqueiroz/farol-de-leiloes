@@ -67,6 +67,20 @@ export class ImportRunResponseDto {
   @ApiProperty({ type: 'integer', minimum: 0, description: 'Detail pages that failed' })
   detailsFailed: number;
 
+  @ApiProperty({
+    type: 'integer',
+    minimum: 0,
+    description: 'Detail pages requested from Caixa that day: what the daily budget counts',
+  })
+  detailsPages: number;
+
+  @ApiProperty({
+    type: 'integer',
+    minimum: 0,
+    description: 'Requests of every kind (pages, photos, documents) made to Caixa that day',
+  })
+  detailsRequests: number;
+
   @ApiProperty({ type: Boolean, description: 'Caixa blocked the detail collection of the run' })
   blocked: boolean;
 
@@ -98,6 +112,8 @@ export class ImportRunResponseDto {
     this.activeCount = record.counts.active;
     this.detailsCollected = record.collection.collected;
     this.detailsFailed = record.collection.failed;
+    this.detailsPages = record.collection.pages;
+    this.detailsRequests = record.collection.requests;
     this.blocked = record.collection.blocked;
     this.failureReasons = [...record.failureReasons];
     this.nonBusinessReason = record.nonBusinessReason;

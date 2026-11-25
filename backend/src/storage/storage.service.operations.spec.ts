@@ -1,13 +1,7 @@
-// TS-07: nothing reaches Caixa or R2. `fetch` is stubbed (a platform global, TS-03) and the S3
-// client's `send` is stubbed, so each upload, download and delete is observed as the command the
+// TS-07: nothing reaches R2. The S3 client's `send` is stubbed, so each upload, download and delete is observed as the command the
 // service built. Signing a URL is a local computation with the fake credentials.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { StorageService } from './storage.service.js';
 
 const config = {
@@ -17,19 +11,14 @@ const config = {
   bucket: 'test-bucket',
   publicUrl: 'https://cdn.test',
 };
-const SOURCE = 'https://venda-imoveis.caixa.gov.br/fotos/F0000000000000.jpg';
 
-const fetchStub = vi.fn();
 let send: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', fetchStub);
   send = vi.spyOn(S3Client.prototype, 'send').mockImplementation(async () => ({}));
 });
 
 afterEach(() => {
-  fetchStub.mockReset();
-  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -46,11 +35,8 @@ describe('StorageService without R2 credentials', () => {
     const service = new StorageService(notConfigured);
 
     expect(service.isConfigured()).toBe(false);
-    await expect(service.uploadImageFromUrl(SOURCE, 'A1')).resolves.toBeNull();
-    await expect(service.uploadDocumentFromUrl(SOURCE, 'A1', 'edital')).resolves.toBeNull();
     await expect(service.getSignedUrl('k')).resolves.toBeNull();
     await expect(service.deleteFile('k')).resolves.toBe(false);
-    expect(fetchStub).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });
 
@@ -61,135 +47,6 @@ describe('StorageService without R2 credentials', () => {
       'R2 not configured',
     );
     await expect(service.downloadBuffer('k')).rejects.toThrow('R2 not configured');
-  });
-});
-
-describe('StorageService.uploadImageFromUrl', () => {
-  it('stores the image under images/<code> with the extension of its content type', async () => {
-    fetchStub.mockResolvedValue(
-      new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png' } }),
-    );
-
-    const result = await new StorageService(config).uploadImageFromUrl(SOURCE, 'A1');
-
-    expect(result).toEqual({
-      key: 'images/A1.png',
-      url: 'https://cdn.test/images/A1.png',
-      size: 3,
-    });
-    expect(send.mock.calls[0]?.[0]).toBeInstanceOf(PutObjectCommand);
-    expect(sentInput()).toMatchObject({
-      Bucket: 'test-bucket',
-      Key: 'images/A1.png',
-      ContentType: 'image/png',
-    });
-  });
-
-  it.each([
-    ['image/jpeg', '.jpg'],
-    ['image/jpg', '.jpg'],
-    ['image/gif', '.gif'],
-    ['image/webp', '.webp'],
-    ['image/tiff', '.jpg'], // unknown types fall back to .jpg
-  ])('maps %s to %s', async (contentType, ext) => {
-    fetchStub.mockResolvedValue(
-      new Response(new Uint8Array([1]), { headers: { 'content-type': contentType } }),
-    );
-
-    const result = await new StorageService(config).uploadImageFromUrl(SOURCE, 'A1');
-
-    expect(result?.key).toBe(`images/A1${ext}`);
-  });
-
-  it('assumes image/jpeg when the response names no content type', async () => {
-    // A Blob-less body: Response sets no content-type for a Uint8Array.
-    fetchStub.mockResolvedValue(new Response(new Uint8Array([1, 2])));
-
-    const result = await new StorageService(config).uploadImageFromUrl(SOURCE, 'A1');
-
-    expect(result).toMatchObject({ key: 'images/A1.jpg', size: 2 });
-    expect(sentInput()['ContentType']).toBe('image/jpeg');
-  });
-
-  it('answers the bare key when no public URL is configured', async () => {
-    fetchStub.mockResolvedValue(new Response(new Uint8Array([1])));
-
-    const result = await new StorageService({ ...config, publicUrl: '' }).uploadImageFromUrl(
-      SOURCE,
-      'A1',
-    );
-
-    expect(result?.url).toBe('images/A1.jpg');
-  });
-
-  it('returns null without uploading when the source answers an error status', async () => {
-    fetchStub.mockResolvedValue(new Response('gone', { status: 404 }));
-
-    await expect(new StorageService(config).uploadImageFromUrl(SOURCE, 'A1')).resolves.toBeNull();
-    expect(send).not.toHaveBeenCalled();
-  });
-
-  it('returns null when the download or the upload throws', async () => {
-    fetchStub.mockRejectedValueOnce(new Error('network down'));
-    const service = new StorageService(config);
-    await expect(service.uploadImageFromUrl(SOURCE, 'A1')).resolves.toBeNull();
-
-    fetchStub.mockResolvedValue(new Response(new Uint8Array([1])));
-    send.mockRejectedValueOnce(new Error('bucket unavailable'));
-    await expect(service.uploadImageFromUrl(SOURCE, 'A1')).resolves.toBeNull();
-  });
-});
-
-describe('StorageService.uploadDocumentFromUrl', () => {
-  it('stores the document under documents/<code>/<type>.pdf', async () => {
-    fetchStub.mockResolvedValue(
-      new Response(new Uint8Array([1, 2, 3, 4]), {
-        headers: { 'content-type': 'application/pdf' },
-      }),
-    );
-
-    const result = await new StorageService(config).uploadDocumentFromUrl(SOURCE, 'A1', 'edital');
-
-    expect(result).toEqual({
-      key: 'documents/A1/edital.pdf',
-      url: 'https://cdn.test/documents/A1/edital.pdf',
-      size: 4,
-    });
-    expect(sentInput()).toMatchObject({
-      Key: 'documents/A1/edital.pdf',
-      ContentType: 'application/pdf',
-    });
-  });
-
-  it('assumes application/pdf and a bare key when the response and config say nothing', async () => {
-    fetchStub.mockResolvedValue(new Response(new Uint8Array([1])));
-
-    const result = await new StorageService({ ...config, publicUrl: '' }).uploadDocumentFromUrl(
-      SOURCE,
-      'A1',
-      'matricula',
-    );
-
-    expect(result?.url).toBe('documents/A1/matricula.pdf');
-    expect(sentInput()['ContentType']).toBe('application/pdf');
-  });
-
-  it('returns null without uploading when the source answers an error status', async () => {
-    fetchStub.mockResolvedValue(new Response('no', { status: 503 }));
-
-    await expect(
-      new StorageService(config).uploadDocumentFromUrl(SOURCE, 'A1', 'edital'),
-    ).resolves.toBeNull();
-    expect(send).not.toHaveBeenCalled();
-  });
-
-  it('returns null when the upload throws', async () => {
-    fetchStub.mockResolvedValue(new Response(new Uint8Array([1])));
-    send.mockRejectedValueOnce(new Error('bucket unavailable'));
-
-    await expect(
-      new StorageService(config).uploadDocumentFromUrl(SOURCE, 'A1', 'edital'),
-    ).resolves.toBeNull();
   });
 });
 
@@ -262,5 +119,25 @@ describe('StorageService buffers', () => {
     await expect(new StorageService(config).downloadBuffer('exports/a.csv')).rejects.toThrow(
       'R2 object exports/a.csv has no body',
     );
+  });
+});
+
+describe('StorageService.publicUrlFor (SPEC-004 BR-004-22)', () => {
+  it('joins the public base URL and the key of a catalogue file', () => {
+    expect(new StorageService(config).publicUrlFor('auctions/1/photos/a.jpg')).toBe(
+      'https://cdn.test/auctions/1/photos/a.jpg',
+    );
+  });
+
+  it('answers the key itself when no public base URL is configured', () => {
+    expect(new StorageService({ ...config, publicUrl: '' }).publicUrlFor('auctions/1/a.jpg')).toBe(
+      'auctions/1/a.jpg',
+    );
+  });
+
+  it('refuses a private key: a client or personal file has no public URL (SC-18)', () => {
+    expect(() =>
+      new StorageService(config).publicUrlFor('private/auctions/1/matricula/a.pdf'),
+    ).toThrow('no public URL');
   });
 });

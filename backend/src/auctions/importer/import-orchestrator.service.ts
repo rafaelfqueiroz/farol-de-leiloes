@@ -20,11 +20,13 @@ import {
   type RunState,
 } from '../domain/import-schedule.js';
 import { validateList } from '../domain/list-validator.js';
+import { RoundClockService } from '../enrichment/round-clock.service.js';
 import { EnrichmentPass, type CollectionResult } from '../enrichment/enrichment-pass.js';
 import { DailyUpdateBus } from '../import-runs/daily-update-bus.js';
 import { ImportAlertService } from '../import-runs/import-alert.service.js';
 import type { ImportCounts, ImportRunRecord } from '../import-runs/import-run.js';
 import { RUN_LEASE_MS, ImportRunService } from '../import-runs/import-run.service.js';
+import { LeaseLostError } from '../import-runs/lease-lost.error.js';
 import { CsvCacheService } from './csv-cache.service.js';
 import { AUCTIONS_IMPORT_JOB } from './import-job.js';
 import { ListApplier } from './list-applier.service.js';
@@ -44,11 +46,6 @@ export interface TickOptions {
    * it never overrides a run that is already decided.
    */
   force?: boolean;
-}
-
-/** The worker lost the lease (it stalled past its expiry): it stops, the new holder carries on. */
-class LeaseLostError extends Error {
-  override name = 'LeaseLostError';
 }
 
 /**
@@ -74,6 +71,7 @@ export class ImportOrchestrator {
   private readonly schedule: ImportSchedule;
   /** How often a worker extends its lease; a spec shortens it to watch the heartbeat. */
   leaseRenewMs = LEASE_RENEW_MS;
+  private ticking = false;
   /**
    * Blocks Caixa answered with whose finalizing write failed, by the run's day: day -> the block's
    * reason. The one write that records a block and ends the day (`finalizeBlocked`) can itself
@@ -95,6 +93,7 @@ export class ImportOrchestrator {
     private readonly enrichment: EnrichmentPass,
     private readonly bus: DailyUpdateBus,
     private readonly alerts: ImportAlertService,
+    private readonly roundClock: RoundClockService,
   ) {
     const { windowStartMinutes, cutoffMinutes, maxAttempts, attemptSpacingMinutes } =
       business.import;
@@ -102,6 +101,24 @@ export class ImportOrchestrator {
   }
 
   async tick(options: TickOptions = {}): Promise<void> {
+    // One tick at a time in this process (SC-24): a collection pass can outlast the next cron tick,
+    // and the next day's run must not start working (and asking Caixa) while the day's pass still
+    // runs. Several processes are kept apart by the lease per run, but they would each pace
+    // themselves: more than one API instance is unsupported until the rate gate is shared through
+    // the database (docs/runbooks/caixa-import.md).
+    if (this.ticking) {
+      this.logger.debug('A tick is still working: this one does nothing');
+      return;
+    }
+    this.ticking = true;
+    try {
+      await this.tickOnce(options);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async tickOnce(options: TickOptions): Promise<void> {
     const runMode = options.force === true ? RunMode.MANUAL : RunMode.AUTO;
     try {
       const today = brasiliaToday(this.clock); // AR-23, AR-24
@@ -410,18 +427,43 @@ export class ImportOrchestrator {
       this.logger.warn(`Could not invalidate the neighborhoods cache: ${jobErrorCode(error)}`);
     }
 
-    let collection: CollectionResult = { collected: 0, failed: 0, blocked: false };
     await this.assertHeld(run.id, owner); // never start a pass for a run another worker holds now
+    // What earlier passes of the day did (a resumed run): the budget is what they left (BR-004-18).
+    let collection: CollectionResult =
+      (await this.runs.findById(run.id))?.collection ?? run.collection;
     try {
       collection = await this.enrichment.run({
         importRunId: run.id,
         brasiliaDate: run.brasiliaDate,
+        previous: collection,
+        // Before EVERY request to Caixa: a stalled worker stops quietly (LeaseLostError, below).
+        assertHeld: () => this.assertHeld(run.id, owner),
+        saveProgress: async (progress) => {
+          this.fence(await this.runs.saveCollection(run.id, owner, progress));
+        },
       });
     } catch (error) {
+      // A lease lost mid-pass ends the tick quietly: the new holder resumes from the saved totals.
+      if (error instanceof LeaseLostError) throw error;
       // The update does not wait on a fault of the enrichment: the Radar and the digest still run.
       this.reportFault('The collection pass failed', error);
+      collection = (await this.runs.findById(run.id))?.collection ?? collection;
     }
     this.fence(await this.runs.saveCollection(run.id, owner, collection));
+
+    // BR-004-13, BR-004-26: the rounds the clock moved since the last run, before the signal.
+    await this.assertHeld(run.id, owner);
+    try {
+      await this.roundClock.record({
+        importRunId: run.id,
+        assertHeld: () => this.assertHeld(run.id, owner),
+      });
+    } catch (error) {
+      if (error instanceof LeaseLostError) throw error;
+      // The changes are found by the next run's look (the recorded round still differs); the
+      // update still completes.
+      this.reportFault('The round clock check failed', error);
+    }
 
     // Exactly one caller wins this update, so the signal fires once per day (BR-004-23). Only a
     // worker that still holds the run completes it.

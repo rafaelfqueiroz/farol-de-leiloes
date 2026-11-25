@@ -70,6 +70,72 @@ describe('toAuction', () => {
 
     expect(auction.imageUrl).toBe('https://caixa.example.test/f.jpg');
     expect(auction.matriculaUrl).toBe('https://files.example.test/m.pdf');
+    expect(auction.hasMatricula).toBe(true);
+  });
+
+  // SPEC-004 BR-004-22, BR-004-30, SC-18: the copies a collection keeps.
+  describe('the copies of a collected property', () => {
+    const photo = (key: string) => ({
+      originalUrl: `https://venda-imoveis.caixa.gov.br/fotos/${key}.jpg`,
+      storageKey: `auctions/A1/photos/${key}.jpg`,
+      publicUrl: `https://files.example.test/auctions/A1/photos/${key}.jpg`,
+      mimeType: 'image/jpeg',
+    });
+
+    it('lists the gallery copies in order and serves the current edital copy', () => {
+      const auction = read({
+        code: 'A1',
+        photos: [photo('a'), photo('b')],
+        edital: {
+          originalUrl: 'https://venda-imoveis.caixa.gov.br/editais/E1.PDF',
+          storageKey: 'auctions/A1/edital/x.pdf',
+          publicUrl: 'https://files.example.test/auctions/A1/edital/x.pdf',
+          mimeType: 'application/pdf',
+        },
+        updatedAt: UPDATED,
+      });
+
+      expect(auction.photoUrls).toEqual([
+        'https://files.example.test/auctions/A1/photos/a.jpg',
+        'https://files.example.test/auctions/A1/photos/b.jpg',
+      ]);
+      expect(auction.editalUrl).toBe('https://files.example.test/auctions/A1/edital/x.pdf');
+    });
+
+    it('has no gallery and no edital for a property never collected', () => {
+      expect(read({ code: 'A1', updatedAt: UPDATED })).toMatchObject({
+        photoUrls: [],
+        editalUrl: null,
+        hasMatricula: false,
+      });
+    });
+
+    it('never hands out a URL for a private matrícula copy, only that it exists (SC-18)', () => {
+      const auction = read({
+        code: 'A1',
+        matricula: {
+          originalUrl: 'https://venda-imoveis.caixa.gov.br/editais/matricula/XX/A1.pdf',
+          storageKey: 'private/auctions/A1/matricula/x.pdf',
+          mimeType: 'application/pdf',
+        },
+        updatedAt: UPDATED,
+      });
+
+      expect(auction.matriculaUrl).toBeNull();
+      expect(auction.hasMatricula).toBe(true);
+    });
+
+    it('skips a photo copy that has no public URL', () => {
+      const auction = read({
+        code: 'A1',
+        photos: [
+          { originalUrl: 'https://venda-imoveis.caixa.gov.br/fotos/z.jpg', mimeType: 'image/jpeg' },
+        ],
+        updatedAt: UPDATED,
+      });
+
+      expect(auction.photoUrls).toEqual([]);
+    });
   });
 });
 

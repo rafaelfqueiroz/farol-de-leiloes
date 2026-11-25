@@ -151,15 +151,14 @@ export function spawnsProcess(source: string): boolean {
   return importsModule(source, 'child_process|execa|shelljs|cross-spawn');
 }
 
-// The three files that predate the CaixaAccess port still reach out on their own (the detail
-// scraper drives puppeteer, the storage copies fetch a Caixa URL, the LLM adapter fetches the model
-// provider), plus the adapter itself. SPEC-004 part 3 moves the Caixa ones behind the port. This
-// list is exact: a new file that reaches out fails until it is added here on purpose.
+// The files that reach out on their own: the Caixa adapter (the ONLY one that reaches Caixa) and the
+// LLM adapter (the model provider). The detail scraper no longer drives a browser and the storage
+// copies no longer fetch a Caixa URL (SPEC-004 part 4): the pages, the photos and the documents all
+// go through `CaixaAccess`. This list is exact and may only shrink: a new file that reaches out
+// fails until it is added here on purpose.
 const KNOWN_REACHING_OUT = [
   'backend/src/ai/adapters/llm.adapter.ts',
   'backend/src/auctions/caixa/http-caixa-access.ts',
-  'backend/src/auctions/scraper/details-scraper.ts',
-  'backend/src/storage/storage.service.ts',
 ];
 
 describe('SC-24: the collection code carries no evasion', () => {

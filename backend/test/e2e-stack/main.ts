@@ -3,9 +3,9 @@
 // error shape through configureApp — compiled with the testing module's provider overrides:
 //
 //   Caixa       AuctionsImporter (the only @Cron host of the import, SPEC-004 part 3),
-//               ImportOrchestrator (the tick it calls) and AuctionDetailsScraper are inert
-//               values: no @Cron is registered and nothing runs at start-up, so the stack never
-//               reaches Caixa and never sends an import alert. The catalog comes from the
+//               ImportOrchestrator (the tick it calls, which runs the detail collection and the
+//               clock's round changes) are inert values: no @Cron is registered and nothing runs
+//               at start-up, so the stack never reaches Caixa and never sends an import alert. The catalog comes from the
 //               reference-workload seed instead (BR-003-08).
 //   Stripe      FakePaymentGateway (test/fakes), the port's own fake (AR-10).
 //   SMTP        E2eEmailSender: emails are recorded in memory, never sent.
@@ -26,7 +26,6 @@ import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/app.setup.js';
 import { AuctionsImporter } from '../../src/auctions/importer/scheduler.js';
 import { ImportOrchestrator } from '../../src/auctions/importer/import-orchestrator.service.js';
-import { AuctionDetailsScraper } from '../../src/auctions/scraper/scraper-scheduler.js';
 import { EmailService } from '../../src/email/email.service.js';
 import { PaymentGateway } from '../../src/payments/payment-gateway.js';
 import { FakePaymentGateway } from '../fakes/fake-payment-gateway.js';
@@ -42,8 +41,6 @@ async function bootstrap(): Promise<void> {
     .useValue({})
     .overrideProvider(ImportOrchestrator)
     .useValue({ tick: () => Promise.resolve() })
-    .overrideProvider(AuctionDetailsScraper)
-    .useValue({})
     .overrideProvider(PaymentGateway)
     .useValue(new FakePaymentGateway())
     .overrideProvider(EmailService)
