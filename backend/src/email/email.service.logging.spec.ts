@@ -23,6 +23,13 @@ const reminder = {
   scheduledAt: new Date('2026-01-26T13:00:00.000Z'),
 } as unknown as Parameters<EmailService['sendReminderEmail']>[1];
 
+const alert = {
+  date: '23/11/2026',
+  outcomeLabel: 'Falhou',
+  reasonText: 'O Caixa bloqueou o acesso <script>',
+  codes: ['LIST_BLOCKED', 'HTTP_403'],
+};
+
 // No SMTP key at all: the transporter is never built.
 function configWith(nodeEnv: string) {
   return {
@@ -39,6 +46,7 @@ async function sendAll(service: EmailService) {
   await service.sendSupportEmail(SUPPORT, EMAIL, NAME, TITLE, TEXT);
   await service.sendReminderEmail(EMAIL, reminder);
   await service.sendPaymentFailedEmail(EMAIL, NAME);
+  await service.sendImportAlertEmail(EMAIL, alert);
 }
 
 describe('EmailService logging', () => {
@@ -58,6 +66,7 @@ describe('EmailService logging', () => {
       expect(logged).toContain('Verification email simulated (SMTP not configured)');
       expect(logged).toContain('Password reset email simulated (SMTP not configured)');
       expect(logged).toContain('Payment failed email simulated (SMTP not configured)');
+      expect(logged).toContain('Import alert email simulated (SMTP not configured)');
     },
   );
 
@@ -96,5 +105,41 @@ describe('EmailService logging', () => {
     expect(named?.html).not.toContain('<b>Fulana</b>');
     expect(anonymous?.html).toContain('Olá!');
     expect(anonymous?.html).not.toContain('undefined');
+  });
+
+  it('SPEC-004 BR-004-29: the import alert carries the day, outcome, reason text and codes, escaped, to the admin', async () => {
+    const sendMail = vi.fn().mockResolvedValue({});
+    const service = new EmailService(testConfigService());
+    (service as unknown as { transporter: unknown }).transporter = { sendMail };
+
+    await service.sendImportAlertEmail(EMAIL, alert);
+
+    const [mail] = sendMail.mock.calls.map((call) => call[0] as Record<string, string>);
+    expect(mail).toMatchObject({
+      to: EMAIL,
+      subject: 'Importação do Caixa: falhou em 23/11/2026 - Farol dos Leilões',
+    });
+    expect(mail?.html).toContain('23/11/2026');
+    expect(mail?.html).toContain('LIST_BLOCKED, HTTP_403');
+    expect(mail?.html).toContain('&lt;script&gt;');
+    expect(mail?.html).not.toContain('<script>');
+  });
+
+  it('SPEC-004 BR-004-29: an alert with no codes shows a dash, and an SMTP failure leaves no address in the log', async () => {
+    const logger = spyOnLogger();
+    const sendMail = vi
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error(`Invalid recipient ${EMAIL}`));
+    const service = new EmailService(testConfigService());
+    (service as unknown as { transporter: unknown }).transporter = { sendMail };
+
+    await service.sendImportAlertEmail(EMAIL, { ...alert, codes: [] });
+    await expect(service.sendImportAlertEmail(EMAIL, alert)).rejects.toThrow();
+
+    expect((sendMail.mock.calls[0]?.[0] as { html: string }).html).toContain(
+      '<p class="codes">-</p>',
+    );
+    expectNoneLogged(logger.loggedText(), PERSONAL);
   });
 });

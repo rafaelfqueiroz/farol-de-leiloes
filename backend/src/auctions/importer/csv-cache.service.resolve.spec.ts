@@ -78,6 +78,19 @@ describe('CsvCacheService.resolveCsv with R2', () => {
     );
   });
 
+  it('BR-004-02: a fresh attempt ignores today’s copy, asks Caixa and replaces the copy', async () => {
+    const { service, model, storage, caixa } = build({
+      lastUpload: new Date('2026-01-15T09:00:00.000Z'),
+    });
+
+    await expect(service.resolveCsv({ fresh: true })).resolves.toBe('fresh;csv');
+
+    expect(caixa.requests).toEqual([{ kind: 'list' }]);
+    expect(storage.downloadBuffer).not.toHaveBeenCalled();
+    expect(storage.uploadBuffer).toHaveBeenCalledTimes(1);
+    expect(model.findOneAndUpdate).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes a copy cached on an earlier Brasília day', async () => {
     // 14/01 23:00 in Brasília is yesterday, although it is 02:00 UTC on 15/01.
     const { service, storage } = build({ lastUpload: new Date('2026-01-15T02:00:00.000Z') });
@@ -126,5 +139,32 @@ describe('CsvCacheService.resolveCsv with R2', () => {
     await expect(service.resolveCsv()).rejects.toBeInstanceOf(CaixaBlockedError);
     expect(storage.uploadBuffer).not.toHaveBeenCalled();
     expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('CsvCacheService.readStored (a resume never reaches Caixa, SC-24, BR-004-07)', () => {
+  it('answers the stored copy whatever day it was stored on, and asks Caixa nothing', async () => {
+    const { service, caixa, storage } = build({ lastUpload: new Date('2026-01-10T09:00:00.000Z') });
+
+    await expect(service.readStored()).resolves.toBe('cached');
+
+    expect(storage.downloadBuffer).toHaveBeenCalledWith(R2_KEY);
+    expect(caixa.requests).toEqual([]);
+  });
+
+  it('answers null without R2, without a stored copy, or when it cannot be read: never a download', async () => {
+    const without = build({ configured: false });
+    await expect(without.service.readStored()).resolves.toBeNull();
+
+    const empty = build({});
+    await expect(empty.service.readStored()).resolves.toBeNull();
+
+    const unreadable = build({
+      lastUpload: new Date('2026-01-15T09:00:00.000Z'),
+      r2: new Error('storage unavailable'),
+    });
+    await expect(unreadable.service.readStored()).resolves.toBeNull();
+
+    for (const { caixa } of [without, empty, unreadable]) expect(caixa.requests).toEqual([]);
   });
 });

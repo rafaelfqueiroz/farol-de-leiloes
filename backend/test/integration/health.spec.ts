@@ -103,15 +103,15 @@ describe('GET /api/health (integration, AR-48)', () => {
     expect(response.text).not.toContain('DownloadError');
   });
 
-  it('is degraded when the last successful import is stale (past 26 h)', async () => {
-    // 2026-01-14T09:00Z → 2026-01-15T12:00Z = 27 h > 26 h.
-    await executions.create(importRun().finishedAt(new Date('2026-01-14T09:00:00.000Z')).build());
+  it('is degraded when the last successful import is stale (past 32 h)', async () => {
+    // 2026-01-14T02:00Z → 2026-01-15T12:00Z = 34 h > 32 h.
+    await executions.create(importRun().finishedAt(new Date('2026-01-14T02:00:00.000Z')).build());
 
     const response = await health().expect(200);
 
     expect(response.body).toMatchObject({
       status: 'degraded',
-      lastImport: { status: 'SUCCESS', ageHours: 27, stale: true },
+      lastImport: { status: 'SUCCESS', ageHours: 34, stale: true },
     });
   });
 

@@ -21,7 +21,7 @@ export class LastImportHealthDto {
   @ApiProperty({ type: Number, nullable: true, description: 'Hours since the run finished' })
   ageHours!: number | null;
 
-  @ApiProperty({ description: 'Older than 26 hours, or never ran' })
+  @ApiProperty({ description: 'Older than 32 hours, or never ran' })
   stale!: boolean;
 }
 

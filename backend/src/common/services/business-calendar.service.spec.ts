@@ -30,6 +30,13 @@ describe('BusinessCalendar', () => {
     expect(calendar.isBusinessDay('2026-12-24')).toBe(true);
   });
 
+  it('says why a day is no business day: weekend, holiday, or null', () => {
+    const { calendar } = build('2026-12-25');
+    expect(calendar.nonBusinessReason('2026-11-21')).toBe('WEEKEND');
+    expect(calendar.nonBusinessReason('2026-12-25')).toBe('HOLIDAY');
+    expect(calendar.nonBusinessReason('2026-11-23')).toBeNull();
+  });
+
   it('reads today in Brasília: 23:30 on Friday is still Friday, 00:30 UTC on Saturday', () => {
     const { calendar, clock } = build('', '2026-11-28T02:30:00.000Z'); // Fri 27/11 23:30 Brasília
     expect(calendar.isBusinessDayToday()).toBe(true);

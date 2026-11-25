@@ -35,6 +35,15 @@ const holidayList = z
   })
   .transform((entries) => [...new Set(entries)].sort());
 
+// SPEC-004 BR-004-01..03: a Brasília time of day, `HH:mm` (24 h). It stays the string it was
+// written as: the validated environment is written back to process.env and validated again by the
+// settings factories, so a transform here would have to survive being stringified (the holiday
+// list does; minutes would not). BusinessConfig reads it as minutes after midnight. The error never
+// echoes the value (SC-16).
+const timeOfDay = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be a Brasília time of day written HH:mm (00:00-23:59)');
+
 // SPEC-004 / ADR-003: the optional proxy Caixa traffic leaves through. http(s) only: undici's
 // ProxyAgent speaks no SOCKS, and a SOCKS endpoint needs a bridge that is #108's decision. The
 // URL may carry credentials, so no message below echoes it (SC-16).
@@ -226,6 +235,14 @@ export const envSchema = z
     // Brasília. A holiday is not a business day, so a day with no new Caixa list is not a failure.
     // Default empty: only weekends then count as non-business days, with a warning in the log.
     NATIONAL_HOLIDAYS: holidayList.default([]),
+    // SPEC-004 BR-004-01..03 (AR-43): the daily import's window, Brasília time. No attempt before
+    // IMPORT_WINDOW_START or from IMPORT_CUTOFF on; at the cutoff the day is decided.
+    IMPORT_WINDOW_START: timeOfDay.default('06:00'),
+    IMPORT_CUTOFF: timeOfDay.default('12:00'),
+    // SPEC-004 BR-004-02: at most this many attempts a day (1-48), IMPORT_ATTEMPT_SPACING_MINUTES
+    // (at least 5, the tick) apart: Caixa is asked politely, never in a tight loop (SC-24, ADR-003).
+    IMPORT_MAX_ATTEMPTS: positiveInt.max(48).default(12),
+    IMPORT_ATTEMPT_SPACING_MINUTES: positiveInt.min(5).default(30),
 
     // Observability (ARCHITECTURE §11)
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
@@ -245,6 +262,20 @@ export const envSchema = z
           code: 'custom',
           path: ['LOG_HASH_SECRET'],
           message: 'required when NODE_ENV is production',
+        });
+      }
+      // BR-004-02: a window that closes before it opens would never attempt anything. (The
+      // fields may have failed their own checks, hence the type guard.)
+      // (`HH:mm` is zero-padded, so the strings order as the times do.)
+      if (
+        typeof env.IMPORT_WINDOW_START === 'string' &&
+        typeof env.IMPORT_CUTOFF === 'string' &&
+        env.IMPORT_WINDOW_START >= env.IMPORT_CUTOFF
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['IMPORT_CUTOFF'],
+          message: 'must be later than IMPORT_WINDOW_START',
         });
       }
       // BR-010-15: an alert after the ceiling would never warn anybody in time.

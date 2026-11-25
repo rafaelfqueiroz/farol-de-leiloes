@@ -5,6 +5,7 @@ import {
   isBusinessDay,
   isCalendarDate,
   isWeekend,
+  nonBusinessReason,
   parseCalendarDate,
   yearOf,
 } from './business-day.js';
@@ -128,5 +129,19 @@ describe('addCalendarDays', () => {
 
   it('refuses a day that does not exist', () => {
     expect(() => addCalendarDays('2026-02-30', 1)).toThrow(RangeError);
+  });
+});
+
+describe('nonBusinessReason (BR-004-31)', () => {
+  const holidays = new Set(['2026-12-25', '2026-11-21']);
+
+  it('says WEEKEND for a Saturday or Sunday, even one that is also a holiday', () => {
+    expect(nonBusinessReason('2026-11-22', holidays)).toBe('WEEKEND');
+    expect(nonBusinessReason('2026-11-21', holidays)).toBe('WEEKEND');
+  });
+
+  it('says HOLIDAY for a weekday in the calendar and null for a business day', () => {
+    expect(nonBusinessReason('2026-12-25', holidays)).toBe('HOLIDAY');
+    expect(nonBusinessReason('2026-11-23', holidays)).toBeNull();
   });
 });

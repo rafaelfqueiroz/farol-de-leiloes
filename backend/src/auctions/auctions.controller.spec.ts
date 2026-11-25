@@ -16,6 +16,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AuctionsController } from './auctions.controller.js';
 import { AuctionsService } from './auctions.service.js';
+import { ImportRunService } from './import-runs/import-run.service.js';
 import { configureApp } from '../app.setup.js';
 import { testConfigService } from '../../test/support/test-env.js';
 import { type PageRequest, paginated } from '../common/pagination/paginated.js';
@@ -30,6 +31,7 @@ describe('AuctionsController over HTTP (Express 5 query parsing)', () => {
     getNeighborhoods: vi.fn(),
     findByCode: vi.fn(),
   };
+  const importRuns = { lastUpdateAt: vi.fn() };
   let app: INestApplication;
 
   beforeAll(async () => {
@@ -37,6 +39,7 @@ describe('AuctionsController over HTTP (Express 5 query parsing)', () => {
       controllers: [AuctionsController],
       providers: [
         { provide: AuctionsService, useValue: auctions },
+        { provide: ImportRunService, useValue: importRuns },
         { provide: ConfigService, useValue: testConfigService() },
       ],
     }).compile();
@@ -266,6 +269,29 @@ describe('AuctionsController over HTTP (Express 5 query parsing)', () => {
       await request(app.getHttpServer())
         .get('/api/auctions/0000000000')
         .expect(404, { code: 'AUCTION_NOT_FOUND', context: {} });
+    });
+  });
+
+  describe('GET /api/auctions/last-update (SPEC-004 BR-004-24)', () => {
+    it('is public, answers the instant the last update finished, and is not read as a property code', async () => {
+      importRuns.lastUpdateAt.mockResolvedValue(new Date('2026-11-23T09:12:00.000Z'));
+
+      const response = await request(app.getHttpServer())
+        .get('/api/auctions/last-update')
+        .expect(200);
+
+      expect(response.body).toEqual({ finishedAt: '2026-11-23T09:12:00.000Z' });
+      expect(auctions.findByCode).not.toHaveBeenCalled();
+    });
+
+    it('answers null before the first update', async () => {
+      importRuns.lastUpdateAt.mockResolvedValue(null);
+
+      const response = await request(app.getHttpServer())
+        .get('/api/auctions/last-update')
+        .expect(200);
+
+      expect(response.body).toEqual({ finishedAt: null });
     });
   });
 });

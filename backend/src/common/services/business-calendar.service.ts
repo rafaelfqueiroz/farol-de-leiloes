@@ -1,7 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Clock } from '../clock/clock.js';
 import { brasiliaToday } from '../clock/brasilia-time.js';
-import { hasHolidaysInYear, isBusinessDay, yearOf } from '../domain/business-day.js';
+import {
+  hasHolidaysInYear,
+  isBusinessDay,
+  nonBusinessReason,
+  yearOf,
+} from '../domain/business-day.js';
 import businessConfig, { type BusinessConfig } from '../../config/business.config.js';
 
 /**
@@ -30,6 +35,12 @@ export class BusinessCalendar {
   isBusinessDay(brasiliaDate: string): boolean {
     this.warnWhenYearIsNotConfigured(yearOf(brasiliaDate));
     return isBusinessDay(brasiliaDate, this.holidays);
+  }
+
+  /** Why `brasiliaDate` is not a business day, or null when it is one. */
+  nonBusinessReason(brasiliaDate: string): 'WEEKEND' | 'HOLIDAY' | null {
+    this.warnWhenYearIsNotConfigured(yearOf(brasiliaDate));
+    return nonBusinessReason(brasiliaDate, this.holidays);
   }
 
   /** Whether today, in Brasília, is a business day. */

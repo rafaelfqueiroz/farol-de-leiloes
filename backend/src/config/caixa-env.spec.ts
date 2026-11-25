@@ -129,3 +129,25 @@ describe('NATIONAL_HOLIDAYS (BR-004-31)', () => {
     },
   );
 });
+
+describe('the validated environment survives being validated again', () => {
+  // ConfigModule writes the validated values back to process.env (as strings) and the settings
+  // factories validate that again: every transform must accept its own stringified output.
+  it('gives the same import settings the second time', () => {
+    const first = validateEnv({
+      ...TEST_ENV,
+      NATIONAL_HOLIDAYS: '2026-12-25',
+      IMPORT_WINDOW_START: '05:30',
+    });
+    const written = Object.fromEntries(
+      Object.entries(first).map(([key, value]) => [key, String(value)]),
+    );
+
+    const second = validateEnv(written);
+
+    expect(second.IMPORT_WINDOW_START).toBe('05:30');
+    expect(second.IMPORT_CUTOFF).toBe('12:00');
+    expect(second.NATIONAL_HOLIDAYS).toEqual(['2026-12-25']);
+    expect(second.IMPORT_MAX_ATTEMPTS).toBe(12);
+  });
+});
