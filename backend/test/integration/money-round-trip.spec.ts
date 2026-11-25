@@ -14,6 +14,14 @@ import {
   AuctionSchema,
   PhaseModality,
 } from '../../src/auctions/schemas/auction.schema.js';
+import {
+  ImportRunEntity,
+  ImportRunSchema,
+} from '../../src/auctions/import-runs/import-run.schema.js';
+import {
+  PropertyChangeEntity,
+  PropertyChangeSchema,
+} from '../../src/auctions/changes/property-change.schema.js';
 import { Clock } from '../../src/common/clock/clock.js';
 import { Decimal } from '../../src/common/money/money.js';
 import { applyMongooseDefaults } from '../../src/common/mongo/query-safety.js';
@@ -29,6 +37,7 @@ import {
 } from '../../src/saved-filters/schemas/saved-filter.schema.js';
 import { FakeClock } from '../fakes/fake-clock.js';
 import { FakePaymentGateway } from '../fakes/fake-payment-gateway.js';
+import { aRow, type ImportKit, importKit } from '../support/list-applier.js';
 import { useTestDatabase } from '../support/test-database.js';
 import { testBusinessConfig, testConfigService } from '../support/test-env.js';
 import businessConfig from '../../src/config/business.config.js';
@@ -42,12 +51,14 @@ const PAGE = { page: 1, pageSize: 20 };
 const PRECISE = '1234567890123.123456789012345678901';
 
 describe('Money round trip through MongoDB (integration)', () => {
+  const clock = new FakeClock(NOW);
   const db = useTestDatabase();
   let moduleRef: TestingModule;
   let auctions: AuctionsService;
   let coupons: CouponsService;
   let savedFilters: SavedFiltersService;
   let auctionModel: Model<AuctionEntity>;
+  let kit: ImportKit;
   let couponModel: Model<CouponEntity>;
   let savedFilterModel: Model<SavedFilterEntity>;
 
@@ -58,6 +69,8 @@ describe('Money round trip through MongoDB (integration)', () => {
         MongooseModule.forRoot(db.uri),
         MongooseModule.forFeature([
           { name: AuctionEntity.name, schema: AuctionSchema },
+          { name: ImportRunEntity.name, schema: ImportRunSchema },
+          { name: PropertyChangeEntity.name, schema: PropertyChangeSchema },
           { name: CouponEntity.name, schema: CouponSchema },
           { name: SavedFilterEntity.name, schema: SavedFilterSchema },
         ]),
@@ -67,7 +80,7 @@ describe('Money round trip through MongoDB (integration)', () => {
         CouponsService,
         SavedFiltersService,
         SavedFiltersRepository,
-        { provide: Clock, useValue: new FakeClock(NOW) },
+        { provide: Clock, useValue: clock },
         { provide: PaymentGateway, useValue: new FakePaymentGateway() },
         { provide: CACHE_MANAGER, useValue: {} },
         { provide: ConfigService, useValue: testConfigService() },
@@ -80,6 +93,7 @@ describe('Money round trip through MongoDB (integration)', () => {
     auctionModel = moduleRef.get(getModelToken(AuctionEntity.name));
     couponModel = moduleRef.get(getModelToken(CouponEntity.name));
     savedFilterModel = moduleRef.get(getModelToken(SavedFilterEntity.name));
+    kit = importKit(moduleRef, clock);
     await auctionModel.syncIndexes();
   });
 
@@ -89,18 +103,23 @@ describe('Money round trip through MongoDB (integration)', () => {
 
   describe('auctions', () => {
     beforeAll(async () => {
-      await auctions.upsertMany([
-        {
-          code: 'NEW',
-          appraisalPrice: new Decimal(PRECISE),
-          phases: [{ modality: PhaseModality.ONLINE_SALES, minimumPrice: new Decimal('91589.89') }],
-        },
-        {
-          code: 'OLDER',
-          appraisalPrice: new Decimal('130000'),
-          phases: [{ modality: PhaseModality.ONLINE_SALES, minimumPrice: new Decimal('74628.94') }],
-        },
-      ]);
+      // The writer of the daily list (SPEC-004): the prices go in through it.
+      await kit.applier.apply({
+        minRowRatio: 0,
+        runId: new Types.ObjectId().toHexString(),
+        rows: [
+          aRow('NEW', {
+            appraisalPrice: new Decimal(PRECISE),
+            minimumPrice: new Decimal('91589.89'),
+            modality: PhaseModality.ONLINE_SALES,
+          }),
+          aRow('OLDER', {
+            appraisalPrice: new Decimal('130000'),
+            minimumPrice: new Decimal('74628.94'),
+            modality: PhaseModality.ONLINE_SALES,
+          }),
+        ],
+      });
     });
 
     it('stores every price as Decimal128 (AR-17)', async () => {
@@ -113,7 +132,7 @@ describe('Money round trip through MongoDB (integration)', () => {
 
     it('reads back the exact Decimal, 34 digits included, lean and hydrated', async () => {
       const hydrated = await auctions.findByCode('NEW');
-      const [lean] = await auctions.findAvailableByCodes(['NEW']);
+      const [lean] = await auctions.findByCodes(['NEW']);
 
       for (const auction of [hydrated, lean]) {
         expect(auction?.appraisalPrice?.toFixed()).toBe(PRECISE);
@@ -134,13 +153,23 @@ describe('Money round trip through MongoDB (integration)', () => {
       await expect(codes('0', '91589.88')).resolves.toEqual(['OLDER']);
     });
 
-    it('writes the stored phases back as read when the importer appends a phase', async () => {
-      await auctions.upsertMany([
-        {
-          code: 'OLDER',
-          phases: [{ modality: PhaseModality.SFI_AUCTION, minimumPrice: new Decimal('70000') }],
-        },
-      ]);
+    it('keeps the stored phases as they were when the importer appends a phase', async () => {
+      await kit.applier.apply({
+        minRowRatio: 0,
+        runId: new Types.ObjectId().toHexString(),
+        rows: [
+          aRow('NEW', {
+            appraisalPrice: new Decimal(PRECISE),
+            minimumPrice: new Decimal('91589.89'),
+            modality: PhaseModality.ONLINE_SALES,
+          }),
+          aRow('OLDER', {
+            appraisalPrice: new Decimal('130000'),
+            minimumPrice: new Decimal('70000'),
+            modality: PhaseModality.SFI_AUCTION,
+          }),
+        ],
+      });
 
       const raw = await auctionModel.collection.findOne({ code: 'OLDER' });
       expect(raw?.phases.map((phase: { minimumPrice: unknown }) => phase.minimumPrice)).toEqual([
@@ -152,6 +181,77 @@ describe('Money round trip through MongoDB (integration)', () => {
         '74628.94',
         '70000',
       ]);
+    });
+  });
+
+  describe('a property that left the list (BR-004-17, BR-004-13, BR-004-14)', () => {
+    it('is still reachable by its number, with read-time state and money as strings', async () => {
+      const rows = [
+        aRow('GONE', {
+          appraisalPrice: new Decimal('200000'),
+          minimumPrice: new Decimal('150000'),
+          modality: PhaseModality.SFI_AUCTION,
+        }),
+      ];
+      await kit.applier.apply({ minRowRatio: 0, runId: new Types.ObjectId().toHexString(), rows });
+      // The collector's rounds: 1st at 10h00 on 2026-03-10, 2nd a week later (Brasília).
+      await auctionModel.collection.updateOne(
+        { code: 'GONE' },
+        {
+          $set: {
+            rounds: [
+              {
+                label: '1º Leilão',
+                minimumPrice: Types.Decimal128.fromString('150000'),
+                date: new Date('2026-03-10T13:00:00Z'),
+              },
+              {
+                label: '2º Leilão',
+                minimumPrice: Types.Decimal128.fromString('120000'),
+                date: new Date('2026-03-16T13:00:00Z'),
+              },
+            ],
+          },
+        },
+      );
+      // The next list does not have it: swept, and 30 days pass.
+      await kit.applier.apply({
+        minRowRatio: 0,
+        runId: new Types.ObjectId().toHexString(),
+        rows: [aRow('KEEP')],
+      });
+      clock.set(new Date('2026-04-15T12:00:00.000Z'));
+
+      const found = await auctions.findByCode('GONE');
+
+      expect(found).toMatchObject({ code: 'GONE', available: false, active: false });
+      expect(found?.currentMinimumPrice?.toFixed(2)).toBe('150000.00'); // no round left: the list price stands
+      expect(found?.discountPercent?.toFixed(2)).toBe('25.00');
+      // The same lookup the favorites page makes returns it too, flagged.
+      const [again] = await auctions.findByCodes(['GONE']);
+      expect(again?.available).toBe(false);
+      // Search lists only what is active.
+      const listed = await auctions.query({}, PAGE);
+      expect(listed.items.map((item) => item.code)).not.toContain('GONE');
+    });
+
+    it('switches the price at 10h00 of the second round, with no import (the clock decides)', async () => {
+      await auctionModel.collection.updateOne({ code: 'GONE' }, { $set: { available: true } });
+
+      clock.set(new Date('2026-03-10T12:59:00.000Z'));
+      const before = await auctions.findByCode('GONE');
+      clock.set(new Date('2026-03-10T13:00:00.000Z'));
+      const after = await auctions.findByCode('GONE');
+
+      expect([
+        before?.currentMinimumPrice?.toFixed(2),
+        before?.discountPercent?.toFixed(2),
+      ]).toEqual(['150000.00', '25.00']);
+      expect([after?.currentMinimumPrice?.toFixed(2), after?.discountPercent?.toFixed(2)]).toEqual([
+        '120000.00',
+        '40.00',
+      ]);
+      expect([before?.active, after?.active]).toEqual([true, true]);
     });
   });
 

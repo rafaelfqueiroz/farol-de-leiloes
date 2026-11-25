@@ -115,7 +115,7 @@ Scheduling
 
 - Every schedule is Brasília time, whatever the server's zone (AR-25): the import of all states at 03:00, the detail-page scraper at 06:00, reminders every 15 minutes.
 - With `IMPORT_ON_START_UP=true`, one initial import also runs ~5s after startup.
-- Every run of the import and the details scraper is recorded in `jobexecutions` with `status` `SUCCESS` or `FAILED` (and a stable `errorCode`, never a message). A failed run does not count as "ran recently", so the next scheduled run retries (AR-03).
+- Every run of the import and the details scraper is recorded in `jobexecutions` with `status` `SUCCESS` or `FAILED` (and a stable `errorCode`, never a message). A failed run does not count as "ran recently", so the next scheduled run retries (AR-03). The import also records each day in `importruns` (outcome, counts, reasons as codes) and every property change in `propertychanges` (SPEC-004; how to read them: `docs/runbooks/caixa-import.md`).
 
 Notes
 

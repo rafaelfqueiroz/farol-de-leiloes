@@ -33,6 +33,15 @@ export function isCalendarDate(value: string): boolean {
   return parseCalendarDate(value) !== null;
 }
 
+/**
+ * The calendar day `days` after (or, negative, before) `brasiliaDate`, as `YYYY-MM-DD`. Counted on
+ * the calendar, so month and year ends roll over and no zone or daylight rule enters.
+ */
+export function addCalendarDays(brasiliaDate: string, days: number): string {
+  const { year, month, day } = partsOf(brasiliaDate);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 function partsOf(brasiliaDate: string): CalendarDateParts {
   const parts = parseCalendarDate(brasiliaDate);
   if (!parts) throw new RangeError('A calendar day must be a real YYYY-MM-DD date');

@@ -1,37 +1,25 @@
-import { Auction } from '../interfaces/auction.interface.js';
-import { PhaseModality } from '../schemas/auction.schema.js';
+import { serverOperators } from '../../common/mongo/query-safety.js';
 
 /**
- * Checks if an auction is currently active (not closed) at `now`.
+ * SPEC-004 BR-004-16, DL-004-06: the MongoDB twin of the pure `isActive` (domain/active.ts), the
+ * ONE definition of "active" that search, the sitemap, the neighborhoods list and favorites use.
+ * `test/integration/active-predicate.spec.ts` holds the two equal over a table of cases.
  *
- * AR-24: the current time is an argument, never read here, so the check is a pure function a
- * spec drives with any instant (TS-06).
+ *   available AND ( no round collected yet            -> rounds absent or empty
+ *                   OR a round date still ahead       -> rounds.date > now
+ *                   OR an open-ended round )          -> a round with no date
  *
- * An auction is considered active if:
- * - It is available (available !== false)
- * - AND one of:
- *   - Its current phase is ONLINE_SALES (always active, no date required)
- *   - Its current phase has a date in phaseDates at or after `now`
+ * "Now" is an argument (AR-24). Every operator is server-written, so each is wrapped where it
+ * sits (SC-10), including inside `$or`, where a wrapper around the whole array does not reach
+ * the branches under `sanitizeFilter` (#100).
  */
-export function isAuctionActive(auction: Auction, now: Date): boolean {
-  if (auction.available === false) {
-    return false;
-  }
-
-  const currentPhase = auction.currentPhase;
-  if (!currentPhase) {
-    return false;
-  }
-
-  // Online Sales and Direct Online Sales auctions are always active (they're like real estate listings)
-  if (
-    currentPhase.modality === PhaseModality.ONLINE_SALES ||
-    currentPhase.modality === PhaseModality.DIRECT_ONLINE_SALES
-  ) {
-    return true;
-  }
-
-  // Check if any phase date is still ahead
-  const phaseDates = currentPhase.phaseDates ?? [];
-  return phaseDates.some((date) => new Date(date).getTime() >= now.getTime());
+export function activeAuctionFilter(now: Date): Record<string, unknown> {
+  return {
+    available: true,
+    $or: [
+      { 'rounds.0': serverOperators({ $exists: false }) },
+      { 'rounds.date': serverOperators({ $gt: now }) },
+      { rounds: serverOperators({ $elemMatch: { date: null } }) },
+    ],
+  };
 }

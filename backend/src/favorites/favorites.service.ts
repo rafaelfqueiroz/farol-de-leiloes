@@ -33,7 +33,7 @@ export class FavoritesService {
       page,
     );
     const auctions = new Map(
-      (await this.auctionsService.findAvailableByCodes(pageCodes)).map((a) => [a.code, a]),
+      (await this.auctionsService.findByCodes(pageCodes)).map((a) => [a.code, a]),
     );
     const items = pageCodes.flatMap((code) => auctions.get(code) ?? []);
     return paginated(items, total, page);
@@ -71,10 +71,10 @@ export class FavoritesService {
 
     await this.favorites.create(ctx, { auctionCode, auction: auctionDoc._id });
 
-    // findByCode only returns available auctions; an unavailable one is reported as not found
-    // (DV-03) instead of returning null to the controller.
+    // A property that left the list cannot be newly favorited: reported as not found, as before
+    // the by-code read returned unavailable properties too (BR-004-17).
     const auction = await this.auctionsService.findByCode(auctionCode);
-    if (!auction) {
+    if (!auction?.available) {
       throw new DomainError('AUCTION_NOT_FOUND');
     }
     return auction;

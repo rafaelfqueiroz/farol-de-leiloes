@@ -2,7 +2,7 @@
 //   unit        — domain and service specs next to their source (src/**/*.spec.ts), plus the
 //                 test helpers' own specs; no database, no network (TS-01)
 //   tz-<zone>   — the specs whose answer must not depend on the host's zone, repeated once per
-//                 zone (UTC, Tokyo, Brasília) in forked workers that get TZ before Node starts
+//                 zone (UTC, Tokyo, New York, Brasília) in forked workers that get TZ before Node starts
 //                 (TS-11, AR-23); they are excluded from `unit` so each runs once per zone
 //   structural  — checks on the repository itself (test/structural/)
 //   integration — real MongoDB from Testcontainers (test/integration/); needs Docker (DV-17)
@@ -31,8 +31,9 @@ const shared = {
 const timeZoneSpecs = [
   'src/common/clock/brasilia-time.spec.ts',
   'src/reminders/templates/reminder.template.spec.ts',
+  'src/auctions/domain/sfi-rounds.spec.ts',
 ];
-const timeZones = ['UTC', 'Asia/Tokyo', 'America/Sao_Paulo'];
+const timeZones = ['UTC', 'Asia/Tokyo', 'America/New_York', 'America/Sao_Paulo'];
 
 // One mongo:8.2 container per run, shared by both projects; each spec file uses its own database
 // on it (TS-05, test/support/test-database.ts). A real database round trip (plus Nest

@@ -4,7 +4,7 @@ import { serverOperators } from '../common/mongo/query-safety.js';
 import { DomainError } from '../common/errors/domain-error.js';
 import { Decimal } from '../common/money/money.js';
 import { AuctionsService } from './auctions.service.js';
-import { PhaseModality } from './schemas/auction.schema.js';
+import { activeAuctionFilter } from './utils/auction-filters.js';
 import { FakeClock } from '../../test/fakes/fake-clock.js';
 
 type ServiceDeps = ConstructorParameters<typeof AuctionsService>;
@@ -12,40 +12,6 @@ type ServiceDeps = ConstructorParameters<typeof AuctionsService>;
 // TS-06: the service's "now" is a fixed instant from the injected clock.
 const NOW = new Date('2026-01-15T12:00:00.000Z');
 const d128 = (value: string) => Types.Decimal128.fromString(value);
-
-describe('AuctionsService.markAvailable', () => {
-  function build(modifiedCount = 0) {
-    const repo = { updateMany: vi.fn().mockResolvedValue({ modifiedCount }) };
-    const configService = { get: vi.fn().mockReturnValue(undefined) };
-    const service = new AuctionsService(
-      repo as unknown as ServiceDeps[0],
-      {} as ServiceDeps[1],
-      configService as unknown as ServiceDeps[2],
-      new FakeClock(NOW),
-    );
-    return { service, repo };
-  }
-
-  it('marks unavailable auctions in the CSV as available and returns the modified count', async () => {
-    const { service, repo } = build(3);
-
-    await expect(service.markAvailable(['A1', 'A2'])).resolves.toBe(3);
-    expect(repo.updateMany).toHaveBeenCalledWith(
-      {
-        code: serverOperators({ $in: ['A1', 'A2'] }),
-        available: serverOperators({ $ne: true }),
-      },
-      { $set: { available: true, updatedAt: NOW } },
-    );
-  });
-
-  it('does nothing for an empty code list', async () => {
-    const { service, repo } = build();
-
-    await expect(service.markAvailable([])).resolves.toBe(0);
-    expect(repo.updateMany).not.toHaveBeenCalled();
-  });
-});
 
 // SC-10, TS-13 (the real-database half lives in test/integration): the list query is built from
 // text and finite numbers only, and anything else is refused with VALIDATION_FAILED (AR-34, AR-37).
@@ -166,11 +132,11 @@ describe('AuctionsService code lookups (SC-10)', () => {
 
   const operator = { $ne: null } as unknown as string;
 
-  it('findByCode compares the code by equality and only among available auctions', async () => {
+  it('findByCode compares the code by equality, among every property: a gone one is reachable (BR-004-17)', async () => {
     const { service, repo } = build();
 
     await expect(service.findByCode('A1')).resolves.toBeNull();
-    expect(repo.findOne).toHaveBeenCalledWith({ code: { $eq: 'A1' }, available: true });
+    expect(repo.findOne).toHaveBeenCalledWith({ code: { $eq: 'A1' } });
   });
 
   it('findByCode finds nothing, and never queries, for a non-string code', async () => {
@@ -244,129 +210,43 @@ describe('AuctionsService document id lookups (AR-09, SC-10)', () => {
   });
 });
 
-// AR-17: every writer writes Decimal128; stored phases, Decimal128 since the #34 migration, are
-// written back as read. AR-24: the timestamps come from the injected clock.
-describe('AuctionsService.upsertMany', () => {
-  function build(existing: unknown[]) {
-    const repo = {
-      find: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(existing) }),
-      }),
-      bulkWrite: vi.fn().mockResolvedValue({ matchedCount: 0, upsertedCount: 0, modifiedCount: 1 }),
-    };
-    const service = new AuctionsService(
-      repo as unknown as ServiceDeps[0],
-      {} as ServiceDeps[1],
-      { get: vi.fn().mockReturnValue(undefined) } as unknown as ServiceDeps[2],
-      new FakeClock(NOW),
-    );
-    return { service, repo };
-  }
-
-  const onlineSale = {
-    modality: PhaseModality.ONLINE_SALES,
-    minimumPrice: new Decimal('91589.89'),
-  };
-
-  it('inserts a new auction with its prices as Decimal128', async () => {
-    const { service, repo } = build([]);
-
-    await service.upsertMany([
-      { code: 'A1', appraisalPrice: new Decimal('250000.00'), phases: [onlineSale] },
-    ]);
-
-    const [ops] = repo.bulkWrite.mock.calls[0] as [{ insertOne: { document: unknown } }[]];
-    const stored = { modality: PhaseModality.ONLINE_SALES, minimumPrice: d128('91589.89') };
-    expect(ops[0]?.insertOne.document).toEqual({
-      code: 'A1',
-      title: null,
-      address: {},
-      appraisalPrice: d128('250000'), // decimal.js writes no trailing zeros; same value
-      phases: [stored],
-      currentPhase: stored,
-      detailsUrl: null,
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
-  });
-
-  it('appends a new phase, writing the stored one back as it was read', async () => {
-    const stored = {
-      modality: PhaseModality.SFI_AUCTION,
-      minimumPrice: d128('120000.5'),
-      phaseDates: [],
-    };
-    const { service, repo } = build([{ code: 'A1', phases: [stored] }]);
-
-    await service.upsertMany([{ code: 'A1', phases: [onlineSale] }]);
-
-    const [ops] = repo.bulkWrite.mock.calls[0] as [
-      { updateOne: { update: { $set: Record<string, unknown> } } }[],
-    ];
-    expect(ops[0]?.updateOne.update.$set).toEqual({
-      phases: [
-        { modality: PhaseModality.SFI_AUCTION, minimumPrice: d128('120000.5'), phaseDates: [] },
-        { modality: PhaseModality.ONLINE_SALES, minimumPrice: d128('91589.89') },
-      ],
-      currentPhase: { modality: PhaseModality.ONLINE_SALES, minimumPrice: d128('91589.89') },
-      updatedAt: NOW,
-    });
-  });
-
-  it('writes a missing price as null, never as a number', async () => {
-    const { service, repo } = build([]);
-
-    await service.upsertMany([
-      { code: 'A1', phases: [{ modality: PhaseModality.ONLINE_SALES, minimumPrice: null }] },
-    ]);
-
-    const [ops] = repo.bulkWrite.mock.calls[0] as [
-      { insertOne: { document: Record<string, unknown> } }[],
-    ];
-    expect(ops[0]?.insertOne.document.appraisalPrice).toBeNull();
-    expect(ops[0]?.insertOne.document.currentPhase).toEqual({
-      modality: PhaseModality.ONLINE_SALES,
-      minimumPrice: null,
-    });
-  });
-});
-
-// AR-24 / TS-06: whether an auction is still open is decided against the injected clock.
+// BR-004-16, AR-24 / TS-06: whether an auction is active is the one predicate (activeAuctionFilter),
+// asked of the database with the injected clock's "now". That the predicate itself means what the
+// in-memory isActive means is test/integration/active-predicate.spec.ts.
 describe('AuctionsService.findActiveCodes', () => {
   function build(docs: unknown[], now: Date) {
-    const repo = {
-      find: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          lean: vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(docs) }),
-        }),
-      }),
-    };
-    return new AuctionsService(
+    const lean = vi.fn().mockReturnValue({ exec: vi.fn().mockResolvedValue(docs) });
+    const repo = { find: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ lean }) }) };
+    const service = new AuctionsService(
       repo as unknown as ServiceDeps[0],
       {} as ServiceDeps[1],
       { get: vi.fn().mockReturnValue(undefined) } as unknown as ServiceDeps[2],
       new FakeClock(now),
     );
+    return { service, repo };
   }
 
-  const auctionOn = (code: string, date: string) => {
-    const phase = { modality: PhaseModality.SFI_AUCTION, phaseDates: [new Date(date)] };
-    return { code, available: true, phases: [phase], currentPhase: phase, updatedAt: NOW };
-  };
+  it('asks for the given codes under the active predicate at the clock now', async () => {
+    const { service, repo } = build([{ code: 'A1' }, { code: 'A3' }], NOW);
 
-  it('keeps an auction whose date is at or after now and drops one already past', async () => {
-    const docs = [
-      auctionOn('PAST', '2026-01-15T11:59:59.999Z'),
-      auctionOn('NOW', '2026-01-15T12:00:00.000Z'),
-      auctionOn('LATER', '2026-01-16T00:00:00.000Z'),
-    ];
-
-    await expect(build(docs, NOW).findActiveCodes(['PAST', 'NOW', 'LATER'])).resolves.toEqual(
-      new Set(['NOW', 'LATER']),
+    await expect(service.findActiveCodes(['A1', 'A2', 'A3'])).resolves.toEqual(
+      new Set(['A1', 'A3']),
     );
-    // A day later by the clock, every one of them has closed.
-    await expect(
-      build(docs, new Date('2026-01-16T00:00:00.001Z')).findActiveCodes(['PAST', 'NOW', 'LATER']),
-    ).resolves.toEqual(new Set());
+    expect(repo.find).toHaveBeenCalledWith({
+      code: serverOperators({ $in: ['A1', 'A2', 'A3'] }),
+      ...activeAuctionFilter(NOW),
+    });
+  });
+
+  it('moves with the clock: a later now is a later bound in the same query', async () => {
+    const later = new Date('2026-01-16T00:00:00.001Z');
+    const { service, repo } = build([], later);
+
+    await service.findActiveCodes(['A1']);
+
+    expect(repo.find).toHaveBeenCalledWith({
+      code: serverOperators({ $in: ['A1'] }),
+      ...activeAuctionFilter(later),
+    });
   });
 });

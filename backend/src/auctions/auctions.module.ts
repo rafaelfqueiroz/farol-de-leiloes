@@ -8,6 +8,14 @@ import { AuctionEntity, AuctionSchema } from './schemas/auction.schema.js';
 import { CsvUpload, CsvUploadSchema } from './importer/schemas/csv-upload.schema.js';
 import { CsvCacheService } from './importer/csv-cache.service.js';
 import { AuctionsImporter } from './importer/scheduler.js';
+import { ListApplier } from './importer/list-applier.service.js';
+import { ListApplierRepository } from './importer/list-applier.repository.js';
+import { ImportRunEntity, ImportRunSchema } from './import-runs/import-run.schema.js';
+import { ImportRunRepository } from './import-runs/import-run.repository.js';
+import { ImportRunService } from './import-runs/import-run.service.js';
+import { PropertyChangeEntity, PropertyChangeSchema } from './changes/property-change.schema.js';
+import { PropertyChangeRepository } from './changes/property-change.repository.js';
+import { PropertyChangeService } from './changes/property-change.service.js';
 import { AuctionDetailsScraper } from './scraper/scraper-scheduler.js';
 import { AuctionCleanupService } from './cleanup/auction-cleanup.service.js';
 import { CommonModule } from '../common/common.module.js';
@@ -23,6 +31,8 @@ import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
     MongooseModule.forFeature([
       { name: AuctionEntity.name, schema: AuctionSchema },
       { name: CsvUpload.name, schema: CsvUploadSchema },
+      { name: ImportRunEntity.name, schema: ImportRunSchema },
+      { name: PropertyChangeEntity.name, schema: PropertyChangeSchema },
     ]),
     ConfigModule.forFeature(schedulerConfig),
     ConfigModule.forFeature(businessConfig),
@@ -44,6 +54,12 @@ import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
   providers: [
     AuctionsService,
     AuctionsImporter,
+    ListApplier,
+    ListApplierRepository,
+    ImportRunService,
+    ImportRunRepository,
+    PropertyChangeService,
+    PropertyChangeRepository,
     CsvCacheService,
     // AR-10: Caixa behind its port; HttpCaixaAccess is the one adapter (SC-24).
     {
@@ -54,6 +70,7 @@ import { HttpCaixaAccess } from './caixa/http-caixa-access.js';
     AuctionDetailsScraper,
     AuctionCleanupService,
   ],
-  exports: [AuctionsService, CacheModule],
+  // SPEC-008 / SPEC-013 read the change entries and the Import Runs through these services (AR-09).
+  exports: [AuctionsService, CacheModule, PropertyChangeService, ImportRunService],
 })
 export class AuctionsModule {}

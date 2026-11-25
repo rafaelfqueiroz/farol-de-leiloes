@@ -77,11 +77,14 @@ describe('FavoritesService (integration)', () => {
     service = moduleRef.get(FavoritesService);
 
     const auctions = moduleRef.get<Model<AuctionEntity>>(getModelToken(AuctionEntity.name));
+    // BR-004-16: closed means every round date has passed. It was read from the phase's own
+    // `phaseDates`; the rounds of SPEC-004 are what the one active predicate reads.
     const closed = { modality: PhaseModality.SFI_AUCTION, phaseDates: [LONG_AGO] };
+    const closedRounds = [{ label: '1º Leilão', minimumPrice: null, date: LONG_AGO }];
     const inserted = await auctions.collection.insertMany([
       auction('A1'),
       auction('A2'),
-      auction('A3-closed', { phases: [closed], currentPhase: closed }),
+      auction('A3-closed', { phases: [closed], currentPhase: closed, rounds: closedRounds }),
       auction('A4-unavailable', { available: false }),
       auction('B1'),
     ]);

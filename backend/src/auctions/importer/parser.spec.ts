@@ -139,6 +139,9 @@ describe('parseCaixaList', () => {
       missingColumns: [],
       generatedOn: '2025-11-10',
       rowCount: 4,
+      usableCodeCount: 4,
+      rowsWithoutCode: 0,
+      unreadableMoneyRows: 0,
       syntaxErrors: 0,
       irregularRows: 0,
     });
@@ -187,6 +190,9 @@ describe('parseCaixaList', () => {
       missingColumns: [],
       generatedOn: '2025-11-10',
       rowCount: 0,
+      usableCodeCount: 0,
+      rowsWithoutCode: 0,
+      unreadableMoneyRows: 0,
       syntaxErrors: 0,
       irregularRows: 0,
     });
@@ -247,6 +253,52 @@ describe('parseCaixaList', () => {
   });
 });
 
+describe('listFacts: what the validator is told about the numbers and the prices (BR-004-05, AR-17)', () => {
+  const HEAD =
+    ' Lista de Imóveis da Caixa;;Data de geração:;10/11/2025\n' +
+    ' N° do imóvel;UF;Cidade;Bairro;Endereço;Preço;Valor de avaliação;Desconto;Descrição;Modalidade de venda;Link de acesso\n';
+  const row = (code: string, price = '100.000,00', appraisal = '200.000,00') =>
+    ` ${code} ;SP ;CAMPINAS ;CENTRO ; RUA A ;${price};${appraisal};50.00;Casa, 60 m2;Venda Online;`;
+
+  it('counts distinct numbers, not lines: one number on every row is one', () => {
+    const facts = listFacts(parseCaixaList(HEAD + [row('1'), row('1'), row('1')].join('\n')));
+
+    expect(facts).toMatchObject({ rowCount: 3, usableCodeCount: 1, rowsWithoutCode: 0 });
+  });
+
+  it('counts rows with no number (also when the link is the only place the number is)', () => {
+    const noNumber = ';SP ;CAMPINAS ;CENTRO ; RUA A ;1,00;2,00;50.00;Casa;Venda Online;';
+    const linkOnly =
+      ';SP ;CAMPINAS ;CENTRO ; RUA A ;1,00;2,00;50.00;Casa;Venda Online;https://venda-imoveis.caixa.gov.br/x?hdnimovel=77';
+    const facts = listFacts(parseCaixaList(HEAD + [row('1'), noNumber, linkOnly].join('\n')));
+
+    expect(facts).toMatchObject({ rowCount: 3, usableCodeCount: 2, rowsWithoutCode: 1 });
+  });
+
+  it('counts a renamed number column as every row without a number', () => {
+    const renamed = HEAD.replace('N° do imóvel', 'Referência interna');
+    const facts = listFacts(parseCaixaList(renamed + [row('1'), row('2')].join('\n')));
+
+    expect(facts).toMatchObject({ rowCount: 2, usableCodeCount: 0, rowsWithoutCode: 2 });
+  });
+
+  it('counts a filled price that does not read, never an empty one', () => {
+    const rows = [
+      row('1', '', '200.000,00'), // a direct sale has no price: empty is not unreadable
+      row('2', '100.000,00', ''),
+      row('3', '100000.00', '200.000,00'), // a changed money format
+      row('4', 'R$ abc', '200.000,00'),
+      row('5', '100.000,00', '200,000.00'),
+      row('6'),
+    ].join('\n');
+
+    expect(listFacts(parseCaixaList(HEAD + rows))).toMatchObject({
+      rowCount: 6,
+      unreadableMoneyRows: 3,
+    });
+  });
+});
+
 // BR-004-04 / DL-004-03 (owner's review of #185): the syntax of the CSV is part of its verdict. An
 // unterminated quote in row 9 of a 10-row list swallows property 10 into row 9's cell, and 9 of 10
 // rows is above the 0.8 ratio, so the row count alone declared the list valid.
@@ -266,7 +318,7 @@ describe('malformed CSV reaches the verdict', () => {
 
     expect(parsed.rows).toHaveLength(9); // property 10 is swallowed into row 9
     expect(parsed.syntaxErrors).toEqual(['MissingQuotes']);
-    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({
+    expect(validateList(listFacts(parsed), LAST, 0.8, '2025-11-10')).toEqual({
       kind: 'rejected',
       reason: 'MALFORMED_CSV',
     });
@@ -284,7 +336,7 @@ describe('malformed CSV reaches the verdict', () => {
     const parsed = parseCaixaList(list([row(1, '"Casa"x'), ...ten.slice(1)]));
 
     expect(parsed.syntaxErrors.length).toBeGreaterThan(0);
-    expect(validateList(listFacts(parsed), LAST, 0.8).kind).toBe('rejected');
+    expect(validateList(listFacts(parsed), LAST, 0.8, '2025-11-10').kind).toBe('rejected');
   });
 
   it('rejects a row with fewer cells than the header, as a download cut in a row has', () => {
@@ -293,7 +345,7 @@ describe('malformed CSV reaches the verdict', () => {
 
     expect(parsed.syntaxErrors).toEqual([]);
     expect(parsed.irregularRows).toBe(1);
-    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({
+    expect(validateList(listFacts(parsed), LAST, 0.8, '2025-11-10')).toEqual({
       kind: 'rejected',
       reason: 'MALFORMED_CSV',
     });
@@ -303,7 +355,7 @@ describe('malformed CSV reaches the verdict', () => {
     const parsed = parseCaixaList(list([row(1, 'Casa; sem aspas'), ...ten.slice(1)]));
 
     expect(parsed.irregularRows).toBe(1);
-    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({
+    expect(validateList(listFacts(parsed), LAST, 0.8, '2025-11-10')).toEqual({
       kind: 'rejected',
       reason: 'MALFORMED_CSV',
     });
@@ -317,7 +369,7 @@ describe('malformed CSV reaches the verdict', () => {
     expect(parsed.rows).toHaveLength(10);
     expect(parsed.syntaxErrors).toEqual([]);
     expect(parsed.irregularRows).toBe(0);
-    expect(validateList(listFacts(parsed), LAST, 0.8)).toEqual({ kind: 'valid' });
+    expect(validateList(listFacts(parsed), LAST, 0.8, '2025-11-10')).toEqual({ kind: 'valid' });
   });
 
   it.each(['Lista_imoveis_geral.csv', 'Lista_imoveis_geral.latin1.csv', 'lista-bom-reordered.csv'])(
@@ -330,7 +382,7 @@ describe('malformed CSV reaches the verdict', () => {
 
       expect(parsed.syntaxErrors).toEqual([]);
       expect(parsed.irregularRows).toBe(0);
-      expect(validateList(listFacts(parsed), null, 0.8)).toEqual({ kind: 'valid' });
+      expect(validateList(listFacts(parsed), null, 0.8, '2025-11-10')).toEqual({ kind: 'valid' });
     },
   );
 });

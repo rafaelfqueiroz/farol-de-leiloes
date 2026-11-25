@@ -9,6 +9,8 @@ import {
   AuctionFile,
   StoredPhase,
 } from '../schemas/auction.schema.js';
+import { roundsFromPhaseDates } from '../domain/rounds.js';
+import { toStoredRound } from '../auction.mapper.js';
 import { fetchAndScrapeDetails } from './details-scraper.js';
 import { JobExecutionService } from '../../common/services/job-execution.service.js';
 import { RunMode } from '../../common/job-execution.js';
@@ -275,6 +277,14 @@ export class AuctionDetailsScraper implements OnModuleInit {
         updatedPhases[lastPhaseIndex] = updatedLastPhase;
         updateData.phases = updatedPhases;
         updateData.currentPhase = updatedLastPhase;
+        // SPEC-004 BR-004-13, BR-004-16: until the collection of part 3 replaces this scraper, the
+        // dates it finds are also written as the property's rounds (what the active predicate
+        // reads), and the page counts as collected.
+        updateData.rounds = roundsFromPhaseDates(
+          lastPhase.modality,
+          details.phaseDetails.phaseDates ?? [],
+        ).map(toStoredRound);
+        updateData.detailsCollectedAt = this.clock.now();
         this.logger.debug(
           `Scraped phase details for auction ${auction.code}: ${details.phaseDetails.paymentMethods?.length || 0} payment methods, ${details.phaseDetails.expenseRules?.length || 0} expense rules, ${details.phaseDetails.phaseDates?.length || 0} phase dates`,
         );

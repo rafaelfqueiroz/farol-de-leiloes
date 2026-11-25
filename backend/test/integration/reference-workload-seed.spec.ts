@@ -54,7 +54,7 @@ describe('BR-003-08: seedReferenceWorkload', () => {
       .collection<AuctionRecord>('auctions')
       .findOne({ code: FIXTURE_AUCTIONS.BRASILIA_TEN_AM });
     if (!stored) throw new Error('fixture auction missing');
-    const auction = toAuction(stored);
+    const auction = toAuction(stored, new Date('2026-01-15T12:00:00.000Z'));
     expect(auction.currentPhase?.phaseDates).toEqual([new Date('2026-01-26T13:00:00.000Z')]);
     expect(auction.currentPhase?.minimumPrice?.toFixed(2)).toBe('180000.00');
     expect(auction.available).toBe(true);

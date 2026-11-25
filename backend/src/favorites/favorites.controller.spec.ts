@@ -26,6 +26,14 @@ const AUCTION: Auction = {
   appraisalPrice: new Decimal('150000'),
   phases: [{ modality: ONLINE_SALES, minimumPrice: new Decimal('90000.5') }],
   currentPhase: { modality: ONLINE_SALES, minimumPrice: new Decimal('90000.5') },
+  active: true,
+  currentMinimumPrice: new Decimal('90000.5'),
+  discountPercent: new Decimal('40'),
+  propertyType: 'Casa',
+  rounds: [],
+  occupancy: null,
+  listSeenAt: null,
+  detailsCollectedAt: null,
   detailsUrl: null,
   imageUrl: null,
   matriculaUrl: null,
@@ -38,9 +46,14 @@ const AUCTION: Auction = {
 
 // AR-17: money leaves as strings of reais with two decimals.
 const PHASE_JSON = { modality: ONLINE_SALES, minimumPrice: '90000.50' };
+// The fields the API does not expose (AR-36): the collection bookkeeping of SPEC-004.
+const { rounds, occupancy, listSeenAt, detailsCollectedAt, ...EXPOSED } = AUCTION;
+void [rounds, occupancy, listSeenAt, detailsCollectedAt];
 const AUCTION_JSON = {
-  ...AUCTION,
+  ...EXPOSED,
   appraisalPrice: '150000.00',
+  currentMinimumPrice: '90000.50',
+  discountPercent: '40.00',
   phases: [PHASE_JSON],
   currentPhase: PHASE_JSON,
   updatedAt: '2026-01-15T12:00:00.000Z',
